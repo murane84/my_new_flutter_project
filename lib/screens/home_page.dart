@@ -247,6 +247,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // The first name of whoever is typing in each group (phonebook-resolved), so
   // the group tile can say "Belyner typing…" rather than a bare "typing…".
   final Map<int, String> _groupTypingNames = {};
+  // Group typers' kind: 'typing' or 'recording' (a voice note).
+  final Map<int, String> _groupTypingKind = {};
   // Groups where someone @-mentioned me since I last opened them → an "@"
   // chip on the tile; value = the mentioning message id (opening the group
   // jumps to it). Fed by the notify socket's `mention` event.
@@ -2543,7 +2545,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
         final first = full.trim().isEmpty
             ? ''
             : full.trim().split(RegExp(r'\s+')).first;
-        _setGroupTyping(convId, first);
+        _setGroupTyping(
+            convId, first, (event['kind'] ?? 'typing').toString());
       } else {
         final uid = (event['user_id'] as num?)?.toInt();
         if (uid != null) {
@@ -3316,8 +3319,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   /// Mark group [convId] as having a live typer and auto-clear after 5s. Keyed
   /// by conversation id so it drives the group tile, never a DM row.
-  void _setGroupTyping(int convId, [String typerName = '']) {
+  void _setGroupTyping(int convId,
+      [String typerName = '', String kind = 'typing']) {
     final was = _groupTypingTimers.containsKey(convId);
+    final kindChanged = _groupTypingKind[convId] != kind;
+    _groupTypingKind[convId] = kind;
     _groupTypingTimers[convId]?.cancel();
     if (typerName.isNotEmpty) {
       _groupTypingNames[convId] = typerName;
@@ -3325,9 +3331,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _groupTypingTimers[convId] = Timer(const Duration(seconds: 5), () {
       _groupTypingTimers.remove(convId);
       _groupTypingNames.remove(convId);
+      _groupTypingKind.remove(convId);
       if (mounted) setState(() {});
     });
-    if (!was && mounted) setState(() {});
+    if ((!was || kindChanged) && mounted) setState(() {});
   }
 
   /// Sign out directly from the consent gate when the user declines to accept.
@@ -3937,42 +3944,116 @@ class HomePageState extends rp.ConsumerState<HomePage>
                                 fontWeight: FontWeight.bold, fontSize: 14),
                             overflow: TextOverflow.ellipsis,
                           ),
-                          // Circle "listening now": members playing music
-                          // right now (that share it with me) → tap to start
-                          // a group jam. Otherwise the member count.
+                          // The group's line, same rules as a friend's
+                          // header (strongest first): someone typing /
+                          // recording › a call live (join) › a jam live
+                          // (join) › members listening (start a jam) ›
+                          // member count. Same marquee + fade.
                           ListenableBuilder(
-                            listenable: NowPlayingPresence.instance,
+                            listenable: Listenable.merge([
+                              NowPlayingPresence.instance,
+                              GroupCallService.instance.ongoingCalls,
+                              LiveRoomsRegistry.instance,
+                            ]),
                             builder: (context, _) {
+                              final gid = (g['id'] as num?)?.toInt() ?? -1;
+                              final gcs = GroupCallService.instance;
+                              final inMyCall = gcs.room == gid &&
+                                  gcs.phase != GroupCallPhase.idle;
+                              final inCall = inMyCall ||
+                                  gcs.ongoingCalls.value.containsKey(gid);
+                              final myJam = activeLiveSession
+                                      ?.controller.conversationId ==
+                                  gid;
+                              final room = LiveRoomsRegistry.instance
+                                  .roomForConversation(gid);
+                              final typer = _groupTypingTimers
+                                      .containsKey(gid)
+                                  ? (_groupTypingNames[gid] ?? '')
+                                  : null;
                               final who = _groupListeners(members);
-                              if (who.isEmpty) {
-                                return Text(
-                                  '${members.length} members · tap for info',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: textColor.withAlpha(130)),
-                                  overflow: TextOverflow.ellipsis,
-                                );
-                              }
-                              final names = who.length == 1
-                                  ? '${who[0]} is'
-                                  : who.length == 2
-                                      ? '${who[0]} and ${who[1]} are'
-                                      : '${who[0]}, ${who[1]} +${who.length - 2} are';
-                              return GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: () {
+                              String text;
+                              (int, int)? bold;
+                              Color color = accentInk(scheme);
+                              VoidCallback? onTap;
+                              if (typer != null) {
+                                final n = typer.isEmpty ? 'Someone' : typer;
+                                text = _groupTypingKind[gid] == 'recording'
+                                    ? '🎤 $n is recording a voice note…'
+                                    : '$n is typing…';
+                              } else if (inCall) {
+                                text = inMyCall
+                                    ? '📞 You’re in the call · tap to return'
+                                    : '📞 Call in progress · tap to join';
+                                onTap = () => _joinGroupCall(g);
+                              } else if (myJam || room != null) {
+                                final song = (myJam
+                                        ? activeLiveSession!.title
+                                        : ((room?['track'] as Map?)?['title'] ??
+                                                '')
+                                            .toString())
+                                    .trim();
+                                final lead = myJam
+                                    ? '🎧 In the jam'
+                                    : '🎧 Jam live';
+                                final tail = myJam
+                                    ? ' · tap to return'
+                                    : ' · tap to join';
+                                text = song.isEmpty
+                                    ? '$lead$tail'
+                                    : '$lead · “$song”$tail';
+                                if (song.isNotEmpty) {
+                                  bold = (lead.length + 4,
+                                      lead.length + 4 + song.length);
+                                }
+                                onTap = myJam
+                                    ? _reopenLiveSession
+                                    : () => LiveRoomsRegistry.instance
+                                        .joinRoom
+                                        ?.call(room!);
+                              } else if (who.isNotEmpty) {
+                                final names = who.length == 1
+                                    ? '${who[0]} is'
+                                    : who.length == 2
+                                        ? '${who[0]} and ${who[1]} are'
+                                        : '${who[0]}, ${who[1]} +${who.length - 2} are';
+                                text = '🎧 $names listening now · Start a jam';
+                                onTap = () {
                                   HapticFeedback.selectionClick();
                                   chatJamRequest.value++;
-                                },
-                                child: Text(
-                                  '🎧 $names listening now · Start a jam',
-                                  style: TextStyle(
+                                };
+                              } else {
+                                text = '${members.length} members · tap for info';
+                                color = textColor.withAlpha(130);
+                              }
+                              final line = SizedBox(
+                                height: 15,
+                                child: AnimatedSwitcher(
+                                  duration:
+                                      const Duration(milliseconds: 280),
+                                  layoutBuilder: (cur, prev) => Stack(
+                                    alignment: Alignment.centerLeft,
+                                    children: [...prev, ?cur],
+                                  ),
+                                  child: _ScrollingText(
+                                    key: ValueKey(text),
+                                    text: text,
+                                    bold: bold,
+                                    style: TextStyle(
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: accentInk(scheme)),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                      fontWeight: onTap == null
+                                          ? FontWeight.normal
+                                          : FontWeight.w600,
+                                      color: color,
+                                    ),
+                                  ),
                                 ),
+                              );
+                              if (onTap == null) return line;
+                              return GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: onTap,
+                                child: line,
                               );
                             },
                           ),

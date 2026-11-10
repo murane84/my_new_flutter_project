@@ -91,20 +91,22 @@ extension _HomeHub on HomePageState {
       (zone == 'listening' ? listening : circle).add(e);
     }
 
-    // A maximised section minimises with a right-to-left swipe too (Android's
-    // back gesture already does; this gives iPhone the same). The detector
-    // is always in the tree — only its callback switches — so toggling never
-    // remounts the lists below (their scroll positions stay put).
-    final maximised = _circleView != 'all';
+    // Swipe between sections like pages: ← next (All → Status → Listening
+    // → Your circle), → previous — so a swipe right walks back to All (and
+    // Android's back gesture still minimises in one go). Rows / the story
+    // strip keep their own swipes; this catches the rest of the screen.
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onHorizontalDragEnd: maximised
-          ? (d) {
-              if ((d.primaryVelocity ?? 0) < -300) {
-                _setCircleView(_circleView); // same key → back to all
-              }
-            }
-          : null,
+      onHorizontalDragEnd: (d) {
+        final v = d.primaryVelocity ?? 0;
+        if (v.abs() < 300) return;
+        final order = HomePageState.kCircleViews
+            .where((k) => k != 'stories' || _myUserId != null)
+            .toList();
+        final i = order.indexOf(_circleView);
+        final j = (i + (v < 0 ? 1 : -1)).clamp(0, order.length - 1);
+        if (j != i) _goCircleView(order[j]);
+      },
       child: Column(
         children: [
           _friendSearchField(
@@ -140,6 +142,11 @@ extension _HomeHub on HomePageState {
         .where((g) =>
             !g.isMe && g.hasUnseen && !StoryMute.instance.isMuted(g.authorId))
         .length;
+    // Once per launch: land on the section where something is waiting.
+    _maybeSmartLanding(
+        unread: _circleBadge(),
+        newStatuses: storiesUnseen,
+        live: listening.length);
     final pad = wide
         ? const EdgeInsets.fromLTRB(6, 0, 6, 12)
         : const EdgeInsets.only(bottom: 12);
@@ -161,7 +168,7 @@ extension _HomeHub on HomePageState {
       return [
         _maxHeader(scheme, 'Status & Stories', 'Status',
             storiesUnseen > 0 ? storiesUnseen : null, storiesUnseen,
-            listening.length),
+            listening, circle, textColor),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _fetchStories,
@@ -184,7 +191,7 @@ extension _HomeHub on HomePageState {
     if (view == 'listening') {
       return [
         _maxHeader(scheme, 'Listening now', 'Listening', listening.length,
-            storiesUnseen, listening.length),
+            storiesUnseen, listening, circle, textColor),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _onPullToRefresh,
@@ -232,7 +239,7 @@ extension _HomeHub on HomePageState {
       // Pinned "Your circle" header (fixed above the scrolling list).
       if (view == 'chats')
         _maxHeader(scheme, 'Your circle', 'Circle', chats.length,
-            storiesUnseen, listening.length)
+            storiesUnseen, listening, circle, textColor)
       else if (chats.isNotEmpty)
         _listHeader(scheme, 'Your circle', null, 'chats'),
       Expanded(
@@ -331,8 +338,16 @@ extension _HomeHub on HomePageState {
   /// other sections as small live pills (with what's waiting there), and
   /// Minimise — where the old header + a separate chip row spent two rows
   /// (and a hairline) of height. Narrow → pills and Minimise go icon-only.
-  Widget _maxHeader(ColorScheme scheme, String label, String shortLabel,
-      int? count, int storiesUnseen, int live) {
+  Widget _maxHeader(
+      ColorScheme scheme,
+      String label,
+      String shortLabel,
+      int? count,
+      int storiesUnseen,
+      List<Map<String, dynamic>> listening,
+      List<Map<String, dynamic>> circle,
+      Color textColor) {
+    final live = listening.length;
     final view = _circleView;
     final unread = _circleBadge();
     final ink = accentInk(scheme);
@@ -351,10 +366,28 @@ extension _HomeHub on HomePageState {
         return Padding(
           padding: const EdgeInsets.only(right: 6),
           child: Tooltip(
-            message: key == view
-                ? 'Back to all'
-                : (n > 0 && what != null ? '$text · $n $what' : text),
-            child: Material(
+            // Desktop (wide): the keyboard shortcut rides along.
+            message: (key == view
+                    ? 'Back to all'
+                    : (n > 0 && what != null ? '$text · $n $what' : text)) +
+                (wide
+                    ? '   Alt+${HomePageState.kCircleViews.indexOf(key) + 1}'
+                    : ''),
+            // Hold a pill → that section peeks over this one; let go → gone.
+            child: GestureDetector(
+              onLongPressStart: key == view
+                  ? null
+                  : (_) => _CirclePeek.show(
+                      context,
+                      _peekContent(key, listening, circle, scheme, textColor),
+                      text),
+              onLongPressEnd: (_) => _CirclePeek.hide(),
+              onLongPressCancel: _CirclePeek.hide,
+              // Something new arrived there → the pill breathes once.
+              child: _PulseOnRise(
+              value: n,
+              color: scheme.primary,
+              child: Material(
               color: hot
                   ? scheme.primary.withValues(alpha: 0.10)
                   : Colors.transparent,
@@ -390,6 +423,8 @@ extension _HomeHub on HomePageState {
                   ]),
                 ),
               ),
+            ),
+            ),
             ),
           ),
         );
@@ -441,6 +476,45 @@ extension _HomeHub on HomePageState {
         ]),
       );
     });
+  }
+
+  /// What a held pill peeks: that section, read-only, in a floating card.
+  Widget _peekContent(
+      String key,
+      List<Map<String, dynamic>> listening,
+      List<Map<String, dynamic>> circle,
+      ColorScheme scheme,
+      Color textColor) {
+    if (key == 'stories') {
+      return StoriesTray(
+        apiBase: _apiBase,
+        myUserId: _myUserId,
+        myName: _username.isNotEmpty ? _username : 'You',
+        myAvatarUrl: _myAvatar,
+        groups: _storyGroups,
+        onReload: _fetchStories,
+        grid: true,
+      );
+    }
+    final rows = key == 'listening'
+        ? listening
+        : key == 'chats'
+            ? [...listening, ...circle]
+            : const <Map<String, dynamic>>[];
+    if (rows.isEmpty) {
+      return Center(
+        child: Text(
+            key == 'listening'
+                ? 'Nobody is listening right now'
+                : 'Nothing here yet',
+            style: TextStyle(color: scheme.onSurfaceVariant)),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      itemCount: rows.length.clamp(0, 12),
+      itemBuilder: (_, i) => _friendEntry(rows, i, scheme, textColor),
+    );
   }
 
   /// Listening maximised, nobody live right now.
@@ -709,5 +783,131 @@ extension _HomeHub on HomePageState {
       }
     }
     return seen.length;
+  }
+}
+
+/// A Circle pill that BREATHES once when its count goes up (a new status,
+/// someone started playing, a new unread) — the same gentle swell as the
+/// ⌖ glow, never a flashing badge. Nothing moves in the list.
+class _PulseOnRise extends StatefulWidget {
+  const _PulseOnRise(
+      {required this.value, required this.color, required this.child});
+  final int value;
+  final Color color;
+  final Widget child;
+
+  @override
+  State<_PulseOnRise> createState() => _PulseOnRiseState();
+}
+
+class _PulseOnRiseState extends State<_PulseOnRise>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _a = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1000));
+
+  @override
+  void didUpdateWidget(_PulseOnRise old) {
+    super.didUpdateWidget(old);
+    if (widget.value > old.value) _a.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _a.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _a,
+      child: widget.child,
+      builder: (_, child) {
+        final t = _a.value;
+        if (t == 0 || t == 1) return child!;
+        final i = t < 0.35
+            ? Curves.easeOut.transform(t / 0.35)
+            : 1 - Curves.easeInOut.transform((t - 0.35) / 0.65);
+        return Transform.scale(
+          scale: 1 + 0.08 * i,
+          child: DecoratedBox(
+            decoration: ShapeDecoration(
+              shape: const StadiumBorder(),
+              shadows: [
+                BoxShadow(
+                    color: widget.color.withValues(alpha: 0.45 * i),
+                    blurRadius: 14,
+                    spreadRadius: 1),
+              ],
+            ),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Hold-to-peek: a Circle section floating over the current one while a
+/// pill is held (read-only — the finger is still down); let go → gone.
+class _CirclePeek {
+  static OverlayEntry? _entry;
+
+  static void show(BuildContext context, Widget content, String title) {
+    hide();
+    HapticFeedback.selectionClick();
+    final overlay = Overlay.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final size = MediaQuery.sizeOf(context);
+    _entry = OverlayEntry(
+      builder: (_) => Positioned.fill(
+        child: IgnorePointer(
+          child: ColoredBox(
+            color: Colors.black.withValues(alpha: 0.25),
+            child: Center(
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: 1),
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutBack,
+                builder: (_, t, child) => Opacity(
+                  opacity: t.clamp(0.0, 1.0),
+                  child: Transform.scale(scale: 0.9 + 0.1 * t, child: child),
+                ),
+                child: Material(
+                  color: scheme.surface,
+                  elevation: 12,
+                  borderRadius: BorderRadius.circular(20),
+                  clipBehavior: Clip.antiAlias,
+                  child: SizedBox(
+                    width: (size.width < 472 ? size.width : 472.0) - 32,
+                    height: size.height * 0.55,
+                    child: Column(children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                        child: Row(children: [
+                          Icon(Icons.visibility_rounded,
+                              size: 16, color: scheme.primary),
+                          const SizedBox(width: 6),
+                          Text('Peek · $title',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800, fontSize: 13)),
+                        ]),
+                      ),
+                      Expanded(child: content),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    overlay.insert(_entry!);
+  }
+
+  static void hide() {
+    _entry?.remove();
+    _entry = null;
   }
 }

@@ -7,7 +7,8 @@ import 'message_search_screen.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
+import 'package:flutter/services.dart'
+    show HapticFeedback, HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey;
 import 'package:flutter/foundation.dart'
     show kIsWeb, kReleaseMode, defaultTargetPlatform, TargetPlatform, ValueListenable;
 import 'package:flutter_contacts/flutter_contacts.dart';
@@ -369,17 +370,80 @@ class HomePageState extends rp.ConsumerState<HomePage>
   String _circleView = 'all';
   void _setCircleView(String v) {
     // Tapping the maximised section's control again minimises it.
-    final next = (_circleView == v) ? 'all' : v;
+    _goCircleView((_circleView == v) ? 'all' : v);
+  }
+
+  /// Go straight to a Circle view (no toggle) — shortcuts, swipes, the
+  /// smart landing. [remember] false = a one-off (don't overwrite the
+  /// choice the user made themselves).
+  void _goCircleView(String next, {bool remember = true}) {
     if (next == _circleView) return;
+    _smartLandingDone = true; // any move of mine beats the smart landing
     HapticFeedback.selectionClick();
     setState(() {
       _circleView = next;
       // Maximising Status always shows it (it may have been folded away).
       if (next == 'stories') _storiesExpanded = true;
     });
+    if (!remember) return;
     SharedPreferences.getInstance()
         .then((p) => p.setString('circle_view_v1', next))
         .catchError((_) => false);
+  }
+
+  /// Order for swiping / Alt+1…4: All · Status · Listening · Your circle.
+  static const List<String> kCircleViews = [
+    'all', 'stories', 'listening', 'chats'
+  ];
+
+  /// Smart landing, once per launch: if I like a focused Circle (a section
+  /// was maximised when I left), open the one where something is WAITING —
+  /// unread chats, else new statuses, else someone live — instead of a
+  /// quiet one. My remembered choice stays the fallback, and it's never
+  /// saved over. The shared view ("All") shows everything, so it stays.
+  bool _smartLandingDone = false;
+  void _maybeSmartLanding({
+    required int unread,
+    required int newStatuses,
+    required int live,
+  }) {
+    if (_smartLandingDone || _isLoadingFriends) return;
+    _smartLandingDone = true;
+    if (_circleView == 'all') return;
+    final has = {
+      'chats': unread > 0,
+      'stories': newStatuses > 0,
+      'listening': live > 0,
+    };
+    if (has[_circleView] == true) return; // already somewhere lively
+    final target = unread > 0
+        ? 'chats'
+        : newStatuses > 0
+            ? 'stories'
+            : live > 0
+                ? 'listening'
+                : null;
+    if (target == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _goCircleView(target, remember: false);
+    });
+  }
+
+  /// Desktop: Alt+1 All · Alt+2 Status · Alt+3 Listening · Alt+4 Your
+  /// circle (never while typing).
+  bool _onCircleKey(KeyEvent e) {
+    if (e is! KeyDownEvent) return false;
+    if (!HardwareKeyboard.instance.isAltPressed) return false;
+    final i = [
+      LogicalKeyboardKey.digit1,
+      LogicalKeyboardKey.digit2,
+      LogicalKeyboardKey.digit3,
+      LogicalKeyboardKey.digit4,
+    ].indexOf(e.logicalKey);
+    if (i < 0 || !mounted) return false;
+    if (_friendLayer == 'glow') return false;
+    _goCircleView(kCircleViews[i]);
+    return true;
   }
 
   // Images shared into Aluta from another app, waiting to be handed to the chat
@@ -475,6 +539,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     LiveSessionController.onUnseenSongShare = _onUnseenSongShare;
     GroupMeta.instance.addListener(_onGroupMeta);
     BlockList.instance.addListener(_onBlockList);
+    HardwareKeyboard.instance.addHandler(_onCircleKey);
     StoryPosting.instance.addListener(_onStoryPosting);
     // Changing who sees my last seen also changes whose I see (both ways):
     // once the choice has reached the server, refetch the list.
@@ -687,6 +752,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   @override
   void dispose() {
     BlockList.instance.removeListener(_onBlockList);
+    HardwareKeyboard.instance.removeHandler(_onCircleKey);
     StoryPosting.instance.removeListener(_onStoryPosting);
     LastSeenPrivacy.instance.mode.removeListener(_onLastSeenPrivacy);
     spacesListStale.removeListener(_loadSpaces);

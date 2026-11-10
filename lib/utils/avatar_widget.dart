@@ -8,6 +8,73 @@ import 'net_image.dart';
 /// is too weak right now (a hollow green ring — still online, not "away").
 enum OnlineDot { plain, ready, weak }
 
+/// One reading of a friend's Listen-Together readiness (`net_grade` from
+/// the server, only sent for mutual friends who are online), used by every
+/// online dot and status line so they all say the same thing.
+(OnlineDot, String) onlineDotFor(Object? grade) => switch (grade) {
+      'good' => (OnlineDot.ready, 'Online · ready to listen together'),
+      'fair' => (OnlineDot.ready,
+          'Online · ready to listen together (okay connection)'),
+      'weak' || 'offline' => (OnlineDot.weak,
+          'Online · weak connection — listening together may stutter'),
+      _ => (OnlineDot.plain, 'Online'),
+    };
+
+/// The online dot itself — shared by every avatar that shows presence
+/// (Circle list, DM header, profile peek, Group info), so all three shapes
+/// look identical everywhere.
+class OnlineDotBadge extends StatelessWidget {
+  const OnlineDotBadge(
+      {super.key, required this.style, required this.size, this.color});
+  final OnlineDot style;
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final green = color ?? const Color(0xFF2BB673);
+    final surface = Theme.of(context).colorScheme.surface;
+    switch (style) {
+      case OnlineDot.weak:
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: surface,
+            shape: BoxShape.circle,
+            border: Border.all(color: green, width: 2.2),
+            boxShadow: [BoxShadow(color: surface, spreadRadius: 1.5)],
+          ),
+        );
+      case OnlineDot.ready:
+        // Ready to listen together: a little headphones glyph in the green,
+        // so "green" alone never has to mean two things.
+        return Container(
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: green,
+            shape: BoxShape.circle,
+            border: Border.all(color: surface, width: 2),
+          ),
+          child: Icon(Icons.headphones_rounded,
+              size: size * 0.52, color: Colors.white),
+        );
+      case OnlineDot.plain:
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: green,
+            shape: BoxShape.circle,
+            border: Border.all(color: surface, width: 2),
+          ),
+        );
+    }
+  }
+}
+
 class InitialsAvatar extends StatelessWidget {
   final String name;
   final double radius;
@@ -35,49 +102,11 @@ class InitialsAvatar extends StatelessWidget {
     this.onlineDot = OnlineDot.plain,
   });
 
-  Widget _dot(BuildContext context) {
-    final green = onlineColor ?? const Color(0xFF2BB673);
-    final surface = Theme.of(context).colorScheme.surface;
-    // Ready to listen together: a touch larger, with a little headphones
-    // glyph — so "green" alone never has to mean two things.
-    final size = radius * (onlineDot == OnlineDot.ready ? 0.66 : 0.55);
-    switch (onlineDot) {
-      case OnlineDot.weak:
-        return Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: surface,
-            shape: BoxShape.circle,
-            border: Border.all(color: green, width: 2.2),
-            boxShadow: [BoxShadow(color: surface, spreadRadius: 1.5)],
-          ),
-        );
-      case OnlineDot.ready:
-        return Container(
-          width: size,
-          height: size,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: green,
-            shape: BoxShape.circle,
-            border: Border.all(color: surface, width: 2),
-          ),
-          child: Icon(Icons.headphones_rounded,
-              size: size * 0.52, color: Colors.white),
-        );
-      case OnlineDot.plain:
-        return Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: green,
-            shape: BoxShape.circle,
-            border: Border.all(color: surface, width: 2),
-          ),
-        );
-    }
-  }
+  Widget _dot(BuildContext context) => OnlineDotBadge(
+        style: onlineDot,
+        size: radius * (onlineDot == OnlineDot.ready ? 0.66 : 0.55),
+        color: onlineColor,
+      );
 
   Color _colorFromName(String name) {
     final colors = [

@@ -3487,6 +3487,16 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
   }
 
+  /// The open DM friend's Listen-Together readiness (from the friend list).
+  String? _activeNetGrade() {
+    final id = _activeFriendId;
+    if (id == null) return null;
+    for (final f in _allFriends) {
+      if (f['id']?.toString() == id) return f['net_grade']?.toString();
+    }
+    return null;
+  }
+
   int _blockVersion = 0;
   void _onBlockList() {
     for (final p in BlockList.instance.people) {
@@ -3984,7 +3994,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// Open the active DM friend's profile details (tapped from the chat header).
   void _openActiveFriendProfile() {
     final status = _activeFriendOnline == true
-        ? 'Online'
+        ? onlineDotFor(_activeNetGrade()).$2
         : (_activeFriendLastSeen?.isNotEmpty == true
             ? 'Last seen ${formatLastSeen(_activeFriendLastSeen!)}'
             // Unknown or kept private → nothing (never "Offline").
@@ -4000,6 +4010,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
       avatarUrl: _avatarFull(_activeFriendAvatar),
       isOnline: _activeFriendOnline == true,
       statusLine: status,
+      netGrade:
+          _activeFriendOnline == true ? _activeNetGrade() : null,
       // The bond: In-tune streak + Our Space, hearts between you, and
       // "Tune in" when they're playing something right now.
       spaceId: (space?['id'] as num?)?.toInt(),
@@ -4676,11 +4688,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       presence.pausedTrackFor(fid) != null;
                   final music = together || playing || paused;
                   const face = 34.0;
+                  final dot = onlineDotFor(_activeNetGrade());
                   final photo = InitialsAvatar(
                     name: _contactDisplayName(
                         _activeFriendPhone, _activeFriendName ?? ''),
                     radius: face / 2,
                     isOnline: _activeFriendOnline == true && !music,
+                    onlineDot: dot.$1,
+                    onlineTip: dot.$2,
                     imageUrl: _avatarFull(_activeFriendAvatar),
                   );
                   final story = _friendStory(_activeFriendId);

@@ -248,6 +248,9 @@ class ConversationMemberOut(BaseModel):
     avatar_url: Optional[str] = None
     phone: Optional[str] = None
     is_online: Optional[bool] = False
+    # Listen-Together readiness (good/fair/weak) — only for my mutual
+    # friends who are online, exactly like the friend list.
+    net_grade: Optional[str] = None
     role: str = "member"
 
     model_config = ConfigDict(from_attributes=True)

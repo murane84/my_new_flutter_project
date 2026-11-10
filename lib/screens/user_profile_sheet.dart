@@ -9,6 +9,7 @@ import '../services/contact_names.dart';
 import '../services/now_playing_presence.dart';
 import '../services/block_list.dart';
 import '../utils/net_image.dart';
+import '../utils/avatar_widget.dart' show onlineDotFor;
 import '../utils/time_utils.dart';
 import '../utils/toast_helper.dart';
 import '../widgets/avatar_flight.dart';
@@ -82,6 +83,9 @@ Future<void> showUserProfile(
   VoidCallback? onOpenSpace,
   // They're playing music right now → "Tune in".
   VoidCallback? onTuneIn,
+  // Their Listen-Together readiness (net_grade) when online — the status
+  // line reads like the green dot ("Online · ready to listen together").
+  String? netGrade,
   // DM friends: count the secret hearts between you.
   bool showHearts = false,
 }) async {
@@ -117,6 +121,7 @@ Future<void> showUserProfile(
       avatarUrl: avatarUrl,
       isOnline: isOnline,
       statusLine: statusLine,
+      netGrade: netGrade,
       onCall: onCall,
       spaceId: spaceId,
       spaceName: spaceName,
@@ -135,6 +140,7 @@ class _UserProfileSheet extends StatefulWidget {
   final String? phone;
   final String? avatarUrl;
   final bool isOnline;
+  final String? netGrade;
   final String? statusLine;
   final VoidCallback? onCall;
   final int? spaceId;
@@ -151,6 +157,7 @@ class _UserProfileSheet extends StatefulWidget {
     this.phone,
     this.avatarUrl,
     this.isOnline = false,
+    this.netGrade,
     this.statusLine,
     this.onCall,
     this.spaceId,
@@ -198,7 +205,7 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
       if (fp != null && fp.isNotEmpty) _phone = fp;
       _isOnline = online;
       if (online) {
-        _statusLine = 'Online';
+        _statusLine = onlineDotFor(widget.netGrade).$2;
       } else if (lastSeen != null && lastSeen.isNotEmpty) {
         _statusLine = 'Last seen ${formatLastSeen(lastSeen)}';
       } else {

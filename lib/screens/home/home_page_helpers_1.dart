@@ -1787,6 +1787,8 @@ extension _HomePageHelpers1 on HomePageState {
                         name: name,
                         radius: 38,
                         isOnline: isOnline && t == null,
+                        onlineDot: onlineDotFor(f['net_grade']).$1,
+                        onlineTip: onlineDotFor(f['net_grade']).$2,
                         imageUrl: _avatarFull(f['avatar_url']),
                       ),
                     ),
@@ -1954,15 +1956,8 @@ extension _HomePageHelpers1 on HomePageState {
     // always GREEN when online (never amber, which read as "away"): a tiny
     // 🎧 inside = ready (strong or okay connection); a hollow green ring =
     // online but too weak right now; plain green = online, not measured.
-    final grade = isOnline ? f['net_grade'] : null;
-    final (OnlineDot dotStyle, String dotTip) = switch (grade) {
-      'good' => (OnlineDot.ready, 'Online · ready to listen together'),
-      'fair' => (OnlineDot.ready,
-          'Online · ready to listen together (okay connection)'),
-      'weak' || 'offline' => (OnlineDot.weak,
-          'Online · weak connection — listening together may stutter'),
-      _ => (OnlineDot.plain, 'Online'),
-    };
+    final (OnlineDot dotStyle, String dotTip) =
+        onlineDotFor(isOnline ? f['net_grade'] : null);
     final avatar = InitialsAvatar(
       name: name,
       radius: face / 2,
@@ -2049,7 +2044,9 @@ extension _HomePageHelpers1 on HomePageState {
           phone: f['phone']?.toString(),
           avatarUrl: _avatarFull(f['avatar_url']),
           isOnline: isOnline,
-          statusLine: isOnline ? 'Online' : null,
+          statusLine:
+              isOnline ? onlineDotFor(f['net_grade']).$2 : null,
+          netGrade: isOnline ? f['net_grade']?.toString() : null,
           spaceId: (space?['id'] as num?)?.toInt(),
           spaceName: space?['name']?.toString(),
           onOpenSpace: space == null ? null : () => _openSpace(space),

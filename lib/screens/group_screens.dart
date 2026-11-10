@@ -17,6 +17,7 @@ import 'user_profile_sheet.dart';
 import '../utils/readable.dart';
 import '../services/contact_names.dart';
 import '../widgets/person_avatar.dart';
+import '../utils/avatar_widget.dart' show OnlineDot, OnlineDotBadge, onlineDotFor;
 import '../services/now_playing_presence.dart';
 import '../services/live_rooms_registry.dart';
 import '../services/group_meta.dart';
@@ -1195,6 +1196,8 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     final phone = (m['phone'] ?? '').toString();
     final isSelf = uid == _myUid;
     final online = !isSelf && m['is_online'] == true;
+    // Same reading as every online dot: 🎧 ready · ring weak · plain.
+    final dot = onlineDotFor(online ? m['net_grade'] : null);
     final avatar = _fullUrl((m['avatar_url'] ?? '').toString());
     final track = _playing(uid);
     final song = (track?['title'] ?? '').toString();
@@ -1246,15 +1249,13 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           )
         else if (online)
           Positioned(
-            right: 1,
-            bottom: 1,
-            child: Container(
-              width: 12,
-              height: 12,
-              decoration: BoxDecoration(
-                  color: Colors.green,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: scheme.surface, width: 2)),
+            right: dot.$1 == OnlineDot.ready ? -1 : 1,
+            bottom: dot.$1 == OnlineDot.ready ? -1 : 1,
+            child: Tooltip(
+              message: dot.$2,
+              child: OnlineDotBadge(
+                  style: dot.$1,
+                  size: dot.$1 == OnlineDot.ready ? 15 : 12),
             ),
           ),
       ]),
@@ -1266,7 +1267,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           ? '♪ $song · $artist'
           : '♪ $song';
     } else if (online) {
-      sub = 'Online';
+      sub = dot.$2;
     } else if (isSelf) {
       sub = role == 'admin' ? 'You manage this group' : null;
     }

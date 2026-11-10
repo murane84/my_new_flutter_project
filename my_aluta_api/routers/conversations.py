@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 import crud
 import crud_conversations as cc
+import net_grades
 import schemas
 from database import get_db
 from models import User, Conversation, ConversationMember, Message
@@ -54,14 +55,16 @@ def _conversation_out(db: Session, conv: Conversation, me: int) -> schemas.Conve
         u = db.query(User).filter(User.id == m.user_id).first()
         if u is None:
             continue
+        shown_online = bool(u.is_online and (u.id == me or u.id in _friends))
         member_outs.append(
             schemas.ConversationMemberOut(
                 user_id=u.id,
                 username=u.username,
                 avatar_url=u.avatar_url,
                 phone=u.phone,
-                is_online=bool(u.is_online
-                               and (u.id == me or u.id in _friends)),
+                is_online=shown_online,
+                net_grade=(net_grades.grade_of(u.id)
+                           if shown_online and u.id != me else None),
                 role=m.role,
             )
         )

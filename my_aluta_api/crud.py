@@ -225,6 +225,8 @@ def mark_single_message_as_delivered(db: Session, message_id: int, receiver_id: 
         raise HTTPException(status_code=404, detail="Message not found")
     if msg.receiver_id != receiver_id:
         raise HTTPException(status_code=403, detail="Not authorized")
+    if msg.visible_to_receiver is False:
+        raise HTTPException(status_code=404, detail="Message not found")
     
     if not msg.delivered:
         msg.delivered = True
@@ -245,7 +247,10 @@ def get_unread_messages_with_friend(db: Session, user_id: int, friend_id: int):
     return db.query(Message).filter(
         Message.receiver_id == user_id,
         Message.sender_id == friend_id,
-        Message.is_read == False
+        Message.is_read == False,
+        # Never a message held back from me (sent while I had them blocked):
+        # it isn't in my chat, so it can't be read — or tick blue for them.
+        Message.visible_to_receiver.isnot(False),
     ).all()
 
 

@@ -1190,6 +1190,12 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           type: ToastType.info);
       return;
     }
+    // A bond they haven't accepted yet never buzzes them (server agrees).
+    if ((_space['status'] ?? 'active').toString() == 'pending_partner') {
+      showToast(context, 'Nudges start once they accept your bond 💞',
+          type: ToastType.info);
+      return;
+    }
     setState(() => _nudging = true);
     var res = await ApiService().nudgePartner(_id);
     // One quiet retry: a blip (server restarting after a deploy, a flaky

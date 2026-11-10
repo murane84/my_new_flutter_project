@@ -277,6 +277,19 @@ def _space_status(db: Session, space: RelationshipSpace,
     return "active" if acc is not None else "pending_partner"
 
 
+def _active_partner(db: Session, space: RelationshipSpace,
+                    current_user_id: int) -> Optional[int]:
+    """The partner to NOTIFY — only once the bond is accepted. A Space I've
+    pinned for someone who hasn't said yes stays mine alone: nothing I add
+    to it buzzes them ("pinned a moment for you", heartbeats, nudges…)
+    until they accept. Data paths keep using _partner_id."""
+    partner = _partner_id(space, current_user_id)
+    if partner is None:
+        return None
+    return partner if _space_status(db, space, current_user_id) == "active" \
+        else None
+
+
 def _space_owned_with(db: Session, owner_id: int, partner_id: int):
     """The Space `owner_id` pinned whose member set is exactly {owner, partner}."""
     candidates = (
@@ -500,7 +513,7 @@ def _notify_partner_moment(db: Session, space: RelationshipSpace,
                            current_user: User, moment: PinnedMoment) -> None:
     """Tell the partner a new moment landed — the little loop that makes people
     keep sending. Best-effort over the home socket + a push."""
-    partner = _partner_id(space, current_user.id)
+    partner = _active_partner(db, space, current_user.id)
     if not partner:
         return
     who = current_user.username or "Someone"
@@ -603,7 +616,7 @@ def _notify_partner_playlist(db: Session, space: RelationshipSpace,
                              current_user: User, track: PlaylistTrack) -> None:
     """Tell the partner a song just landed in the shared crate — the little pull
     that says 'come add to this with me'. Best-effort socket + push."""
-    partner = _partner_id(space, current_user.id)
+    partner = _active_partner(db, space, current_user.id)
     if not partner:
         return
     who = current_user.username or "Someone"
@@ -645,7 +658,7 @@ def _notify_partner_playlist_remove(db: Session, space: RelationshipSpace,
     """Tell the partner a track left the shared crate so their open playlist
     refreshes — the list stays in sync for both. Socket only (no push; a
     removal is quiet). Best-effort."""
-    partner = _partner_id(space, current_user.id)
+    partner = _active_partner(db, space, current_user.id)
     if not partner:
         return
     try:
@@ -778,7 +791,7 @@ def _notify_partner_diary(db: Session, space: RelationshipSpace,
     its font) or "removed". Only "added" is worth a toast + push; "updated" and
     "removed" ship the socket event SILENTLY so the partner's page reloads
     live without a noisy banner for every small edit."""
-    partner = _partner_id(space, current_user.id)
+    partner = _active_partner(db, space, current_user.id)
     if not partner:
         return
     who = current_user.username or "Someone"
@@ -1335,6 +1348,13 @@ def _notify_moment_comment(db: Session, moment: PinnedMoment,
                            current_user: User) -> None:
     who = current_user.username or "Someone"
     line = f"{who} commented on a moment"
+    # Accepted bonds only: a moment in a Space the other person hasn't said
+    # yes to never buzzes them.
+    sp = db.query(RelationshipSpace).filter(
+        RelationshipSpace.id == moment.space_id).first()
+    if sp is not None and sp.owner_id == current_user.id and \
+            _active_partner(db, sp, current_user.id) is None:
+        return
     members = db.query(SpaceMember).filter(
         SpaceMember.space_id == moment.space_id).all()
     for mm in members:
@@ -1470,6 +1490,10 @@ def nudge_partner(
     if not partner:
         raise HTTPException(
             status_code=400, detail="This space has no partner to nudge")
+    if _active_partner(db, space, current_user.id) is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Nudges start once they accept your bond")
     who = current_user.username or "Someone"
     line = f"{who} is thinking of you 💭"
     try:
@@ -1865,7 +1889,8 @@ def answer_question(
                     db, pk, ans.user_id, ans.track_title, ans.track_artist,
                     ans.track_ref, source="question", memo=prompt.body)
 
-    _notify_prompt(space, current_user, partner,
+    _notify_prompt(space, current_user,
+                   _active_partner(db, space, current_user.id),
                    "prompt_revealed" if both else "prompt_answered",
                    prompt, reveal=both)
     return _question_state(db, space, current_user)
@@ -2118,7 +2143,9 @@ def _streak_state(db: Session, space: RelationshipSpace,
     except Exception:
         db.rollback()
     for kind in new_unlocks:
-        _notify_streak_unlock(space, current_user, partner, kind)
+        _notify_streak_unlock(space, current_user,
+                              _active_partner(db, space, current_user.id),
+                              kind)
 
     unlocks = [u.kind for u in
                db.query(CoupleUnlock).filter(CoupleUnlock.pair_key == pk).all()]
@@ -2532,7 +2559,8 @@ def create_dedication(
     _upsert_soundtrack_track(
         db, pk, current_user.id, d.track_title, d.track_artist, d.track_ref,
         source="dedication", memo=memo)
-    _notify_dedication(space, current_user, partner, d)
+    _notify_dedication(space, current_user,
+                       _active_partner(db, space, current_user.id), d)
     return _dedication_dict(db, d, current_user.id)
 
 
@@ -2622,7 +2650,8 @@ def create_capsule(
     db.add(c)
     db.commit()
     db.refresh(c)
-    _notify_capsule(space, current_user, partner, c)
+    _notify_capsule(space, current_user,
+                    _active_partner(db, space, current_user.id), c)
     return _capsule_dict(db, c, current_user.id)
 
 
@@ -2912,8 +2941,9 @@ def react_diary_entry(
             entry_id=entry.id, user_id=current_user.id, emoji=emoji))
     db.commit()
     # Live-nudge the partner so an open Our Space page / memory updates without
-    # a manual refresh (no push — reactions are lightweight).
-    if partner:
+    # a manual refresh (no push — reactions are lightweight). Accepted bonds
+    # only.
+    if partner and _active_partner(db, space, current_user.id):
         try:
             safe_notify_user(partner, {
                 "type": "space_diary_react",
@@ -2975,7 +3005,7 @@ def add_diary_comment(
     db.commit()
     db.refresh(comment)
     # Best-effort ping to the partner.
-    if partner:
+    if partner and _active_partner(db, space, current_user.id):
         who = current_user.username or "Someone"
         title = (entry.title or "").strip()
         line = (f"{who} commented on “{title}”"
@@ -3253,6 +3283,10 @@ def send_heartbeat(
     partner = _partner_id(space, current_user.id)
     if partner is None:
         raise HTTPException(status_code=400, detail="Not a 1:1 bond")
+    if _active_partner(db, space, current_user.id) is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Heartbeats start once they accept your bond")
     now = datetime.now(timezone.utc)
     key = (current_user.id, partner)
     last = _HEARTBEAT_LAST.get(key)

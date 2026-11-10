@@ -187,6 +187,7 @@ extension _HomeFriendListView on HomePageState {
                       // follows the finger (see _SwipePath).
                       return _SwipePath(
                         current: switched,
+                        hasNeighbor: (fwd) => _pathStep(fwd) != null,
                         neighbor: (fwd) {
                           final s = _pathStep(fwd);
                           return s == null

@@ -135,10 +135,13 @@ extension _HomeHub on HomePageState {
             !g.isMe && g.hasUnseen && !StoryMute.instance.isMuted(g.authorId))
         .length;
     // Once per launch: land on the section where something is waiting.
-    if (viewOverride == null) _maybeSmartLanding(
-        unread: _circleBadge(),
-        newStatuses: storiesUnseen,
-        live: listening.length);
+    // (Not for a neighbour page built under a swipe.)
+    if (viewOverride == null) {
+      _maybeSmartLanding(
+          unread: _circleBadge(),
+          newStatuses: storiesUnseen,
+          live: listening.length);
+    }
     final k = wide ? 'wide-' : '';
     return [
       // A maximised section: the 3D switcher (the shared view keeps its own
@@ -1036,11 +1039,15 @@ class _CircleFlip extends StatelessWidget {
 class _SwipePath extends StatefulWidget {
   const _SwipePath({
     required this.current,
+    required this.hasNeighbor,
     required this.neighbor,
     required this.commit,
   });
 
   final Widget current;
+
+  /// Is there a page that way? (Cheap — no building.)
+  final bool Function(bool forward) hasNeighbor;
 
   /// The page a swipe would bring in (forward = finger moving left), or
   /// null at that end of the path.
@@ -1059,10 +1066,20 @@ class _SwipePathState extends State<_SwipePath>
       vsync: this, duration: const Duration(milliseconds: 280));
   double _dx = 0; // raw finger travel this drag
   bool? _fwd; // which way this drag is going
-  Widget? _next; // the neighbour shown under the finger
+  bool _hasNext = false; // a page exists the way this drag goes
+  Widget? _next; // that page — built in build() (never in a gesture
+  // callback: its rows read providers, which belongs in the build phase)
   double _w = 1;
   bool _settling = false;
   double _rubber = 0; // past an end: a small stretch
+
+  @override
+  void didUpdateWidget(_SwipePath old) {
+    super.didUpdateWidget(old);
+    // The home rebuilt (a new message, someone went live…) — rebuild the
+    // page under the finger from fresh data on the next frame.
+    _next = null;
+  }
 
   @override
   void dispose() {
@@ -1075,6 +1092,7 @@ class _SwipePathState extends State<_SwipePath>
     _p.stop();
     _dx = 0;
     _fwd = null;
+    _hasNext = false;
     _next = null;
   }
 
@@ -1084,10 +1102,11 @@ class _SwipePathState extends State<_SwipePath>
     final fwd = _dx < 0;
     if (_fwd != fwd) {
       _fwd = fwd;
-      _next = widget.neighbor(fwd);
+      _hasNext = widget.hasNeighbor(fwd);
+      _next = null; // (re)built for this direction in build()
     }
     setState(() {
-      if (_next == null) {
+      if (!_hasNext) {
         _p.value = 0;
         _rubber = (_dx * 0.25).clamp(-40.0, 40.0);
       } else {
@@ -1100,7 +1119,7 @@ class _SwipePathState extends State<_SwipePath>
   void _end(DragEndDetails d) {
     if (_settling) return;
     final fwd = _fwd;
-    if (fwd == null || _next == null) {
+    if (fwd == null || !_hasNext) {
       setState(() => _rubber = 0); // bounce back (animated below)
       _reset();
       return;
@@ -1131,6 +1150,7 @@ class _SwipePathState extends State<_SwipePath>
     setState(() {
       _dx = 0;
       _fwd = null;
+      _hasNext = false;
       _next = null;
       _settling = false;
       _p.value = 0;
@@ -1160,7 +1180,10 @@ class _SwipePathState extends State<_SwipePath>
               final dir = (_fwd ?? true) ? 1.0 : -1.0;
               // Reduce motion: the finger still drives it, as a plain fade.
               final st = reduce ? SectionTransitionStyle.fade : style;
-              final next = _next;
+              final fwd = _fwd;
+              final next = (fwd != null && _hasNext && p > 0)
+                  ? (_next ??= widget.neighbor(fwd))
+                  : null;
               return ClipRect(
                 child: Stack(fit: StackFit.expand, children: [
                   TweenAnimationBuilder<double>(

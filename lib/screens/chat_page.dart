@@ -7616,11 +7616,12 @@ class _ChatPageState extends State<ChatPage>
                               .lineFor(widget.friendId)
                               .isNotEmpty)
                             QuickStatus.instance.lineFor(widget.friendId),
-                          _isFriendOnline
-                              ? 'online'
-                              : _lastSeen.isNotEmpty
-                                  ? 'last seen ${formatLastSeen(_lastSeen)}'
-                                  : 'offline',
+                          // Unknown or kept private → nothing, never
+                          // "offline" (that would give it away).
+                          if (_isFriendOnline)
+                            'Online'
+                          else if (_lastSeen.isNotEmpty)
+                            'Last seen ${formatLastSeen(_lastSeen)}',
                         ].join(' · '),
                   style: TextStyle(
                     fontSize: 11,

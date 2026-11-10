@@ -483,7 +483,8 @@ information. It is a good-faith draft by the developer, not legal advice.
   a secure one-way hash, never in plain text), an optional phone number and
   profile picture, and — if you enable two-factor authentication — a TOTP secret.
 - Presence: your online status and a "last seen" time, so friends can see when
-  you are available.
+  you are available. You choose who sees your last seen (your circle, only
+  your Our Space bonds, or nobody); it works both ways.
 - Messages and shared media: the text, photos, files, voice notes and GIFs you
   send and receive, with metadata such as timestamps, read/delivery status,
   reactions and replies. Media is stored on our server so it can be delivered.

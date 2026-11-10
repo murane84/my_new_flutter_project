@@ -200,6 +200,9 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
         _statusLine = 'Online';
       } else if (lastSeen != null && lastSeen.isNotEmpty) {
         _statusLine = 'Last seen ${formatLastSeen(lastSeen)}';
+      } else {
+        // Went offline, or keeps last seen private → no stale "Online".
+        _statusLine = null;
       }
     }
     if (b.streak != null) _streak = b.streak;

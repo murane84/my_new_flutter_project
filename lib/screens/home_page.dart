@@ -741,6 +741,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
     if (state == AppLifecycleState.resumed) {
       _resumedAt = DateTime.now();
+      // Heartbeats that arrived by push while I was away.
+      HeartbeatLog.instance.load();
       // A banner tapped in the shade clears itself but not its person header.
       tidyNotificationBundles();
       // Keep my Listen Together signal dot fresh for friends (≤ every 30 min).
@@ -3354,9 +3356,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
       _activeFriendOnline = friend['is_online'] ?? false;
       // Their real last-seen — never the last MESSAGE's time (that showed a
       // wrong "Last seen" that snapped to the right one a second later).
-      _activeFriendLastSeen = _freshestLastSeen(
-          _lastSeenCache[friend['id'].toString()],
-          friend['last_seen'] as String?);
+      // The list's value decides whether we may show one at all (null =
+      // unknown or kept private), so a cached time never resurrects a last
+      // seen they've since hidden.
+      final listSeen = friend['last_seen'] as String?;
+      _activeFriendLastSeen = (listSeen == null || listSeen.isEmpty)
+          ? null
+          : _freshestLastSeen(
+              _lastSeenCache[friend['id'].toString()], listSeen);
       _activeFriendLastTrack = null;
       _activeFriendPhone = friend['phone'] as String?;
       _activeFriendAvatar = friend['avatar_url'] as String?;
@@ -4356,10 +4363,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       onFriendOnlineStatusChanged: (online, lastSeen) {
                         if (mounted) {
                           final key = _activeFriendId;
-                          if (key != null &&
-                              lastSeen != null &&
-                              lastSeen.isNotEmpty) {
-                            _lastSeenCache[key] = lastSeen;
+                          if (key != null) {
+                            if (lastSeen != null && lastSeen.isNotEmpty) {
+                              _lastSeenCache[key] = lastSeen;
+                            } else {
+                              _lastSeenCache.remove(key); // hidden now
+                            }
                           }
                           setState(() {
                             _activeFriendOnline = online;

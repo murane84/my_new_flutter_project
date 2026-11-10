@@ -66,7 +66,7 @@ def get_now_playing(user_id: int) -> Optional[dict]:
     if not entry:
         return None
     if time.time() - entry["ts"] > NOW_PLAYING_TTL:
-        now_playing.pop(int(user_id), None)
+        clear_now_playing(user_id)  # expired (app killed) → remember it
         return None
     return entry["track"]
 
@@ -79,7 +79,7 @@ def get_now_playing_for(owner_id: int, viewer_id: int) -> Optional[dict]:
     if not entry:
         return None
     if time.time() - entry["ts"] > NOW_PLAYING_TTL:
-        now_playing.pop(int(owner_id), None)
+        clear_now_playing(owner_id)  # expired (app killed) → remember it
         return None
     aud = entry.get("audience")
     if aud is not None and int(viewer_id) not in aud:

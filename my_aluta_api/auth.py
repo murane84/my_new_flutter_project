@@ -386,10 +386,15 @@ def get_user_status(friend_id: int, db: Session = Depends(get_db), current_user:
     if not friend:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Same rule as /users/{id}/status: last seen only when both people's
+    # privacy choice allows it (privacy.py), else null.
+    import privacy
+    seen = privacy.last_seen_visible(db, friend.id, current_user.id)
     return {
         "user_id": friend.id,
         "is_online": friend.is_online,
-        "last_seen": str(friend.last_seen) if friend.last_seen else None
+        "last_seen": (str(friend.last_seen)
+                      if (seen and friend.last_seen) else None)
     }
 
 @router.get("/users/me")

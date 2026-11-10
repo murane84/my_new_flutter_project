@@ -278,8 +278,9 @@ def delete_account(
 
 @router.get("/users/", response_model=List[UserOut], tags=["Users"])
 def get_all_users_except_current(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    users = db.query(User).filter(User.id != current_user.id).all()
-    return users
+    # My own circle only — this used to list EVERY registered account with its
+    # email and phone, against "you never see every user by default".
+    return crud.get_all_users(db, current_user.id)
 
 @router.post("/users/me/online", tags=["Users"])
 def set_user_online_status(is_online: bool, tz_offset: int | None = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

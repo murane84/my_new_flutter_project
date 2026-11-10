@@ -330,6 +330,24 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Harmony: _spaceSearchCtrl), so switching preserves each side's query
     // rather than wiping it.
     setState(() => _friendLayer = layer);
+    // Arriving on Circle at its top → the chats that got news while I was
+    // away blink now (the chip only shows when they're above me).
+    if (layer == 'circle') {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _revealNewIfAtTop());
+    }
+  }
+
+  /// Back on the Circle list and already at its top: the chats that got new
+  /// messages while I was elsewhere are right there — blink them and drop the
+  /// "↑ N new" count (otherwise it would pop up stale the next time I scroll
+  /// down).
+  void _revealNewIfAtTop() {
+    if (!mounted || _newWhileAway.isEmpty || !_circleListVisible) return;
+    final c = _circleScroll;
+    if (c.hasClients && c.offset > 40) return; // the chip handles it
+    final fresh = Set<String>.of(_newWhileAway);
+    setState(_newWhileAway.clear);
+    _flashRows(fresh);
   }
 
   // Mobile CIRCLE layer: whether the pinned "Status & Stories" tray is expanded.
@@ -768,6 +786,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
       _bgSince ??= DateTime.now();
     }
     if (state == AppLifecycleState.resumed) {
+      // Back in the app on the Circle list's top → news blinks in place.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _revealNewIfAtTop());
       _resumedAt = DateTime.now();
       // Heartbeats that arrived by push while I was away.
       HeartbeatLog.instance.load();
@@ -5492,8 +5512,18 @@ class HomePageState extends rp.ConsumerState<HomePage>
           _searchCtrl.text = q;
           _filterFriends(q);
         }
-        // The row I came back from blinks softly, so my eye lands on it.
-        if (came != null) _flashRows({came});
+        // The row I came back from blinks softly, so my eye lands on it —
+        // and, at the top of the list, so do chats that got news meanwhile.
+        final c = _circleScroll;
+        if (_newWhileAway.isNotEmpty &&
+            _circleListVisible &&
+            (!c.hasClients || c.offset <= 40)) {
+          final fresh = Set<String>.of(_newWhileAway);
+          setState(_newWhileAway.clear);
+          _flashRows({?came, ...fresh});
+        } else if (came != null) {
+          _flashRows({came});
+        }
       });
     }
     _wasInChat = inChat;

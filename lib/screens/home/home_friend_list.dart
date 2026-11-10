@@ -267,7 +267,8 @@ extension _HomeFriendListView on HomePageState {
             children: [
               _layerColumnHeader(scheme, 'Harmony', Icons.favorite_rounded,
                   'your closest, in tune', _harmonyBadge(),
-                  onRefresh: _onPullToRefresh),
+                  onRefresh: _onPullToRefresh,
+                  onTitleTap: () => _scrollLayerToTop('harmony')),
               Padding(
                 padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
                 child: _friendSearchField(scheme, _spaceSearchCtrl,
@@ -304,7 +305,8 @@ extension _HomeFriendListView on HomePageState {
             children: [
               _layerColumnHeader(scheme, 'Circle', Icons.forum_rounded,
                   'your people & chats', _circleBadge(),
-                  onRefresh: _onPullToRefresh),
+                  onRefresh: _onPullToRefresh,
+                  onTitleTap: () => _scrollLayerToTop('circle')),
               Padding(
                 padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
                 child: _friendSearchField(scheme, _searchCtrl,
@@ -380,7 +382,8 @@ extension _HomeFriendListView on HomePageState {
   /// flagship name + a soft one-line tagline + the same persistent badge the
   /// mobile hub uses, over a hairline.
   Widget _layerColumnHeader(ColorScheme scheme, String name, IconData icon,
-      String tagline, int badge, {Future<void> Function()? onRefresh}) {
+      String tagline, int badge,
+      {Future<void> Function()? onRefresh, VoidCallback? onTitleTap}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(6, 2, 6, 8),
       child: Column(
@@ -388,16 +391,24 @@ extension _HomeFriendListView on HomePageState {
         children: [
           Row(
             children: [
-              Icon(icon, size: 17, color: accentInk(scheme)),
-              const SizedBox(width: 8),
-              Text(
-                name.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.6,
-                  color: scheme.onSurface,
-                ),
+              // Desktop twin of tapping the lit pill on a phone: the column's
+              // name takes its list back to the top.
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onTitleTap,
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(icon, size: 17, color: accentInk(scheme)),
+                  const SizedBox(width: 8),
+                  Text(
+                    name.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.6,
+                      color: scheme.onSurface,
+                    ),
+                  ),
+                ]),
               ),
               const SizedBox(width: 10),
               Expanded(

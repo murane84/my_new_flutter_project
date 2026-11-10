@@ -68,6 +68,18 @@ def _related(db: Session, a: int, b: int) -> bool:
     return False
 
 
+def _blocked(a: int, b: int) -> bool:
+    """A block either way (own session — safe from the WebSocket handler)."""
+    db = SessionLocal()
+    try:
+        import crud
+        return crud.blocked_either(db, a, b)
+    except Exception:
+        return False
+    finally:
+        db.close()
+
+
 def _are_friends(a: int, b: int) -> bool:
     """True if a and b are friends (either direction). Opens its own session so
     it's safe to call from the WebSocket handler."""
@@ -251,6 +263,10 @@ def list_rooms(
     loads — covers friends who were already online before the room started."""
     friend_ids = _friend_ids(db, current_user.id)
     rooms = MANAGER.open_rooms_for(current_user.id, friend_ids)
+    # A group jam is listed to CURRENT members only (the snapshot taken when
+    # it opened may include someone removed since).
+    rooms = [s for s in rooms if s.conversation_id is None
+             or _in_group(current_user.id, s.conversation_id)]
     return {"rooms": [s.snapshot() for s in rooms]}
 
 
@@ -416,10 +432,14 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
         allowed = (user.id == session.host_id
                    or _in_group(user.id, session.conversation_id))
     elif session.open:
-        allowed = (user.id in session.allowed_ids
+        # Re-checked on every (re)join: a friend who unfriended or blocked
+        # the host since dropping in can't come back.
+        allowed = (user.id == session.host_id
                    or _are_friends(user.id, session.host_id))
     else:
-        allowed = user.id in session.allowed_ids
+        allowed = user.id in session.allowed_ids and (
+            user.id == session.host_id
+            or not _blocked(user.id, session.host_id))
     if not allowed:
         await websocket.close(code=4403)  # not allowed in this room
         return

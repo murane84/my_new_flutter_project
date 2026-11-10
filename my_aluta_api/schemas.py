@@ -262,7 +262,7 @@ class ConversationOut(BaseModel):
     updated_at: Optional[datetime] = None
     members: list[ConversationMemberOut] = []
     # Convenience fields the chat list needs.
-    other_user: Optional[UserOut] = None   # for DMs: the OTHER member (not me)
+    other_user: Optional[PublicUser] = None   # for DMs: the OTHER member (not me)
     last_message: Optional[str] = None
     last_timestamp: Optional[datetime] = None
     last_sender_id: Optional[int] = None

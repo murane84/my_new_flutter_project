@@ -193,16 +193,25 @@ def get_messages(db: Session, conversation_id: int, skip: int = 0, limit: int = 
     )
 
 
-def last_message(db: Session, conversation_id: int) -> Message | None:
-    return (
-        db.query(Message)
-        .filter(
-            Message.conversation_id == conversation_id,
-            Message.is_deleted == False,  # noqa: E712
-        )
-        .order_by(Message.id.desc())
-        .first()
+def _visible_to(viewer: int):
+    """What [viewer] may see: not their own 'deleted for me' sends, and not
+    a DM hidden from them (sent while blocked / deleted for them)."""
+    # IS FALSE (not "= false"): legacy NULL flags count as visible.
+    return ~(((Message.sender_id == viewer)
+              & Message.visible_to_sender.is_(False))
+             | ((Message.sender_id != viewer)
+                & Message.visible_to_receiver.is_(False)))
+
+
+def last_message(db: Session, conversation_id: int,
+                 viewer: int | None = None) -> Message | None:
+    q = db.query(Message).filter(
+        Message.conversation_id == conversation_id,
+        Message.is_deleted == False,  # noqa: E712
     )
+    if viewer is not None:
+        q = q.filter(_visible_to(int(viewer)))
+    return q.order_by(Message.id.desc()).first()
 
 
 def latest_message_id(db: Session, conversation_id: int) -> int:
@@ -368,6 +377,7 @@ def unread_count(db: Session, conversation_id: int, user_id: int) -> int:
             Message.id > last,
             Message.sender_id != user_id,
             Message.is_deleted == False,  # noqa: E712
+            _visible_to(int(user_id)),
         )
         .scalar()
         or 0

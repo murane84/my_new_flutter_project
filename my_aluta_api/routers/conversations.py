@@ -69,7 +69,7 @@ def _conversation_out(db: Session, conv: Conversation, me: int) -> schemas.Conve
             my_role = m.role
         elif not conv.is_group:
             other_user = schemas.PublicUser.model_validate(u)
-    last = cc.last_message(db, conv.id)
+    last = cc.last_message(db, conv.id, viewer=me)
     return schemas.ConversationOut(
         id=conv.id,
         is_group=conv.is_group,

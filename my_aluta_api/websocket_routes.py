@@ -358,7 +358,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
     # who was closed when it was sent never saw it and the host waited forever.
     try:
         from live_session import MANAGER as _LIVE
+        from routers.live import _blocked as _lv_blocked, _in_group as _lv_in
         for s in _LIVE.pending_invites_for(uid):
+            if _lv_blocked(uid, s.host_id):
+                continue  # a block since the invite: it's gone for them
             await notify_user(uid, {
                 "type": "live_invite",
                 "data": {
@@ -372,6 +375,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
         # a user who comes online mid-room sees the drop-in card immediately
         # (the same info GET /live/rooms returns on a fresh friend-list load).
         for s in _LIVE.open_rooms_for(uid, _friend_ids(uid)):
+            if s.conversation_id is not None and \
+                    not _lv_in(uid, s.conversation_id):
+                continue  # left / removed from that group since it opened
             await notify_user(uid, {
                 "type": "live_room_available",
                 "data": {

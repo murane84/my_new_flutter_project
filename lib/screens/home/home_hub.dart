@@ -159,9 +159,8 @@ extension _HomeHub on HomePageState {
                   saved.toLowerCase().contains(q);
             }).toList();
       return [
-        _listHeader(scheme, 'Status & Stories',
-            storiesUnseen > 0 ? storiesUnseen : null, 'stories'),
-        _circleJumpBar(scheme, storiesUnseen, listening.length),
+        _maxHeader(scheme, 'Status', storiesUnseen > 0 ? storiesUnseen : null,
+            storiesUnseen, listening.length),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _fetchStories,
@@ -183,8 +182,8 @@ extension _HomeHub on HomePageState {
 
     if (view == 'listening') {
       return [
-        _listHeader(scheme, 'Listening now', listening.length, 'listening'),
-        _circleJumpBar(scheme, storiesUnseen, listening.length),
+        _maxHeader(scheme, 'Listening', listening.length, storiesUnseen,
+            listening.length),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _onPullToRefresh,
@@ -230,11 +229,11 @@ extension _HomeHub on HomePageState {
         ),
       ],
       // Pinned "Your circle" header (fixed above the scrolling list).
-      if (chats.isNotEmpty || view == 'chats')
-        _listHeader(scheme, 'Your circle',
-            view == 'chats' ? chats.length : null, 'chats'),
       if (view == 'chats')
-        _circleJumpBar(scheme, storiesUnseen, listening.length),
+        _maxHeader(scheme, 'Your circle', chats.length, storiesUnseen,
+            listening.length)
+      else if (chats.isNotEmpty)
+        _listHeader(scheme, 'Your circle', null, 'chats'),
       Expanded(
         child: Stack(children: [
           NotificationListener<UserScrollNotification>(
@@ -327,47 +326,109 @@ extension _HomeHub on HomePageState {
   /// what's waiting there — unseen statuses, people listening, unread chats)
   /// so nothing is out of mind while one section has the height. A tap
   /// maximises that one instead; "All" goes back to the shared view.
-  Widget _circleJumpBar(ColorScheme scheme, int storiesUnseen, int live) {
-    final unread = _circleBadge();
-    Widget chip(String key, IconData icon, String label, int n) {
-      return Padding(
-        padding: const EdgeInsets.only(right: 6),
-        child: ActionChip(
-          visualDensity: VisualDensity.compact,
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          avatar: Icon(icon, size: 15, color: accentInk(scheme)),
-          label: Text(n > 0 ? '$label · $n' : label,
-              style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: n > 0 ? FontWeight.w800 : FontWeight.w600)),
-          side: BorderSide(
-              color: n > 0
-                  ? scheme.primary.withAlpha(120)
-                  : scheme.outlineVariant.withAlpha(90)),
-          onPressed: () => _setCircleView(key),
-        ),
-      );
-    }
-
+  /// The ONE compact row above a maximised section: its name + count, the
+  /// other sections as small live pills (with what's waiting there), and
+  /// Minimise — where the old header + a separate chip row spent two rows
+  /// (and a hairline) of height. Narrow → pills and Minimise go icon-only.
+  Widget _maxHeader(ColorScheme scheme, String label, int? count,
+      int storiesUnseen, int live) {
     final view = _circleView;
-    return SizedBox(
-      height: 38,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        children: [
-          chip(view, Icons.dashboard_rounded, 'All', 0),
-          if (view != 'stories' && _myUserId != null)
-            chip('stories', Icons.auto_stories_rounded, 'Status',
-                storiesUnseen),
-          if (view != 'listening')
-            chip('listening', Icons.headphones_rounded, 'Listening', live),
-          if (view != 'chats')
-            chip('chats', Icons.forum_rounded, 'Chats', unread),
-        ],
-      ),
-    );
+    final unread = _circleBadge();
+    final ink = accentInk(scheme);
+    return LayoutBuilder(builder: (context, cons) {
+      final roomy = cons.maxWidth >= 380;
+      Widget pill(String key, IconData icon, String text, int n) {
+        final hot = n > 0;
+        return Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: Tooltip(
+            message: key == view ? 'Back to all' : text,
+            child: Material(
+              color: hot
+                  ? scheme.primary.withValues(alpha: 0.10)
+                  : Colors.transparent,
+              shape: StadiumBorder(
+                  side: BorderSide(
+                      color: hot
+                          ? scheme.primary.withValues(alpha: 0.45)
+                          : scheme.outlineVariant.withValues(alpha: 0.5))),
+              child: InkWell(
+                customBorder: const StadiumBorder(),
+                onTap: () => _setCircleView(key),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                      horizontal: roomy ? 9 : 7, vertical: 4),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(icon, size: 14, color: ink),
+                    if (roomy) ...[
+                      const SizedBox(width: 4),
+                      Text(text,
+                          style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight:
+                                  hot ? FontWeight.w800 : FontWeight.w600)),
+                    ],
+                    if (hot) ...[
+                      const SizedBox(width: 4),
+                      Text('$n',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: ink)),
+                    ],
+                  ]),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(6, 6, 0, 6),
+        child: Row(children: [
+          Text(label.toUpperCase(),
+              style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
+                  color: scheme.onSurfaceVariant)),
+          if (count != null) ...[
+            const SizedBox(width: 5),
+            Text('· $count',
+                style: TextStyle(
+                    fontSize: 10.5, fontWeight: FontWeight.w800, color: ink)),
+          ],
+          const SizedBox(width: 10),
+          // The other sections, scrolling sideways if they ever overflow.
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                pill(view, Icons.dashboard_rounded, 'All', 0),
+                if (view != 'stories' && _myUserId != null)
+                  pill('stories', Icons.auto_stories_rounded, 'Status',
+                      storiesUnseen),
+                if (view != 'listening')
+                  pill('listening', Icons.headphones_rounded, 'Listening',
+                      live),
+                if (view != 'chats')
+                  pill('chats', Icons.forum_rounded, 'Chats', unread),
+              ]),
+            ),
+          ),
+          roomy
+              ? _maxControl(scheme, view)
+              : IconButton(
+                  tooltip: 'Minimise',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(Icons.close_fullscreen_rounded,
+                      size: 16, color: ink),
+                  onPressed: () => _setCircleView(view),
+                ),
+        ]),
+      );
+    });
   }
 
   /// Listening maximised, nobody live right now.

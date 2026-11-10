@@ -1732,6 +1732,10 @@ extension _HomeFriendListView on HomePageState {
                 ],
               ],
             ),
+            // Breathing room between the time and the button — the tinted
+            // 🎧 circle sat right against "Fri". Same gap for 📞, so the time
+            // never shifts when the button swaps.
+            const SizedBox(width: 8),
             // BRIDGE — when this friend is playing right now, a one-tap "tune
             // in" takes the call button's place (calling stays one swipe
             // right away, and in the chat).
@@ -2370,6 +2374,8 @@ extension _HomeFriendListView on HomePageState {
                 ],
               ],
             ),
+            // Same gap as a DM row, so times line up down the list.
+            const SizedBox(width: 8),
             // Quick group call — same flow as starting one from inside the
             // group (rings every member, opens the group-call screen).
             IconButton(

@@ -312,65 +312,10 @@ extension _HomeFriendListView on HomePageState {
                 child: _friendSearchField(scheme, _searchCtrl,
                     'Search chats & people…', _filterFriends),
               ),
-              // Collapsible Status & Stories — tap its header to reclaim the
-              // tray's height for the chat list.
-              if (_myUserId != null) _collapsibleStories(scheme),
-              if (wideListening.isNotEmpty) ...[
-                _listHeader(scheme, 'Listening now', wideListening.length),
-                // Capped so a growing listener count scrolls within this zone
-                // instead of pushing "Your circle" down the column.
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 220),
-                  child: ListView.builder(
-                    key: const PageStorageKey<String>('wide-listening-list'),
-                    shrinkWrap: true,
-                    physics: const ClampingScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    itemCount: wideListening.length,
-                    itemBuilder: (_, i) =>
-                        _friendEntry(wideListening, i, scheme, textColor),
-                  ),
-                ),
-              ],
-              // Pinned "Your circle" header (fixed above the scrolling list).
-              if (wideCircle.isNotEmpty) _listHeader(scheme, 'Your circle'),
-              Expanded(
-                child: Stack(children: [
-                NotificationListener<UserScrollNotification>(
-                  onNotification: (_) {
-                    _lastUserScroll = DateTime.now();
-                    return false;
-                  },
-                  child: RefreshIndicator(
-                  onRefresh: _onPullToRefresh,
-                  child: wideCircle.isNotEmpty
-                      ? ListView.builder(
-                          // Back from a chat → right where I left the list.
-                          key: const PageStorageKey<String>('wide-circle-list'),
-                          controller: _circleScroll,
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          itemCount: wideCircle.length,
-                          itemBuilder: (_, i) =>
-                              _friendEntry(wideCircle, i, scheme, textColor),
-                        )
-                      : (wideListening.isEmpty
-                          ? _emptyConversations(scheme)
-                          : ListView(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              children: const [SizedBox(height: 220)],
-                            )),
-                ),
-                ),
-                  if (wideCircle.isNotEmpty)
-                    Positioned(
-                      right: 8,
-                      bottom: 14,
-                      child:
-                          _listTopChip(_circleScroll, scheme, countsNew: true),
-                    ),
-                ]),
-              ),
+              // Status & Stories · Listening now · Your circle — sharing the
+              // column, or one maximised to the full column height.
+              ..._circleSections(wideListening, wideCircle, scheme, textColor,
+                  wide: true),
             ],
           ),
         ),
@@ -578,7 +523,8 @@ extension _HomeFriendListView on HomePageState {
 
   /// A zone header in the conversation list ("LISTENING NOW · 2", "YOUR
   /// CIRCLE") — a small caps label, an optional coral count, and a hairline.
-  Widget _listHeader(ColorScheme scheme, String label, [int? count]) {
+  Widget _listHeader(ColorScheme scheme, String label,
+      [int? count, String? maxKey]) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(6, 16, 6, 8),
       child: Row(
@@ -608,6 +554,11 @@ extension _HomeFriendListView on HomePageState {
             child: Container(
                 height: 1, color: scheme.outlineVariant.withAlpha(70)),
           ),
+          // Circle sections: maximise to full height / minimise back.
+          if (maxKey != null) ...[
+            const SizedBox(width: 4),
+            _maxControl(scheme, maxKey),
+          ],
         ],
       ),
     );

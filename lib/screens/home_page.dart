@@ -361,6 +361,25 @@ class HomePageState extends rp.ConsumerState<HomePage>
     setState(() => _storiesExpanded = !_storiesExpanded);
   }
 
+  // Circle sections share the column's height by default ('all'). Any one of
+  // them — 'stories', 'listening' or 'chats' — can be maximised to take the
+  // whole column (desktop) / screen (mobile), and minimised back. Remembered.
+  String _circleView = 'all';
+  void _setCircleView(String v) {
+    // Tapping the maximised section's control again minimises it.
+    final next = (_circleView == v) ? 'all' : v;
+    if (next == _circleView) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      _circleView = next;
+      // Maximising Status always shows it (it may have been folded away).
+      if (next == 'stories') _storiesExpanded = true;
+    });
+    SharedPreferences.getInstance()
+        .then((p) => p.setString('circle_view_v1', next))
+        .catchError((_) => false);
+  }
+
   // Images shared into Aluta from another app, waiting to be handed to the chat
   // the user next taps (screenshot-share flow). Null when nothing is pending.
   List<String>? _shareToSend;
@@ -543,6 +562,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Know who "me" is from the last session at once (the profile call can be
     // slow or offline) — the partner lookup (Glow, Our Space) depends on it.
     SharedPreferences.getInstance().then((p) {
+      final view = p.getString('circle_view_v1');
+      if (view != null &&
+          const {'stories', 'listening', 'chats'}.contains(view) &&
+          mounted) {
+        setState(() => _circleView = view);
+      }
       final cached = int.tryParse(p.getString('my_user_id') ?? '');
       if (cached != null && _myUserId == null && mounted) {
         setState(() => _myUserId = cached);
@@ -5671,9 +5696,18 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
     // Back / swipe-back should step DOWN the view stack (close an open chat →
     // collapse a full-screen panel → then exit), not jump off the app.
+    // A maximised Circle section (Status / Listening / chats) on the list
+    // screen: back minimises it first.
+    final circleMax = _circleView != 'all' &&
+        _friendLayer == 'circle' &&
+        _activeGroup == null &&
+        _activeFriendId == null &&
+        !_playerExpanded &&
+        !_isMusicFullScreen;
     final canLeave = !(_isMusicFullScreen ||
         _isChatFullScreen ||
         _playerExpanded ||
+        circleMax ||
         _activeGroup != null ||
         _activeFriendId != null);
 
@@ -5683,6 +5717,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
       canPop: canLeave,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
+        if (circleMax) {
+          _setCircleView(_circleView); // same key again → back to all
+          return;
+        }
         setState(() {
           if (_playerExpanded) {
             // Collapse the slide-up player back to the mini bar first.

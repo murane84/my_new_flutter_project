@@ -23,6 +23,10 @@ class StoriesTray extends StatefulWidget {
   // Compact = smaller rings/tiles, for a pinned strip where vertical room is
   // precious (e.g. the desktop Circle column). Default is the full-size tray.
   final bool compact;
+  // Grid = the "Status" full view: every circle laid out in a vertical grid
+  // that fills the whole column / screen, split into New · Viewed · Muted,
+  // instead of the one-row strip. The caller gives it a bounded height.
+  final bool grid;
 
   const StoriesTray({
     super.key,
@@ -33,6 +37,7 @@ class StoriesTray extends StatefulWidget {
     required this.groups,
     required this.onReload,
     this.compact = false,
+    this.grid = false,
   });
 
   @override
@@ -141,6 +146,7 @@ class _StoriesTrayState extends State<StoriesTray> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.grid) return _buildGrid(context);
     final friends = _friendGroups;
     final compact = widget.compact;
     final ringSize = compact ? 50.0 : 66.0;
@@ -168,6 +174,123 @@ class _StoriesTrayState extends State<StoriesTray> {
               avatarRadius, tileWidth, labelSize, badgeSize);
         },
       ),
+    );
+  }
+
+  /// The full Status view: "Your story" first, then the circle split into
+  /// New (unseen) · Viewed · Muted — each a grid that fills the width, the
+  /// whole thing scrolling in the height it's given. The viewer still walks
+  /// the full closest-first order, so swiping on carries through sections.
+  Widget _buildGrid(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final friends = _friendGroups;
+    final fresh = <StoryGroup>[];
+    final seen = <StoryGroup>[];
+    final muted = <StoryGroup>[];
+    for (final g in friends) {
+      if (StoryMute.instance.isMuted(g.authorId)) {
+        muted.add(g);
+      } else if (g.hasUnseen) {
+        fresh.add(g);
+      } else {
+        seen.add(g);
+      }
+    }
+    const ringSize = 66.0, avatarRadius = 30.0, tileWidth = 80.0;
+    const labelSize = 11.0, badgeSize = 22.0;
+    const delegate = SliverGridDelegateWithMaxCrossAxisExtent(
+      maxCrossAxisExtent: 96,
+      mainAxisExtent: 98,
+      crossAxisSpacing: 4,
+      mainAxisSpacing: 6,
+    );
+    Widget label(String text, int n) => Padding(
+          padding: const EdgeInsets.fromLTRB(6, 14, 6, 8),
+          child: Row(children: [
+            Text(text.toUpperCase(),
+                style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                    color: scheme.onSurfaceVariant)),
+            const SizedBox(width: 6),
+            Text('· $n',
+                style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: scheme.primary)),
+            const SizedBox(width: 10),
+            Expanded(
+                child: Container(
+                    height: 1, color: scheme.outlineVariant.withAlpha(70))),
+          ]),
+        );
+    List<Widget> section(String title, List<StoryGroup> list) {
+      if (list.isEmpty) return const [];
+      return [
+        SliverToBoxAdapter(child: label(title, list.length)),
+        SliverGrid(
+          gridDelegate: delegate,
+          delegate: SliverChildBuilderDelegate(
+            (_, i) {
+              final g = list[i];
+              return Center(
+                child: _friendTile(
+                    g,
+                    () => _openViewer(friends, friends.indexOf(g)),
+                    ringSize,
+                    avatarRadius,
+                    tileWidth,
+                    labelSize,
+                    badgeSize),
+              );
+            },
+            childCount: list.length,
+          ),
+        ),
+      ];
+    }
+
+    return CustomScrollView(
+      key: const PageStorageKey<String>('stories-grid'),
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
+          sliver: SliverToBoxAdapter(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _myTile(
+                  ringSize, avatarRadius, tileWidth, labelSize, badgeSize),
+            ),
+          ),
+        ),
+        ...section('New', fresh),
+        ...section('Viewed', seen),
+        ...section('Muted', muted),
+        if (friends.isEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 28, 16, 0),
+              child: Column(children: [
+                Icon(Icons.auto_stories_rounded,
+                    size: 34, color: scheme.onSurfaceVariant.withAlpha(150)),
+                const SizedBox(height: 10),
+                Text('No status from your circle yet',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface)),
+                const SizedBox(height: 4),
+                Text('Share a moment or the song you\'re on — yours shows first.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 12.5, color: scheme.onSurfaceVariant)),
+              ]),
+            ),
+          ),
+        const SliverToBoxAdapter(child: SizedBox(height: 16)),
+      ],
     );
   }
 

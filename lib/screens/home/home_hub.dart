@@ -72,6 +72,8 @@ extension _HomeHub on HomePageState {
     //    couple of rows — so many listeners can never shove the circle down.
     //  • "YOUR CIRCLE": a FIXED header above the scrolling chat list, so it is
     //    always pinned in view no matter what sits above it.
+    //  • Any of the three can be maximised to the whole screen and minimised
+    //    back (see _circleSections).
     final listening = <Map<String, dynamic>>[];
     final circle = <Map<String, dynamic>>[];
     var zone = '';
@@ -98,27 +100,109 @@ extension _HomeHub on HomePageState {
           _filterFriends,
         ),
         const SizedBox(height: 10),
-        if (_myUserId != null) _collapsibleStories(scheme),
-        if (listening.isNotEmpty) ...[
-          _listHeader(scheme, 'Listening now', listening.length),
-          // Cap the live-listeners block so a growing count scrolls WITHIN this
-          // region instead of pushing "Your circle" off the screen.
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 190),
-            child: ListView.builder(
-              key: const PageStorageKey<String>('listening-list'),
-              shrinkWrap: true,
-              physics: const ClampingScrollPhysics(),
-              padding: EdgeInsets.zero,
-              itemCount: listening.length,
-              itemBuilder: (_, i) =>
-                  _friendEntry(listening, i, scheme, textColor),
+        ..._circleSections(listening, circle, scheme, textColor, wide: false),
+      ],
+    );
+  }
+
+  /// The CIRCLE sections below the search, shared by the phone layer and the
+  /// desktop column. By default ('all') Status & Stories, Listening now and
+  /// Your circle share the height. Each header carries a full-height control:
+  /// that section then takes the whole column / screen (Status as a grid,
+  /// Listening / chats as full lists) and the same control minimises it back.
+  List<Widget> _circleSections(
+      List<Map<String, dynamic>> listening,
+      List<Map<String, dynamic>> circle,
+      ColorScheme scheme,
+      Color textColor,
+      {required bool wide}) {
+    final view = _circleView;
+    final storiesUnseen = _storyGroups
+        .where((g) =>
+            !g.isMe && g.hasUnseen && !StoryMute.instance.isMuted(g.authorId))
+        .length;
+    final pad = wide
+        ? const EdgeInsets.fromLTRB(6, 0, 6, 12)
+        : const EdgeInsets.only(bottom: 12);
+    final k = wide ? 'wide-' : '';
+
+    if (view == 'stories' && _myUserId != null) {
+      return [
+        _listHeader(scheme, 'Status & Stories',
+            storiesUnseen > 0 ? storiesUnseen : null, 'stories'),
+        _circleJumpBar(scheme, storiesUnseen, listening.length),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _onPullToRefresh,
+            child: StoriesTray(
+              apiBase: _apiBase,
+              myUserId: _myUserId,
+              myName: _username.isNotEmpty ? _username : 'You',
+              myAvatarUrl: _myAvatar,
+              groups: _storyGroups,
+              onReload: _fetchStories,
+              grid: true,
             ),
           ),
-        ],
-        if (circle.isNotEmpty) _listHeader(scheme, 'Your circle'),
+        ),
+      ];
+    }
+
+    if (view == 'listening') {
+      return [
+        _listHeader(scheme, 'Listening now', listening.length, 'listening'),
+        _circleJumpBar(scheme, storiesUnseen, listening.length),
         Expanded(
-          child: Stack(children: [
+          child: RefreshIndicator(
+            onRefresh: _onPullToRefresh,
+            child: listening.isEmpty
+                ? _emptyListening(scheme)
+                : ListView.builder(
+                    key: PageStorageKey<String>('${k}listening-full'),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: pad,
+                    itemCount: listening.length,
+                    itemBuilder: (_, i) =>
+                        _friendEntry(listening, i, scheme, textColor),
+                  ),
+          ),
+        ),
+      ];
+    }
+
+    // 'chats' maximised = EVERY conversation in one full list (the live ones
+    // first, as everywhere); 'all' keeps the listeners in their own zone.
+    final chats = view == 'chats' ? [...listening, ...circle] : circle;
+    final showListening = view == 'all' && listening.isNotEmpty;
+    return [
+      if (view == 'all' && _myUserId != null) _collapsibleStories(scheme),
+      if (showListening) ...[
+        _listHeader(scheme, 'Listening now', listening.length, 'listening'),
+        // Capped so a growing listener count scrolls WITHIN this zone instead
+        // of pushing "Your circle" down — maximise it for the full list.
+        ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: wide ? 220 : 190),
+          child: ListView.builder(
+            key: PageStorageKey<String>('${k}listening-list'),
+            shrinkWrap: true,
+            physics: const ClampingScrollPhysics(),
+            padding: wide
+                ? const EdgeInsets.symmetric(horizontal: 6)
+                : EdgeInsets.zero,
+            itemCount: listening.length,
+            itemBuilder: (_, i) =>
+                _friendEntry(listening, i, scheme, textColor),
+          ),
+        ),
+      ],
+      // Pinned "Your circle" header (fixed above the scrolling list).
+      if (chats.isNotEmpty || view == 'chats')
+        _listHeader(scheme, 'Your circle',
+            view == 'chats' ? chats.length : null, 'chats'),
+      if (view == 'chats')
+        _circleJumpBar(scheme, storiesUnseen, listening.length),
+      Expanded(
+        child: Stack(children: [
           NotificationListener<UserScrollNotification>(
             // My own scrolling → don't yank the list for a new message now.
             onNotification: (_) {
@@ -126,35 +210,151 @@ extension _HomeHub on HomePageState {
               return false;
             },
             child: RefreshIndicator(
-            onRefresh: _onPullToRefresh,
-            child: circle.isNotEmpty
-                ? ListView.builder(
-                    // Back from a chat → right where I left the list.
-                    key: const PageStorageKey<String>('circle-list'),
-                    controller: _circleScroll,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.only(bottom: 12),
-                    itemCount: circle.length,
-                    itemBuilder: (_, i) =>
-                        _friendEntry(circle, i, scheme, textColor),
-                  )
-                : (listening.isEmpty
-                    ? _emptyConversations(scheme)
-                    : ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        children: const [SizedBox(height: 220)],
-                      )),
+              onRefresh: _onPullToRefresh,
+              child: chats.isNotEmpty
+                  ? ListView.builder(
+                      // Back from a chat → right where I left the list.
+                      key: PageStorageKey<String>(view == 'chats'
+                          ? '${k}circle-full'
+                          : '${k}circle-list'),
+                      controller: _circleScroll,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: pad,
+                      itemCount: chats.length,
+                      itemBuilder: (_, i) =>
+                          _friendEntry(chats, i, scheme, textColor),
+                    )
+                  : (!showListening
+                      ? _emptyConversations(scheme)
+                      : ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: const [SizedBox(height: 220)],
+                        )),
+            ),
           ),
-          ),
-            // "↑ Top" once well down; "↑ 3 new" when chats got new
-            // messages above me.
-            if (circle.isNotEmpty)
-              Positioned(
-                right: 8,
-                bottom: 14,
-                child: _listTopChip(_circleScroll, scheme, countsNew: true),
+          // "↑ Top" once well down; "↑ 3 new" when chats got new messages
+          // above me.
+          if (chats.isNotEmpty)
+            Positioned(
+              right: 8,
+              bottom: 14,
+              child: _listTopChip(_circleScroll, scheme, countsNew: true),
+            ),
+        ]),
+      ),
+    ];
+  }
+
+  /// Full-height control on a Circle section header: maximise this section,
+  /// or (when it's the one maximised) minimise back to the shared view.
+  Widget _maxControl(ColorScheme scheme, String key) {
+    final on = _circleView == key;
+    return Tooltip(
+      message: on ? 'Minimise' : 'Full height',
+      child: InkWell(
+        onTap: () => _setCircleView(key),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (on) ...[
+              Text(
+                'Minimise',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: accentInk(scheme),
+                ),
               ),
+              const SizedBox(width: 3),
+            ],
+            Icon(
+              on
+                  ? Icons.close_fullscreen_rounded
+                  : Icons.open_in_full_rounded,
+              size: 15,
+              color: accentInk(scheme),
+            ),
           ]),
+        ),
+      ),
+    );
+  }
+
+  /// Under a MAXIMISED section: the other two as small live chips (with
+  /// what's waiting there — unseen statuses, people listening, unread chats)
+  /// so nothing is out of mind while one section has the height. A tap
+  /// maximises that one instead; "All" goes back to the shared view.
+  Widget _circleJumpBar(ColorScheme scheme, int storiesUnseen, int live) {
+    final unread = _circleBadge();
+    Widget chip(String key, IconData icon, String label, int n) {
+      return Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: ActionChip(
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          avatar: Icon(icon, size: 15, color: accentInk(scheme)),
+          label: Text(n > 0 ? '$label · $n' : label,
+              style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: n > 0 ? FontWeight.w800 : FontWeight.w600)),
+          side: BorderSide(
+              color: n > 0
+                  ? scheme.primary.withAlpha(120)
+                  : scheme.outlineVariant.withAlpha(90)),
+          onPressed: () => _setCircleView(key),
+        ),
+      );
+    }
+
+    final view = _circleView;
+    return SizedBox(
+      height: 38,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        children: [
+          chip(view, Icons.dashboard_rounded, 'All', 0),
+          if (view != 'stories' && _myUserId != null)
+            chip('stories', Icons.auto_stories_rounded, 'Status',
+                storiesUnseen),
+          if (view != 'listening')
+            chip('listening', Icons.headphones_rounded, 'Listening', live),
+          if (view != 'chats')
+            chip('chats', Icons.forum_rounded, 'Chats', unread),
+        ],
+      ),
+    );
+  }
+
+  /// Listening maximised, nobody live right now.
+  Widget _emptyListening(ColorScheme scheme) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(24, 48, 24, 0),
+      children: [
+        Icon(Icons.headphones_rounded,
+            size: 36, color: scheme.onSurfaceVariant.withAlpha(150)),
+        const SizedBox(height: 10),
+        Text(
+          'Nobody in your circle is listening right now',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.w700, color: scheme.onSurface),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Play something — your friends see you here and can tune in.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 14),
+        Center(
+          child: TextButton.icon(
+            onPressed: () => _setCircleView('listening'),
+            icon: const Icon(Icons.close_fullscreen_rounded, size: 16),
+            label: const Text('Back to all'),
+          ),
         ),
       ],
     );
@@ -167,45 +367,51 @@ extension _HomeHub on HomePageState {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: _toggleStories,
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
-              child: Row(
-                children: [
-                  Text(
-                    'STATUS & STORIES',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.1,
-                      color: scheme.onSurfaceVariant,
-                    ),
+        Row(children: [
+          Expanded(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _toggleStories,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
+                  child: Row(
+                    children: [
+                      Text(
+                        'STATUS & STORIES',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.1,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        _storiesExpanded ? 'Hide' : 'Show',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: accentInk(scheme),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      AnimatedRotation(
+                        turns: _storiesExpanded ? 0.0 : 0.5,
+                        duration: const Duration(milliseconds: 200),
+                        child: Icon(Icons.keyboard_arrow_up_rounded,
+                            size: 20, color: accentInk(scheme)),
+                      ),
+                    ],
                   ),
-                  const Spacer(),
-                  Text(
-                    _storiesExpanded ? 'Hide' : 'Show',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      color: accentInk(scheme),
-                    ),
-                  ),
-                  const SizedBox(width: 2),
-                  AnimatedRotation(
-                    turns: _storiesExpanded ? 0.0 : 0.5,
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(Icons.keyboard_arrow_up_rounded,
-                        size: 20, color: accentInk(scheme)),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
+          // Full height: Status takes the whole column / screen as a grid.
+          _maxControl(scheme, 'stories'),
+        ]),
         AnimatedSize(
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeInOut,

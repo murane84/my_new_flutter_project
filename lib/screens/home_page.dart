@@ -4069,39 +4069,90 @@ class HomePageState extends rp.ConsumerState<HomePage>
                     ),
                 ],
               ),
-              // Playing music → the song's progress traced round their
-              // photo (the header has no progress line of its own), in the
-              // song's colour; ❤️ when it's the same song as mine. Else the
-              // story ring as before.
+              // ONE fixed geometry, like the friend list: a 34 px photo in a
+              // 42 px slot whose 4 px rim says what's happening — together
+              // with me › the song's progress (their colour; ❤️ same song as
+              // mine) › unseen/seen story › bonded glow › empty. The photo
+              // never grows or shrinks as music starts and stops.
               child: ListenableBuilder(
                 listenable: NowPlayingPresence.instance,
                 builder: (context, _) {
                   final fid = int.tryParse(_activeFriendId ?? '') ?? -1;
                   final presence = NowPlayingPresence.instance;
-                  final playing = presence.trackFor(fid) != null;
-                  final paused =
-                      !playing && presence.pausedTrackFor(fid) != null;
+                  final ls = activeLiveSession?.controller;
+                  final together = ls != null &&
+                      ls.isPrivatePair &&
+                      ls.partnerIds.contains(fid);
+                  final playing = !together && presence.trackFor(fid) != null;
+                  final paused = !together &&
+                      !playing &&
+                      presence.pausedTrackFor(fid) != null;
+                  final music = together || playing || paused;
+                  const face = 34.0;
                   final photo = InitialsAvatar(
                     name: _contactDisplayName(
                         _activeFriendPhone, _activeFriendName ?? ''),
-                    radius: 17,
-                    isOnline: _activeFriendOnline == true && !playing && !paused,
+                    radius: face / 2,
+                    isOnline: _activeFriendOnline == true && !music,
                     imageUrl: _avatarFull(_activeFriendAvatar),
                   );
-                  if (!playing && !paused) {
-                    return _statusRing(photo, _friendStory(_activeFriendId));
+                  final story = _friendStory(_activeFriendId);
+                  if (!music && story != null) {
+                    // Story ring drawn IN the same rim (not around it).
+                    return SizedBox(
+                      width: face + 8,
+                      height: face + 8,
+                      child: Stack(alignment: Alignment.center, children: [
+                        Positioned.fill(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: story.hasUnseen
+                                  ? const SweepGradient(colors: [
+                                      Color(0xFFF9A825),
+                                      Color(0xFFE91E63),
+                                      Color(0xFF7B1FA2),
+                                      Color(0xFFF9A825),
+                                    ])
+                                  : null,
+                              color: story.hasUnseen
+                                  ? null
+                                  : scheme.onSurface.withValues(alpha: 0.28),
+                            ),
+                          ),
+                        ),
+                        Container(
+                          width: face + 2,
+                          height: face + 2,
+                          decoration: BoxDecoration(
+                              shape: BoxShape.circle, color: scheme.surface),
+                        ),
+                        photo,
+                      ]),
+                    );
                   }
                   final c = presence.colorFor(fid);
                   return PresenceRingAvatar(
                     key: ValueKey('hdr-ring-$fid'),
-                    face: 34,
-                    mode: playing && _onSameSong(fid)
-                        ? RingMode.sameSong
-                        : RingMode.listening,
-                    color: c != null ? Color(c) : scheme.primary,
+                    face: face,
+                    mode: together
+                        ? RingMode.together
+                        : (playing && _onSameSong(fid))
+                            ? RingMode.sameSong
+                            : music
+                                ? RingMode.listening
+                                : RingMode.none,
+                    color: together
+                        ? scheme.primary
+                        : (c != null ? Color(c) : scheme.primary),
+                    color2: const Color(0xFFF2A541),
+                    // Quiet bonded partner: the thin breathing theme ring.
+                    glow: !music && _isHarmonyPartner(fid),
                     paused: paused,
                     showProgress: true,
-                    progress: () => presence.progressFor(fid),
+                    progress: (playing || paused)
+                        ? () => presence.progressFor(fid)
+                        : null,
                     gapColor: scheme.surface,
                     child: photo,
                   );
@@ -4180,7 +4231,15 @@ class HomePageState extends rp.ConsumerState<HomePage>
                     ]),
                     builder: (context, _) {
                       final fid = int.tryParse(_activeFriendId ?? '') ?? -1;
-                      final np = NowPlayingPresence.instance.trackFor(fid);
+                      // In a Listen Together session with them right now —
+                      // same rule as their photo's ring.
+                      final ls = activeLiveSession?.controller;
+                      final together = ls != null &&
+                          ls.isPrivatePair &&
+                          ls.partnerIds.contains(fid);
+                      final np = together
+                          ? null
+                          : NowPlayingPresence.instance.trackFor(fid);
                       final t = (np?['title'] ?? '').toString().trim();
                       final a = (np?['artist'] ?? '').toString().trim();
                       final listening = np != null && t.isNotEmpty;
@@ -4248,6 +4307,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
                             ? '🎤 recording a voice note…'
                             : 'typing…';
                         color = accentInk(scheme);
+                      } else if (together) {
+                        final lt2 = (activeLiveSession?.title ?? '').trim();
+                        const tLead = '🎧 Listening together';
+                        text = lt2.isEmpty ? tLead : '$tLead · “$lt2”';
+                        if (lt2.isNotEmpty) {
+                          bold = (tLead.length + 4, tLead.length + 4 + lt2.length);
+                        }
+                        color = accentInk(scheme);
                       } else if (same) {
                         text = '$bothLead$t” ❤️';
                         bold = (bothLead.length, bothLead.length + t.length);
@@ -4295,6 +4362,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
                           ),
                         ),
                       );
+                      if (typingKind == null && together) {
+                        // Tap → back into the session.
+                        return GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _reopenLiveSession,
+                          child: line,
+                        );
+                      }
                       if (typingKind == null && listening) {
                         // Tap: tune in (same song → sync up together).
                         // Long-press: where they are in the song.

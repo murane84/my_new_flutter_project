@@ -91,17 +91,33 @@ extension _HomeHub on HomePageState {
       (zone == 'listening' ? listening : circle).add(e);
     }
 
-    return Column(
-      children: [
-        _friendSearchField(
-          scheme,
-          _searchCtrl,
-          _circleSearchHint,
-          _filterFriends,
-        ),
-        const SizedBox(height: 10),
-        ..._circleSections(listening, circle, scheme, textColor, wide: false),
-      ],
+    // A maximised section minimises with a right-to-left swipe too (Android's
+    // back gesture already does; this gives iPhone the same). The detector
+    // is always in the tree — only its callback switches — so toggling never
+    // remounts the lists below (their scroll positions stay put).
+    final maximised = _circleView != 'all';
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragEnd: maximised
+          ? (d) {
+              if ((d.primaryVelocity ?? 0) < -300) {
+                _setCircleView(_circleView); // same key → back to all
+              }
+            }
+          : null,
+      child: Column(
+        children: [
+          _friendSearchField(
+            scheme,
+            _searchCtrl,
+            _circleSearchHint,
+            _filterFriends,
+          ),
+          const SizedBox(height: 10),
+          ..._circleSections(listening, circle, scheme, textColor,
+              wide: false),
+        ],
+      ),
     );
   }
 

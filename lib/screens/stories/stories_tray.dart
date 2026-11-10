@@ -166,6 +166,9 @@ class _StoriesTrayState extends State<StoriesTray> {
       height: trayHeight,
       margin: const EdgeInsets.only(bottom: 4),
       child: ListView.separated(
+        // Keeps the strip where I'd scrolled it when a section is maximised
+        // and minimised again (or I come back from a chat).
+        key: const PageStorageKey<String>('stories-strip'),
         scrollDirection: Axis.horizontal,
         padding: EdgeInsets.symmetric(horizontal: 8, vertical: compact ? 4 : 6),
         itemCount: friends.length + 1,
@@ -225,7 +228,7 @@ class _StoriesTrayState extends State<StoriesTray> {
                 style: TextStyle(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w800,
-                    color: scheme.primary)),
+                    color: accentInk(scheme))),
             const SizedBox(width: 10),
             Expanded(
                 child: Container(

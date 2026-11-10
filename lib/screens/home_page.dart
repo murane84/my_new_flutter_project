@@ -3664,7 +3664,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // waits on the "↑ N new" chip for when it's back.
     if (_circleView == 'stories' || _circleView == 'listening') return false;
     final wide = MediaQuery.sizeOf(context).width >= 600;
-    if (wide) return true;
+    // Wide: the Circle column is always beside Harmony — unless Glow fills
+    // the panel.
+    if (wide) return _friendLayer != 'glow';
     return _activeFriendId == null &&
         _activeGroup == null &&
         _friendLayer == 'circle';
@@ -5715,8 +5717,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // collapse a full-screen panel → then exit), not jump off the app.
     // A maximised Circle section (Status / Listening / chats) on the list
     // screen: back minimises it first.
+    // (Desktop / tablet shows the Circle column beside Harmony, so there it's
+    // on screen unless Glow has the panel.)
+    final circleShown = _friendLayer == 'circle' ||
+        (MediaQuery.sizeOf(context).width >= 600 && _friendLayer != 'glow');
     final circleMax = _circleView != 'all' &&
-        _friendLayer == 'circle' &&
+        circleShown &&
         _activeGroup == null &&
         _activeFriendId == null &&
         !_playerExpanded &&

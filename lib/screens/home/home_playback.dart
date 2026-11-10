@@ -78,6 +78,27 @@ class PlaybackBus {
 
 final playbackBus = PlaybackBus();
 
+/// Play one of MY loaded songs by title, matched loosely (exact name, then
+/// "file starts with / contains it"). false = it isn't loaded here (or this
+/// player can't play by file — web). Used by "your song", a friend's music
+/// status, and Our Space's song of the week.
+bool playLoadedSongByTitle(String title) {
+  String norm(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
+  final want = norm(title);
+  if (want.isEmpty) return false;
+  String? exact, starts, contains;
+  for (final p in playlistNotifier.value) {
+    var name = p.split(RegExp(r'[\\/]')).last;
+    name = name.replaceAll(RegExp(r'\.[A-Za-z0-9]{2,4}$'), '');
+    final n = norm(name);
+    if (n == want) exact ??= p;
+    if (want.length >= 4 && n.startsWith(want)) starts ??= p;
+    if (want.length >= 4 && n.contains(want)) contains ??= p;
+  }
+  final path = exact ?? starts ?? contains;
+  return path != null && (playbackBus.playPath?.call(path) ?? false);
+}
+
 // Command channel for the app-wide PLAYLIST DRAWER. The playlist UI lives in
 // MusicControls (which is always mounted, so the drawer can render over the
 // chat via the root Overlay). MusicControls registers [open]/[close]/[toggle]

@@ -45,6 +45,72 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
     );
   }
 
+  // ── our song this week ────────────────────────────────────────────────────
+  /// The song we listened to together on the most days this week — a small
+  /// card with ▶ Play (from my songs) and 💝 Dedicate it back.
+  Widget _weekSongCard(ColorScheme scheme) {
+    final ws = (_space['stats'] as Map?)?['week_song'];
+    if (ws is! Map) return const SizedBox.shrink();
+    final title = (ws['title'] ?? '').toString().trim();
+    final days = (ws['days'] as num?)?.toInt() ?? 0;
+    if (title.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: _accent.withValues(alpha: 0.10),
+          border: Border.all(color: _accent.withValues(alpha: 0.35)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('🎶 OUR SONG THIS WEEK',
+                style: TextStyle(
+                    fontSize: 10.5,
+                    letterSpacing: 1.2,
+                    fontWeight: FontWeight.w800,
+                    color: _accent)),
+            const SizedBox(height: 6),
+            Text('“$title”',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onSurface)),
+            Text('You listened to it together on $days days',
+                style:
+                    TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+            const SizedBox(height: 6),
+            Wrap(spacing: 4, children: [
+              if (!kIsWeb)
+                TextButton.icon(
+                  onPressed: () {
+                    final ok = playLoadedSongByTitle(title);
+                    showToast(
+                        context,
+                        ok
+                            ? 'Playing “$title” 💞'
+                            : '“$title” isn’t in your loaded songs yet',
+                        type: ToastType.info);
+                  },
+                  icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                  label: const Text('Play'),
+                ),
+              TextButton.icon(
+                onPressed: _composeDedication,
+                icon: const Text('💝'),
+                label: const Text('Dedicate it back'),
+              ),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── milestones ───────────────────────────────────────────────────────────
   Widget _milestoneBanner(ColorScheme scheme) {
     final reached = (_space['stats'] as Map?)?['milestone_reached'];

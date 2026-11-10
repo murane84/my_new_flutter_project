@@ -3611,22 +3611,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   /// Play a song from MY loaded songs, matched loosely by title (exact,
   /// then "file starts with / contains it"). false = not loaded here.
-  bool _playLoadedSong(String title) {
-    String norm(String s) =>
-        s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
-    final want = norm(title);
-    String? exact, starts, contains;
-    for (final p in playlistNotifier.value) {
-      var name = p.split(RegExp(r'[\\/]')).last;
-      name = name.replaceAll(RegExp(r'\.[A-Za-z0-9]{2,4}$'), '');
-      final n = norm(name);
-      if (n == want) exact ??= p;
-      if (want.length >= 4 && n.startsWith(want)) starts ??= p;
-      if (want.length >= 4 && n.contains(want)) contains ??= p;
-    }
-    final path = exact ?? starts ?? contains;
-    return path != null && (playbackBus.playPath?.call(path) ?? false);
-  }
+  bool _playLoadedSong(String title) => playLoadedSongByTitle(title);
 
   // ── List navigation ─────────────────────────────────────────────────────
 
@@ -4184,6 +4169,34 @@ class HomePageState extends rp.ConsumerState<HomePage>
   }
 
   /// First names (as I know them) of group members playing music right now.
+  /// Several of a group on the SAME song right now (me included) → the most
+  /// shared one and how many: "3 of you are on “Song”". Null under 2.
+  ({String title, int count})? _groupSharedSong(List members) {
+    String norm(String s) =>
+        s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
+    final counts = <String, int>{};
+    final shown = <String, String>{};
+    void add(String? t) {
+      final title = (t ?? '').trim();
+      final k = norm(title);
+      if (k.isEmpty) return;
+      counts[k] = (counts[k] ?? 0) + 1;
+      shown.putIfAbsent(k, () => title);
+    }
+
+    for (final m in members.whereType<Map>()) {
+      final id = int.tryParse((m['user_id'] ?? m['id'] ?? '').toString());
+      if (id == null || id == _myUserId) continue;
+      add(NowPlayingPresence.instance.trackFor(id)?['title']?.toString());
+    }
+    add(NowPlayingPresence.instance.myTrack?.title);
+    if (counts.isEmpty) return null;
+    final best =
+        counts.entries.reduce((a, b) => b.value > a.value ? b : a);
+    if (best.value < 2) return null;
+    return (title: shown[best.key]!, count: best.value);
+  }
+
   List<String> _groupListeners(List members) {
     final out = <String>[];
     for (final m in members.whereType<Map>()) {
@@ -4355,6 +4368,22 @@ class HomePageState extends rp.ConsumerState<HomePage>
                                     : () => LiveRoomsRegistry.instance
                                         .joinRoom
                                         ?.call(room!);
+                              } else if (_groupSharedSong(members)
+                                  case final shared?) {
+                                // Several of us on the same song → a jam
+                                // is one tap away.
+                                const lead = '🎶 ';
+                                final mid =
+                                    '${shared.count} of you are on “';
+                                text =
+                                    '$lead$mid${shared.title}” · Start a jam';
+                                bold = (lead.length + mid.length,
+                                    lead.length + mid.length +
+                                        shared.title.length);
+                                onTap = () {
+                                  HapticFeedback.selectionClick();
+                                  chatJamRequest.value++;
+                                };
                               } else if (who.isNotEmpty) {
                                 final names = who.length == 1
                                     ? '${who[0]} is'

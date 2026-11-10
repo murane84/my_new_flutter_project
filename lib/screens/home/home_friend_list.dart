@@ -2293,6 +2293,22 @@ extension _HomeFriendListView on HomePageState {
                   ),
                   const SizedBox(height: 2),
                   Builder(builder: (context) {
+                    // Several of the group on the same song → say so (the
+                    // group's header offers "Start a jam").
+                    final shared =
+                        isTyping ? null : _groupSharedSong(members);
+                    if (shared != null) {
+                      return Text(
+                        '🎶 ${shared.count} of you are on “${shared.title}”',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: accentInk(scheme),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                    }
                     if (isTyping) {
                       return Text(
                         typingName.isEmpty

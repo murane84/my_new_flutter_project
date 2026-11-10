@@ -124,6 +124,23 @@ def bond_stats(db: Session, a: int, b: int,
         title, cnt = ranked[0]
         your_song = {"title": title, "artist": "", "count": cnt}
 
+    # "Our song this week": the title we listened to together on the most
+    # days in the last 7 (needs 2+ days, so it means something).
+    week_song = None
+    try:
+        since = date.today() - timedelta(days=6)
+        wk: dict = {}
+        for r in rows:
+            t = (r.song_title or "").strip()
+            if t and r.day and r.day >= since:
+                wk.setdefault(t, set()).add(r.day)
+        if wk:
+            t, ds = max(wk.items(), key=lambda kv: (len(kv[1]), kv[0]))
+            if len(ds) >= 2:
+                week_song = {"title": t, "days": len(ds)}
+    except Exception:
+        week_song = None
+
     days_together = None
     if close_since is not None:
         days_together = max(0, (date.today() - close_since).days)
@@ -133,6 +150,7 @@ def bond_stats(db: Session, a: int, b: int,
         "listen_streak": streak,
         "your_song": your_song,
         "top_songs": top_songs,
+        "week_song": week_song,
         "next_milestone": _next_milestone(streak, days_together),
         "milestone_reached": _reached_milestone(streak, days_together),
     }

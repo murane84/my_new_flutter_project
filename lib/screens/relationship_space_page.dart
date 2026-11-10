@@ -16,7 +16,8 @@ import 'package:just_audio/just_audio.dart' as ja;
 
 import 'api_service.dart';
 import 'music/player_disc_style.dart' show PlayerStyleController;
-import 'home_page.dart' show playbackBus, playlistNotifier;
+import 'home_page.dart'
+    show playbackBus, playlistNotifier, playLoadedSongByTitle;
 import 'live_session_screen.dart';
 import 'token_helper.dart' show getToken, mediaAuthHeaders;
 import '../services/now_playing_presence.dart';

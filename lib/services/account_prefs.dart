@@ -63,6 +63,8 @@ class AccountPrefs {
     'glow_saved_v1',
     // Save received photos & videos to my Gallery (services/gallery_autosave)
     'gallery_autosave_on', 'gallery_autosave_videos', 'gallery_autosave_wifi',
+    // Appearance → section transitions (services/section_transition)
+    'section_transition_v1',
   ];
 
   static final List<FutureOr<void> Function()> _reloaders = [];

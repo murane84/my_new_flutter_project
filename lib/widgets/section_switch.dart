@@ -1,0 +1,325 @@
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+
+import '../services/section_transition.dart';
+
+/// Switches between sections with the user's chosen transition (Appearance
+/// → Section transitions). Give each section's child a distinct key; set
+/// [forward] to whether the new one sits further along (it comes from that
+/// side). Always clipped to its own box — nothing ever spills over
+/// neighbouring panels.
+class SectionSwitch extends StatelessWidget {
+  const SectionSwitch({
+    super.key,
+    required this.child,
+    required this.forward,
+    this.style,
+    this.duration = const Duration(milliseconds: 420),
+  });
+
+  final Widget child;
+  final bool forward;
+  final SectionTransitionStyle? style; // null = the user's choice
+  final Duration duration;
+
+  @override
+  Widget build(BuildContext context) {
+    final fixed = style;
+    if (fixed != null) return _build(context, fixed);
+    return ValueListenableBuilder<SectionTransitionStyle>(
+      valueListenable: SectionTransition.instance.style,
+      builder: (context, s, _) => _build(context, s),
+    );
+  }
+
+  Widget _build(BuildContext context, SectionTransitionStyle s) {
+    final accent = Theme.of(context).colorScheme.primary;
+    final dir = forward ? 1.0 : -1.0;
+    final ms = s == SectionTransitionStyle.wave ||
+            s == SectionTransitionStyle.ripple ||
+            s == SectionTransitionStyle.equaliser
+        ? duration + const Duration(milliseconds: 120)
+        : duration;
+    return ClipRect(
+      child: AnimatedSwitcher(
+        duration: ms,
+        switchInCurve: Curves.linear,
+        switchOutCurve: Curves.linear,
+        layoutBuilder: (cur, prev) =>
+            Stack(fit: StackFit.expand, children: [...prev, ?cur]),
+        transitionBuilder: (c, anim) {
+          final incoming = c.key == child.key;
+          return AnimatedBuilder(
+            animation: anim,
+            child: c,
+            builder: (context, w) {
+              // t: 0 → 1 while coming in; 1 → 0 while going out.
+              final t = anim.value;
+              final body = _frame(s, w!, t, incoming, dir, accent);
+              return IgnorePointer(ignoring: !incoming, child: body);
+            },
+          );
+        },
+        child: child,
+      ),
+    );
+  }
+
+  static double _ease(double t) => Curves.easeOutCubic.transform(t);
+
+  Widget _frame(SectionTransitionStyle s, Widget w, double t, bool incoming,
+      double dir, Color accent) {
+    final e = _ease(t);
+    switch (s) {
+      case SectionTransitionStyle.slide:
+        return _slide(w, e, incoming, dir);
+      case SectionTransitionStyle.slideWave:
+        return incoming
+            ? Stack(fit: StackFit.expand, children: [
+                _slide(w, e, incoming, dir),
+                _WaveLine(t: t, dir: dir, color: accent, opacity: 0.45),
+              ])
+            : _slide(w, e, incoming, dir);
+      case SectionTransitionStyle.depth:
+        return Opacity(
+          opacity: e.clamp(0.0, 1.0),
+          child: Transform.scale(
+            scale: incoming ? 1.05 - 0.05 * e : 0.93 + 0.07 * e,
+            child: w,
+          ),
+        );
+      case SectionTransitionStyle.fade:
+        // Out fades quickly; in waits a beat, then fades + grows.
+        if (!incoming) return Opacity(opacity: (t * 3 - 2).clamp(0.0, 1.0), child: w);
+        final k = ((t - 0.3) / 0.7).clamp(0.0, 1.0);
+        final ek = _ease(k);
+        return Opacity(
+          opacity: ek,
+          child: Transform.scale(scale: 0.92 + 0.08 * ek, child: w),
+        );
+      case SectionTransitionStyle.ripple:
+        if (!incoming) return w; // revealed over, then removed
+        return ClipPath(
+          clipper: _RippleClipper(
+              Curves.easeInOutCubic.transform(t), dir > 0 ? 0.75 : 0.25),
+          child: w,
+        );
+      case SectionTransitionStyle.wave:
+        if (!incoming) return w;
+        return Stack(fit: StackFit.expand, children: [
+          ClipPath(clipper: _WaveClipper(_ease(t), dir), child: w),
+          _WaveLine(t: t, dir: dir, color: accent, opacity: 1),
+        ]);
+      case SectionTransitionStyle.equaliser:
+        if (!incoming) return w;
+        return ClipPath(clipper: _BarsClipper(t, dir), child: w);
+      case SectionTransitionStyle.cube:
+        final angle = (1 - e) * 0.55 * (incoming ? dir : -dir);
+        final hinge = incoming
+            ? (dir > 0 ? Alignment.centerLeft : Alignment.centerRight)
+            : (dir > 0 ? Alignment.centerRight : Alignment.centerLeft);
+        return Opacity(
+          opacity: e.clamp(0.0, 1.0),
+          child: Transform(
+            alignment: hinge,
+            transform: Matrix4.identity()
+              ..setEntry(3, 2, 0.0014)
+              ..rotateY(angle),
+            child: w,
+          ),
+        );
+    }
+  }
+
+  static Widget _slide(Widget w, double e, bool incoming, double dir) {
+    final dx = (1 - e) * 30 * (incoming ? dir : -dir);
+    return Opacity(
+      opacity: e.clamp(0.0, 1.0),
+      child: Transform.translate(offset: Offset(dx, 0), child: w),
+    );
+  }
+}
+
+/// A circle growing out of the switcher (top, on the tapped side).
+class _RippleClipper extends CustomClipper<Path> {
+  _RippleClipper(this.t, this.fx);
+  final double t, fx;
+  @override
+  Path getClip(Size s) {
+    final c = Offset(s.width * fx, -s.height * 0.08);
+    final r = math.sqrt(s.width * s.width + s.height * s.height) * 1.15 * t;
+    return Path()..addOval(Rect.fromCircle(center: c, radius: r));
+  }
+
+  @override
+  bool shouldReclip(_RippleClipper o) => o.t != t || o.fx != fx;
+}
+
+double _waveX(double t, double w, double dir) =>
+    dir > 0 ? w * t : w * (1 - t);
+
+/// Everything behind a sound-wave edge sweeping across.
+class _WaveClipper extends CustomClipper<Path> {
+  _WaveClipper(this.t, this.dir);
+  final double t, dir;
+  @override
+  Path getClip(Size s) {
+    final x = _waveX(t, s.width, dir);
+    final p = Path()..moveTo(dir > 0 ? 0 : s.width, 0);
+    for (double y = 0; y <= s.height; y += 6) {
+      p.lineTo(x + 7 * math.sin(y / 14 + t * 18), y);
+    }
+    p
+      ..lineTo(x, s.height)
+      ..lineTo(dir > 0 ? 0 : s.width, s.height)
+      ..close();
+    return p;
+  }
+
+  @override
+  bool shouldReclip(_WaveClipper o) => o.t != t || o.dir != dir;
+}
+
+/// The accent sound-wave line riding the edge (fades in and out).
+class _WaveLine extends StatelessWidget {
+  const _WaveLine(
+      {required this.t,
+      required this.dir,
+      required this.color,
+      required this.opacity});
+  final double t, dir, opacity;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+        child: CustomPaint(
+          painter: _WavePainter(SectionSwitch._ease(t), dir,
+              color.withValues(alpha: opacity * math.sin(math.pi * t))),
+        ),
+      );
+}
+
+class _WavePainter extends CustomPainter {
+  _WavePainter(this.t, this.dir, this.color);
+  final double t, dir;
+  final Color color;
+  @override
+  void paint(Canvas canvas, Size s) {
+    if (color.a == 0) return;
+    final x = _waveX(t, s.width, dir);
+    final p = Path()..moveTo(x + 7 * math.sin(t * 18), 0);
+    for (double y = 6; y <= s.height; y += 6) {
+      p.lineTo(x + 7 * math.sin(y / 14 + t * 18), y);
+    }
+    canvas.drawPath(
+        p,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.4
+          ..strokeCap = StrokeCap.round);
+  }
+
+  @override
+  bool shouldRepaint(_WavePainter o) =>
+      o.t != t || o.dir != dir || o.color != color;
+}
+
+/// Equaliser bars: the new section rises in strip by strip, in the
+/// direction of travel (with a tiny overshoot per bar).
+class _BarsClipper extends CustomClipper<Path> {
+  _BarsClipper(this.t, this.dir);
+  final double t, dir;
+  static const n = 8;
+  @override
+  Path getClip(Size s) {
+    final p = Path();
+    final w = s.width / n;
+    for (var i = 0; i < n; i++) {
+      final k = dir > 0 ? i : n - 1 - i;
+      final local = ((t - k * 0.06) / (1 - (n - 1) * 0.06)).clamp(0.0, 1.0);
+      final h = s.height * Curves.easeOutBack.transform(local).clamp(0.0, 1.2);
+      p.addRect(Rect.fromLTWH(i * w, s.height - h, w + 0.5, h));
+    }
+    return p;
+  }
+
+  @override
+  bool shouldReclip(_BarsClipper o) => o.t != t || o.dir != dir;
+}
+
+/// A looping mini demo of one style (two little "sections" swapping) for
+/// the Appearance picker.
+class SectionTransitionDemo extends StatefulWidget {
+  const SectionTransitionDemo({super.key, required this.style});
+  final SectionTransitionStyle style;
+  @override
+  State<SectionTransitionDemo> createState() => _SectionTransitionDemoState();
+}
+
+class _SectionTransitionDemoState extends State<SectionTransitionDemo> {
+  bool _b = false;
+  late final Stream<int> _tick =
+      Stream.periodic(const Duration(milliseconds: 1600), (i) => i);
+
+  Widget _face(ColorScheme scheme, bool live) {
+    Widget row() => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2.5),
+          child: Row(children: [
+            Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: scheme.surfaceContainerHighest,
+                border: Border.all(
+                    color: live ? scheme.primary : scheme.outlineVariant,
+                    width: 1.5),
+              ),
+            ),
+            const SizedBox(width: 5),
+            Expanded(
+              child: Container(
+                height: 10,
+                decoration: BoxDecoration(
+                  color: live
+                      ? scheme.primary.withValues(alpha: 0.35)
+                      : scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+          ]),
+        );
+    return Container(
+      key: ValueKey(live),
+      color: scheme.surface,
+      padding: const EdgeInsets.all(6),
+      child: Column(children: [row(), row(), row()]),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return StreamBuilder<int>(
+      stream: _tick,
+      builder: (context, snap) {
+        if (snap.hasData) _b = snap.data!.isOdd;
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox(
+            width: 76,
+            height: 52,
+            child: SectionSwitch(
+              style: widget.style,
+              forward: _b,
+              child: _face(scheme, _b),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

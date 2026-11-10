@@ -1007,55 +1007,16 @@ class _CirclePeek {
   }
 }
 
-/// Turns a Circle section change like a cube face: the new view swings in
-/// from the side it lives on (← forward: All → Status → Listening →
-/// Circle; → back), with depth and a soft fade, while the old one swings
-/// away. [forward] is set by HomePageState._goCircleView.
+/// A Circle section change, in the user's chosen transition (Appearance →
+/// Section transitions; default slide + wave). The new view comes from the
+/// side it lives on (← forward: All → Status → Listening → Circle; → back).
+/// [forward] is set by HomePageState._goCircleView.
 class _CircleFlip extends StatelessWidget {
   const _CircleFlip({required this.child});
   final Widget child;
   static bool forward = true;
 
   @override
-  Widget build(BuildContext context) {
-    // Clipped to the Circle area: a turning face must never draw over the
-    // Harmony column (or the search box above).
-    return ClipRect(child: AnimatedSwitcher(
-      duration: const Duration(milliseconds: 420),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      layoutBuilder: (cur, prev) =>
-          Stack(fit: StackFit.expand, children: [...prev, ?cur]),
-      transitionBuilder: (c, anim) {
-        final incoming = c.key == child.key;
-        return AnimatedBuilder(
-          animation: anim,
-          child: c,
-          builder: (_, w) {
-            final t = anim.value; // 0 → 1 coming in; 1 → 0 going out
-            final dir = forward ? 1.0 : -1.0;
-            // In: hinged on the near edge, swinging flat. Out: away.
-            final angle = (1 - t) * 0.55 * (incoming ? dir : -dir);
-            final hinge = incoming
-                ? (dir > 0 ? Alignment.centerLeft : Alignment.centerRight)
-                : (dir > 0 ? Alignment.centerRight : Alignment.centerLeft);
-            return IgnorePointer(
-              ignoring: !incoming,
-              child: Opacity(
-                opacity: t.clamp(0.0, 1.0),
-                child: Transform(
-                  alignment: hinge,
-                  transform: Matrix4.identity()
-                    ..setEntry(3, 2, 0.0014)
-                    ..rotateY(angle),
-                  child: w,
-                ),
-              ),
-            );
-          },
-        );
-      },
-      child: child,
-    ));
-  }
+  Widget build(BuildContext context) =>
+      SectionSwitch(forward: forward, child: child);
 }

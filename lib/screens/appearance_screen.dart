@@ -20,6 +20,8 @@ import '../services/song_insights.dart';
 import '../utils/readable.dart';
 import '../services/account_prefs.dart';
 import '../services/gallery_autosave.dart';
+import '../services/section_transition.dart';
+import '../widgets/section_switch.dart';
 import '../utils/toast_helper.dart';
 
 /// The personalization surface (build step 5): whole-app **theme** (System /
@@ -187,7 +189,25 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                   ],
                 ),
           const SizedBox(height: 10),
-          const _MusicNudgesSection(),
+          // Music nudges · Section transitions — side by side on wide screens.
+          isWide
+              ? const IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: _MusicNudgesSection()),
+                      SizedBox(width: 12),
+                      Expanded(child: _SectionTransitionsSection()),
+                    ],
+                  ),
+                )
+              : const Column(
+                  children: [
+                    _MusicNudgesSection(),
+                    SizedBox(height: 10),
+                    _SectionTransitionsSection(),
+                  ],
+                ),
           if (_showGuide) ...[
             const SizedBox(height: 8),
             Text(
@@ -1180,6 +1200,181 @@ class _HeartReceiptsSectionState extends State<_HeartReceiptsSection> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "Section transitions": how Circle's All · Status · Listening · Circle
+/// switch animates. The card shows the current one playing in miniature;
+/// tapping opens the picker, every style looping live side by side.
+class _SectionTransitionsSection extends StatelessWidget {
+  const _SectionTransitionsSection();
+
+  void _pick(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints:
+              BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.8),
+          child: ValueListenableBuilder<SectionTransitionStyle>(
+            valueListenable: SectionTransition.instance.style,
+            builder: (ctx, cur, _) {
+              final scheme = Theme.of(ctx).colorScheme;
+              return ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(8, 0, 8, 2),
+                    child: Text('Section transitions',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w800)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+                    child: Text(
+                        'How Circle switches between All · Status · Listening · '
+                        'Circle. Each one is playing below.',
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant)),
+                  ),
+                  for (final s in SectionTransitionStyle.values)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Material(
+                        color: s == cur
+                            ? scheme.primary.withValues(alpha: 0.10)
+                            : scheme.surfaceContainerHighest
+                                .withValues(alpha: 0.45),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          side: BorderSide(
+                              color: s == cur
+                                  ? scheme.primary.withValues(alpha: 0.6)
+                                  : Colors.transparent),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () => SectionTransition.instance.set(s),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Row(children: [
+                              SectionTransitionDemo(style: s),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(children: [
+                                      Flexible(
+                                        child: Text(s.label,
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 14)),
+                                      ),
+                                      if (s ==
+                                          SectionTransition.defaultStyle) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 1),
+                                          decoration: BoxDecoration(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            border: Border.all(
+                                                color: scheme.primary
+                                                    .withValues(alpha: 0.5)),
+                                          ),
+                                          child: Text('Default',
+                                              style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: accentInk(scheme))),
+                                        ),
+                                      ],
+                                    ]),
+                                    const SizedBox(height: 2),
+                                    Text(s.blurb,
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: scheme.onSurfaceVariant)),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                  s == cur
+                                      ? Icons.radio_button_checked_rounded
+                                      : Icons.radio_button_off_rounded,
+                                  color: s == cur
+                                      ? accentInk(scheme)
+                                      : scheme.onSurfaceVariant),
+                            ]),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return DecoratedBox(
+      decoration: _raisedCardDecoration(scheme, isDark),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => _pick(context),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            child: ValueListenableBuilder<SectionTransitionStyle>(
+              valueListenable: SectionTransition.instance.style,
+              builder: (context, s, _) => Row(
+                children: [
+                  _accentIconChip(scheme, Icons.animation_rounded),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Section transitions',
+                            style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                                color: scheme.onSurface)),
+                        const SizedBox(height: 2),
+                        Text('${s.label} · how Circle switches sections',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: scheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // The current style, playing in miniature.
+                  SectionTransitionDemo(key: ValueKey(s), style: s),
+                  Icon(Icons.chevron_right_rounded,
+                      color: scheme.onSurfaceVariant),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

@@ -505,12 +505,23 @@ def toggle_mute(friend_id: int, db: Session = Depends(get_db), current_user: Use
         db.commit()
         return {"muted": True}
     
+@router.get("/block/{user_id}", response_model=bool)
+def have_i_blocked(user_id: int, db: Session = Depends(get_db),
+                   current_user: User = Depends(get_current_user)):
+    """Did I block {user_id}? (Only my own side — whether THEY blocked me is
+    never revealed.)"""
+    return db.query(BlockStatus).filter_by(
+        user_id=current_user.id, blocked_user_id=user_id).first() is not None
+
+
 @router.post("/block/{blocked_user_id}", response_model=bool)
 def toggle_block_user(
     blocked_user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if blocked_user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="You can't block yourself")
     block = db.query(BlockStatus).filter_by(
         user_id=current_user.id,
         blocked_user_id=blocked_user_id

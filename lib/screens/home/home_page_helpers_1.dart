@@ -1703,38 +1703,6 @@ extension _HomePageHelpers1 on HomePageState {
     _fetchStories();
   }
 
-  /// A friend-list avatar, wrapped in a story ring when they have an active
-  /// status: a colourful gradient while unseen, a neutral grey once viewed.
-  /// Tapping the ring opens their story (the rest of the tile opens the chat).
-  /// Wrap [avatar] in a status ring for [story] — a colourful gradient while
-  /// unseen, a neutral grey once viewed — or return it unchanged when there's
-  /// no active story. Shared by the friend-list tiles and the DM chat header.
-  Widget _statusRing(Widget avatar, StoryGroup? story) {
-    if (story == null) return avatar;
-    final scheme = Theme.of(context).colorScheme;
-    final gradient = story.hasUnseen
-        ? const LinearGradient(
-            colors: [Color(0xFFF9A825), Color(0xFFE91E63), Color(0xFF7B1FA2)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          )
-        : null;
-    return Container(
-      padding: const EdgeInsets.all(2.5),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: gradient,
-        color: gradient == null ? Colors.grey.shade400 : null,
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(2),
-        decoration:
-            BoxDecoration(shape: BoxShape.circle, color: scheme.surface),
-        child: avatar,
-      ),
-    );
-  }
-
   /// The quick peek from long-pressing a friend's photo in the Circle list:
   /// their photo + ring, what they're playing (live progress), and one-tap
   /// Tune in / send a ❤️ for the song / open the chat.

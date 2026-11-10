@@ -27,6 +27,11 @@ class StoriesTray extends StatefulWidget {
   // that fills the whole column / screen, split into New · Viewed · Muted,
   // instead of the one-row strip. The caller gives it a bounded height.
   final bool grid;
+  // Grid only: the groups were narrowed by a search (empty = "no match",
+  // not "nobody posted").
+  final bool searching;
+  // Grid only: lets the host glide it back to the top.
+  final ScrollController? controller;
 
   const StoriesTray({
     super.key,
@@ -38,6 +43,8 @@ class StoriesTray extends StatefulWidget {
     required this.onReload,
     this.compact = false,
     this.grid = false,
+    this.searching = false,
+    this.controller,
   });
 
   @override
@@ -253,6 +260,7 @@ class _StoriesTrayState extends State<StoriesTray> {
 
     return CustomScrollView(
       key: const PageStorageKey<String>('stories-grid'),
+      controller: widget.controller,
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         SliverPadding(
@@ -276,16 +284,20 @@ class _StoriesTrayState extends State<StoriesTray> {
                 Icon(Icons.auto_stories_rounded,
                     size: 34, color: scheme.onSurfaceVariant.withAlpha(150)),
                 const SizedBox(height: 10),
-                Text('No status from your circle yet',
+                Text(
+                    widget.searching
+                        ? 'No status matches that name'
+                        : 'No status from your circle yet',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                         fontWeight: FontWeight.w700,
                         color: scheme.onSurface)),
                 const SizedBox(height: 4),
-                Text('Share a moment or the song you\'re on — yours shows first.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 12.5, color: scheme.onSurfaceVariant)),
+                if (!widget.searching)
+                  Text('Share a moment or the song you\'re on — yours shows first.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 12.5, color: scheme.onSurfaceVariant)),
               ]),
             ),
           ),

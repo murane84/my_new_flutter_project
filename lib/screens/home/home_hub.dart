@@ -96,7 +96,7 @@ extension _HomeHub on HomePageState {
         _friendSearchField(
           scheme,
           _searchCtrl,
-          'Search chats & people…',
+          _circleSearchHint,
           _filterFriends,
         ),
         const SizedBox(height: 10),
@@ -116,7 +116,10 @@ extension _HomeHub on HomePageState {
       ColorScheme scheme,
       Color textColor,
       {required bool wide}) {
-    final view = _circleView;
+    // Status needs to know who "me" is (cold start may not yet): until then
+    // the shared view stands in.
+    final view =
+        (_circleView == 'stories' && _myUserId == null) ? 'all' : _circleView;
     final storiesUnseen = _storyGroups
         .where((g) =>
             !g.isMe && g.hasUnseen && !StoryMute.instance.isMuted(g.authorId))
@@ -126,22 +129,36 @@ extension _HomeHub on HomePageState {
         : const EdgeInsets.only(bottom: 12);
     final k = wide ? 'wide-' : '';
 
-    if (view == 'stories' && _myUserId != null) {
+    if (view == 'stories') {
+      // The one Circle search box filters whichever section is maximised —
+      // here, statuses by the name I know them by.
+      final q = _searchQuery.trim().toLowerCase();
+      final groups = q.isEmpty
+          ? _storyGroups
+          : _storyGroups.where((g) {
+              if (g.isMe) return true;
+              final saved =
+                  ContactNames.instance.nameFor((g.phone ?? '').trim()) ?? '';
+              return g.username.toLowerCase().contains(q) ||
+                  saved.toLowerCase().contains(q);
+            }).toList();
       return [
         _listHeader(scheme, 'Status & Stories',
             storiesUnseen > 0 ? storiesUnseen : null, 'stories'),
         _circleJumpBar(scheme, storiesUnseen, listening.length),
         Expanded(
           child: RefreshIndicator(
-            onRefresh: _onPullToRefresh,
+            onRefresh: _fetchStories,
             child: StoriesTray(
               apiBase: _apiBase,
               myUserId: _myUserId,
               myName: _username.isNotEmpty ? _username : 'You',
               myAvatarUrl: _myAvatar,
-              groups: _storyGroups,
+              groups: groups,
               onReload: _fetchStories,
               grid: true,
+              searching: q.isNotEmpty,
+              controller: _circleMaxScroll,
             ),
           ),
         ),
@@ -156,9 +173,10 @@ extension _HomeHub on HomePageState {
           child: RefreshIndicator(
             onRefresh: _onPullToRefresh,
             child: listening.isEmpty
-                ? _emptyListening(scheme)
+                ? _emptyListening(scheme, _searchQuery.trim().isNotEmpty)
                 : ListView.builder(
                     key: PageStorageKey<String>('${k}listening-full'),
+                    controller: _circleMaxScroll,
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: pad,
                     itemCount: listening.length,
@@ -245,6 +263,14 @@ extension _HomeHub on HomePageState {
     ];
   }
 
+  /// The Circle search hint follows the maximised section, so the box says
+  /// what it will filter.
+  String get _circleSearchHint => switch (_circleView) {
+        'stories' => 'Search statuses…',
+        'listening' => 'Search who\'s listening…',
+        _ => 'Search chats & people…',
+      };
+
   /// Full-height control on a Circle section header: maximise this section,
   /// or (when it's the one maximised) minimise back to the shared view.
   Widget _maxControl(ColorScheme scheme, String key) {
@@ -329,7 +355,7 @@ extension _HomeHub on HomePageState {
   }
 
   /// Listening maximised, nobody live right now.
-  Widget _emptyListening(ColorScheme scheme) {
+  Widget _emptyListening(ColorScheme scheme, bool searching) {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(24, 48, 24, 0),
@@ -338,16 +364,19 @@ extension _HomeHub on HomePageState {
             size: 36, color: scheme.onSurfaceVariant.withAlpha(150)),
         const SizedBox(height: 10),
         Text(
-          'Nobody in your circle is listening right now',
+          searching
+              ? 'No one listening matches that name'
+              : 'Nobody in your circle is listening right now',
           textAlign: TextAlign.center,
           style: TextStyle(fontWeight: FontWeight.w700, color: scheme.onSurface),
         ),
         const SizedBox(height: 4),
-        Text(
-          'Play something — your friends see you here and can tune in.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
-        ),
+        if (!searching)
+          Text(
+            'Play something — your friends see you here and can tune in.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
+          ),
         const SizedBox(height: 14),
         Center(
           child: TextButton.icon(

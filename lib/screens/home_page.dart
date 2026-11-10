@@ -730,6 +730,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _burstTimer?.cancel();
     _circleScroll.dispose();
     _harmonyScroll.dispose();
+    _circleMaxScroll.dispose();
     _minuteTick.dispose();
     _connectivitySub?.cancel();
     _notifyWs?.close();
@@ -2982,6 +2983,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // lists' PageStorageKeys keep the position across a chat).
   final ScrollController _circleScroll = ScrollController();
   final ScrollController _harmonyScroll = ScrollController();
+  // The maximised Status grid / Listening list (one is on screen at a time).
+  final ScrollController _circleMaxScroll = ScrollController();
   // Rows blinking right now ('s<friendId>' / 'g<convId>').
   final Set<String> _flashKeys = {};
   Timer? _flashTimer;
@@ -3657,6 +3660,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// Is the Circle list on screen right now? (Desktop columns: always.)
   bool get _circleListVisible {
     if (!_appForeground) return false;
+    // Status or Listening maximised: the chat list isn't on screen, so news
+    // waits on the "↑ N new" chip for when it's back.
+    if (_circleView == 'stories' || _circleView == 'listening') return false;
     final wide = MediaQuery.sizeOf(context).width >= 600;
     if (wide) return true;
     return _activeFriendId == null &&
@@ -3685,7 +3691,15 @@ class HomePageState extends rp.ConsumerState<HomePage>
     HapticFeedback.selectionClick();
     switch (layer) {
       case 'circle':
-        _scrollListToTop(_circleScroll);
+        // Status / Listening maximised → that full view glides up instead.
+        if ((_circleView == 'stories' || _circleView == 'listening') &&
+            _circleMaxScroll.hasClients) {
+          _circleMaxScroll.animateTo(0,
+              duration: const Duration(milliseconds: 450),
+              curve: Curves.easeOutCubic);
+        } else {
+          _scrollListToTop(_circleScroll);
+        }
       case 'harmony':
         _scrollListToTop(_harmonyScroll);
       case 'glow':
@@ -5282,10 +5296,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Also re-read the phone book: anyone in it who has joined Aluta since is
     // added to the circle (quietly — no prompt, no toast unless someone new).
     final fromContacts = _findFriendsFromContacts(quiet: true);
+    // Statuses too — the same pull refreshes every Circle section.
+    final stories = _fetchStories();
     await _fetchFriends();
     _loadSpaces();
     _loadPlan();
     await fromContacts;
+    await stories;
   }
 
   static const _kSpacesCache = 'cached_spaces_v1';

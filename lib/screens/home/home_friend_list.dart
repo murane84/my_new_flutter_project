@@ -310,7 +310,7 @@ extension _HomeFriendListView on HomePageState {
               Padding(
                 padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
                 child: _friendSearchField(scheme, _searchCtrl,
-                    'Search chats & people…', _filterFriends),
+                    _circleSearchHint, _filterFriends),
               ),
               // Status & Stories · Listening now · Your circle — sharing the
               // column, or one maximised to the full column height.

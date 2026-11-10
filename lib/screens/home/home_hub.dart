@@ -36,20 +36,28 @@ extension _HomeHub on HomePageState {
           ),
           const SizedBox(height: 10),
           Expanded(
-            child: RefreshIndicator(
-              onRefresh: _onPullToRefresh,
-              child: ListView.builder(
-                // Remembers where I'd scrolled: opening a chat replaces this
-                // list, and coming back rebuilds it — the key restores the
-                // position instead of jumping to the top.
-                key: const PageStorageKey<String>('harmony-list'),
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.only(bottom: 12),
-                itemCount: harmonyEntries.length,
-                itemBuilder: (_, i) =>
-                    _friendEntry(harmonyEntries, i, scheme, textColor),
+            child: Stack(children: [
+              RefreshIndicator(
+                onRefresh: _onPullToRefresh,
+                child: ListView.builder(
+                  // Remembers where I'd scrolled: opening a chat replaces
+                  // this list, and coming back rebuilds it — the key
+                  // restores the position instead of jumping to the top.
+                  key: const PageStorageKey<String>('harmony-list'),
+                  controller: _harmonyScroll,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.only(bottom: 12),
+                  itemCount: harmonyEntries.length,
+                  itemBuilder: (_, i) =>
+                      _friendEntry(harmonyEntries, i, scheme, textColor),
+                ),
               ),
-            ),
+              Positioned(
+                right: 8,
+                bottom: 14,
+                child: _listTopChip(_harmonyScroll, scheme),
+              ),
+            ]),
           ),
         ],
       );
@@ -110,12 +118,20 @@ extension _HomeHub on HomePageState {
         ],
         if (circle.isNotEmpty) _listHeader(scheme, 'Your circle'),
         Expanded(
-          child: RefreshIndicator(
+          child: Stack(children: [
+          NotificationListener<UserScrollNotification>(
+            // My own scrolling → don't yank the list for a new message now.
+            onNotification: (_) {
+              _lastUserScroll = DateTime.now();
+              return false;
+            },
+            child: RefreshIndicator(
             onRefresh: _onPullToRefresh,
             child: circle.isNotEmpty
                 ? ListView.builder(
                     // Back from a chat → right where I left the list.
                     key: const PageStorageKey<String>('circle-list'),
+                    controller: _circleScroll,
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.only(bottom: 12),
                     itemCount: circle.length,
@@ -129,6 +145,16 @@ extension _HomeHub on HomePageState {
                         children: const [SizedBox(height: 220)],
                       )),
           ),
+          ),
+            // "↑ Top" once well down; "↑ 3 new" when chats got new
+            // messages above me.
+            if (circle.isNotEmpty)
+              Positioned(
+                right: 8,
+                bottom: 14,
+                child: _listTopChip(_circleScroll, scheme, countsNew: true),
+              ),
+          ]),
         ),
       ],
     );
@@ -225,7 +251,9 @@ extension _HomeHub on HomePageState {
       child: Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap ?? () => _setFriendLayer(key),
+        // Tapping the lit pill again → that list glides back to the top.
+        onTap: onTap ??
+            () => active ? _scrollLayerToTop(key) : _setFriendLayer(key),
         borderRadius: BorderRadius.circular(20),
         // The badge FLOATS on the corner (Stack, no clip) instead of sitting
         // inline — so it adds zero width to the pill. A growing count (even

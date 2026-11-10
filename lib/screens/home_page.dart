@@ -438,6 +438,15 @@ class HomePageState extends rp.ConsumerState<HomePage>
     LastSeenPrivacy.instance.load();
     LastSeenPrivacy.instance.mode.addListener(_onLastSeenPrivacy);
     spacesListStale.addListener(_loadSpaces);
+    // Scrolled back up by hand → the "↑ N new" chip has done its job.
+    _circleScroll.addListener(() {
+      if (_newWhileAway.isNotEmpty &&
+          _circleScroll.hasClients &&
+          _circleScroll.offset <= 40 &&
+          mounted) {
+        setState(_newWhileAway.clear);
+      }
+    });
     // Replied from a notification while the app is alive → refresh that card
     // (its preview becomes "✓ You: …" and the unread clears).
     onInlineReplySent = (fid, cid) {
@@ -660,6 +669,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _refreshTimer?.cancel();
     _heartbeatTimer?.cancel();
     _minuteTimer?.cancel();
+    _flashTimer?.cancel();
+    _burstTimer?.cancel();
+    _circleScroll.dispose();
+    _harmonyScroll.dispose();
     _minuteTick.dispose();
     _connectivitySub?.cancel();
     _notifyWs?.close();
@@ -2571,6 +2584,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
       // Keep it for the thread: opening that chat paints it at once (with the
       // "new messages" divider) instead of after the history fetch.
       LiveInbox.instance.add(data, _myUserId?.toString());
+      // Its chat moves to the top of the list: glide + blink, or the chip.
+      _noteIncomingForList(data);
       // "Save to Gallery" on → a received photo / video goes there now.
       GalleryAutoSave.instance.consider(data, _myUserId?.toString());
       if (mid != null &&
@@ -2896,6 +2911,24 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // restored when I come back, so "back" returns to exactly what I left.
   String _searchBeforeChat = '';
   bool _wasInChat = false;
+
+  // ── List navigation ──
+  // Circle / Harmony list scroll (phone + desktop columns share them; the
+  // lists' PageStorageKeys keep the position across a chat).
+  final ScrollController _circleScroll = ScrollController();
+  final ScrollController _harmonyScroll = ScrollController();
+  // Rows blinking right now ('s<friendId>' / 'g<convId>').
+  final Set<String> _flashKeys = {};
+  Timer? _flashTimer;
+  // The row I opened a chat from — it blinks when I come back.
+  String? _openedKey;
+  // Chats that got a new message while I was scrolled away / elsewhere →
+  // the "↑ N new" chip (newest last).
+  final Set<String> _newWhileAway = <String>{};
+  // New messages landing together glide up ONCE (a burst, not a jitter).
+  final Set<String> _burst = {};
+  Timer? _burstTimer;
+  DateTime _lastUserScroll = DateTime.fromMillisecondsSinceEpoch(0);
 
   void _filterFriends(String query) {
     setState(() {
@@ -3456,6 +3489,168 @@ class HomePageState extends rp.ConsumerState<HomePage>
         type: ToastType.info);
   }
 
+  // ── List navigation ─────────────────────────────────────────────────────
+
+  /// Blink these rows twice (theme glow) — "here it is".
+  void _flashRows(Set<String> keys) {
+    if (keys.isEmpty) return;
+    _flashTimer?.cancel();
+    setState(() {
+      _flashKeys
+        ..clear()
+        ..addAll(keys);
+    });
+    _flashTimer = Timer(const Duration(milliseconds: 1700), () {
+      if (mounted) setState(_flashKeys.clear);
+    });
+  }
+
+  /// Is the Circle list on screen right now? (Desktop columns: always.)
+  bool get _circleListVisible {
+    if (!_appForeground) return false;
+    final wide = MediaQuery.sizeOf(context).width >= 600;
+    if (wide) return true;
+    return _activeFriendId == null &&
+        _activeGroup == null &&
+        _friendLayer == 'circle';
+  }
+
+  /// Glide a list to the top; arriving there clears the "new" chip and
+  /// blinks what was new.
+  void _scrollListToTop(ScrollController c) {
+    if (!c.hasClients) return;
+    final fresh = Set<String>.of(_newWhileAway);
+    c.animateTo(0,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeOutCubic);
+    if (fresh.isNotEmpty) {
+      setState(_newWhileAway.clear);
+      Future<void>.delayed(const Duration(milliseconds: 480), () {
+        if (mounted) _flashRows(fresh);
+      });
+    }
+  }
+
+  /// Tapped the layer pill that's already lit → that list back to the top.
+  void _scrollLayerToTop(String layer) {
+    HapticFeedback.selectionClick();
+    switch (layer) {
+      case 'circle':
+        _scrollListToTop(_circleScroll);
+      case 'harmony':
+        _scrollListToTop(_harmonyScroll);
+      case 'glow':
+        glowScrollTopRequest.value++;
+    }
+  }
+
+  /// A message just arrived. Its chat jumps to the top of the Circle list:
+  /// if I can see the list but I'm scrolled down (and not busy scrolling or
+  /// searching), glide up to it and blink it. Several at once → one glide.
+  /// Otherwise (scrolling, searching, in a chat, another layer) it waits on
+  /// the "↑ N new" chip. Never for my own messages, an open chat, or a
+  /// group I muted.
+  void _noteIncomingForList(Map<String, dynamic> data) {
+    final me = _myUserId?.toString();
+    final sObj = data['sender'] as Map?;
+    final sid = (sObj?['id'] ?? data['sender_id'])?.toString();
+    if (sid == null || sid == me) return;
+    final cid = (data['conversation_id'] ?? '').toString();
+    final isGroup = data['receiver_id'] == null && cid.isNotEmpty;
+    if (isGroup) {
+      final gid = int.tryParse(cid);
+      if (gid != null && GroupMeta.instance.isMuted(gid)) return;
+      if (_activeGroup?['id']?.toString() == cid) return;
+    } else if (_activeFriendId == sid) {
+      return;
+    }
+    final key = isGroup ? 'g$cid' : 's$sid';
+    final c = _circleScroll;
+    final atTop = c.hasClients && c.offset <= 40;
+    final busy = DateTime.now().difference(_lastUserScroll) <
+        const Duration(seconds: 3);
+    if (_circleListVisible && _searchQuery.isEmpty && (atTop || !busy)) {
+      _burst.add(key);
+      _burstTimer?.cancel();
+      // Let the list re-sort (and more messages land) first.
+      _burstTimer = Timer(const Duration(milliseconds: 700), () {
+        if (!mounted) return;
+        final keys = Set<String>.of(_burst);
+        _burst.clear();
+        if (c.hasClients && c.offset > 40) {
+          c.animateTo(0,
+              duration: const Duration(milliseconds: 520),
+              curve: Curves.easeOutCubic);
+          Future<void>.delayed(const Duration(milliseconds: 540), () {
+            if (mounted) _flashRows(keys);
+          });
+        } else {
+          _flashRows(keys);
+        }
+      });
+      return;
+    }
+    setState(() {
+      _newWhileAway
+        ..remove(key)
+        ..add(key);
+    });
+  }
+
+  /// The floating "↑ Top" / "↑ 3 new" chip over a list: shows once you're
+  /// well down the list, or when new chats are waiting above you.
+  Widget _listTopChip(ScrollController c, ColorScheme scheme,
+      {bool countsNew = false}) {
+    return ListenableBuilder(
+      listenable: c,
+      builder: (context, _) {
+        final off = c.hasClients ? c.offset : 0.0;
+        final n = countsNew ? _newWhileAway.length : 0;
+        final show = off > 600 || (n > 0 && off > 40);
+        return IgnorePointer(
+          ignoring: !show,
+          child: AnimatedSlide(
+            offset: show ? Offset.zero : const Offset(0, 0.6),
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            child: AnimatedOpacity(
+              opacity: show ? 1 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: Material(
+                color: n > 0 ? scheme.primary : scheme.surfaceContainerHigh,
+                elevation: 3,
+                shape: const StadiumBorder(),
+                child: InkWell(
+                  customBorder: const StadiumBorder(),
+                  onTap: () => _scrollListToTop(c),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.arrow_upward_rounded,
+                          size: 16,
+                          color: n > 0
+                              ? readableOn(scheme.primary)
+                              : accentInk(scheme)),
+                      const SizedBox(width: 4),
+                      Text(n > 0 ? '$n new' : 'Top',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: n > 0
+                                  ? readableOn(scheme.primary)
+                                  : accentInk(scheme))),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   /// The later of two server "last seen" times (either may be missing).
   String? _freshestLastSeen(String? a, String? b) {
     if (a == null || a.isEmpty) return (b == null || b.isEmpty) ? null : b;
@@ -3470,6 +3665,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void openChat(Map<String, dynamic> friend, {String? jumpToMessageId}) {
     var leftFull = false;
     if (_searchQuery.isNotEmpty) _searchBeforeChat = _searchQuery;
+    _openedKey = 's${friend['id']}';
+    _newWhileAway.remove(_openedKey);
     setState(() {
       _pendingJumpMessageId = jumpToMessageId;
       _clearSearchState();
@@ -3524,6 +3721,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     jumpToMessageId ??=
         (mentionMid != null && mentionMid.isNotEmpty) ? mentionMid : null;
     if (_searchQuery.isNotEmpty) _searchBeforeChat = _searchQuery;
+    _openedKey = 'g${conv['id']}';
+    _newWhileAway.remove(_openedKey);
     setState(() {
       _pendingJumpMessageId = jumpToMessageId;
       _clearSearchState();
@@ -5280,15 +5479,21 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // panel) → the list returns as I left it: same scroll position (the
     // lists' PageStorageKeys) and the same search, if I'd searched.
     final inChat = _activeFriendId != null || _activeGroup != null;
-    if (_wasInChat && !inChat && _searchBeforeChat.isNotEmpty) {
+    if (_wasInChat && !inChat) {
       final q = _searchBeforeChat;
       _searchBeforeChat = '';
+      final came = _openedKey;
+      _openedKey = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _activeFriendId != null || _activeGroup != null) {
           return;
         }
-        _searchCtrl.text = q;
-        _filterFriends(q);
+        if (q.isNotEmpty) {
+          _searchCtrl.text = q;
+          _filterFriends(q);
+        }
+        // The row I came back from blinks softly, so my eye lands on it.
+        if (came != null) _flashRows({came});
       });
     }
     _wasInChat = inChat;

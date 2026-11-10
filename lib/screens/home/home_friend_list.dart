@@ -277,6 +277,7 @@ extension _HomeFriendListView on HomePageState {
                 child: ListView.builder(
                   // Back from a chat → right where I left the list.
                   key: const PageStorageKey<String>('wide-harmony-list'),
+                  controller: _harmonyScroll,
                   physics: const AlwaysScrollableScrollPhysics(),
                   // Symmetric horizontal inset so the Our Space hero + Live Room
                   // cards float with EQUAL left/right margins on every platform
@@ -332,12 +333,19 @@ extension _HomeFriendListView on HomePageState {
               // Pinned "Your circle" header (fixed above the scrolling list).
               if (wideCircle.isNotEmpty) _listHeader(scheme, 'Your circle'),
               Expanded(
-                child: RefreshIndicator(
+                child: Stack(children: [
+                NotificationListener<UserScrollNotification>(
+                  onNotification: (_) {
+                    _lastUserScroll = DateTime.now();
+                    return false;
+                  },
+                  child: RefreshIndicator(
                   onRefresh: _onPullToRefresh,
                   child: wideCircle.isNotEmpty
                       ? ListView.builder(
                           // Back from a chat → right where I left the list.
                           key: const PageStorageKey<String>('wide-circle-list'),
+                          controller: _circleScroll,
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.symmetric(horizontal: 6),
                           itemCount: wideCircle.length,
@@ -351,6 +359,15 @@ extension _HomeFriendListView on HomePageState {
                               children: const [SizedBox(height: 220)],
                             )),
                 ),
+                ),
+                  if (wideCircle.isNotEmpty)
+                    Positioned(
+                      right: 8,
+                      bottom: 14,
+                      child:
+                          _listTopChip(_circleScroll, scheme, countsNew: true),
+                    ),
+                ]),
               ),
             ],
           ),
@@ -494,9 +511,17 @@ extension _HomeFriendListView on HomePageState {
     final item = e['item'] as Map<String, dynamic>;
     // Each conversation row is now a raised 3D card that self-separates from the
     // next, so the old hairline divider between tiles is gone.
-    return item['is_group'] == true
-        ? _buildGroupTile(item, textColor, scheme)
-        : _buildFriendTile(item, textColor, scheme);
+    final isGroup = item['is_group'] == true;
+    final key = isGroup ? 'g${item['id']}' : 's${item['id']}';
+    // Blinks twice when it's the row I came back from, or a chat that just
+    // got a new message and glided into view.
+    return _RowFlash(
+      active: _flashKeys.contains(key),
+      color: scheme.primary,
+      child: isGroup
+          ? _buildGroupTile(item, textColor, scheme)
+          : _buildFriendTile(item, textColor, scheme),
+    );
   }
 
   /// The empty-conversation placeholder (pull-to-refresh friendly).

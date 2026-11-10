@@ -97,6 +97,9 @@ GlowCard? glowForUs() {
 /// feeling you last gave a song), then the rest of the pack, shuffled fresh
 /// each day. Save ♡ what speaks to you; send any card to your partner.
 /// Bundled and on-device — no server. Encouragement, not therapy.
+/// Bumped by Home when the lit Glow pill is tapped again → back to the top.
+final ValueNotifier<int> glowScrollTopRequest = ValueNotifier<int>(0);
+
 class GlowFeed extends StatefulWidget {
   const GlowFeed({super.key});
 
@@ -110,10 +113,27 @@ class _GlowFeedState extends State<GlowFeed> {
   static const _savedKey = 'glow_saved_v1';
   Set<String> _saved = {};
   _Filter _filter = _Filter.all;
+  final ScrollController _scroll = ScrollController();
+
+  void _toTop() {
+    if (_scroll.hasClients) {
+      _scroll.animateTo(0,
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeOutCubic);
+    }
+  }
+
+  @override
+  void dispose() {
+    glowScrollTopRequest.removeListener(_toTop);
+    _scroll.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
     super.initState();
+    glowScrollTopRequest.addListener(_toTop);
     SharedPreferences.getInstance().then((p) {
       if (!mounted) return;
       setState(() => _saved = (p.getStringList(_savedKey) ?? const []).toSet());
@@ -192,6 +212,7 @@ class _GlowFeedState extends State<GlowFeed> {
       // Like the Circle / Harmony lists: back from a chat (or another
       // layer) lands where I'd scrolled.
       key: const PageStorageKey<String>('glow-list'),
+      controller: _scroll,
       padding: const EdgeInsets.fromLTRB(2, 0, 2, 20),
       children: [
         if (showToday) ...[

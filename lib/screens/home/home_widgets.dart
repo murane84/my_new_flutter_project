@@ -479,3 +479,66 @@ class _LiveInviteDialog extends StatelessWidget {
     );
   }
 }
+
+/// A list row that blinks twice in the theme colour when [active] turns on —
+/// "here it is" (the chat I came back from, or one a new message just moved
+/// to the top). Costs nothing while idle.
+class _RowFlash extends StatefulWidget {
+  const _RowFlash(
+      {required this.active, required this.color, required this.child});
+
+  final bool active;
+  final Color color;
+  final Widget child;
+
+  @override
+  State<_RowFlash> createState() => _RowFlashState();
+}
+
+class _RowFlashState extends State<_RowFlash>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1500));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) _c.forward(from: 0);
+  }
+
+  @override
+  void didUpdateWidget(covariant _RowFlash old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !old.active) _c.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      child: widget.child,
+      builder: (context, child) {
+        final t = _c.value;
+        // Two soft pulses, then rest: 0 → 1 → 0 → 1 → 0.
+        final v = (t <= 0 || t >= 1) ? 0.0 : 0.5 - 0.5 * cos(t * pi * 4);
+        if (v == 0) return child!;
+        return DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            color: widget.color.withValues(alpha: 0.14 * v),
+            border: Border.all(
+                color: widget.color.withValues(alpha: 0.65 * v), width: 1.5),
+          ),
+          child: child,
+        );
+      },
+    );
+  }
+}

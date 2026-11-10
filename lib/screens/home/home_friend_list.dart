@@ -201,11 +201,23 @@ extension _HomeFriendListView on HomePageState {
                     builder: (context) {
                       // Glow (third layer) fills the panel on any width.
                       if (_friendLayer == 'glow') {
-                        return Center(
+                        final feed = Center(
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 720),
                             child: const GlowFeed(),
                           ),
+                        );
+                        if (wide) return feed;
+                        // Phone: swipe → back to Circle (same path as
+                        // everywhere: Harmony ← Circle ← Glow).
+                        return GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onHorizontalDragEnd: (d) {
+                            if ((d.primaryVelocity ?? 0) > 300) {
+                              _setFriendLayer('circle');
+                            }
+                          },
+                          child: feed,
                         );
                       }
                       if (wide) {

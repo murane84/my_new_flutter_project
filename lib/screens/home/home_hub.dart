@@ -26,7 +26,13 @@ extension _HomeHub on HomePageState {
 
     // HARMONY layer is unchanged: contextual search + a single scrolling list.
     if (harmony) {
-      return Column(
+      // Swipe ← to Circle (the same path every layer follows).
+      return GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragEnd: (d) {
+          if ((d.primaryVelocity ?? 0) < -300) _setFriendLayer('circle');
+        },
+        child: Column(
         children: [
           _friendSearchField(
             scheme,
@@ -60,6 +66,7 @@ extension _HomeHub on HomePageState {
             ]),
           ),
         ],
+      ),
       );
     }
 
@@ -104,6 +111,17 @@ extension _HomeHub on HomePageState {
             .where((k) => k != 'stories' || _myUserId != null)
             .toList();
         final i = order.indexOf(_circleView);
+        // One continuous path across the chat screen: Harmony ← [All ·
+        // Status · Listening · Circle] → Glow. Past either end of Circle's
+        // sections, the swipe carries on to the next layer.
+        if (v > 0 && i <= 0) {
+          _setFriendLayer('harmony');
+          return;
+        }
+        if (v < 0 && i >= order.length - 1) {
+          _setFriendLayer('glow');
+          return;
+        }
         final j = (i + (v < 0 ? 1 : -1)).clamp(0, order.length - 1);
         if (j != i) _goCircleView(order[j]);
       },

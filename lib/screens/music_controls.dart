@@ -5,6 +5,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart'
+    show PointerDeviceKind, PointerScrollEvent;
 import 'package:intl/intl.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:file_picker/file_picker.dart';
@@ -389,6 +391,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   bool _showSpeedPanel = false;
   // Volume popup: appears on tap, auto-hides after a short idle.
   bool _showVolume = false;
+  // Opened by a desktop hover (not a tap) → it also closes when the pointer
+  // leaves the pill.
+  bool _volumeByHover = false;
+  bool _overVolume = false; // the pointer is on the pill → never auto-hide
   Timer? _volumeHideTimer;
   // Anchors the volume popup to the volume button so it grows out of the icon
   // (instead of floating far away at the bottom of the panel).
@@ -2682,6 +2688,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   void _closeVolume() {
     _volumeHideTimer?.cancel();
+    _volumeByHover = false;
+    _overVolume = false;
     if (!mounted || !_showVolume) return;
     _volumeCtrl.reverse().then((_) {
       if (mounted) setState(() => _showVolume = false);
@@ -2901,7 +2909,34 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                       alignment: Alignment.centerLeft,
                       child: FadeTransition(
                         opacity: _volumeCtrl,
-                        child: _buildVolumePopup(scheme),
+                        // Desktop: while the pointer is on the pill it stays;
+                        // leaving it folds it back (hover-opened ones); the
+                        // mouse wheel nudges the volume 5% a notch.
+                        child: MouseRegion(
+                          onEnter: (_) {
+                            _overVolume = true;
+                            _volumeHideTimer?.cancel();
+                          },
+                          onExit: (_) {
+                            _overVolume = false;
+                            _volumeHideTimer?.cancel();
+                            _volumeHideTimer = Timer(
+                                Duration(
+                                    milliseconds:
+                                        _volumeByHover ? 380 : 1500),
+                                _closeVolume);
+                          },
+                          child: Listener(
+                            onPointerSignal: (s) {
+                              if (s is! PointerScrollEvent) return;
+                              final step =
+                                  s.scrollDelta.dy > 0 ? -0.05 : 0.05;
+                              if (_muted) setState(() => _muted = false);
+                              _setVolume((_volume + step).clamp(0.0, 1.0));
+                            },
+                            child: _buildVolumePopup(scheme),
+                          ),
+                        ),
                       ),
                     ),
                   ),

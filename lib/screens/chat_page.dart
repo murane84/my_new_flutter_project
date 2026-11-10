@@ -3632,13 +3632,24 @@ class _ChatPageState extends State<ChatPage>
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            for (final e in reactions)
-              _ReactionButton(
-                emoji: e,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _addReaction(msg, e);
-                },
+            for (var i = 0; i < reactions.length; i++)
+              // The strip unrolls: each emoji pops in a beat after the last
+              // (phones too), instead of the whole row snapping on.
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: 1),
+                duration: Duration(milliseconds: 180 + 40 * i),
+                curve: Curves.easeOutBack,
+                builder: (_, t, child) => Opacity(
+                  opacity: t.clamp(0.0, 1.0),
+                  child: Transform.scale(scale: 0.4 + 0.6 * t, child: child),
+                ),
+                child: _ReactionButton(
+                  emoji: reactions[i],
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _addReaction(msg, reactions[i]);
+                  },
+                ),
               ),
           ],
         ),
@@ -8589,7 +8600,9 @@ class _HoverChevronState extends State<_HoverChevron> {
   final _portal = OverlayPortalController();
   bool _rowOpen = false; // the full emoji row (vs. the 😊 chip)
   bool _overFloat = false; // pointer is on the floating chip / row
+  bool _closing = false; // fading out before the overlay is removed
   Timer? _hideTimer;
+  Timer? _outTimer;
 
   bool get _canReact =>
       widget.onReact != null && widget.reactions.isNotEmpty;
@@ -8611,13 +8624,20 @@ class _HoverChevronState extends State<_HoverChevron> {
   }
 
   void _onScroll() {
+    _outTimer?.cancel();
     if (_portal.isShowing) _portal.hide();
-    if (_rowOpen && mounted) setState(() => _rowOpen = false);
+    if ((_rowOpen || _closing) && mounted) {
+      setState(() {
+        _rowOpen = false;
+        _closing = false;
+      });
+    }
   }
 
   @override
   void dispose() {
     _hideTimer?.cancel();
+    _outTimer?.cancel();
     _scroll?.removeListener(_onScroll);
     super.dispose();
   }
@@ -8651,8 +8671,29 @@ class _HoverChevronState extends State<_HoverChevron> {
 
   void _enterBubble() {
     _hideTimer?.cancel();
+    // Back on the bubble while it was fading out → it simply fades back in.
+    if (_closing) {
+      _outTimer?.cancel();
+      setState(() => _closing = false);
+    }
     if (!_hover) setState(() => _hover = true);
     if (_canReact && !_portal.isShowing && _placeChip()) _portal.show();
+  }
+
+  /// Fold the chip / row away smoothly (fade + shrink), THEN drop the
+  /// overlay — never a snap off.
+  void _fadeOut() {
+    if (!_portal.isShowing) return;
+    setState(() => _closing = true);
+    _outTimer?.cancel();
+    _outTimer = Timer(const Duration(milliseconds: 170), () {
+      if (!mounted || !_closing) return;
+      if (_portal.isShowing) _portal.hide();
+      setState(() {
+        _closing = false;
+        _rowOpen = false;
+      });
+    });
   }
 
   // Leaving the bubble toward the floating chip must not close it: wait a
@@ -8661,11 +8702,8 @@ class _HoverChevronState extends State<_HoverChevron> {
     _hideTimer?.cancel();
     _hideTimer = Timer(const Duration(milliseconds: 220), () {
       if (!mounted || _overFloat) return;
-      setState(() {
-        _hover = false;
-        _rowOpen = false;
-      });
-      if (_portal.isShowing) _portal.hide();
+      setState(() => _hover = false);
+      _fadeOut();
     });
   }
 
@@ -8708,15 +8746,31 @@ class _HoverChevronState extends State<_HoverChevron> {
               ],
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              for (final e in widget.reactions)
-                _HoverEmoji(
-                  emoji: e,
-                  mine: e == widget.mine,
-                  scheme: scheme,
-                  onTap: () {
-                    setState(() => _rowOpen = false);
-                    widget.onReact?.call(e);
-                  },
+              for (var i = 0; i < widget.reactions.length; i++)
+                // Each emoji pops in a beat after the one before — the row
+                // unrolls out of the 😊 like the volume pill out of its icon.
+                TweenAnimationBuilder<double>(
+                  key: ValueKey('pop-${widget.reactions[i]}'),
+                  tween: Tween(begin: 0, end: 1),
+                  duration: Duration(milliseconds: 160 + 35 * i),
+                  curve: Curves.easeOutBack,
+                  builder: (_, t, child) => Opacity(
+                    opacity: t.clamp(0.0, 1.0),
+                    child: Transform.scale(scale: 0.5 + 0.5 * t, child: child),
+                  ),
+                  child: _HoverEmoji(
+                    emoji: widget.reactions[i],
+                    mine: widget.reactions[i] == widget.mine,
+                    scheme: scheme,
+                    onTap: () {
+                      final e = widget.reactions[i];
+                      widget.onReact?.call(e);
+                      // A little "sent" beat, then the row folds away.
+                      _overFloat = false;
+                      setState(() => _hover = false);
+                      _fadeOut();
+                    },
+                  ),
                 ),
             ]),
           )
@@ -8726,6 +8780,47 @@ class _HoverChevronState extends State<_HoverChevron> {
                 scheme,
                 const Text('😊', style: TextStyle(fontSize: 14, height: 1))),
           );
+    // Chip ⇄ row: the pill WIDENS from the chip's corner (AnimatedSize, anchored
+    // to the bubble side) while the two cross-fade; the whole float fades /
+    // grows in on show and shrinks / fades out on hide.
+    final anchor = _below
+        ? (widget.isMe ? Alignment.topRight : Alignment.topLeft)
+        : (widget.isMe ? Alignment.bottomRight : Alignment.bottomLeft);
+    final morph = AnimatedSize(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+      alignment: anchor,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 150),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        layoutBuilder: (cur, prev) => Stack(
+            alignment: anchor, children: [...prev, ?cur]),
+        child: KeyedSubtree(
+            key: ValueKey(_rowOpen ? 'row' : 'chip'), child: content),
+      ),
+    );
+    final shown = TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutBack,
+      builder: (_, t, child) => Opacity(
+        opacity: t.clamp(0.0, 1.0),
+        child: Transform.scale(
+            scale: 0.6 + 0.4 * t, alignment: anchor, child: child),
+      ),
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 160),
+        opacity: _closing ? 0 : 1,
+        child: AnimatedScale(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeIn,
+          scale: _closing ? 0.7 : 1,
+          alignment: anchor,
+          child: morph,
+        ),
+      ),
+    );
     return CompositedTransformFollower(
       link: _link,
       showWhenUnlinked: false,
@@ -8749,13 +8844,17 @@ class _HoverChevronState extends State<_HoverChevron> {
           onEnter: (_) {
             _overFloat = true;
             _hideTimer?.cancel();
+            if (_closing) {
+              _outTimer?.cancel();
+              setState(() => _closing = false);
+            }
             if (!_rowOpen) setState(() => _rowOpen = true);
           },
           onExit: (_) {
             _overFloat = false;
             _leaveSoon();
           },
-          child: Material(type: MaterialType.transparency, child: content),
+          child: Material(type: MaterialType.transparency, child: shown),
         ),
       ),
     );
@@ -8780,21 +8879,33 @@ class _HoverChevronState extends State<_HoverChevron> {
             clipBehavior: Clip.none,
             children: [
               _HoverScope(hovering: _hover, child: widget.child),
-              if (_hover)
-                Positioned(
-                  // Sit ON the bubble's rounded top corner (overlapping
-                  // inward), so it hugs the corner.
-                  top: 0,
-                  left: widget.isMe ? null : 42,
-                  right: widget.isMe ? 8 : null,
-                  child: GestureDetector(
-                    onTapDown: (d) => widget.onOpen(d.globalPosition),
-                    child: _chip(
-                        scheme,
-                        Icon(Icons.expand_more_rounded,
-                            size: 18, color: accentInk(scheme))),
+              Positioned(
+                // Sit ON the bubble's rounded top corner (overlapping
+                // inward), so it hugs the corner. Fades / grows in on hover
+                // and out on leave — no snap.
+                top: 0,
+                left: widget.isMe ? null : 42,
+                right: widget.isMe ? 8 : null,
+                child: IgnorePointer(
+                  ignoring: !_hover,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 160),
+                    opacity: _hover ? 1 : 0,
+                    child: AnimatedScale(
+                      duration: const Duration(milliseconds: 180),
+                      curve: _hover ? Curves.easeOutBack : Curves.easeIn,
+                      scale: _hover ? 1 : 0.6,
+                      child: GestureDetector(
+                        onTapDown: (d) => widget.onOpen(d.globalPosition),
+                        child: _chip(
+                            scheme,
+                            Icon(Icons.expand_more_rounded,
+                                size: 18, color: accentInk(scheme))),
+                      ),
+                    ),
                   ),
                 ),
+              ),
             ],
           ),
         ),

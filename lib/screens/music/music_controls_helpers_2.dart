@@ -294,6 +294,8 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
   // Restart the idle countdown whenever the user touches the control.
   void _armVolumeHide() {
     _volumeHideTimer?.cancel();
+    // Still under the pointer (desktop) → it waits until the pointer leaves.
+    if (_overVolume) return;
     _volumeHideTimer =
         Timer(const Duration(milliseconds: 1500), _closeVolume);
   }
@@ -609,7 +611,17 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
               children: [
                 CompositedTransformTarget(
                   link: _volumeLink,
-                  child: GestureDetector(
+                  // Desktop: hovering the icon slides the volume pill out
+                  // (it folds away again once the pointer leaves it).
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    onEnter: (e) {
+                      if (e.kind == PointerDeviceKind.mouse && !_showVolume) {
+                        _volumeByHover = true;
+                        _openVolume();
+                      }
+                    },
+                    child: GestureDetector(
                     onTap: _openVolume,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
@@ -676,6 +688,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                                   )),
                       ),
                     ),
+                  ),
                   ),
                 ),
                 const Spacer(),

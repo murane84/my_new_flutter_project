@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:just_audio/just_audio.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -1893,18 +1894,27 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              GestureDetector(
-                onLongPress: () {
-                  _toggleMute();
-                  _armVolumeHide();
+              // Desktop: hovering the icon slides the slider out.
+              MouseRegion(
+                onEnter: (e) {
+                  if (e.kind == PointerDeviceKind.mouse && !_showVolume) {
+                    _volumeByHover = true;
+                    _toggleVolume();
+                  }
                 },
-                child: _discBtn(
-                  theme,
-                  icon: volIcon,
-                  size: 18,
-                  tooltip: 'Volume  (hold to mute)',
-                  onTap: _toggleVolume,
-                  active: _showVolume || _volume <= 0,
+                child: GestureDetector(
+                  onLongPress: () {
+                    _toggleMute();
+                    _armVolumeHide();
+                  },
+                  child: _discBtn(
+                    theme,
+                    icon: volIcon,
+                    size: 18,
+                    tooltip: 'Volume  (hold to mute)',
+                    onTap: _toggleVolume,
+                    active: _showVolume || _volume <= 0,
+                  ),
                 ),
               ),
               _speedPill(theme, speedLabel),
@@ -1913,7 +1923,23 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           // A-B in the exact centre: widens equally both ways as it changes.
           _abPill(theme),
           // Floating volume slider — glows over the row, fades back to the icon.
-          IgnorePointer(
+          // While the pointer is on it, it stays; leaving folds it away.
+          MouseRegion(
+            opaque: false,
+            onEnter: (_) {
+              if (!_showVolume) return;
+              _overVolume = true;
+              _volumeHideTimer?.cancel();
+            },
+            onExit: (_) {
+              _overVolume = false;
+              if (!_showVolume) return;
+              _volumeHideTimer?.cancel();
+              _volumeHideTimer = Timer(
+                  Duration(milliseconds: _volumeByHover ? 380 : 1800),
+                  _closeVolume);
+            },
+            child: IgnorePointer(
             ignoring: !_showVolume,
             child: AnimatedOpacity(
               opacity: _showVolume ? 1 : 0,
@@ -1982,6 +2008,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                 ),
               ),
             ),
+          ),
           ),
         ],
       ),
@@ -2129,12 +2156,18 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
 
   void _armVolumeHide() {
     _volumeHideTimer?.cancel();
+    if (_overVolume) return; // under the pointer → waits for it to leave
     _volumeHideTimer =
         Timer(const Duration(milliseconds: 1800), _closeVolume);
   }
 
+  bool _volumeByHover = false; // opened by a desktop hover
+  bool _overVolume = false; // the pointer is on the slider
+
   void _closeVolume() {
     _volumeHideTimer?.cancel();
+    _volumeByHover = false;
+    _overVolume = false;
     if (!mounted || !_showVolume) return;
     setState(() => _showVolume = false);
   }

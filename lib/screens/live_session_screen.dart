@@ -237,6 +237,11 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   late LiveSessionController _c;
   // Up-next list scroll (host + guest views) — for "find the playing song".
   final ScrollController _queueCtrl = ScrollController();
+  // Follow-along: the queue opens on the shared playing song and glides to
+  // each new one — unless I scrolled it myself in the last few seconds (a
+  // guest browsing to add a song is never yanked away). ⌖ always jumps.
+  DateTime _queueTouched = DateTime.fromMillisecondsSinceEpoch(0);
+  int _followedIdx = -1;
   // Song-picker hints: a track's content fingerprint cached by file path (so we
   // only ever read+hash a given file once per session), and whether the partner
   // can already play it instantly. Populated by a bounded background pass when
@@ -410,8 +415,11 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       _status = _isHost
           ? 'Sharing with ${widget.peerName}'
           : 'Listening with ${widget.peerName}';
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _bindFlagCallbacks());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _bindFlagCallbacks();
+        // Reopened mid-session: land on the song playing now.
+        _syncFromQueue();
+      });
       return;
     }
 
@@ -533,6 +541,17 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   // title the controller mirrored from the host.
   void _syncFromQueue() {
     if (!mounted) return;
+    final idx = _isHost ? _c.currentIndex : _c.remoteIndex;
+    if (idx >= 0 && idx != _followedIdx) {
+      final first = _followedIdx < 0;
+      _followedIdx = idx;
+      if (DateTime.now().difference(_queueTouched) >
+          const Duration(seconds: 5)) {
+        // First landing is instant (opening on it); later ones glide.
+        WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _locateQueueNow(animate: !first));
+      }
+    }
     setState(() {
       if (_isHost) {
         if (_c.currentIndex >= 0 && _c.currentIndex < _c.queue.length) {
@@ -2724,7 +2743,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         ),
       );
     }
-    return ListView.builder(
+    return _queueTouchWatch(ListView.builder(
       controller: _queueCtrl,
       shrinkWrap: true,
       padding: const EdgeInsets.only(bottom: 4),
@@ -2769,7 +2788,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               : () => _c.requestControl('play_index', index: i),
         );
       },
-    );
+    ));
   }
 
   // Shown when the connection drops — offer to reconnect. For the host this
@@ -2868,7 +2887,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   }
 
   /// Scroll the Up next list so the playing song sits mid-view.
-  void _locateQueueNow() {
+  void _locateQueueNow({bool animate = true}) {
+    if (!mounted) return;
     final count = _isHost ? _c.queue.length : _c.remoteQueueTitles.length;
     final idx = _isHost ? _c.currentIndex : _c.remoteIndex;
     if (count == 0 || idx < 0 || !_queueCtrl.hasClients) return;
@@ -2876,10 +2896,24 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     final per = (pos.maxScrollExtent + pos.viewportDimension) / count;
     final target = (per * idx - pos.viewportDimension / 2 + per / 2)
         .clamp(0.0, pos.maxScrollExtent);
+    if (!animate) {
+      _queueCtrl.jumpTo(target);
+      return;
+    }
     _queueCtrl.animateTo(target,
         duration: const Duration(milliseconds: 420),
         curve: Curves.easeOutCubic);
   }
+
+  /// My own drag / wheel on the queue: follow-along pauses for a few seconds.
+  Widget _queueTouchWatch(Widget list) =>
+      NotificationListener<UserScrollNotification>(
+        onNotification: (_) {
+          _queueTouched = DateTime.now();
+          return false;
+        },
+        child: list,
+      );
 
   /// HOST (room): a compact switch for "let guests add songs to the queue".
   Widget _guestToggle(ColorScheme scheme) {
@@ -2909,7 +2943,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
 
   Widget _buildQueueList(ColorScheme scheme) {
     final q = _c.queue;
-    return ListView.builder(
+    return _queueTouchWatch(ListView.builder(
       // Fills the space the parent Flexible gives it; scrolls independently as
       // the queue grows. shrinkWrap keeps it small when the queue is short.
       controller: _queueCtrl,
@@ -2976,7 +3010,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
           onTap: isCurrent ? null : () => _c.playIndex(i),
         );
       },
-    );
+    ));
   }
 
   /// Present the loaded music library and return the chosen path (or null).

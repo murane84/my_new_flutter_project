@@ -93,6 +93,55 @@ extension _ChatPollsAdmin on _ChatPageState {
     );
   }
 
+  /// A DM with someone I blocked: the composer gives way to a calm bar that
+  /// says so and unblocks in one tap (with the same confirm as everywhere).
+  Widget _buildBlockedBar(ColorScheme scheme, bool isDark) {
+    final name = widget.friendName;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.fromLTRB(16, 4, 6, 4),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.35)
+                  : Colors.white.withValues(alpha: 0.65),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.block_rounded, size: 17, color: scheme.error),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'You blocked $name',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurface.withValues(alpha: 0.75)),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => BlockList.instance
+                      .toggle(context, widget.friendId, name),
+                  child: const Text('Unblock'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Socket events for this file. Returns true when handled.
   bool _handleGroupMetaWs(String? type, Map<String, dynamic> event) {
     if (!_isGroup) return false;
@@ -1237,26 +1286,43 @@ extension _ChatPollsAdmin on _ChatPageState {
   /// This week's jam DJ: the member whose phone played the most jam winners
   /// (🏆 lines) in the last 7 days — null when none.
   String? _jamDjId() {
-    if (_jamDjCacheLen == _messages.length) return _jamDjCache;
-    _jamDjCacheLen = _messages.length;
-    final since = DateTime.now().subtract(const Duration(days: 7));
+    // Keyed by chat AND length: the cache is static, so another group with
+    // the same message count must not get this group's DJ.
+    final cacheKey = '${_isGroup ? _cid : -1}:${_messages.length}';
+    if (_jamDjCacheKey == cacheKey) return _jamDjCache;
+    _jamDjCacheKey = cacheKey;
+    final now = DateTime.now();
+    final since = now.subtract(const Duration(days: 7));
+    final midnight = DateTime(now.year, now.month, now.day);
     final wins = <String, int>{};
+    final today = <String, int>{};
     for (final m in _messages) {
       final c = (m['content'] ?? '').toString();
       if (!c.startsWith('🏆 “')) continue;
-      final ts = DateTime.tryParse((m['timestamp'] ?? '').toString());
+      final ts = DateTime.tryParse((m['timestamp'] ?? '').toString())
+          ?.toLocal();
       if (ts != null && ts.isBefore(since)) continue;
       final id = m['sender_id']?.toString();
-      if (id != null) wins[id] = (wins[id] ?? 0) + 1;
-    }
-    String? best;
-    var n = 0;
-    wins.forEach((id, c) {
-      if (c > n) {
-        n = c;
-        best = id;
+      if (id == null) continue;
+      wins[id] = (wins[id] ?? 0) + 1;
+      if (ts != null && !ts.isBefore(midnight)) {
+        today[id] = (today[id] ?? 0) + 1;
       }
-    });
+    }
+    String? top(Map<String, int> t) {
+      String? best;
+      var n = 0;
+      t.forEach((id, c) {
+        if (c > n) {
+          n = c;
+          best = id;
+        }
+      });
+      return best;
+    }
+
+    final best = top(wins);
+    final bestToday = top(today);
     // Remember it for the group's row in the Circle list ("👑 Lorraine").
     if (_isGroup) {
       String? djName;
@@ -1268,13 +1334,17 @@ extension _ChatPollsAdmin on _ChatPageState {
       }
       if (best == _myId) djName = 'You';
       final cid = _cid;
-      WidgetsBinding.instance.addPostFrameCallback(
-          (_) => GroupMeta.instance.setDj(cid, djName));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        GroupMeta.instance.setDj(cid, djName);
+        // By id too, for Group info's crowns (week + today).
+        GroupMeta.instance.setDjIds(cid,
+            week: int.tryParse(best ?? ''), day: int.tryParse(bestToday ?? ''));
+      });
     }
     return _jamDjCache = best;
   }
 
-  static int _jamDjCacheLen = -1;
+  static String? _jamDjCacheKey;
   static String? _jamDjCache;
 
   Widget _djTag(ColorScheme scheme, {Color? on}) {

@@ -17,6 +17,10 @@ import 'user_profile_sheet.dart';
 import '../utils/readable.dart';
 import '../services/contact_names.dart';
 import '../widgets/person_avatar.dart';
+import '../services/now_playing_presence.dart';
+import '../services/live_rooms_registry.dart';
+import '../services/group_meta.dart';
+import 'stories/story_viewer.dart' show StoryHooks;
 
 // Groups are presented as CARD POPUPS (AppPopupShell) — not full-window routes —
 // so on desktop they never hide the music/chat panels. Selecting or creating a
@@ -674,103 +678,207 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
       title: 'Group info',
       icon: Icons.info_outline_rounded,
       edgeToEdge: true,
+      // Room for the two-pane desktop layout (card + members).
+      desktopMaxWidth: 1180,
       builder: (ctx, isWide) => _loading
           ? const Padding(
               padding: EdgeInsets.all(40),
               child: Center(child: CircularProgressIndicator()))
-          : _body(ctx),
+          // Live: who's playing, a jam starting/ending, a new crown — the
+          // page repaints the moment any of it changes.
+          : ListenableBuilder(
+              listenable: Listenable.merge([
+                NowPlayingPresence.instance,
+                LiveRoomsRegistry.instance,
+                GroupMeta.instance,
+              ]),
+              builder: (c, _) => _body(c),
+            ),
     );
+  }
+
+  // ── Live facts about the group (all from what this phone may already see:
+  //    presence only for my mutual friends, the jam room, the DJ crowns) ──
+
+  int _uidOf(dynamic m) => (m['user_id'] as num).toInt();
+
+  /// What a member is playing right now, as I'm allowed to see it (never
+  /// for myself — I know what I'm playing).
+  Map<String, dynamic>? _playing(int uid) =>
+      uid == _myUid ? null : NowPlayingPresence.instance.trackFor(uid);
+
+  /// Members in the order that matters: me, then whoever's listening, then
+  /// online, then admins, then everyone else by name.
+  List _sortedMembers() {
+    final list = List.of(_members());
+    int rank(dynamic m) {
+      final uid = _uidOf(m);
+      if (uid == _myUid) return 0;
+      if (_playing(uid) != null) return 1;
+      if (m['is_online'] == true) return 2;
+      if ((m['role'] ?? '') == 'admin') return 3;
+      return 4;
+    }
+
+    String name(dynamic m) => ContactNames.instance
+        .displayName(of: m, registered: (m['username'] ?? '').toString())
+        .toLowerCase();
+    list.sort((a, b) {
+      final r = rank(a).compareTo(rank(b));
+      return r != 0 ? r : name(a).compareTo(name(b));
+    });
+    return list;
+  }
+
+  String _shownName(dynamic m) {
+    final uid = _uidOf(m);
+    if (uid == _myUid) return 'You';
+    return ContactNames.instance.displayName(
+        of: m, registered: (m['username'] ?? 'User').toString());
+  }
+
+  dynamic _memberById(int? id) {
+    if (id == null) return null;
+    for (final m in _members()) {
+      if (_uidOf(m) == id) return m;
+    }
+    return null;
   }
 
   Widget _body(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final title = (_conv?['title'] ?? 'Group').toString();
-    final avatar = _fullAvatar();
-    final members = _members();
-    // Layout: a compact FIXED header (avatar + name + member count), then the
-    // member list takes all remaining height and scrolls on its own, and the
-    // Leave button stays PINNED at the bottom so it's always reachable.
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+    return LayoutBuilder(builder: (context, cons) {
+      // Wide (desktop / landscape tablet): the group's card on the left, the
+      // members filling the right — no more one thin list stretched across
+      // the whole width. Phones keep one column with Leave pinned below.
+      final wide = cons.maxWidth >= 760;
+      if (wide) {
+        final listW = cons.maxWidth - 360 - 1;
+        return Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1180),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  width: 360,
+                  child: Column(children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+                        child: _heroCard(scheme),
+                      ),
+                    ),
+                    _leaveFooter(scheme),
+                  ]),
+                ),
+                VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: scheme.outlineVariant.withAlpha(70)),
+                Expanded(child: _membersPane(scheme, columns: listW >= 720)),
+              ],
+            ),
+          ),
+        );
+      }
+      // Top-aligned (not floating mid-page), Leave pinned at the bottom.
+      return Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
           child: Column(
             children: [
-              // Avatar (tap to change if admin)
-              GestureDetector(
-                onTap: (_isAdmin && !_busy) ? _changeAvatar : null,
-                child: Stack(
-                  alignment: Alignment.bottomRight,
-                  children: [
-                    CircleAvatar(
-                      radius: 38,
-                      backgroundColor: scheme.primaryContainer,
-                      backgroundImage: avatar != null
-                          ? authNetworkImageProvider(
-                              avatar, mediaAuthHeaders(avatar))
-                          : null,
-                      child: avatar == null
-                          ? Icon(Icons.groups_rounded,
-                              size: 36, color: scheme.onPrimaryContainer)
-                          : null,
+              Expanded(
+                child: CustomScrollView(
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                      sliver: SliverToBoxAdapter(child: _heroCard(scheme)),
                     ),
-                    if (_isAdmin)
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                            color: scheme.primary, shape: BoxShape.circle),
-                        child: Icon(Icons.camera_alt_rounded,
-                            size: 15, color: readableOn(scheme.primary)),
-                      ),
+                    ..._memberSlivers(scheme, columns: false),
                   ],
                 ),
               ),
-              const SizedBox(height: 10),
-              // Name (edit if admin)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(title,
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w700),
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis),
-                  ),
-                  if (_isAdmin)
-                    IconButton(
-                      icon: const Icon(Icons.edit_rounded, size: 18),
-                      onPressed: _busy ? null : _rename,
-                      tooltip: 'Rename',
-                    ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Text('${members.length} members',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: scheme.onSurfaceVariant)),
-                  const Spacer(),
-                  if (_isAdmin)
-                    TextButton.icon(
-                      onPressed: _busy ? null : _addMembers,
-                      icon:
-                          const Icon(Icons.person_add_alt_1_rounded, size: 18),
-                      label: const Text('Add'),
-                    ),
-                ],
-              ),
+              _leaveFooter(scheme),
             ],
           ),
         ),
-        // Admins-only posting: a switch for admins, a quiet note otherwise.
+      );
+    });
+  }
+
+  /// The group's card: photo, name, counts, what's live right now, the DJ
+  /// crowns, and the admins-only setting.
+  Widget _heroCard(ColorScheme scheme) {
+    final title = (_conv?['title'] ?? 'Group').toString();
+    final avatar = _fullAvatar();
+    final members = _members();
+    final online = members
+        .where((m) => _uidOf(m) != _myUid && m['is_online'] == true)
+        .length;
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: (_isAdmin && !_busy) ? _changeAvatar : null,
+          child: Stack(
+            alignment: Alignment.bottomRight,
+            children: [
+              CircleAvatar(
+                radius: 44,
+                backgroundColor: scheme.primaryContainer,
+                backgroundImage: avatar != null
+                    ? authNetworkImageProvider(avatar, mediaAuthHeaders(avatar))
+                    : null,
+                child: avatar == null
+                    ? Icon(Icons.groups_rounded,
+                        size: 40, color: scheme.onPrimaryContainer)
+                    : null,
+              ),
+              if (_isAdmin)
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                      color: scheme.primary, shape: BoxShape.circle),
+                  child: Icon(Icons.camera_alt_rounded,
+                      size: 15, color: readableOn(scheme.primary)),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(title,
+                  style: const TextStyle(
+                      fontSize: 19, fontWeight: FontWeight.w800),
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis),
+            ),
+            if (_isAdmin)
+              IconButton(
+                icon: const Icon(Icons.edit_rounded, size: 18),
+                onPressed: _busy ? null : _rename,
+                tooltip: 'Rename',
+              ),
+          ],
+        ),
+        Text(
+          online > 0
+              ? '${members.length} members · $online online'
+              : '${members.length} members',
+          style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 14),
+        _rightNow(scheme),
+        const SizedBox(height: 10),
         if (_isAdmin)
           SwitchListTile.adaptive(
             dense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            contentPadding: EdgeInsets.zero,
             secondary: Icon(Icons.shield_rounded, color: accentInk(scheme)),
             title: const Text('Only admins can send messages'),
             subtitle: const Text('Everyone can still read, react and vote'),
@@ -778,51 +886,274 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
             onChanged: _busy ? null : _setAdminsOnly,
           )
         else if (_conv?['admins_only'] == true)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
-            child: Row(children: [
-              Icon(Icons.shield_outlined, size: 16, color: accentInk(scheme)),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text('Only admins can send messages in this group',
-                    style: TextStyle(
-                        fontSize: 12.5, color: scheme.onSurfaceVariant)),
-              ),
-            ]),
-          ),
-        Divider(height: 1, color: scheme.outlineVariant.withAlpha(90)),
-        // Member list — expands to use all remaining height, scrolls when long.
-        Flexible(
-          child: ListView.builder(
-            shrinkWrap: true,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            itemCount: members.length,
-            itemBuilder: (_, i) => _memberTile(members[i], scheme),
-          ),
-        ),
-        // Pinned footer — Leave group is always visible, never scrolls away.
-        Container(
-          decoration: BoxDecoration(
-            border: Border(
-              top: BorderSide(color: scheme.outlineVariant.withAlpha(90)),
+          Row(children: [
+            Icon(Icons.shield_outlined, size: 16, color: accentInk(scheme)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('Only admins can send messages in this group',
+                  style: TextStyle(
+                      fontSize: 12.5, color: scheme.onSurfaceVariant)),
             ),
-          ),
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-          child: SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _busy ? null : _leave,
-              icon: const Icon(Icons.logout_rounded),
-              label: const Text('Leave group'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: scheme.error,
-                side: BorderSide(color: scheme.error.withAlpha(120)),
-              ),
-            ),
-          ),
-        ),
+          ]),
       ],
     );
+  }
+
+  /// "Right now" — the group's pulse: a live jam (join it), who's listening,
+  /// and the week's / today's jam DJ. A calm line when it's all quiet.
+  Widget _rightNow(ColorScheme scheme) {
+    final cid = widget.conversationId;
+    final room = LiveRoomsRegistry.instance.roomForConversation(cid);
+    final listening =
+        _members().where((m) => _playing(_uidOf(m)) != null).toList();
+    final weekDj = _memberById(GroupMeta.instance.djWeekIdOf(cid));
+    final dayDj = _memberById(GroupMeta.instance.djDayIdOf(cid));
+    final rows = <Widget>[];
+
+    if (room != null) {
+      final host = (room['host_username'] ?? 'Someone').toString();
+      final n = (room['listeners'] as num?)?.toInt() ?? 0;
+      final song = ((room['track'] as Map?)?['title'] ?? '').toString();
+      rows.add(_pulseRow(
+        scheme,
+        icon: Icons.graphic_eq_rounded,
+        live: true,
+        title: 'Jam live · $host${n > 0 ? ' + $n' : ''}',
+        subtitle: song.isEmpty ? null : '♪ $song',
+        action: LiveRoomsRegistry.instance.joinRoom == null
+            ? null
+            : TextButton(
+                onPressed: () {
+                  final join = LiveRoomsRegistry.instance.joinRoom;
+                  Navigator.pop(context);
+                  join?.call(room);
+                },
+                child: const Text('Join'),
+              ),
+      ));
+    }
+    if (listening.isNotEmpty) {
+      final names = listening.take(2).map(_shownName).join(', ');
+      final more = listening.length > 2 ? ' +${listening.length - 2}' : '';
+      rows.add(_pulseRow(
+        scheme,
+        icon: Icons.headphones_rounded,
+        title: '${listening.length} listening now',
+        subtitle: '$names$more',
+      ));
+    }
+    if (weekDj != null) {
+      rows.add(_pulseRow(
+        scheme,
+        icon: Icons.emoji_events_rounded,
+        title: 'DJ of the week · ${_shownName(weekDj)}',
+        subtitle: 'Most jam winners played in 7 days',
+      ));
+    }
+    if (dayDj != null && dayDj != weekDj) {
+      rows.add(_pulseRow(
+        scheme,
+        icon: Icons.album_rounded,
+        title: "Today's DJ · ${_shownName(dayDj)}",
+        subtitle: 'Most jam winners played today',
+      ));
+    } else if (dayDj != null) {
+      // Same person holds both crowns — say so on the one line.
+      rows.removeLast();
+      rows.add(_pulseRow(
+        scheme,
+        icon: Icons.emoji_events_rounded,
+        title: 'DJ of the week & today · ${_shownName(dayDj)}',
+        subtitle: 'Most jam winners played — this week and today',
+      ));
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.outlineVariant.withAlpha(70)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('RIGHT NOW',
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
+                  color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 6),
+          if (rows.isEmpty)
+            Text('Quiet for now — start a jam from the chat and crown a DJ 🎶',
+                style:
+                    TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant))
+          else
+            ...rows,
+        ],
+      ),
+    );
+  }
+
+  Widget _pulseRow(ColorScheme scheme,
+      {required IconData icon,
+      required String title,
+      String? subtitle,
+      bool live = false,
+      Widget? action}) {
+    final ink = accentInk(scheme);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(children: [
+        Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: (live ? Colors.redAccent : ink).withValues(alpha: 0.14),
+          ),
+          child: Icon(icon,
+              size: 16, color: live ? Colors.redAccent : ink),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w700)),
+              if (subtitle != null)
+                Text(subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 11.5, color: scheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+        ?action,
+      ]),
+    );
+  }
+
+  Widget _leaveFooter(ColorScheme scheme) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: scheme.outlineVariant.withAlpha(90)),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      child: SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: _busy ? null : _leave,
+          icon: const Icon(Icons.logout_rounded),
+          label: const Text('Leave group'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: scheme.error,
+            side: BorderSide(color: scheme.error.withAlpha(120)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Members pane for the wide layout (its own scroll).
+  Widget _membersPane(ColorScheme scheme, {required bool columns}) {
+    return CustomScrollView(
+      slivers: [
+        const SliverToBoxAdapter(child: SizedBox(height: 8)),
+        ..._memberSlivers(scheme, columns: columns),
+        const SliverToBoxAdapter(child: SizedBox(height: 16)),
+      ],
+    );
+  }
+
+  String _memberQuery = '';
+
+  /// Header (count · Add · search when the group is big) + the members, as
+  /// a list on phones or two columns of cards on a roomy desktop pane.
+  List<Widget> _memberSlivers(ColorScheme scheme, {required bool columns}) {
+    final all = _sortedMembers();
+    final q = _memberQuery.trim().toLowerCase();
+    final shown = q.isEmpty
+        ? all
+        : all
+            .where((m) =>
+                _shownName(m).toLowerCase().contains(q) ||
+                (m['username'] ?? '').toString().toLowerCase().contains(q))
+            .toList();
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+        sliver: SliverToBoxAdapter(
+          child: Column(children: [
+            Row(children: [
+              Text('MEMBERS · ${all.length}',
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2,
+                      color: scheme.onSurfaceVariant)),
+              const Spacer(),
+              if (_isAdmin)
+                TextButton.icon(
+                  onPressed: _busy ? null : _addMembers,
+                  icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                  label: const Text('Add'),
+                ),
+            ]),
+            // Big groups get a quick filter.
+            if (all.length > 8)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: TextField(
+                  onChanged: (v) => setState(() => _memberQuery = v),
+                  decoration: InputDecoration(
+                    hintText: 'Search members…',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    isDense: true,
+                    filled: true,
+                    fillColor: scheme.surfaceContainerHighest,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ),
+          ]),
+        ),
+      ),
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        sliver: columns
+            ? SliverGrid(
+                gridDelegate:
+                    const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 420,
+                  mainAxisExtent: 74,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 6,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (_, i) => _memberTile(shown[i], scheme, card: true),
+                  childCount: shown.length,
+                ),
+              )
+            : SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (_, i) => _memberTile(shown[i], scheme),
+                  childCount: shown.length,
+                ),
+              ),
+      ),
+    ];
   }
 
   // Build a full media URL from a stored relative avatar ref.
@@ -831,8 +1162,30 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     return rel.startsWith('http') ? rel : '$_apiBase$rel';
   }
 
-  Widget _memberTile(dynamic m, ColorScheme scheme) {
-    final uid = (m['user_id'] as num).toInt();
+  Widget _badge(ColorScheme scheme, String text, {IconData? icon}) {
+    final ink = accentInk(scheme);
+    return Container(
+      margin: const EdgeInsets.only(left: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.35)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (icon != null) ...[
+          Icon(icon, size: 10, color: ink),
+          const SizedBox(width: 3),
+        ],
+        Text(text,
+            style: TextStyle(
+                fontSize: 10.5, fontWeight: FontWeight.w800, color: ink)),
+      ]),
+    );
+  }
+
+  Widget _memberTile(dynamic m, ColorScheme scheme, {bool card = false}) {
+    final uid = _uidOf(m);
     // The profile card resolves the saved name itself (and shows the
     // registered one under it), so it gets the registered name; the row
     // shows how I saved them.
@@ -841,10 +1194,126 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     final role = (m['role'] ?? 'member').toString();
     final phone = (m['phone'] ?? '').toString();
     final isSelf = uid == _myUid;
+    final online = !isSelf && m['is_online'] == true;
     final avatar = _fullUrl((m['avatar_url'] ?? '').toString());
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      dense: true,
+    final track = _playing(uid);
+    final song = (track?['title'] ?? '').toString();
+    final artist = (track?['artist'] ?? '').toString();
+    final cid = widget.conversationId;
+    final weekDj = GroupMeta.instance.djWeekIdOf(cid) == uid;
+    final dayDj = GroupMeta.instance.djDayIdOf(cid) == uid;
+    final ink = accentInk(scheme);
+    final tuneIn = StoryHooks.tuneIn;
+
+    // Photo with presence: an accent ring while they're playing, a green
+    // dot when online (both only for people I may see that of).
+    final face = SizedBox(
+      width: 46,
+      height: 46,
+      child: Stack(clipBehavior: Clip.none, children: [
+        Container(
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+                color: track != null ? ink : Colors.transparent, width: 2),
+          ),
+          child: CircleAvatar(
+            radius: 19,
+            backgroundColor: scheme.primaryContainer,
+            backgroundImage: avatar != null
+                ? authNetworkImageProvider(avatar, mediaAuthHeaders(avatar))
+                : null,
+            child: avatar == null
+                ? Text(shown.isNotEmpty ? shown[0].toUpperCase() : '?',
+                    style: TextStyle(color: scheme.onPrimaryContainer))
+                : null,
+          ),
+        ),
+        if (track != null)
+          Positioned(
+            right: -2,
+            bottom: -2,
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                  color: ink,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: scheme.surface, width: 2)),
+              child: Icon(Icons.headphones_rounded,
+                  size: 10, color: readableOn(ink)),
+            ),
+          )
+        else if (online)
+          Positioned(
+            right: 1,
+            bottom: 1,
+            child: Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                  color: Colors.green,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: scheme.surface, width: 2)),
+            ),
+          ),
+      ]),
+    );
+
+    String? sub;
+    if (track != null) {
+      sub = artist.isNotEmpty && artist != '<unknown>'
+          ? '♪ $song · $artist'
+          : '♪ $song';
+    } else if (online) {
+      sub = 'Online';
+    } else if (isSelf) {
+      sub = role == 'admin' ? 'You manage this group' : null;
+    }
+
+    final menu = _isAdmin
+        ? GeniePopupMenuButton<String>(
+            tooltip: 'Member options',
+            icon: const Icon(Icons.more_vert_rounded, size: 20),
+            onSelected: (v) {
+              if (_busy) return;
+              if (v == 'admin') _setRole(uid, name, true);
+              if (v == 'member') _setRole(uid, name, false);
+              if (v == 'remove') _removeMember(uid);
+            },
+            itemBuilder: (_) => [
+              if (role != 'admin')
+                const PopupMenuItem(
+                    value: 'admin',
+                    child: Row(children: [
+                      Icon(Icons.shield_rounded, size: 20),
+                      SizedBox(width: 12),
+                      Text('Make admin'),
+                    ])),
+              if (role == 'admin')
+                PopupMenuItem(
+                    value: 'member',
+                    child: Row(children: [
+                      const Icon(Icons.shield_outlined, size: 20),
+                      const SizedBox(width: 12),
+                      Text(isSelf ? 'Step down as admin' : 'Dismiss as admin'),
+                    ])),
+              if (!isSelf)
+                PopupMenuItem(
+                    value: 'remove',
+                    child: Row(children: [
+                      Icon(Icons.remove_circle_outline_rounded,
+                          size: 20, color: scheme.error),
+                      const SizedBox(width: 12),
+                      Text('Remove from group',
+                          style: TextStyle(color: scheme.error)),
+                    ])),
+            ],
+          )
+        : null;
+
+    final row = InkWell(
+      borderRadius: BorderRadius.circular(14),
       // Tap a member to view their profile details (photo, name, number).
       onTap: () => showUserProfile(
         context,
@@ -852,86 +1321,73 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
         userId: uid,
         phone: phone.isEmpty ? null : phone,
         avatarUrl: avatar,
-        isOnline: m['is_online'] == true,
-      ),
-      leading: CircleAvatar(
-        backgroundColor: scheme.primaryContainer,
-        backgroundImage: avatar != null
-            ? authNetworkImageProvider(avatar, mediaAuthHeaders(avatar))
-            : null,
-        child: avatar == null
-            ? Text(shown.isNotEmpty ? shown[0].toUpperCase() : '?',
-                style: TextStyle(color: scheme.onPrimaryContainer))
+        isOnline: online,
+        onTuneIn: (track != null && tuneIn != null)
+            ? () => tuneIn(context, uid, shown, song)
             : null,
       ),
-      title: Row(children: [
-        Flexible(
-            child: Text(isSelf ? '$name (You)' : shown,
-                overflow: TextOverflow.ellipsis)),
-        if (role == 'admin') ...[
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: scheme.primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(7),
-              border:
-                  Border.all(color: scheme.primary.withValues(alpha: 0.35)),
-            ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.shield_rounded, size: 10, color: accentInk(scheme)),
-              const SizedBox(width: 3),
-              Text('Admin',
-                  style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      color: accentInk(scheme))),
-            ]),
-          ),
-        ],
-      ]),
-      // Admins manage everyone (and can step themselves down); the server
-      // keeps at least one admin.
-      trailing: _isAdmin
-          ? GeniePopupMenuButton<String>(
-              tooltip: 'Member options',
-              icon: const Icon(Icons.more_vert_rounded, size: 20),
-              onSelected: (v) {
-                if (_busy) return;
-                if (v == 'admin') _setRole(uid, name, true);
-                if (v == 'member') _setRole(uid, name, false);
-                if (v == 'remove') _removeMember(uid);
-              },
-              itemBuilder: (_) => [
-                if (role != 'admin')
-                  const PopupMenuItem(
-                      value: 'admin',
-                      child: Row(children: [
-                        Icon(Icons.shield_rounded, size: 20),
-                        SizedBox(width: 12),
-                        Text('Make admin'),
-                      ])),
-                if (role == 'admin')
-                  PopupMenuItem(
-                      value: 'member',
-                      child: Row(children: [
-                        const Icon(Icons.shield_outlined, size: 20),
-                        const SizedBox(width: 12),
-                        Text(isSelf ? 'Step down as admin' : 'Dismiss as admin'),
-                      ])),
-                if (!isSelf)
-                  PopupMenuItem(
-                      value: 'remove',
-                      child: Row(children: [
-                        Icon(Icons.remove_circle_outline_rounded,
-                            size: 20, color: scheme.error),
-                        const SizedBox(width: 12),
-                        Text('Remove from group',
-                            style: TextStyle(color: scheme.error)),
-                      ])),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+            horizontal: card ? 10 : 4, vertical: card ? 0 : 6),
+        child: Row(children: [
+          face,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Flexible(
+                    child: Text(isSelf ? '$name (You)' : shown,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 14.5, fontWeight: FontWeight.w600)),
+                  ),
+                  if (role == 'admin')
+                    _badge(scheme, 'Admin', icon: Icons.shield_rounded),
+                  if (weekDj) _badge(scheme, '👑 DJ'),
+                  if (dayDj && !weekDj) _badge(scheme, '🎧 Today'),
+                ]),
+                if (sub != null)
+                  Text(sub,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight:
+                              track != null ? FontWeight.w600 : FontWeight.w400,
+                          color: track != null
+                              ? ink
+                              : online
+                                  ? Colors.green
+                                  : scheme.onSurfaceVariant)),
               ],
-            )
-          : null,
+            ),
+          ),
+          // Playing → one tap to tune in, right from the member row.
+          if (track != null && tuneIn != null)
+            IconButton(
+              tooltip: 'Tune in',
+              icon: Icon(Icons.headphones_rounded, color: ink, size: 20),
+              onPressed: () => tuneIn(context, uid, shown, song),
+            ),
+          ?menu,
+        ]),
+      ),
+    );
+    if (!card) return row;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: track != null
+                ? ink.withValues(alpha: 0.45)
+                : scheme.outlineVariant.withAlpha(60)),
+      ),
+      child: row,
     );
   }
 }

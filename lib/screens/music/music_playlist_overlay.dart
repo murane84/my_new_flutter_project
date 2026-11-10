@@ -1807,11 +1807,19 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     final title = (o?.title?.trim().isNotEmpty ?? false) ? o!.title! : ta.$1;
     final artist =
         (o?.artist?.trim().isNotEmpty ?? false) ? o!.artist : ta.$2;
+    // Preview it, pick its colours, add a line if you like — then post.
+    final pick = await pickStatusColours(context,
+        kind: QuickStatusKind.music, title: title, artist: artist ?? '');
+    if (pick == null || !mounted) return;
     // Right away: it's on its way ("Your story" shows a posting ring too).
     showToast(context, 'Posting “$title” as your status…',
         type: ToastType.info);
     final res = await ApiService().createStory(
-        kind: 'music', musicTitle: title, musicArtist: artist);
+        kind: 'music',
+        musicTitle: title,
+        musicArtist: artist,
+        background: pick.background,
+        caption: pick.text.isEmpty ? null : pick.text);
     if (!mounted) return;
     showToast(
         context,

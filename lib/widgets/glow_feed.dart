@@ -10,6 +10,7 @@ import '../services/song_insights.dart';
 import '../services/account_prefs.dart';
 import 'heart_burst.dart';
 import '../screens/api_service.dart';
+import '../screens/stories/quick_status_sheet.dart';
 
 int _glowDaySeed() {
   final d = DateTime.now();
@@ -164,6 +165,9 @@ class _GlowFeedState extends State<GlowFeed> {
   /// Posting… → Posted ✓ like every post.
   Future<void> _shareAsStatus(GlowCard c) async {
     HapticFeedback.selectionClick();
+    final pick = await pickStatusColours(context,
+        kind: QuickStatusKind.text, text: _shareText(c));
+    if (pick == null || !mounted) return;
     final m = ScaffoldMessenger.maybeOf(context);
     m?.showSnackBar(const SnackBar(
         behavior: SnackBarBehavior.floating,
@@ -171,8 +175,8 @@ class _GlowFeedState extends State<GlowFeed> {
         content: Text('Posting as your status…')));
     final res = await ApiService().createStory(
         kind: 'text',
-        caption: _shareText(c),
-        background: '#ffe8436b,#fff5a524');
+        caption: pick.text,
+        background: pick.background);
     if (!mounted) return;
     m?.hideCurrentSnackBar();
     m?.showSnackBar(SnackBar(

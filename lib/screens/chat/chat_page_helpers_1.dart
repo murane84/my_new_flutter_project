@@ -153,14 +153,57 @@ extension _ChatPageHelpers1 on _ChatPageState {
     final t = (msg['message_type'] ?? 'text').toString();
     final rel = (msg['media_url'] as String?) ?? '';
     final words = _stripQuote((msg['content'] as String?) ?? '').trim();
-    if (!isMe) {
-      final what = t == 'text'
-          ? 'this message'
+    final fromOther = isMe
+        ? null
+        : 'It came from someone else — make sure they’d be happy with your '
+            'circle seeing it.';
+    // Words, a song or a GIF: preview + colours + an optional line, in one
+    // step (the sheet carries the "someone else's" note itself).
+    if (t == 'text' || t == 'song' || rel.startsWith('http')) {
+      final ta = t == 'song' ? splitTitleArtist(_songTitleOf(msg)) : null;
+      final pick = await pickStatusColours(
+        context,
+        kind: t == 'text'
+            ? QuickStatusKind.text
+            : t == 'song'
+                ? QuickStatusKind.music
+                : QuickStatusKind.sticker,
+        text: t == 'text' ? words : '',
+        title: ta?.$1 ?? '',
+        artist: ta?.$2 ?? '',
+        stickerUrl: rel.startsWith('http') ? rel : null,
+        note: fromOther,
+      );
+      if (pick == null || !mounted) return;
+      showToast(context, 'Posting as your status…', type: ToastType.info);
+      final cap = pick.text.isEmpty ? null : pick.text;
+      final res = t == 'text'
+          ? await ApiService().createStory(
+              kind: 'text', caption: pick.text, background: pick.background)
           : t == 'song'
-              ? 'this song'
-              : t == 'video'
-                  ? 'this video'
-                  : 'this photo';
+              ? await ApiService().createStory(
+                  kind: 'music',
+                  musicTitle: ta!.$1,
+                  musicArtist: ta.$2,
+                  caption: cap,
+                  background: pick.background)
+              : await ApiService().createStory(
+                  kind: 'sticker',
+                  musicArtUrl: rel,
+                  caption: cap,
+                  background: pick.background);
+      if (!mounted) return;
+      showToast(
+          context,
+          res != null
+              ? 'Posted ✓ — it’s on “Your story” in Circle'
+              : 'Couldn’t post it — check your connection and try again',
+          type: res != null ? ToastType.success : ToastType.error);
+      return;
+    }
+    // A photo / video keeps its own picture (no colours to pick).
+    if (!isMe) {
+      final what = t == 'video' ? 'this video' : 'this photo';
       final ok = await showDialog<bool>(
         context: context,
         builder: (d) => AlertDialog(
@@ -182,21 +225,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
     }
     showToast(context, 'Posting as your status…', type: ToastType.info);
     Map<String, dynamic>? res;
-    if (t == 'text') {
-      res = await ApiService().createStory(
-          kind: 'text',
-          caption: words,
-          // Aluta's own gradient (purple night) — edit-free, one tap.
-          background: '#ff5b2c83,#ff1d1040');
-    } else if (t == 'song') {
-      final ta = splitTitleArtist(_songTitleOf(msg));
-      res = await ApiService().createStory(
-          kind: 'music', musicTitle: ta.$1, musicArtist: ta.$2);
-    } else if (rel.startsWith('http')) {
-      // A GIF from the picker (an outside link) → a sticker status.
-      res = await ApiService().createStory(
-          kind: 'sticker', musicArtUrl: rel, background: '#ff5b2c83,#ff1d1040');
-    } else {
+    {
       final mime = (msg['media_mime'] as String?) ??
           (t == 'video' ? 'video/mp4' : 'image/jpeg');
       final mine = await _durableMediaRef(rel, mime);

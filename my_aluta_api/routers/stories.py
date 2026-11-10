@@ -35,6 +35,24 @@ STORY_TTL = timedelta(hours=24)
 VALID_KINDS = {"photo", "video", "music", "text", "sticker"}
 
 
+def _story_circle(db: Session, user_id: int) -> set:
+    """Who shares stories with [user_id]: their friends, minus anyone either
+    of them has blocked — a block hides stories both ways (feed, media,
+    views, the live "posted" nudge), not just chats."""
+    from models import BlockStatus
+    ids = set(_get_friend_ids(db, user_id))
+    if not ids:
+        return ids
+    rows = db.query(BlockStatus.user_id, BlockStatus.blocked_user_id).filter(
+        ((BlockStatus.user_id == user_id)
+         & BlockStatus.blocked_user_id.in_(ids))
+        | ((BlockStatus.blocked_user_id == user_id)
+           & BlockStatus.user_id.in_(ids))
+    ).all()
+    blocked = {int(b if int(a) == user_id else a) for a, b in rows}
+    return ids - blocked
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -158,7 +176,7 @@ def create_story(
     # without a manual refresh. The event carries no story data — clients fetch
     # the feed themselves on this signal (keeps access control server-side).
     try:
-        for fid in _get_friend_ids(db, current_user.id):
+        for fid in _story_circle(db, current_user.id):
             safe_notify_user(int(fid),
                              {"type": "story_posted", "author_id": current_user.id})
     except Exception:  # noqa: BLE001
@@ -180,7 +198,7 @@ def stories_feed(
     now = _now()
     purge_expired_stories(db)
 
-    author_ids = set(_get_friend_ids(db, me))
+    author_ids = set(_story_circle(db, me))
     author_ids.add(me)
 
     stories = (
@@ -276,7 +294,7 @@ def get_story_media(
     if not story:
         # Either no such story, or it has expired.
         raise HTTPException(status_code=404, detail="Story not found")
-    if story.author_id != current_user.id and current_user.id not in _get_friend_ids(
+    if story.author_id != current_user.id and current_user.id not in _story_circle(
         db, story.author_id
     ):
         raise HTTPException(status_code=403, detail="Not authorized to view this story")
@@ -306,7 +324,7 @@ def mark_viewed(
     story = db.query(Story).filter(Story.id == story_id).first()
     if not story or story.expires_at <= now:
         raise HTTPException(status_code=404, detail="Story not found")
-    if story.author_id != me and me not in _get_friend_ids(db, story.author_id):
+    if story.author_id != me and me not in _story_circle(db, story.author_id):
         raise HTTPException(status_code=403, detail="Not authorized to view this story")
     if story.author_id == me:
         return {"ok": True}  # don't record self-views
@@ -345,13 +363,17 @@ def story_viewers(
         .order_by(StoryView.viewed_at.desc())
         .all()
     )
+    # WHEN someone watched is activity, so it follows their last-seen choice
+    # (privacy.py, both ways): hidden → they're listed, without a time.
+    import privacy
+    seen_ok = privacy.visible_to(db, current_user.id, [u.id for _, u in rows])
     return [
         schemas.StoryViewerOut(
             user_id=u.id,
             username=u.username,
             avatar_url=u.avatar_url,
             phone=u.phone,
-            viewed_at=v.viewed_at,
+            viewed_at=v.viewed_at if seen_ok.get(u.id, False) else None,
         )
         for v, u in rows
     ]

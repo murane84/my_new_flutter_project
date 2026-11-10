@@ -135,10 +135,10 @@ def create_story(
             .filter(MediaAsset.id == payload.media_asset_id)
             .first()
         )
-        # The asset must exist and belong to the poster (they just uploaded it).
-        if not asset or (
-            asset.uploader_id is not None and asset.uploader_id != current_user.id
-        ):
+        # The asset must exist and be the poster's OWN upload. (A legacy
+        # asset with no recorded uploader used to pass — anyone's old photo
+        # could be lifted into a status, i.e. shown to a whole circle.)
+        if not asset or asset.uploader_id != current_user.id:
             raise HTTPException(status_code=400, detail="Unknown media for story")
     elif kind == "text":
         if not (payload.caption and payload.caption.strip()):
@@ -147,9 +147,29 @@ def create_story(
         # A sticker/GIF story carries its image URL in music_art_url.
         if not (payload.music_art_url and payload.music_art_url.strip()):
             raise HTTPException(status_code=400, detail="Nothing to post")
+
     else:  # music
         if not (payload.music_title or payload.caption):
             raise HTTPException(status_code=400, detail="Nothing to post")
+
+    # Sane sizes for what every viewer downloads and renders.
+    if len(payload.caption or "") > 2000 or \
+            len(payload.music_title or "") > 300 or \
+            len(payload.music_artist or "") > 300 or \
+            len(payload.background or "") > 64:
+        raise HTTPException(status_code=400, detail="Too long")
+
+    # Any picture URL (sticker / GIF, a song's art) is loaded by every
+    # viewer's phone, so only our GIF provider or our own attachments —
+    # never an arbitrary site that would learn who in my circle opened it.
+    if payload.music_art_url and payload.music_art_url.strip():
+        from urllib.parse import urlparse
+        u = payload.music_art_url.strip()
+        host = (urlparse(u).hostname or "").lower()
+        if not (u.startswith("/attachments/") or (
+                u.startswith("https://") and
+                (host == "giphy.com" or host.endswith(".giphy.com")))):
+            raise HTTPException(status_code=400, detail="Unsupported picture")
 
     # Housekeeping: clear out anyone's expired stories on this write.
     purge_expired_stories(db)

@@ -27,6 +27,10 @@ class SectionSwitch extends StatelessWidget {
   // centre); null = the side it comes from.
   final double? rippleFrom;
 
+  /// A drag just played this change under the finger — the switch that
+  /// follows it must not animate it a second time.
+  static DateTime? skipUntil;
+
   @override
   Widget build(BuildContext context) {
     final fixed = style;
@@ -53,11 +57,14 @@ class SectionSwitch extends StatelessWidget {
         ),
       );
     }
-    final ms = s == SectionTransitionStyle.wave ||
-            s == SectionTransitionStyle.ripple ||
-            s == SectionTransitionStyle.equaliser
-        ? duration + const Duration(milliseconds: 120)
-        : duration;
+    final skip = skipUntil != null && DateTime.now().isBefore(skipUntil!);
+    final ms = skip
+        ? Duration.zero
+        : s == SectionTransitionStyle.wave ||
+                s == SectionTransitionStyle.ripple ||
+                s == SectionTransitionStyle.equaliser
+            ? duration + const Duration(milliseconds: 120)
+            : duration;
     return ClipRect(
       child: AnimatedSwitcher(
         duration: ms,
@@ -76,7 +83,8 @@ class SectionSwitch extends StatelessWidget {
             builder: (context, w) {
               // t: 0 → 1 while coming in; 1 → 0 while going out.
               final t = anim.value;
-              final body = _frame(s, w!, t, incoming, dir, accent);
+              final body =
+                  frame(s, w!, t, incoming, dir, accent, rippleFrom: rippleFrom);
               return IgnorePointer(ignoring: !incoming, child: body);
             },
           ));
@@ -99,8 +107,11 @@ class SectionSwitch extends StatelessWidget {
   /// Our section key, under AnimatedSwitcher's own entry wrapper.
   static Key? _innerKey(Widget w) => (w is KeyedSubtree ? w.child : w).key;
 
-  Widget _frame(SectionTransitionStyle s, Widget w, double t, bool incoming,
-      double dir, Color accent) {
+  /// One frame of style [s] at progress [t] (0 → 1 arriving; 1 → 0
+  /// leaving) — also driven by a finger in the chat screen's swipe path.
+  static Widget frame(SectionTransitionStyle s, Widget w, double t,
+      bool incoming, double dir, Color accent,
+      {double? rippleFrom}) {
     final e = _ease(t);
     switch (s) {
       case SectionTransitionStyle.slide:
@@ -161,6 +172,42 @@ class SectionSwitch extends StatelessWidget {
           ),
         );
     }
+  }
+
+  /// The page under the finger while a swipe is in progress (p = how far,
+  /// 0..1). ONE fixed shape (Opacity › Transform) for every style and every
+  /// p — so the page is never rebuilt from scratch as a drag starts / ends.
+  static Widget dragOutgoing(
+      SectionTransitionStyle s, Widget w, double p, double dir) {
+    var o = 1.0;
+    var m = Matrix4.identity();
+    var a = Alignment.center;
+    switch (s) {
+      case SectionTransitionStyle.slide:
+      case SectionTransitionStyle.slideWave:
+        o = 1 - p;
+        m = Matrix4.translationValues(-60 * dir * p, 0, 0);
+      case SectionTransitionStyle.depth:
+        o = 1 - p;
+        m = Matrix4.diagonal3Values(1 - 0.07 * p, 1 - 0.07 * p, 1);
+      case SectionTransitionStyle.fade:
+        o = (1 - p * 1.6).clamp(0.0, 1.0);
+      case SectionTransitionStyle.cube:
+        o = 1 - p;
+        a = dir > 0 ? Alignment.centerRight : Alignment.centerLeft;
+        m = Matrix4.identity()
+          ..setEntry(3, 2, 0.0014)
+          ..rotateY(-0.55 * dir * p);
+      case SectionTransitionStyle.ripple:
+      case SectionTransitionStyle.wave:
+      case SectionTransitionStyle.equaliser:
+        // The new page is revealed over this one; it stays put.
+        break;
+    }
+    return Opacity(
+      opacity: o.clamp(0.0, 1.0),
+      child: Transform(alignment: a, transform: m, child: w),
+    );
   }
 
   static Widget _slide(Widget w, double e, bool incoming, double dir) {

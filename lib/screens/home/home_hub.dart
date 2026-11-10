@@ -16,23 +16,23 @@ extension _HomeHub on HomePageState {
   /// Mobile friend body: just the ACTIVE layer, its own contextual search at the
   /// top, content scrolling below. The Harmony/Circle pills that switch layers
   /// live in the header (_buildChatHeader).
+  /// [layer] / [view] build a specific page (the swipe path's neighbour)
+  /// instead of the current one.
   Widget _friendHubMobile(
       List<Map<String, dynamic>> harmonyEntries,
       List<Map<String, dynamic>> circleEntries,
       ColorScheme scheme,
-      Color textColor) {
-    final harmony = _friendLayer == 'harmony';
-    if (_friendLayer == 'glow') return const GlowFeed();
+      Color textColor,
+      {String? layer,
+      String? view}) {
+    final lay = layer ?? _friendLayer;
+    final harmony = lay == 'harmony';
+    if (lay == 'glow') return const GlowFeed();
 
     // HARMONY layer is unchanged: contextual search + a single scrolling list.
+    // (Swiping between pages is the _SwipePath around all of this.)
     if (harmony) {
-      // Swipe ← to Circle (the same path every layer follows).
-      return GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onHorizontalDragEnd: (d) {
-          if ((d.primaryVelocity ?? 0) < -300) _setFriendLayer('circle');
-        },
-        child: Column(
+      return Column(
         children: [
           _friendSearchField(
             scheme,
@@ -66,7 +66,6 @@ extension _HomeHub on HomePageState {
             ]),
           ),
         ],
-      ),
       );
     }
 
@@ -98,44 +97,19 @@ extension _HomeHub on HomePageState {
       (zone == 'listening' ? listening : circle).add(e);
     }
 
-    // Swipe between sections like pages: ← next (All → Status → Listening
-    // → Your circle), → previous — so a swipe right walks back to All (and
-    // Android's back gesture still minimises in one go). Rows / the story
-    // strip keep their own swipes; this catches the rest of the screen.
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onHorizontalDragEnd: (d) {
-        final v = d.primaryVelocity ?? 0;
-        if (v.abs() < 300) return;
-        final order = HomePageState.kCircleViews
-            .where((k) => k != 'stories' || _myUserId != null)
-            .toList();
-        final i = order.indexOf(_circleView);
-        // One continuous path across the chat screen: Harmony ← [All ·
-        // Status · Listening · Circle] → Glow. Past either end of Circle's
-        // sections, the swipe carries on to the next layer.
-        if (v > 0 && i <= 0) {
-          _setFriendLayer('harmony');
-          return;
-        }
-        if (v < 0 && i >= order.length - 1) {
-          _setFriendLayer('glow');
-          return;
-        }
-        final j = (i + (v < 0 ? 1 : -1)).clamp(0, order.length - 1);
-        if (j != i) _goCircleView(order[j]);
-      },
-      child: Column(
+    final shown = view ?? _circleView;
+    return Builder(
+      builder: (context) => Column(
         children: [
           _friendSearchField(
             scheme,
             _searchCtrl,
-            _circleSearchHint,
+            _circleSearchHintFor(shown),
             _filterFriends,
           ),
           const SizedBox(height: 10),
           ..._circleSections(listening, circle, scheme, textColor,
-              wide: false),
+              wide: false, viewOverride: view),
         ],
       ),
     );
@@ -151,17 +125,17 @@ extension _HomeHub on HomePageState {
       List<Map<String, dynamic>> circle,
       ColorScheme scheme,
       Color textColor,
-      {required bool wide}) {
+      {required bool wide, String? viewOverride}) {
     // Status needs to know who "me" is (cold start may not yet): until then
     // the shared view stands in.
-    final view =
-        (_circleView == 'stories' && _myUserId == null) ? 'all' : _circleView;
+    final v0 = viewOverride ?? _circleView;
+    final view = (v0 == 'stories' && _myUserId == null) ? 'all' : v0;
     final storiesUnseen = _storyGroups
         .where((g) =>
             !g.isMe && g.hasUnseen && !StoryMute.instance.isMuted(g.authorId))
         .length;
     // Once per launch: land on the section where something is waiting.
-    _maybeSmartLanding(
+    if (viewOverride == null) _maybeSmartLanding(
         unread: _circleBadge(),
         newStatuses: storiesUnseen,
         live: listening.length);
@@ -170,7 +144,8 @@ extension _HomeHub on HomePageState {
       // A maximised section: the 3D switcher (the shared view keeps its own
       // per-section headers).
       if (view != 'all')
-        _circleSwitcher(scheme, storiesUnseen, listening, circle, textColor),
+        _circleSwitcher(
+            scheme, storiesUnseen, listening, circle, textColor, view),
       // Every change of section turns like a cube face (← forward, → back).
       Expanded(
         child: _CircleFlip(
@@ -315,7 +290,8 @@ extension _HomeHub on HomePageState {
 
   /// The Circle search hint follows the maximised section, so the box says
   /// what it will filter.
-  String get _circleSearchHint => switch (_circleView) {
+  String get _circleSearchHint => _circleSearchHintFor(_circleView);
+  String _circleSearchHintFor(String view) => switch (view) {
         'stories' => 'Search statuses…',
         'listening' => 'Search who\'s listening…',
         _ => 'Search chats & people…',
@@ -368,8 +344,8 @@ extension _HomeHub on HomePageState {
       int storiesUnseen,
       List<Map<String, dynamic>> listening,
       List<Map<String, dynamic>> circle,
-      Color textColor) {
-    final view = _circleView;
+      Color textColor,
+      String view) {
     final unread = _circleBadge();
     final isDark = scheme.brightness == Brightness.dark;
     final segs = <(String, IconData, String, int, String)>[
@@ -1048,4 +1024,167 @@ class _CircleFlip extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SectionSwitch(
       forward: forward, rippleFrom: rippleFrom, child: child);
+}
+
+/// The chat screen's swipe path on phones — Harmony ← [All · Status ·
+/// Listening · Circle] → Glow — that FOLLOWS THE FINGER: the next page
+/// slides / reveals in under the drag in the chosen transition style, a
+/// release past a third of the width (or a flick) finishes it, an early
+/// release springs back with nothing changed, and past either end the page
+/// stretches a little and bounces back. Inner horizontal lists (the story
+/// strip, Your Spaces, Glow's filters) keep their own swipes.
+class _SwipePath extends StatefulWidget {
+  const _SwipePath({
+    required this.current,
+    required this.neighbor,
+    required this.commit,
+  });
+
+  final Widget current;
+
+  /// The page a swipe would bring in (forward = finger moving left), or
+  /// null at that end of the path.
+  final Widget? Function(bool forward) neighbor;
+
+  /// Make [forward]'s neighbour the current page (no second animation).
+  final void Function(bool forward) commit;
+
+  @override
+  State<_SwipePath> createState() => _SwipePathState();
+}
+
+class _SwipePathState extends State<_SwipePath>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _p = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 280));
+  double _dx = 0; // raw finger travel this drag
+  bool? _fwd; // which way this drag is going
+  Widget? _next; // the neighbour shown under the finger
+  double _w = 1;
+  bool _settling = false;
+  double _rubber = 0; // past an end: a small stretch
+
+  @override
+  void dispose() {
+    _p.dispose();
+    super.dispose();
+  }
+
+  void _start(DragStartDetails d) {
+    if (_settling) return;
+    _p.stop();
+    _dx = 0;
+    _fwd = null;
+    _next = null;
+  }
+
+  void _update(DragUpdateDetails d) {
+    if (_settling) return;
+    _dx += d.delta.dx;
+    final fwd = _dx < 0;
+    if (_fwd != fwd) {
+      _fwd = fwd;
+      _next = widget.neighbor(fwd);
+    }
+    setState(() {
+      if (_next == null) {
+        _p.value = 0;
+        _rubber = (_dx * 0.25).clamp(-40.0, 40.0);
+      } else {
+        _rubber = 0;
+        _p.value = (_dx.abs() / _w).clamp(0.0, 1.0);
+      }
+    });
+  }
+
+  void _end(DragEndDetails d) {
+    if (_settling) return;
+    final fwd = _fwd;
+    if (fwd == null || _next == null) {
+      setState(() => _rubber = 0); // bounce back (animated below)
+      _reset();
+      return;
+    }
+    final v = d.primaryVelocity ?? 0;
+    final flick = fwd ? v < -600 : v > 600;
+    final back = fwd ? v > 300 : v < -300;
+    final go = !back && (_p.value > 0.33 || flick);
+    _settling = true;
+    final run = go
+        ? _p.animateTo(1, curve: Curves.easeOutCubic)
+        : _p.animateBack(0, curve: Curves.easeOutCubic);
+    run.whenComplete(() {
+      if (!mounted) return;
+      if (go) {
+        HapticFeedback.selectionClick();
+        // The page already arrived under the finger: the switch that
+        // follows the state change must not play it again.
+        SectionSwitch.skipUntil =
+            DateTime.now().add(const Duration(milliseconds: 350));
+        widget.commit(fwd);
+      }
+      _reset();
+    });
+  }
+
+  void _reset() {
+    setState(() {
+      _dx = 0;
+      _fwd = null;
+      _next = null;
+      _settling = false;
+      _p.value = 0;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final accent = Theme.of(context).colorScheme.primary;
+    return LayoutBuilder(builder: (context, cons) {
+      _w = cons.maxWidth <= 0 ? 1 : cons.maxWidth;
+      return GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragStart: _start,
+        onHorizontalDragUpdate: _update,
+        onHorizontalDragEnd: _end,
+        onHorizontalDragCancel: () {
+          if (!_settling) _reset();
+        },
+        child: ValueListenableBuilder<SectionTransitionStyle>(
+          valueListenable: SectionTransition.instance.style,
+          builder: (context, style, _) => AnimatedBuilder(
+            animation: _p,
+            builder: (context, _) {
+              final p = _p.value;
+              final dir = (_fwd ?? true) ? 1.0 : -1.0;
+              // Reduce motion: the finger still drives it, as a plain fade.
+              final st = reduce ? SectionTransitionStyle.fade : style;
+              final next = _next;
+              return ClipRect(
+                child: Stack(fit: StackFit.expand, children: [
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(end: _rubber),
+                    duration: _rubber == 0
+                        ? const Duration(milliseconds: 260)
+                        : Duration.zero,
+                    curve: Curves.easeOutBack,
+                    builder: (context, r, child) => Transform.translate(
+                        offset: Offset(r, 0), child: child),
+                    child: SectionSwitch.dragOutgoing(
+                        st, widget.current, p, dir),
+                  ),
+                  if (next != null && p > 0)
+                    IgnorePointer(
+                      child: SectionSwitch.frame(
+                          st, next, p, true, dir, accent),
+                    ),
+                ]),
+              );
+            },
+          ),
+        ),
+      );
+    });
+  }
 }

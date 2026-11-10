@@ -174,7 +174,7 @@ extension _HomeFriendListView on HomePageState {
                       final layerKey = _friendLayer == 'glow'
                           ? 'glow'
                           : (wide ? 'columns' : _friendLayer);
-                      return SectionSwitch(
+                      final switched = SectionSwitch(
                         forward: _layerForward,
                         child: KeyedSubtree(
                           key: ValueKey('layer-$layerKey'),
@@ -182,12 +182,71 @@ extension _HomeFriendListView on HomePageState {
                               combined, scheme, textColor, wide),
                         ),
                       );
+                      if (wide) return switched;
+                      // Phones: the whole chat screen is one swipe path that
+                      // follows the finger (see _SwipePath).
+                      return _SwipePath(
+                        current: switched,
+                        neighbor: (fwd) {
+                          final s = _pathStep(fwd);
+                          return s == null
+                              ? null
+                              : _pathPage(s, harmonyEntries, circleEntries,
+                                  scheme, textColor);
+                        },
+                        commit: (fwd) {
+                          final s = _pathStep(fwd);
+                          if (s != null) _goPathStep(s);
+                        },
+                      );
                     },
                   ),
           ),
         ],
       ),
     );
+  }
+
+  /// Where a swipe goes from here on the phone path — Harmony ← [All ·
+  /// Status · Listening · Circle] → Glow; from Harmony / Glow it lands on
+  /// Circle as I left it. Null past either end.
+  String? _pathStep(bool forward) {
+    if (_friendLayer == 'harmony') return forward ? 'circle' : null;
+    if (_friendLayer == 'glow') return forward ? null : 'circle';
+    final order = HomePageState.kCircleViews
+        .where((k) => k != 'stories' || _myUserId != null)
+        .toList();
+    final i = order.indexOf(_circleView).clamp(0, order.length - 1);
+    if (forward) return i >= order.length - 1 ? 'glow' : order[i + 1];
+    return i <= 0 ? 'harmony' : order[i - 1];
+  }
+
+  /// That step's page, built as it will look (the one under the finger).
+  Widget _pathPage(String step, List<Map<String, dynamic>> harmonyEntries,
+      List<Map<String, dynamic>> circleEntries, ColorScheme scheme,
+      Color textColor) {
+    if (step == 'glow') {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: const GlowFeed(),
+        ),
+      );
+    }
+    if (step == 'harmony' || step == 'circle') {
+      return _friendHubMobile(harmonyEntries, circleEntries, scheme, textColor,
+          layer: step);
+    }
+    return _friendHubMobile(harmonyEntries, circleEntries, scheme, textColor,
+        layer: 'circle', view: step);
+  }
+
+  void _goPathStep(String step) {
+    if (step == 'harmony' || step == 'glow' || step == 'circle') {
+      _setFriendLayer(step);
+      return;
+    }
+    _goCircleView(step);
   }
 
   Widget _layerBody(
@@ -207,18 +266,8 @@ extension _HomeFriendListView on HomePageState {
                             child: const GlowFeed(),
                           ),
                         );
-                        if (wide) return feed;
-                        // Phone: swipe → back to Circle (same path as
-                        // everywhere: Harmony ← Circle ← Glow).
-                        return GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onHorizontalDragEnd: (d) {
-                            if ((d.primaryVelocity ?? 0) > 300) {
-                              _setFriendLayer('circle');
-                            }
-                          },
-                          child: feed,
-                        );
+                        // (On phones, swiping is the _SwipePath around it.)
+                        return feed;
                       }
                       if (wide) {
                         // Desktop: each column carries its OWN contextual search

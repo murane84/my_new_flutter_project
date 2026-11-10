@@ -161,6 +161,7 @@ def report_device(
 @router.post("/calls/decline")
 def decline_call_from_shade(
     payload: dict,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """"Decline" tapped on the ringing call notification while Aluta is
@@ -170,6 +171,13 @@ def decline_call_from_shade(
     try:
         caller = int(payload.get("caller_id"))
     except (TypeError, ValueError):
+        return {"ok": False}
+    # Only someone who could have been rung by them (the same link a call
+    # needs: a contact either way, or a shared chat) — never a guessed id.
+    import crud
+    from routers.users import _share_a_chat
+    if caller not in crud._get_contact_ids(db, current_user.id) and \
+            not _share_a_chat(db, current_user.id, caller):
         return {"ok": False}
     from websocket_manager import safe_notify_user
     safe_notify_user(caller, {"type": "call_decline", "from": current_user.id})

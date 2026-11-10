@@ -39,10 +39,10 @@ class UserOut(BaseModel):
 
 class PublicUser(BaseModel):
     """Another person as shown to OTHERS (message senders, chat peers): never
-    their email or account flags — those are for the account owner only."""
+    their email, account flags or online state — presence is for mutual
+    friends only and comes from the friends list / status check."""
     id: int
     username: str
-    is_online: Optional[bool] = False
     phone: Optional[str] = None
     avatar_url: Optional[str] = None
 

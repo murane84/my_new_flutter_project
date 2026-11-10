@@ -5,19 +5,21 @@
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
-JSObject? get _ctor {
-  final n = globalContext['Notification'];
-  return n is JSObject ? n : null;
-}
+// Typed property reads (getProperty<T>) instead of `is` checks — the
+// analyzer's platform-consistent way to read browser values.
+bool get _hasNotification => globalContext.has('Notification');
 
-bool get webNotifySupported => _ctor != null;
+JSObject? get _ctor => _hasNotification
+    ? globalContext.getProperty<JSObject>('Notification'.toJS)
+    : null;
+
+bool get webNotifySupported => _hasNotification;
 
 /// 'granted' | 'denied' | 'default' | 'unsupported'
 String get webNotifyPermission {
   final n = _ctor;
   if (n == null) return 'unsupported';
-  final p = n['permission'];
-  return p is JSString ? p.toDart : 'default';
+  return n.getProperty<JSString?>('permission'.toJS)?.toDart ?? 'default';
 }
 
 Future<String> webNotifyRequest() async {
@@ -34,10 +36,8 @@ Future<String> webNotifyRequest() async {
 }
 
 bool get webTabHidden {
-  final d = globalContext['document'];
-  if (d is! JSObject) return false;
-  final h = d['hidden'];
-  return h is JSBoolean ? h.toDart : false;
+  final d = globalContext.getProperty<JSObject?>('document'.toJS);
+  return d?.getProperty<JSBoolean?>('hidden'.toJS)?.toDart ?? false;
 }
 
 void webNotifyShow({
@@ -55,7 +55,9 @@ void webNotifyShow({
     opts['icon'] = 'icons/Icon-192.png'.toJS;
     // Same tag → the newer one replaces the older (one per chat / person).
     if (tag != null) opts['tag'] = tag.toJS;
-    final n = (ctor as JSFunction).callAsConstructor<JSObject>(title.toJS, opts);
+    final n = globalContext
+        .getProperty<JSFunction>('Notification'.toJS)
+        .callAsConstructor<JSObject>(title.toJS, opts);
     n['onclick'] = ((JSAny? _) {
       try {
         globalContext.callMethod('focus'.toJS);

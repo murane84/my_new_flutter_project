@@ -460,7 +460,8 @@ def react_to_message(
     # while they're looking at that very chat (the bubble updates live).
     try:
         author = int(message.sender_id)
-        if added and author != current_user.id:
+        if added and author != current_user.id and \
+                not crud.blocked_either(db, current_user.id, author):
             from websocket_manager import is_viewing
             from models import Conversation
             conv = None

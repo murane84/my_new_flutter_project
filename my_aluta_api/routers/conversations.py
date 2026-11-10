@@ -46,6 +46,9 @@ def _conversation_out(db: Session, conv: Conversation, me: int) -> schemas.Conve
     )
     member_outs: List[schemas.ConversationMemberOut] = []
     other_user: Optional[schemas.PublicUser] = None
+    # Online dots only for my mutual friends (no block) — never strangers
+    # who happen to share a group.
+    _friends = crud._get_friend_ids(db, me)
     my_role: Optional[str] = None
     for m in members:
         u = db.query(User).filter(User.id == m.user_id).first()
@@ -57,7 +60,8 @@ def _conversation_out(db: Session, conv: Conversation, me: int) -> schemas.Conve
                 username=u.username,
                 avatar_url=u.avatar_url,
                 phone=u.phone,
-                is_online=bool(u.is_online),
+                is_online=bool(u.is_online
+                               and (u.id == me or u.id in _friends)),
                 role=m.role,
             )
         )

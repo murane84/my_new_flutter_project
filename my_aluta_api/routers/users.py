@@ -66,8 +66,8 @@ def sync_contacts(
     # They're in my phone book, so name / photo / number — never their email.
     return {
         "matched": [{"id": u.id, "username": u.username,
-                     "avatar_url": u.avatar_url, "phone": u.phone,
-                     "is_online": bool(u.is_online)} for u in matched],
+                     "avatar_url": u.avatar_url, "phone": u.phone}
+                    for u in matched],
         "added": added,
     }
 
@@ -299,6 +299,14 @@ def set_user_online_status(is_online: bool, tz_offset: int | None = None, db: Se
     db.commit()
     return {"message": f"User '{current_user.username}' online status updated to {is_online}"}
 
+def _share_a_chat(db: Session, a: int, b: int) -> bool:
+    from models import ConversationMember as CM
+    mine = {r[0] for r in db.query(CM.conversation_id)
+            .filter(CM.user_id == a).all()}
+    return bool(mine) and db.query(CM).filter(
+        CM.user_id == b, CM.conversation_id.in_(mine)).first() is not None
+
+
 @router.get("/users/{user_id}/status", tags=["Users"])
 def get_user_status(user_id: int, db: Session = Depends(get_db),
                     current_user: User = Depends(get_current_user)):
@@ -312,8 +320,13 @@ def get_user_status(user_id: int, db: Session = Depends(get_db),
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    online = bool(user.is_online and crud.is_recently_active(user.last_seen))
-    seen = privacy.last_seen_visible(db, user.id, current_user.id)
+    me = current_user.id
+    mutual = crud.are_mutual(db, user.id, me)
+    # Online is presence too — mutual friends (no block) only; anyone else
+    # simply sees nothing, never a hint.
+    online = bool(mutual and user.is_online
+                  and crud.is_recently_active(user.last_seen))
+    seen = privacy.last_seen_visible(db, user.id, me)
     last_track = None
     if seen and not online:
         try:
@@ -338,7 +351,14 @@ def get_user_status(user_id: int, db: Session = Depends(get_db),
                           if (seen and user.last_seen) else None),
             "last_track": last_track,
             "tz_offset": tz,
-            "phone": user.phone, "avatar_url": user.avatar_url}
+            # Their number only to someone who already has a link to them: a
+            # contact (either side) or a fellow group member — never to a
+            # stranger guessing ids.
+            "phone": (user.phone if (user.id == me
+                                     or user.id in crud._get_contact_ids(db, me)
+                                     or _share_a_chat(db, me, user.id))
+                      else None),
+            "avatar_url": user.avatar_url}
 
 @router.get("/users/friends/unread_counts", response_model=List[schemas.FriendWithUnread], tags=["Users"])
 def get_friends_with_unread_counts(

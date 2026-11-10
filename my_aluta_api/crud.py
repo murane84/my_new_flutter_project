@@ -456,10 +456,21 @@ def _get_contact_ids(db: Session, user_id: int) -> set:
     return _added_by(db, user_id) | _added_me(db, user_id)
 
 
+def _blocked_with(db: Session, user_id: int) -> set:
+    """Everyone with a block between them and [user_id], either way."""
+    rows = db.query(BlockStatus.user_id, BlockStatus.blocked_user_id).filter(
+        (BlockStatus.user_id == user_id)
+        | (BlockStatus.blocked_user_id == user_id)).all()
+    return {int(b if int(a) == int(user_id) else a) for a, b in rows}
+
+
 def _get_friend_ids(db: Session, user_id: int) -> set:
-    """MUTUAL friends — both have added each other. Every "two friends"
-    feature uses this (stories, presence, last seen, tune-in, bonds…)."""
-    return _added_by(db, user_id) & _added_me(db, user_id)
+    """MUTUAL friends — both have added each other, and no block either way.
+    Every "two friends" feature uses this (stories, presence, last seen,
+    tune-in, quick status, rooms, bonds, groups…), so a block switches all
+    of them off at once."""
+    return (_added_by(db, user_id) & _added_me(db, user_id)) \
+        - _blocked_with(db, user_id)
 
 
 def are_mutual(db: Session, a: int, b: int) -> bool:
@@ -469,7 +480,7 @@ def are_mutual(db: Session, a: int, b: int) -> bool:
         ((Friend.user_id == a) & (Friend.friend_id == b))
         | ((Friend.user_id == b) & (Friend.friend_id == a))
     ).count()
-    return n >= 2
+    return n >= 2 and not blocked_either(db, a, b)
 
 
 # ------------------ Mute/Block ------------------

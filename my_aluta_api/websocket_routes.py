@@ -402,6 +402,19 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                 to = data.get("to")
                 conv = data.get("conv")
                 if to is not None:
+                    # Never across a block (typing is presence too).
+                    try:
+                        import crud as _crud_t
+                        _tdb = SessionLocal()
+                        try:
+                            if _crud_t.blocked_either(
+                                    _tdb, int(user_id), int(to)):
+                                to = None
+                        finally:
+                            _tdb.close()
+                    except Exception:
+                        pass
+                if to is not None:
                     try:
                         await notify_user(
                             int(to),
@@ -483,6 +496,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                                            if int(x) != int(user_id)]
                             elif to is not None:
                                 targets = [int(to)]
+                        # Presence is for mutual friends only, and nothing
+                        # crosses a block: others count as "offline" (no
+                        # away/online hint), blocked ones never get it.
+                        import crud as _crud_p
+                        _mutual = _crud_p._get_friend_ids(db, int(user_id))
+                        _blocked = _crud_p._blocked_with(db, int(user_id))
+                        targets = [t for t in targets if t not in _blocked]
                         kind = _msg_kind(m) if m is not None else "message"
                         sent_at = (m.timestamp.isoformat()
                                    if m is not None and m.timestamp else None)
@@ -493,6 +513,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                     for t in targets:
                         key = f"grp:{cid}" if cid is not None else f"dm:{int(user_id)}"
                         state = _presence_in(t, key)
+                        if state == "away" and t not in _mutual:
+                            state = "offline"
                         counts[state] += 1
                         if state != "here":
                             continue
@@ -641,6 +663,18 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                         try:
                             _blk = _crud.blocked_either(
                                 _bdb, int(user_id), int(to))
+                            # A call needs SOME link: a contact (either
+                            # side) or a shared chat — never a stranger
+                            # ringing a guessed id.
+                            if not _blk and int(to) not in \
+                                    _crud._get_contact_ids(_bdb, int(user_id)):
+                                from models import ConversationMember as _CM
+                                _mine = {r[0] for r in _bdb.query(
+                                    _CM.conversation_id).filter(
+                                    _CM.user_id == int(user_id)).all()}
+                                _blk = not (_mine and _bdb.query(_CM).filter(
+                                    _CM.user_id == int(to),
+                                    _CM.conversation_id.in_(_mine)).first())
                         finally:
                             _bdb.close()
                     except Exception:

@@ -390,9 +390,12 @@ def get_user_status(friend_id: int, db: Session = Depends(get_db), current_user:
     # privacy choice allows it (privacy.py), else null.
     import privacy
     seen = privacy.last_seen_visible(db, friend.id, current_user.id)
+    import crud as _crud
     return {
         "user_id": friend.id,
-        "is_online": friend.is_online,
+        # Presence: mutual friends (no block) only.
+        "is_online": bool(friend.is_online
+                          and _crud.are_mutual(db, friend.id, current_user.id)),
         "last_seen": (str(friend.last_seen)
                       if (seen and friend.last_seen) else None)
     }

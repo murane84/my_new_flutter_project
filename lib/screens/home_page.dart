@@ -97,6 +97,7 @@ import 'stories/story_models.dart';
 import 'stories/story_viewer.dart';
 import '../services/story_mute.dart';
 import '../services/block_list.dart';
+import '../services/story_posting.dart';
 import 'policy_gate.dart';
 import 'add_friend_sheet.dart';
 import 'spinning_vinyl_ring.dart';
@@ -474,6 +475,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     LiveSessionController.onUnseenSongShare = _onUnseenSongShare;
     GroupMeta.instance.addListener(_onGroupMeta);
     BlockList.instance.addListener(_onBlockList);
+    StoryPosting.instance.addListener(_onStoryPosting);
     // Changing who sees my last seen also changes whose I see (both ways):
     // once the choice has reached the server, refetch the list.
     LastSeenPrivacy.instance.load();
@@ -685,6 +687,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   @override
   void dispose() {
     BlockList.instance.removeListener(_onBlockList);
+    StoryPosting.instance.removeListener(_onStoryPosting);
     LastSeenPrivacy.instance.mode.removeListener(_onLastSeenPrivacy);
     spacesListStale.removeListener(_loadSpaces);
     if (ReplyBanner.onIncoming == _showReplyBanner) {
@@ -3473,6 +3476,17 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// I blocked / unblocked someone: their listening, status and presence go
   /// (or come back) at once — refetch the circle and statuses, and drop any
   /// track of theirs still showing.
+  // A status of mine was just posted (from anywhere — the composer, Share as
+  // status, a song share): fetch statuses so "Your story" lights up.
+  int _storyPostedSeen = 0;
+  void _onStoryPosting() {
+    final n = StoryPosting.instance.posted;
+    if (n != _storyPostedSeen) {
+      _storyPostedSeen = n;
+      _fetchStories();
+    }
+  }
+
   int _blockVersion = 0;
   void _onBlockList() {
     for (final p in BlockList.instance.people) {

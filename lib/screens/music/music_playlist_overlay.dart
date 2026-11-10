@@ -1807,14 +1807,17 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     final title = (o?.title?.trim().isNotEmpty ?? false) ? o!.title! : ta.$1;
     final artist =
         (o?.artist?.trim().isNotEmpty ?? false) ? o!.artist : ta.$2;
+    // Right away: it's on its way ("Your story" shows a posting ring too).
+    showToast(context, 'Posting “$title” as your status…',
+        type: ToastType.info);
     final res = await ApiService().createStory(
         kind: 'music', musicTitle: title, musicArtist: artist);
     if (!mounted) return;
     showToast(
         context,
         res != null
-            ? 'Shared as your status 🎶 — friends can tune in'
-            : 'Couldn’t share it — try again',
+            ? 'Posted 🎶 — tap “Your story” in Circle to see it'
+            : 'Couldn’t post it — check your connection and try again',
         type: res != null ? ToastType.success : ToastType.error);
   }
 

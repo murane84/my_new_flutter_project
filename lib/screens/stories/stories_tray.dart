@@ -8,6 +8,7 @@ import 'story_models.dart';
 import 'story_viewer.dart';
 import '../../utils/readable.dart';
 import '../../services/story_mute.dart';
+import '../../services/story_posting.dart';
 
 /// Horizontal "stories" strip shown at the top of the Messages list. Owns its
 /// own data: it fetches the friends-only feed and reloads after posting or
@@ -310,12 +311,44 @@ class _StoriesTrayState extends State<StoriesTray> {
   }
 
   Widget _myTile(double ringSize, double avatarRadius, double tileWidth,
-      double labelSize, double badgeSize) {
+      double labelSize, double badgeSize) =>
+      // Posting → a turning ring + "Posting…"; just posted → "Posted ✓";
+      // whichever screen started it (composer, Share as status, …).
+      ListenableBuilder(
+        listenable: StoryPosting.instance,
+        builder: (context, _) {
+          final p = StoryPosting.instance;
+          final tile = _myTileInner(ringSize, avatarRadius, tileWidth,
+              labelSize, badgeSize,
+              label: p.busy
+                  ? 'Posting…'
+                  : p.justPosted
+                      ? 'Posted ✓'
+                      : 'Your story');
+          if (!p.busy) return tile;
+          return Stack(alignment: Alignment.topCenter, children: [
+            tile,
+            IgnorePointer(
+              child: SizedBox(
+                width: ringSize,
+                height: ringSize,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ),
+          ]);
+        },
+      );
+
+  Widget _myTileInner(double ringSize, double avatarRadius, double tileWidth,
+      double labelSize, double badgeSize, {String label = 'Your story'}) {
     final mine = _myGroup;
     final avatar =
         (widget.myAvatarUrl ?? '').isNotEmpty ? _absUrl(widget.myAvatarUrl!) : null;
     return _TileScaffold(
-      label: 'Your story',
+      label: label,
       width: tileWidth,
       labelSize: labelSize,
       onTap: () {

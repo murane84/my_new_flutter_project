@@ -10,6 +10,7 @@ import 'user.dart';
 import '../utils/app_config.dart';
 import '../utils/session_events.dart';
 import '../services/biometric_service.dart';
+import '../services/story_posting.dart';
 
 final _logger = Logger();
 
@@ -4033,6 +4034,10 @@ class ApiService {
     String? musicArtUrl,
     String? background,
   }) async {
+    // Every post shows on "Your story" (posting ring → Posted ✓) and makes
+    // Home refetch statuses — see StoryPosting.
+    StoryPosting.instance.begin();
+    var ok = false;
     try {
       final token = await _getToken();
       if (token == null) return null;
@@ -4051,13 +4056,17 @@ class ApiService {
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        return _tryDecode(resp.body);
+        final out = _tryDecode(resp.body);
+        ok = out != null;
+        return out;
       }
       _logger.w('createStory failed: ${resp.statusCode} ${resp.body}');
       return null;
     } catch (e) {
       _logger.e('createStory exception: $e');
       return null;
+    } finally {
+      StoryPosting.instance.end(ok: ok);
     }
   }
 

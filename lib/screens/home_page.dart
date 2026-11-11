@@ -3091,6 +3091,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
   final ScrollController _circleMaxScroll = ScrollController();
   // Rows blinking right now ('s<friendId>' / 'g<convId>').
   final Set<String> _flashKeys = {};
+  // Bumped on every _flashRows, so a row that is asked again while it is
+  // still marked (came back + a new message within a second) breathes again.
+  int _flashGen = 0;
   Timer? _flashTimer;
   // The row I opened a chat from — it blinks when I come back.
   String? _openedKey;
@@ -3792,6 +3795,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     if (keys.isEmpty) return;
     _flashTimer?.cancel();
     setState(() {
+      _flashGen++;
       _flashKeys
         ..clear()
         ..addAll(keys);

@@ -623,10 +623,18 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
       onLongPress: mine ? () => _confirmDeleteMoment(id) : null,
       // Right-click on desktop opens the same delete, matching comments.
       onSecondaryTap: mine ? () => _confirmDeleteMoment(id) : null,
-      child: AnimatedContainer(
+      // Jumped to from elsewhere → the card breathes once. The circling
+      // hearts come only once the bond is accepted (like the partner's row).
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 11),
+        child: BreathGlow(
+        active: hot,
+        radius: 20,
+        hearts: (_space['status'] ?? 'active').toString() == 'active',
+        color: Color.lerp(_accent, BreathGlow.rose, 0.4)!,
+        child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
-        margin: const EdgeInsets.only(bottom: 11),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           // SOLID & opaque — the wallpaper must never bleed through and wash out
@@ -637,16 +645,12 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
               : scheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-              color: hot
-                  ? _accent.withValues(alpha: 0.85)
-                  : scheme.outlineVariant.withValues(alpha: 0.5),
-              width: hot ? 2 : 1),
+              color: scheme.outlineVariant.withValues(alpha: 0.5),
+              width: 1),
           boxShadow: [
             BoxShadow(
-              color: hot
-                  ? _accent.withValues(alpha: 0.26)
-                  : Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
-              blurRadius: hot ? 20 : 12,
+              color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
+              blurRadius: 12,
               offset: const Offset(0, 5),
             ),
           ],
@@ -862,6 +866,8 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
               },
             ),
           ],
+        ),
+      ),
         ),
       ),
     );

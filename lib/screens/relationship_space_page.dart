@@ -46,6 +46,7 @@ import 'chat/song_cache.dart';
 import '../widgets/listen_presence_gate.dart';
 import '../widgets/tune_in_ask.dart';
 import '../widgets/playing_bars.dart';
+import '../widgets/now_glow.dart';
 import '../widgets/photo_viewer.dart';
 import '../services/track_title.dart' show cleanTrackName;
 import '../utils/marquee_text.dart';
@@ -1527,25 +1528,27 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     setState(() {
       _section = 'moments';
       _navDrawerOpen = false;
-      _highlightMomentId = momentId;
     });
-    // Wait out the section transition, then ensure the card is on screen.
-    Future.delayed(const Duration(milliseconds: 320), () {
+    // Wait out the section transition, glide the card on screen, and only
+    // then let it breathe once (the same "here it is" as everywhere).
+    Future.delayed(const Duration(milliseconds: 320), () async {
       if (!mounted) return;
       final ctx = _momentKeys[momentId]?.currentContext;
       if (ctx != null && ctx.mounted) {
-        Scrollable.ensureVisible(
+        await Scrollable.ensureVisible(
           ctx,
           duration: const Duration(milliseconds: 450),
           curve: Curves.easeOutCubic,
           alignment: 0.12,
         );
       }
-    });
-    Future.delayed(const Duration(milliseconds: 2800), () {
-      if (mounted && _highlightMomentId == momentId) {
-        setState(() => _highlightMomentId = null);
-      }
+      if (!mounted) return;
+      setState(() => _highlightMomentId = momentId);
+      Future.delayed(const Duration(milliseconds: 1800), () {
+        if (mounted && _highlightMomentId == momentId) {
+          setState(() => _highlightMomentId = null);
+        }
+      });
     });
   }
   void _openDiary([Offset? origin]) => _goSection('diary');

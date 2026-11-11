@@ -918,8 +918,9 @@ class _PulseOnRiseState extends State<_PulseOnRise>
         final t = _a.value;
         if (t == 0 || t == 1) return child!;
         final i = calmBreath(t);
+        final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
         return Transform.scale(
-          scale: 1 + 0.08 * i,
+          scale: still ? 1 : 1 + 0.08 * i,
           child: DecoratedBox(
             decoration: ShapeDecoration(
               shape: const StadiumBorder(),

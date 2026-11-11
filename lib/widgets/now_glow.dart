@@ -87,6 +87,7 @@ class _NowGlowState extends State<NowGlow> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final c = widget.color ?? Theme.of(context).colorScheme.primary;
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     return AnimatedBuilder(
       animation: _a,
       child: widget.child,
@@ -98,7 +99,7 @@ class _NowGlowState extends State<NowGlow> with SingleTickerProviderStateMixin {
         // The ♪ drifts up and fades over the whole breath.
         final noteT = Curves.easeOut.transform(t);
         return Transform.scale(
-          scale: 1 + 0.014 * i,
+          scale: still ? 1 : 1 + 0.012 * i,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -119,7 +120,7 @@ class _NowGlowState extends State<NowGlow> with SingleTickerProviderStateMixin {
                 ),
                 child: child,
               ),
-              if (_strength >= 0.9)
+              if (_strength >= 0.9 && !still)
                 Positioned(
                   right: 10,
                   top: -4 - 14 * noteT,
@@ -141,4 +142,168 @@ class _NowGlowState extends State<NowGlow> with SingleTickerProviderStateMixin {
       },
     );
   }
+}
+
+/// The calm "here it is" for anything that isn't the ⌖ button itself: the
+/// row you came back from, a moment you jumped to in Our Space. When
+/// [active] turns on (or [pulse] changes while it is on) the child breathes
+/// ONCE with [kCalmBreath]: a soft wash, rim and halo, and a hair of lift.
+/// With [hearts] (bonded partner only) three small hearts also circle the
+/// rim once. Reduce-motion keeps the glow but drops the lift and hearts.
+/// Costs nothing while idle.
+class BreathGlow extends StatefulWidget {
+  const BreathGlow({
+    super.key,
+    required this.active,
+    required this.color,
+    required this.child,
+    this.pulse = 0,
+    this.radius = 18,
+    this.hearts = false,
+  });
+
+  final bool active;
+  final int pulse;
+  final Color color;
+  final double radius;
+  final bool hearts;
+  final Widget child;
+
+  static const Color rose = Color(0xFFFF5C8A);
+  static const Color gold = Color(0xFFF2A541);
+
+  @override
+  State<BreathGlow> createState() => _BreathGlowState();
+}
+
+class _BreathGlowState extends State<BreathGlow>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this);
+
+  // The hearts need a little longer to go round, so with them the single
+  // breath is stretched to match. It is still one swell.
+  void _play() {
+    _c.duration =
+        widget.hearts ? const Duration(milliseconds: 1600) : kCalmBreath;
+    _c.forward(from: 0);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) _play();
+  }
+
+  @override
+  void didUpdateWidget(covariant BreathGlow old) {
+    super.didUpdateWidget(old);
+    if (widget.active && (!old.active || widget.pulse != old.pulse)) _play();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    return AnimatedBuilder(
+      animation: _c,
+      child: widget.child,
+      builder: (context, child) {
+        final t = _c.value;
+        if (t <= 0 || t >= 1) return child!;
+        final i = calmBreath(t);
+        final c = widget.color;
+        final glow = DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(widget.radius),
+            color: c.withValues(alpha: 0.14 * i),
+            border:
+                Border.all(color: c.withValues(alpha: 0.55 * i), width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                  color: c.withValues(alpha: 0.32 * i),
+                  blurRadius: 16,
+                  spreadRadius: 0.5),
+            ],
+          ),
+          child: child,
+        );
+        return Transform.scale(
+          scale: still ? 1 : 1 + 0.012 * i,
+          child: !widget.hearts || still
+              ? glow
+              : Stack(clipBehavior: Clip.none, children: [
+                  glow,
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: _RimHeartsPainter(t: t, radius: widget.radius),
+                      ),
+                    ),
+                  ),
+                ]),
+        );
+      },
+    );
+  }
+}
+
+/// Three small hearts going once round a rounded box's rim, evenly spaced,
+/// fading in as they set off and out as they finish.
+class _RimHeartsPainter extends CustomPainter {
+  _RimHeartsPainter({required this.t, required this.radius});
+
+  final double t;
+  final double radius;
+
+  static const _colors = [BreathGlow.rose, BreathGlow.gold, BreathGlow.rose];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final path = Path()
+      ..addRRect(RRect.fromRectAndRadius(
+          (Offset.zero & size).deflate(0.6), Radius.circular(radius)));
+    final fade = (t < 0.15
+            ? t / 0.15
+            : t > 0.8
+                ? (1 - t) / 0.2
+                : 1.0)
+        .clamp(0.0, 1.0);
+    final travel = Curves.easeInOutSine.transform(t);
+    const n = 3;
+    for (final m in path.computeMetrics()) {
+      final len = m.length;
+      for (var k = 0; k < n; k++) {
+        final at = m.getTangentForOffset((travel * len + k * len / n) % len)
+            ?.position;
+        if (at == null) continue;
+        final col = _colors[k];
+        final tp = TextPainter(
+          text: TextSpan(
+            text: '\u2665',
+            style: TextStyle(
+              fontSize: 10,
+              height: 1,
+              color: col.withValues(alpha: 0.95 * fade),
+              shadows: [
+                Shadow(color: col.withValues(alpha: 0.6 * fade), blurRadius: 6),
+              ],
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(canvas, at - Offset(tp.width / 2, tp.height / 2));
+        tp.dispose();
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RimHeartsPainter o) => o.t != t || o.radius != radius;
 }

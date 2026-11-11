@@ -574,6 +574,7 @@ extension _HomeFriendListView on HomePageState {
                 : FlashTier.circle;
     return _RowFlash(
       active: _flashKeys.contains(key),
+      pulse: _flashGen,
       tier: tier,
       color: scheme.primary,
       child: isGroup

@@ -484,171 +484,37 @@ class _LiveInviteDialog extends StatelessWidget {
 enum FlashTier { circle, bond, partner }
 
 /// A list row that says "here it is" when [active] turns on (the chat I
-/// came back from, or one a new message just moved to the top). It uses the
-/// same calm breath as ⌖ Find the playing song: the row swells ONCE with a
-/// soft wash, rim and halo, lifts a hair, and settles. It never flashes
-/// twice. Only the colour changes with closeness ([tier]):
-///  • circle: the theme colour;
-///  • bond: the theme colour warmed toward rose;
-///  • partner: rose, plus the one extra a partner gets: three small
-///    hearts that circle the card's rim once while it breathes.
-/// Costs nothing while idle.
-class _RowFlash extends StatefulWidget {
+/// came back from, or one a new message just moved to the top): the calm
+/// ⌖ breath ([BreathGlow]), once. Only the colour changes with closeness
+/// ([tier]): the theme colour, warmed toward rose for a bond. Only the
+/// Harmony partner also gets the hearts circling the rim.
+class _RowFlash extends StatelessWidget {
   const _RowFlash(
       {required this.active,
       required this.color,
       required this.child,
+      this.pulse = 0,
       this.tier = FlashTier.circle});
 
   final bool active;
+  final int pulse; // bumps on every "here it is", so a repeat breathes again
   final Color color;
   final FlashTier tier;
   final Widget child;
 
   @override
-  State<_RowFlash> createState() => _RowFlashState();
-}
-
-class _RowFlashState extends State<_RowFlash>
-    with SingleTickerProviderStateMixin {
-  static const _rose = Color(0xFFFF5C8A);
-  static const _gold = Color(0xFFF2A541);
-
-  late final AnimationController _c = AnimationController(vsync: this);
-
-  // The breath is the ⌖ glow's length; the partner's hearts need a little
-  // longer to go round, so their single breath is stretched to match.
-  Duration get _len => widget.tier == FlashTier.partner
-      ? const Duration(milliseconds: 1600)
-      : kCalmBreath;
-
-  void _play() {
-    _c.duration = _len;
-    _c.forward(from: 0);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.active) _play();
-  }
-
-  @override
-  void didUpdateWidget(covariant _RowFlash old) {
-    super.didUpdateWidget(old);
-    if (widget.active && !old.active) _play();
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
-    return AnimatedBuilder(
-      animation: _c,
-      child: widget.child,
-      builder: (context, child) {
-        final t = _c.value;
-        if (t <= 0 || t >= 1) return child!;
-        final tier = widget.tier;
-        final i = calmBreath(t);
-        final c = switch (tier) {
-          FlashTier.circle => widget.color,
-          FlashTier.bond => Color.lerp(widget.color, _rose, 0.45)!,
-          FlashTier.partner => Color.lerp(widget.color, _rose, 0.7)!,
-        };
-        const r = 18.0;
-        final glow = DecoratedBox(
-          position: DecorationPosition.foreground,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(r),
-            color: c.withValues(alpha: 0.14 * i),
-            border: Border.all(color: c.withValues(alpha: 0.55 * i), width: 1.2),
-            boxShadow: [
-              BoxShadow(
-                  color: c.withValues(alpha: 0.32 * i),
-                  blurRadius: 16,
-                  spreadRadius: 0.5),
-            ],
-          ),
-          child: child,
-        );
-        return Transform.scale(
-          scale: still ? 1 : 1 + 0.012 * i,
-          child: tier != FlashTier.partner || still
-              ? glow
-              : Stack(clipBehavior: Clip.none, children: [
-                  glow,
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        painter: _RimHeartsPainter(
-                            t: t, radius: r, colors: const [_rose, _gold, _rose]),
-                      ),
-                    ),
-                  ),
-                ]),
-        );
+    return BreathGlow(
+      active: active,
+      pulse: pulse,
+      radius: 18,
+      hearts: tier == FlashTier.partner,
+      color: switch (tier) {
+        FlashTier.circle => color,
+        FlashTier.bond => Color.lerp(color, BreathGlow.rose, 0.45)!,
+        FlashTier.partner => Color.lerp(color, BreathGlow.rose, 0.7)!,
       },
+      child: child,
     );
   }
-}
-
-/// The partner's extra: small hearts that go once round a rounded card's
-/// rim, evenly spaced, fading in as they set off and out as they finish.
-class _RimHeartsPainter extends CustomPainter {
-  _RimHeartsPainter(
-      {required this.t, required this.radius, required this.colors});
-
-  final double t;
-  final double radius;
-  final List<Color> colors;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.isEmpty) return;
-    final path = Path()
-      ..addRRect(RRect.fromRectAndRadius(
-          (Offset.zero & size).deflate(0.6), Radius.circular(radius)));
-    final fade = (t < 0.15
-            ? t / 0.15
-            : t > 0.8
-                ? (1 - t) / 0.2
-                : 1.0)
-        .clamp(0.0, 1.0);
-    final travel = Curves.easeInOutSine.transform(t);
-    for (final m in path.computeMetrics()) {
-      final len = m.length;
-      final n = colors.length;
-      for (var k = 0; k < n; k++) {
-        final d = (travel * len + k * len / n) % len;
-        final at = m.getTangentForOffset(d)?.position;
-        if (at == null) continue;
-        final tp = TextPainter(
-          text: TextSpan(
-            text: '\u2665',
-            style: TextStyle(
-              fontSize: 10,
-              height: 1,
-              color: colors[k].withValues(alpha: 0.95 * fade),
-              shadows: [
-                Shadow(
-                    color: colors[k].withValues(alpha: 0.6 * fade),
-                    blurRadius: 6),
-              ],
-            ),
-          ),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        tp.paint(canvas, at - Offset(tp.width / 2, tp.height / 2));
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_RimHeartsPainter o) => o.t != t;
 }

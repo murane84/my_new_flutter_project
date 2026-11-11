@@ -6,6 +6,7 @@ import 'net_gate.dart';
 import 'person_avatar.dart';
 import '../utils/readable.dart' show accentInk;
 import '../utils/radii.dart';
+import '../utils/adaptive_sheet.dart';
 
 /// Tap "Tune in" on a friend who's listening: ASK to join their song (they
 /// keep their rhythm; you join right where they are). A small waiting card
@@ -33,7 +34,7 @@ Future<void> askToTuneIn(
         type: ToastType.info);
     return;
   }
-  await showModalBottomSheet<void>(
+  await showAdaptiveSheet<void>(
     context: context,
     useRootNavigator: true,
     backgroundColor: Colors.transparent,

@@ -17,6 +17,7 @@ import '../utils/popup_shell.dart';
 import '../widgets/welcome_tour.dart';
 import '../utils/readable.dart' show accentInk;
 import '../utils/radii.dart';
+import '../utils/adaptive_sheet.dart';
 
 /// Moments & nudges — every warm, app-initiated touch in one place, each with
 /// its own switch. Everything here is on-device.
@@ -231,7 +232,7 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
   /// The people I've blocked, each with Unblock.
   void _openBlocked() {
     BlockList.instance.refresh();
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,

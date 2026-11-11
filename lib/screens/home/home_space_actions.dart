@@ -221,7 +221,7 @@ extension _HomeSpaceActions on HomePageState {
     final title = deriveSpaceName(space, _myUserId);
     final isPrimary = space['is_primary'] == true;
     final id = (space['id'] as num).toInt();
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
@@ -430,7 +430,7 @@ extension _HomeSpaceActions on HomePageState {
           type: ok ? ToastType.success : ToastType.error);
     }
 
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
@@ -535,7 +535,7 @@ extension _HomeSpaceActions on HomePageState {
   void _showAwayWatchSheet(int fid, String name) {
     final scheme = Theme.of(context).colorScheme;
     final first = name.trim().split(RegExp(r'\s+')).first;
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
@@ -771,7 +771,7 @@ extension _HomeSpaceActions on HomePageState {
     required List<Widget> Function(BuildContext ctx) actions,
   }) {
     final scheme = Theme.of(context).colorScheme;
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
       context: context,
       backgroundColor: scheme.surface,
       isScrollControlled: true,

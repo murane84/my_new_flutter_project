@@ -47,7 +47,7 @@ extension _ChatHeartComposer on _ChatPageState {
   Future<void> _pickHeartAttach() async {
     final scheme = Theme.of(context).colorScheme;
     final tint = HeartMood.of(_heartMood).color;
-    final choice = await showModalBottomSheet<String>(
+    final choice = await showAdaptiveSheet<String>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
@@ -297,7 +297,7 @@ extension _ChatHeartComposer on _ChatPageState {
     final scheme = Theme.of(context).colorScheme;
     final tint = HeartMood.of(_heartMood).color;
     var q = '';
-    return showModalBottomSheet<dynamic>(
+    return showAdaptiveSheet<dynamic>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
@@ -1051,7 +1051,7 @@ extension _ChatHeartComposer on _ChatPageState {
     final anniv = nextOf(annivMd);
     if (!mounted) return;
     final scheme = Theme.of(context).colorScheme;
-    final choice = await showModalBottomSheet<Object>(
+    final choice = await showAdaptiveSheet<Object>(
       context: context,
       backgroundColor: Colors.transparent,
       // No theme outline — this sheet draws its own card.

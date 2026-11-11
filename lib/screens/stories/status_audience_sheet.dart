@@ -8,13 +8,14 @@ import '../../widgets/pill_search.dart';
 import '../../services/haptics.dart';
 import '../../utils/radii.dart';
 import '../../widgets/skeleton.dart';
+import '../../utils/adaptive_sheet.dart';
 
 /// "Who can see my status": My circle / Bonds only, plus friends to hide it
 /// from either way. Saved to the account; the server applies it.
 Future<void> showStatusAudienceSheet(BuildContext context) async {
   await StatusPrivacy.instance.load();
   if (!context.mounted) return;
-  await showModalBottomSheet<void>(
+  await showAdaptiveSheet<void>(
     context: context,
     isScrollControlled: true,
     useRootNavigator: true,

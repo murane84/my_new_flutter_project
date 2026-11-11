@@ -709,7 +709,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
   }
 
   void _showPlansSheet(ColorScheme scheme) {
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: scheme.surface,

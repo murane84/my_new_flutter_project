@@ -1076,7 +1076,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
   }
 
   void _openMomentComments(Map<String, dynamic> m) {
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,

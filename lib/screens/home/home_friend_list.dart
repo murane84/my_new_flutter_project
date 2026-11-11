@@ -3038,7 +3038,7 @@ extension _HomeFriendListView on HomePageState {
       return null;
     }
     final scheme = Theme.of(context).colorScheme;
-    return showModalBottomSheet<String>(
+    return showAdaptiveSheet<String>(
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
@@ -3150,7 +3150,7 @@ extension _HomeFriendListView on HomePageState {
   void _roomsSheet() {
     final scheme = Theme.of(context).colorScheme;
     final rooms = LiveRoomsRegistry.instance.rooms;
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(

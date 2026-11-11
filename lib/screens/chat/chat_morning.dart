@@ -21,7 +21,7 @@ extension _ChatMorning on _ChatPageState {
     Haptics.hold();
     final scheme = Theme.of(context).colorScheme;
     final first = _peerFirst;
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
@@ -154,7 +154,7 @@ extension _ChatMorning on _ChatPageState {
 
   void _showHeldList() {
     final scheme = Theme.of(context).colorScheme;
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(

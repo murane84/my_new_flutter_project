@@ -38,6 +38,7 @@ import '../services/haptics.dart';
 import '../widgets/now_glow.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/adaptive_sheet.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
 ///
@@ -2116,7 +2117,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   // A sleep-timer chooser (web supports this one).
   void _showSleepMenu() {
     final scheme = Theme.of(context).colorScheme;
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
       context: context,
       showDragHandle: true,
       backgroundColor: scheme.surface,

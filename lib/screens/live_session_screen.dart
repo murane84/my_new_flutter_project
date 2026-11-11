@@ -41,6 +41,7 @@ import '../services/online_watch.dart';
 import '../widgets/edge_scroll_row.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/adaptive_sheet.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
 /// Presented with `showDialog(...)` so it floats over the chat instead of
@@ -917,7 +918,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
 
   // GIF button → open the GIPHY picker and send the chosen GIF as a reaction.
   Future<void> _pickGif() async {
-    await showModalBottomSheet<void>(
+    await showAdaptiveSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -1058,7 +1059,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     if (spaces.length == 1) {
       return (spaces.first['id'] as num?)?.toInt();
     }
-    return showModalBottomSheet<int>(
+    return showAdaptiveSheet<int>(
       context: context,
       showDragHandle: true,
       builder: (bctx) {
@@ -3269,7 +3270,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       return null;
     }
     final scheme = Theme.of(context).colorScheme;
-    return showModalBottomSheet<String>(
+    return showAdaptiveSheet<String>(
       context: context,
       showDragHandle: true,
       backgroundColor: scheme.surface,

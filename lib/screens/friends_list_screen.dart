@@ -13,6 +13,7 @@ import '../utils/snackbar_helper.dart';
 import '../services/contact_names.dart';
 import '../utils/radii.dart';
 import '../widgets/skeleton.dart';
+import '../utils/adaptive_sheet.dart';
 
 class FriendsListScreen extends StatefulWidget {
   static const routeName = '/friends';
@@ -161,7 +162,7 @@ class FriendsListScreenState extends State<FriendsListScreen> {
         HomePage.of(context)?.openChat(user.toMap());
         _loadFriends(quiet: true);
       },
-      onLongPress: () => showModalBottomSheet(
+      onLongPress: () => showAdaptiveSheet(
         context: context,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),

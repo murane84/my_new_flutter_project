@@ -7,6 +7,7 @@ import '../utils/toast_helper.dart';
 import 'net_gate.dart';
 import '../utils/readable.dart' show accentInk;
 import '../utils/radii.dart';
+import '../utils/adaptive_sheet.dart';
 
 /// Before going live with Listen Together: is the partner actually here?
 ///  • online (or we can't tell) → true, start as usual;
@@ -35,7 +36,7 @@ Future<bool> _presenceGate(BuildContext context,
   if (st.isEmpty || st['is_online'] == true) return true;
   final first = name.trim().split(RegExp(r'\s+')).first;
   final scheme = Theme.of(context).colorScheme;
-  final choice = await showModalBottomSheet<String>(
+  final choice = await showAdaptiveSheet<String>(
     context: context,
     backgroundColor: scheme.surface,
     shape: const RoundedRectangleBorder(

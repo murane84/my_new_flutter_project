@@ -26,6 +26,7 @@ import '../utils/toast_helper.dart';
 import '../services/haptics.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/adaptive_sheet.dart';
 
 /// The personalization surface (build step 5): whole-app **theme** (System /
 /// Light / Dark) + a curated **accent** preset set. Dark stays the brand's
@@ -705,7 +706,7 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
     final scheme = Theme.of(context).colorScheme;
     final current = chatBackgroundAll;
     final selUrl = current.isPhoto ? current.url : null;
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: scheme.surface,
@@ -1235,7 +1236,7 @@ class _SectionTransitionsSection extends StatelessWidget {
   const _SectionTransitionsSection();
 
   void _pick(BuildContext context) {
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
@@ -1909,7 +1910,7 @@ class _BubbleThemeSection extends StatelessWidget {
 
   Future<void> _pickColour(BuildContext context, bool sent) async {
     final scheme = Theme.of(context).colorScheme;
-    await showModalBottomSheet<void>(
+    await showAdaptiveSheet<void>(
       context: context,
       showDragHandle: true,
       backgroundColor: scheme.surface,

@@ -128,6 +128,7 @@ import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../widgets/skeleton.dart';
 import '../utils/emoji_field.dart' show emojiFloats;
+import '../utils/adaptive_sheet.dart';
 
 // Split out for maintainability (Dart parts — same library, shared
 // imports & privacy, zero behaviour change):
@@ -1865,7 +1866,7 @@ class _ChatPageState extends State<ChatPage>
   void _showCallChoice() {
     final scheme = Theme.of(context).colorScheme;
     final online = ConnectionStatus.instance.isOnline;
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       backgroundColor: Colors.transparent,
       // No theme outline — this sheet draws its own card.
@@ -2599,7 +2600,7 @@ class _ChatPageState extends State<ChatPage>
       }
       if (!mounted) return;
       // Opens immediately (spinner while it loads names only) — no UI freeze.
-      final picked = await showModalBottomSheet<Contact>(
+      final picked = await showAdaptiveSheet<Contact>(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
@@ -6626,7 +6627,7 @@ class _ChatPageState extends State<ChatPage>
         if (a.value != b.value) return a.value.compareTo(b.value);
         return a.key == _myId ? -1 : (b.key == _myId ? 1 : 0);
       });
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(

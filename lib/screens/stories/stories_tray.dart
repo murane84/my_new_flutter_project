@@ -11,6 +11,7 @@ import '../../services/story_mute.dart';
 import '../../services/story_posting.dart';
 import '../../widgets/edge_scroll_row.dart';
 import '../../utils/radii.dart';
+import '../../utils/adaptive_sheet.dart';
 
 /// Horizontal "stories" strip shown at the top of the Messages list. Owns its
 /// own data: it fetches the friends-only feed and reloads after posting or
@@ -88,7 +89,7 @@ class _StoriesTrayState extends State<StoriesTray> {
   Future<void> _muteSheet(StoryGroup g) async {
     final name = _nameFor(g);
     final muted = StoryMute.instance.isMuted(g.authorId);
-    final ok = await showModalBottomSheet<bool>(
+    final ok = await showAdaptiveSheet<bool>(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(

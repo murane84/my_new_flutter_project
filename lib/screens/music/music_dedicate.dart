@@ -487,7 +487,7 @@ void showSongShareSheet(
   int? sendTo,
 }) {
   if (keys.isEmpty) return;
-  showModalBottomSheet(
+  showAdaptiveSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
@@ -533,7 +533,7 @@ Future<void> showSongDedicate(
   if (!context.mounted) return;
   final avatar =
       raw.isEmpty ? null : (raw.startsWith('http') ? raw : '$base$raw');
-  await showModalBottomSheet(
+  await showAdaptiveSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,

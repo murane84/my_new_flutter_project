@@ -518,7 +518,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
 
   /// When a chosen contact has several numbers, ask which one to share.
   Future<String?> _chooseNumber(String name, List<String> phones) {
-    return showModalBottomSheet<String>(
+    return showAdaptiveSheet<String>(
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(

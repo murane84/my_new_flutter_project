@@ -13,6 +13,7 @@ import 'wallpaper_gallery.dart';
 import 'edge_scroll_row.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/adaptive_sheet.dart';
 
 String _mimeForExt(String ext) {
   switch (ext.toLowerCase()) {
@@ -110,7 +111,7 @@ Future<void> showChatWallpaperSheet(
     }
   }
 
-  await showModalBottomSheet(
+  await showAdaptiveSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: scheme.surface,

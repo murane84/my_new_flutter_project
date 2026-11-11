@@ -721,7 +721,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
 
   void _manageGroup(BuildContext context, String name) {
     final scheme = Theme.of(context).colorScheme;
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       backgroundColor: Colors.transparent,
       // No theme outline — this sheet draws its own card.
@@ -812,7 +812,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       for (final e in widget.groups.entries)
         if (e.value.contains(path)) e.key
     };
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
@@ -885,7 +885,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   void _bulkAddToGroup(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final paths = _selected.toList();
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
@@ -965,7 +965,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         },
       );
     }
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       backgroundColor: Colors.transparent,
       // No theme outline — this sheet draws its own card.
@@ -1035,7 +1035,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     final scheme = Theme.of(context).colorScheme;
     final title = _effTitle(path);
     final artist = _effArtist(path);
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       backgroundColor: Colors.transparent,
       // No theme outline — this sheet draws its own card.
@@ -1240,7 +1240,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       );
     }
 
-    await showModalBottomSheet(
+    await showAdaptiveSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: scheme.surface,
@@ -2086,7 +2086,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       );
     }
 
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       backgroundColor: Colors.transparent,
       // No theme outline — this sheet draws its own card.

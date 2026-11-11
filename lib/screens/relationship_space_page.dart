@@ -62,6 +62,7 @@ import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../utils/emoji_field.dart'
     show emojiFloats, showFloatingCard, emojiSuffixButton;
+import '../utils/adaptive_sheet.dart';
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
 part 'space/space_edit_sheet.dart'; // edit-space sheet + wallpaper picker
@@ -265,7 +266,7 @@ Future<String?> pickDiaryReaction(BuildContext context, Color accent) {
         height: 400,
         builder: (ctx) => _diaryReactionBody(ctx, accent, grabber: false));
   }
-  return showModalBottomSheet<String>(
+  return showAdaptiveSheet<String>(
     context: context,
     isScrollControlled: true,
     backgroundColor: scheme.surface,
@@ -988,7 +989,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     }
     final scheme = Theme.of(context).colorScheme;
     final maxH = MediaQuery.of(context).size.height * 0.55;
-    return showModalBottomSheet<String>(
+    return showAdaptiveSheet<String>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -2112,7 +2113,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   // ── Dedications (an in-body section, like the other tiles) ────────────────
 
   Future<void> _composeDedication() async {
-    final created = await showModalBottomSheet<bool>(
+    final created = await showAdaptiveSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -2125,7 +2126,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   }
 
   Future<void> _composeCapsule() async {
-    final created = await showModalBottomSheet<bool>(
+    final created = await showAdaptiveSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -2473,7 +2474,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         .map((e) => e.cast<String, dynamic>())
         .toList();
     final scheme = Theme.of(context).colorScheme;
-    await showModalBottomSheet(
+    await showAdaptiveSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: scheme.surface,

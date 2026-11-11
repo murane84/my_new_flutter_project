@@ -1064,7 +1064,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
     // chat page or a Navigator) could stall on desktop, so pop() never
     // finished and the card stayed stuck on a black barrier. Let the route
     // own its controller; sheetAnimationStyle keeps the custom timing.
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
@@ -1712,7 +1712,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
   /// WhatsApp-style duration chooser, then pins for the chosen span.
   void _showPinDurationSheet(Map<String, dynamic> msg) {
     final scheme = Theme.of(context).colorScheme;
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       backgroundColor: Colors.transparent,
       // No theme outline — this sheet draws its own card.

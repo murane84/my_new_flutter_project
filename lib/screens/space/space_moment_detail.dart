@@ -85,7 +85,7 @@ class _MomentCommentsSheetState extends State<_MomentCommentsSheet> {
   void _commentActions(Map<String, dynamic> cm) {
     final cid = (cm['id'] as num?)?.toInt();
     if (cid == null) return;
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
       context: context,
       builder: (bctx) => SafeArea(
         child: Column(
@@ -447,7 +447,7 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
             ),
           ),
         );
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       backgroundColor: scheme.surface,
       shape: RoundedRectangleBorder(

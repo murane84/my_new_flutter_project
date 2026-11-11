@@ -1132,7 +1132,7 @@ extension _ChatPollsAdmin on _ChatPageState {
   Future<void> _jamStartClock(Map<String, dynamic> msg) async {
     final mid = int.tryParse(msg['id'].toString());
     if (mid == null) return;
-    final minutes = await showModalBottomSheet<int>(
+    final minutes = await showAdaptiveSheet<int>(
       context: context,
       showDragHandle: true,
       builder: (ctx) => SafeArea(

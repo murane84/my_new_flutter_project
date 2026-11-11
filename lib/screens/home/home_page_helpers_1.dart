@@ -330,7 +330,7 @@ extension _HomePageHelpers1 on HomePageState {
       return;
     }
     final scheme = Theme.of(context).colorScheme;
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
@@ -2233,7 +2233,7 @@ extension _HomePageHelpers1 on HomePageState {
   }) {
     final scheme = Theme.of(context).colorScheme;
     final online = ConnectionStatus.instance.isOnline;
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       backgroundColor: Colors.transparent,
       // No theme outline — this sheet draws its own card.

@@ -8,6 +8,7 @@ import '../../utils/readable.dart';
 import '../home_page.dart' show playProgressNotifier;
 import '../../utils/motion.dart';
 import '../../utils/radii.dart';
+import '../../utils/adaptive_sheet.dart';
 
 /// The look of the big rotating "now playing" glyph. The user can switch
 /// between these from the player; the choice is remembered across launches.
@@ -1789,7 +1790,7 @@ class _EqRingPainter extends CustomPainter {
 Future<void> showPlayerStyleSheet(BuildContext context,
     {required Color accent}) {
   final scheme = Theme.of(context).colorScheme;
-  return showModalBottomSheet<void>(
+  return showAdaptiveSheet<void>(
     context: context,
     isScrollControlled: true,
     useRootNavigator: true,

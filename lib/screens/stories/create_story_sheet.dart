@@ -18,6 +18,7 @@ import '../../services/status_privacy.dart';
 import '../../widgets/edge_scroll_row.dart';
 import '../../utils/motion.dart';
 import '../../utils/radii.dart';
+import '../../utils/adaptive_sheet.dart';
 
 /// Entry point: a bottom sheet offering the four ways to post a story
 /// (photo from gallery, camera photo, a short video clip, or a "now playing"
@@ -30,7 +31,7 @@ Future<void> showCreateStorySheet(
 }) async {
   await StatusPrivacy.instance.load();
   if (!context.mounted) return;
-  final choice = await showModalBottomSheet<String>(
+  final choice = await showAdaptiveSheet<String>(
     context: context,
     showDragHandle: true,
     // Scroll-controlled so the sheet sizes to its content and never clips the
@@ -228,7 +229,7 @@ class StatusPaletteButton extends StatelessWidget {
 
   Future<void> _open(BuildContext context) async {
     final scheme = Theme.of(context).colorScheme;
-    final picked = await showModalBottomSheet<Color>(
+    final picked = await showAdaptiveSheet<Color>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
@@ -354,7 +355,7 @@ Future<bool> pickAndPostSticker(
   BuildContext context, {
   required VoidCallback onPosted,
 }) async {
-  final url = await showModalBottomSheet<String>(
+  final url = await showAdaptiveSheet<String>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Theme.of(context).colorScheme.surface,
@@ -763,7 +764,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
   }
 
   Future<void> _pickSticker() async {
-    final url = await showModalBottomSheet<String>(
+    final url = await showAdaptiveSheet<String>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,

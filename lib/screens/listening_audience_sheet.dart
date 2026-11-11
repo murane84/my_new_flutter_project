@@ -10,6 +10,7 @@ import '../services/haptics.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../widgets/skeleton.dart';
+import '../utils/adaptive_sheet.dart';
 
 /// The music-player toggle for broadcasting "listening now" to friends.
 /// Tap flips sharing on/off; long-press opens the audience sheet (who can see).
@@ -51,7 +52,7 @@ class PresenceShareButton extends StatelessWidget {
 /// and (when selected) a per-friend checklist of who may see your listening now.
 /// A floating Aluta card (centred, capped width on wide screens).
 Future<void> showListeningAudienceSheet(BuildContext context) {
-  return showModalBottomSheet<void>(
+  return showAdaptiveSheet<void>(
     context: context,
     isScrollControlled: true,
     useRootNavigator: true,

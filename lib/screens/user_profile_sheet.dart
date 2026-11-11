@@ -17,6 +17,7 @@ import '../widgets/photo_viewer.dart';
 import '../utils/readable.dart' show accentInk;
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/adaptive_sheet.dart';
 
 /// A read-only profile card for ANOTHER user (a friend or a group member).
 /// Opens from a tap on their name/avatar. Shows the photo, the name (their saved
@@ -108,7 +109,7 @@ Future<void> showUserProfile(
         .timeout(const Duration(milliseconds: 900), onTimeout: () => null);
     if (!context.mounted) return;
   }
-  await showModalBottomSheet<void>(
+  await showAdaptiveSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,

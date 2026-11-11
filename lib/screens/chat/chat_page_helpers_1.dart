@@ -40,7 +40,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
     if (_mySpaces.isEmpty) return null;
     if (_mySpaces.length == 1) return _mySpaces.first;
     final def = _defaultKeepSpaceId;
-    final chosenId = await showModalBottomSheet<int>(
+    final chosenId = await showAdaptiveSheet<int>(
       context: context,
       showDragHandle: true,
       builder: (bctx) {
@@ -475,7 +475,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
       'never forget this',
       'my favourite',
     ];
-    return showModalBottomSheet<String>(
+    return showAdaptiveSheet<String>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
@@ -1133,7 +1133,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
       if (nowPath != null && paths.contains(nowPath)) nowPath,
       ...paths.where((p) => p != nowPath),
     ];
-    return showModalBottomSheet<String>(
+    return showAdaptiveSheet<String>(
       context: context,
       showDragHandle: true,
       backgroundColor: scheme.surface,

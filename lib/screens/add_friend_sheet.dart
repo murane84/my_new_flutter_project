@@ -6,6 +6,7 @@ import '../services/contact_names.dart';
 import '../widgets/person_avatar.dart';
 import '../widgets/pill_search.dart';
 import '../utils/radii.dart';
+import '../utils/adaptive_sheet.dart';
 
 /// Manual "Add friend" — the discovery path for desktop/web users with no
 /// phone-book to scan (and a quick add on mobile too). You look someone up by
@@ -15,7 +16,7 @@ Future<void> showAddFriendSheet(
   BuildContext context, {
   required VoidCallback onAdded,
 }) {
-  return showModalBottomSheet<void>(
+  return showAdaptiveSheet<void>(
     context: context,
     isScrollControlled: true,
     builder: (_) => _AddFriendSheet(onAdded: onAdded),

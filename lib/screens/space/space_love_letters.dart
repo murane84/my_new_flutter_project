@@ -618,7 +618,7 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
             registered: (_others.first['username'] ?? '').toString())
         : 'your partner';
     final id = (moment?['id'] as num?)?.toInt();
-    final choice = await showModalBottomSheet<String>(
+    final choice = await showAdaptiveSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
       // No theme outline — this sheet draws its own card.

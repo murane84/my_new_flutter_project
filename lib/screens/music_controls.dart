@@ -69,6 +69,7 @@ import '../services/haptics.dart';
 import '../widgets/edge_scroll_row.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/adaptive_sheet.dart';
 
 part 'music/music_control_widgets.dart'; // _CtrlBtn, _CtrlChip, _SpeedPanel
 part 'music/music_playlist_overlay.dart'; // _PlaylistOverlay + state
@@ -1034,7 +1035,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     final scheme = Theme.of(context).colorScheme;
     final hasPartner = _partnerId != null;
     Haptics.hold(); // long-press on the disc / record key
-    final pick = await showModalBottomSheet<String>(
+    final pick = await showAdaptiveSheet<String>(
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
@@ -1166,7 +1167,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   void _shareSongs(List<String> paths, {int? sendTo}) {
     if (paths.isEmpty) return;
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -2704,7 +2705,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       return;
     }
     final path = _playlist[_currentIndex];
-    showModalBottomSheet(
+    showAdaptiveSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

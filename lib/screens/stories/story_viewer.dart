@@ -20,6 +20,7 @@ import '../gif_picker.dart';
 import '../../services/haptics.dart';
 import '../../utils/motion.dart';
 import '../../utils/radii.dart';
+import '../../utils/adaptive_sheet.dart';
 
 /// Full-screen, tap-through story viewer (Instagram/WhatsApp style).
 ///
@@ -168,7 +169,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   /// Reply with a GIF / sticker (same picker as the chat).
   Future<void> _replyWithSticker() async {
     _pause();
-    final url = await showModalBottomSheet<String>(
+    final url = await showAdaptiveSheet<String>(
       context: context,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF1B1B1F),
@@ -1369,7 +1370,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     return sent != null;
   }
 
-  Future<String?> _pickSticker(BuildContext ctx) => showModalBottomSheet<String>(
+  Future<String?> _pickSticker(BuildContext ctx) => showAdaptiveSheet<String>(
         context: ctx,
         isScrollControlled: true,
         backgroundColor: const Color(0xFF1B1B1F),
@@ -1424,7 +1425,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       'sticker' => const ['😂', '😉', '❤️', '👋'],
       _ => const ['😍', '❤️', '😊', '🔥', '👋'],
     };
-    await showModalBottomSheet<void>(
+    await showAdaptiveSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,

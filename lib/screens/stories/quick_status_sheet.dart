@@ -8,6 +8,7 @@ import 'status_audience_sheet.dart';
 import '../../widgets/edge_scroll_row.dart';
 import '../../utils/motion.dart';
 import '../../utils/radii.dart';
+import '../../utils/adaptive_sheet.dart';
 
 /// What a one-tap share will look like, and in which colours.
 enum QuickStatusKind { text, music, sticker }
@@ -35,7 +36,7 @@ Future<QuickStatusChoice?> pickStatusColours(
   String? stickerUrl,
   String? note, // e.g. "It came from someone else — make sure…"
 }) {
-  return showModalBottomSheet<QuickStatusChoice>(
+  return showAdaptiveSheet<QuickStatusChoice>(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,

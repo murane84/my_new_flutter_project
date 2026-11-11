@@ -258,7 +258,7 @@ class _MomentComposerState extends State<_MomentComposer> {
           type: ToastType.info);
       return;
     }
-    final chosen = await showModalBottomSheet<String>(
+    final chosen = await showAdaptiveSheet<String>(
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
@@ -875,7 +875,7 @@ class _PlaylistAddSheetState extends State<_PlaylistAddSheet> {
           type: ToastType.info);
       return;
     }
-    final chosen = await showModalBottomSheet<String>(
+    final chosen = await showAdaptiveSheet<String>(
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(

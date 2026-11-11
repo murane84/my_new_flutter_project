@@ -4,6 +4,7 @@ import 'package:photo_manager/photo_manager.dart';
 import '../utils/readable.dart' show accentInk;
 import 'edge_scroll_row.dart';
 import '../utils/radii.dart';
+import '../utils/adaptive_sheet.dart';
 
 /// What the person chose in [showRecentPhotoPicker].
 class PhotoPick {
@@ -36,7 +37,7 @@ Future<PhotoPick?> showRecentPhotoPicker(
   bool canView = false,
   bool alutaPictures = true,
 }) {
-  return showModalBottomSheet<PhotoPick>(
+  return showAdaptiveSheet<PhotoPick>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,

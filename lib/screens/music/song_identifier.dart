@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_picker/file_picker.dart';
 import '../../utils/readable.dart' show accentInk;
 import '../../utils/radii.dart';
+import '../../utils/adaptive_sheet.dart';
 
 /// Shazam-style "what's this song?" flow. The user first picks a SOURCE:
 ///  - "From this phone" — captures the device's own audio output (what another
@@ -24,7 +25,7 @@ import '../../utils/radii.dart';
 /// shown with links to open it elsewhere. Available anywhere via
 /// [showSongIdentifier].
 Future<void> showSongIdentifier(BuildContext context) {
-  return showModalBottomSheet(
+  return showAdaptiveSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,

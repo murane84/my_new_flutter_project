@@ -7,6 +7,7 @@ import '../services/haptics.dart';
 import 'edge_scroll_row.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/adaptive_sheet.dart';
 
 const _momentLabel = {
   AlutaMoment.dawn: ('🌄', 'Dawn'),
@@ -139,7 +140,7 @@ Future<void> showWeekInMusic(
   }
 
   final scroll = ScrollController();
-  return showModalBottomSheet<void>(
+  return showAdaptiveSheet<void>(
     context: context,
     isScrollControlled: true,
     // Desktop / tablet: a centred sheet instead of an edge-to-edge one.

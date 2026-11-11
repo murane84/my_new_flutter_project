@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+// (Newer Flutter keeps the iOS page transition in the cupertino library.)
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'widgets/splash_particles.dart';
 import 'widgets/busy_overlay.dart';

@@ -2373,9 +2373,6 @@ extension _ChatPageHelpers3 on _ChatPageState {
     );
   }
 
-  Widget _buildEmojiPicker(ColorScheme scheme) =>
-      _emojiPickerFor(scheme, _ctrl);
-
   Widget _emojiPickerFor(ColorScheme scheme, TextEditingController controller,
       {double height = 262}) {
     return EmojiPicker(

@@ -1,6 +1,19 @@
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'radii.dart';
+import 'motion.dart';
+
+/// Desktop apps and wide web: emoji pickers float as a card by the button
+/// (like the chat's 😊 card) instead of rising from the bottom.
+bool emojiFloats(BuildContext context) {
+  final mobileOs = defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+  if (!kIsWeb) return !mobileOs;
+  return MediaQuery.sizeOf(context).width >= 600;
+}
 
 /// Open an emoji picker that inserts the tapped emoji into [controller] at the
 /// cursor. Reusable anywhere a plain field wants emoji input (group name,
@@ -8,6 +21,7 @@ import 'radii.dart';
 Future<void> showEmojiPickerSheet(
     BuildContext context, TextEditingController controller) {
   final scheme = Theme.of(context).colorScheme;
+  if (emojiFloats(context)) return _showEmojiCard(context, controller);
   return showModalBottomSheet(
     context: context,
     backgroundColor: scheme.surface,
@@ -116,9 +130,74 @@ Widget inlineEmojiPicker(
 /// A ready-made emoji button for a TextField's suffixIcon.
 Widget emojiSuffixButton(
     BuildContext context, TextEditingController controller) {
-  return IconButton(
-    icon: const Icon(Icons.emoji_emotions_outlined),
-    tooltip: 'Add emoji',
-    onPressed: () => showEmojiPickerSheet(context, controller),
+  // Its own context, so a desktop card can grow out of THIS button.
+  return Builder(
+    builder: (btnCtx) => IconButton(
+      icon: const Icon(Icons.emoji_emotions_outlined),
+      tooltip: 'Add emoji',
+      onPressed: () => showEmojiPickerSheet(btnCtx, controller),
+    ),
+  );
+}
+
+/// The desktop card: floats by the button (below it if there's room, else
+/// above), grows out of it; a click outside or Esc closes it.
+Future<void> _showEmojiCard(
+    BuildContext context, TextEditingController controller) {
+  final box = context.findRenderObject() as RenderBox?;
+  final screen = MediaQuery.sizeOf(context);
+  final anchor = box == null || !box.hasSize
+      ? Rect.fromCenter(
+          center: screen.center(Offset.zero), width: 0, height: 0)
+      : box.localToGlobal(Offset.zero) & box.size;
+  const w = 380.0, h = 300.0; // the inline picker's own height
+  final below = screen.height - anchor.bottom - 8 >= h;
+  final left = (anchor.right - w).clamp(8.0, math.max(8.0, screen.width - w - 8));
+  final top = below
+      ? anchor.bottom + 6
+      : math.max(8.0, anchor.top - h - 6);
+  return showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: 'Close emoji',
+    barrierColor: Colors.transparent,
+    transitionDuration: Motion.standard,
+    pageBuilder: (ctx, anim, _) {
+      final scheme = Theme.of(ctx).colorScheme;
+      final card = Material(
+        color: scheme.surface,
+        elevation: 10,
+        shadowColor: Colors.black.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(Radii.lg),
+        clipBehavior: Clip.antiAlias,
+        child: inlineEmojiPicker(ctx, controller),
+      );
+      return Stack(children: [
+        Positioned(
+          left: left,
+          top: top,
+          width: w,
+          height: h,
+          // Grows out of the button's corner.
+          child: AnimatedBuilder(
+            animation: anim,
+            child: card,
+            builder: (_, child) {
+              final v = Motion.enter.transform(anim.value);
+              return Opacity(
+                opacity: v,
+                child: Transform.scale(
+                  scale: 0.9 + 0.1 * v,
+                  alignment:
+                      below ? Alignment.topRight : Alignment.bottomRight,
+                  child: child,
+                ),
+              );
+            },
+          ),
+        ),
+      ]);
+    },
+    transitionBuilder: (ctx, a, _, child) => child,
   );
 }

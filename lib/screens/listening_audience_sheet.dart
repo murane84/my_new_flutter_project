@@ -9,6 +9,7 @@ import '../widgets/pill_search.dart';
 import '../services/haptics.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../widgets/skeleton.dart';
 
 /// The music-player toggle for broadcasting "listening now" to friends.
 /// Tap flips sharing on/off; long-press opens the audience sheet (who can see).
@@ -390,10 +391,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
           ),
           Flexible(
             child: _loading
-                ? const Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
+                ? const SkeletonList(rows: 4, avatar: 38)
                 : shown.isEmpty
                     ? Padding(
                         padding: const EdgeInsets.all(20),

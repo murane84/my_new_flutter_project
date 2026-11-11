@@ -7,6 +7,7 @@ import '../api_service.dart';
 import '../../widgets/pill_search.dart';
 import '../../services/haptics.dart';
 import '../../utils/radii.dart';
+import '../../widgets/skeleton.dart';
 
 /// "Who can see my status": My circle / Bonds only, plus friends to hide it
 /// from either way. Saved to the account; the server applies it.
@@ -165,9 +166,7 @@ class _StatusAudienceSheetState extends State<_StatusAudienceSheet> {
               ),
               Flexible(
                 child: _loading
-                    ? const Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Center(child: CircularProgressIndicator()))
+                    ? const SkeletonList(rows: 5, avatar: 38)
                     : shown.isEmpty
                         ? Padding(
                             padding: const EdgeInsets.all(24),

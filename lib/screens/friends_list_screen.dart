@@ -12,6 +12,7 @@ import '../utils/avatar_widget.dart';
 import '../utils/snackbar_helper.dart';
 import '../services/contact_names.dart';
 import '../utils/radii.dart';
+import '../widgets/skeleton.dart';
 
 class FriendsListScreen extends StatefulWidget {
   static const routeName = '/friends';
@@ -117,7 +118,7 @@ class FriendsListScreenState extends State<FriendsListScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Messages')),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const SkeletonList()
           : _friends.isEmpty
               ? Center(
                   child: Column(

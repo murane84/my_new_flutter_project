@@ -147,6 +147,7 @@ import '../widgets/slide_track.dart';
 import '../widgets/edge_scroll_row.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../widgets/skeleton.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog

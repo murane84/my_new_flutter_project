@@ -161,7 +161,7 @@ extension _HomeFriendListView on HomePageState {
             _buildBondRequestsBanner(scheme),
           Expanded(
             child: _isLoadingFriends
-                ? const Center(child: CircularProgressIndicator())
+                ? const SkeletonList()
                 : LayoutBuilder(
                     builder: (context, constraints) {
                       // Two columns as soon as there's more than phone-ish

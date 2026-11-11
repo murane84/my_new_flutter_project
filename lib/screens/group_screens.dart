@@ -27,6 +27,7 @@ import '../services/group_meta.dart';
 import 'stories/story_viewer.dart' show StoryHooks;
 import '../widgets/pill_search.dart';
 import '../utils/radii.dart';
+import '../widgets/skeleton.dart';
 
 // Groups are presented as CARD POPUPS (AppPopupShell) — not full-window routes —
 // so on desktop they never hide the music/chat panels. Selecting or creating a
@@ -103,8 +104,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
     final scheme = Theme.of(context).colorScheme;
     if (_loading) {
       return const Padding(
-        padding: EdgeInsets.all(40),
-        child: Center(child: CircularProgressIndicator()),
+        padding: EdgeInsets.all(4),
+        child: SkeletonList(rows: 6),
       );
     }
     if (_groups.isEmpty) {
@@ -362,8 +363,8 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
   Widget _membersArea(ColorScheme scheme) {
     if (_loading) {
       return const Padding(
-        padding: EdgeInsets.all(28),
-        child: Center(child: CircularProgressIndicator()),
+        padding: EdgeInsets.all(4),
+        child: SkeletonList(rows: 4, avatar: 38),
       );
     }
     if (_error) {
@@ -698,8 +699,8 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
       desktopMaxWidth: 1180,
       builder: (ctx, isWide) => _loading
           ? const Padding(
-              padding: EdgeInsets.all(40),
-              child: Center(child: CircularProgressIndicator()))
+              padding: EdgeInsets.all(4),
+              child: SkeletonList(rows: 6))
           // Live: who's playing, a jam starting/ending, a new crown — the
           // page repaints the moment any of it changes.
           : ListenableBuilder(
@@ -1489,8 +1490,8 @@ class _AddMembersPickerState extends State<_AddMembersPicker> {
         final scheme = Theme.of(ctx).colorScheme;
         if (_loading) {
           return const Padding(
-            padding: EdgeInsets.all(30),
-            child: Center(child: CircularProgressIndicator()),
+            padding: EdgeInsets.all(4),
+            child: SkeletonList(rows: 5, avatar: 38),
           );
         }
         if (_friends.isEmpty) {

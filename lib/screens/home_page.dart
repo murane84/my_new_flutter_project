@@ -2708,8 +2708,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final cid = event['conversation_id']?.toString();
       final from = event['user_id']?.toString();
       // That chat is already open here → it rings there itself.
+      final openGroupId = _activeGroup?['id']?.toString();
       final open = cid != null
-          ? _activeGroup?['id']?.toString() == cid
+          ? openGroupId == cid
           : _activeGroup == null && _activeFriendId == from;
       if (mounted && !open) {
         showToast(context, '$who wants to show you a message 👀',
@@ -2718,7 +2719,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
               ToastAction('See', () {
                 _handleMessageTap({
                   'message_id': event['message_id'],
-                  if (cid != null) 'conversation_id': cid,
+                  'conversation_id': ?cid,
                   if (cid == null) 'friend_id': from,
                   'sender_name': event['name'],
                 });

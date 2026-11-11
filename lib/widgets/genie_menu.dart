@@ -66,6 +66,7 @@ Future<void> showGenieMenu(
   required List<GenieMenuEntry> entries,
   double width = 248,
   Color? color,
+  double? maxHeight,
 }) {
   Haptics.selectionClick();
   return Navigator.of(context).push(_GenieMenuRoute(
@@ -73,6 +74,7 @@ Future<void> showGenieMenu(
     entries: entries,
     width: width,
     color: color,
+    maxHeight: maxHeight,
   ));
 }
 
@@ -88,12 +90,14 @@ class _GenieMenuRoute extends PopupRoute<void> {
     required this.entries,
     required this.width,
     this.color,
+    this.maxHeight,
   });
 
   final Rect anchor;
   final List<GenieMenuEntry> entries;
   final double width;
   final Color? color;
+  final double? maxHeight;
 
   @override
   Color? get barrierColor => Colors.transparent;
@@ -135,6 +139,7 @@ class _GenieMenuRoute extends PopupRoute<void> {
       entries: entries,
       width: width,
       color: color,
+      maxHeight: maxHeight,
       animation: animation,
     );
   }
@@ -152,6 +157,7 @@ class _GenieMenuSurface extends StatefulWidget {
     required this.width,
     required this.animation,
     this.color,
+    this.maxHeight,
   });
 
   final Rect anchor;
@@ -159,6 +165,9 @@ class _GenieMenuSurface extends StatefulWidget {
   final double width;
   final Animation<double> animation;
   final Color? color;
+
+  /// A cap on the menu's height (a long list scrolls inside it).
+  final double? maxHeight;
 
   @override
   State<_GenieMenuSurface> createState() => _GenieMenuSurfaceState();
@@ -359,7 +368,9 @@ class _GenieMenuSurfaceState extends State<_GenieMenuSurface> {
               },
               child: ConstrainedBox(
                 constraints:
-                    BoxConstraints(maxHeight: maxH.clamp(120.0, 640.0)),
+                    BoxConstraints(
+                        maxHeight: math.min(maxH.clamp(120.0, 640.0),
+                            widget.maxHeight ?? double.infinity)),
                 child: Material(
                   type: MaterialType.transparency,
                   child: Container(

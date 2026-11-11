@@ -11,6 +11,7 @@ import '../utils/readable.dart';
 import '../utils/time_utils.dart' show parseServerTime;
 import '../utils/prefs_now.dart';
 import '../widgets/genie_menu.dart';
+import '../widgets/edge_scroll_row.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 
 /// Global search across my chats: the PEOPLE and GROUPS whose names match
@@ -462,9 +463,12 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
 
   /// The chips under the bar: what kind, from whom, which chat, when.
   Widget _filterBar(ColorScheme scheme) {
-    Widget chip(String label, bool on, VoidCallback onTap,
+    // Every chip first glides fully into view (its neighbours peek in, so
+    // the row reveals the rest by itself), then acts — a menu chip opens
+    // its dropdown from where it now sits.
+    Widget chip(String label, bool on, void Function(BuildContext c) onTap,
             {IconData? icon, bool menu = false}) =>
-        Padding(
+        Builder(builder: (c) => Padding(
           padding: const EdgeInsets.only(right: 6),
           child: Material(
             color: on
@@ -477,7 +481,10 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                         : scheme.outlineVariant.withValues(alpha: 0.45))),
             child: InkWell(
               customBorder: const StadiumBorder(),
-              onTap: onTap,
+              onTap: () async {
+                await EdgeScrollRow.reveal(c);
+                if (c.mounted) onTap(c);
+              },
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 11),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -499,7 +506,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
               ),
             ),
           ),
-        );
+        ));
     final from = switch (_sender) {
       'me' => 'From me',
       'others' => 'From others',
@@ -512,123 +519,149 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
     };
     return SizedBox(
       height: 32,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        children: [
-          for (final k in const ['media', 'link', 'voice', 'song', 'file'])
-            chip(_kindLabel(k), _kind == k,
-                () => _setFilter(() => _kind = _kind == k ? null : k),
-                icon: _kindIcon(k)),
-          Builder(
-            builder: (c) => chip(
+      child: EdgeScrollRow(
+        builder: (context, ctrl) => ListView(
+          controller: ctrl,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          children: [
+            for (final k in const ['media', 'link', 'voice', 'song', 'file'])
+              chip(_kindLabel(k), _kind == k,
+                  (_) => _setFilter(() => _kind = _kind == k ? null : k),
+                  icon: _kindIcon(k)),
+            chip(
                 from,
                 _sender != null,
-                () => _pick<String>(c, [
-                      ('', 'From anyone'),
-                      ('me', 'From me'),
-                      ('others', 'From others'),
+                (c) => _pick<String>(c, _sender ?? '', [
+                      ('', 'From anyone', Icons.people_outline_rounded),
+                      ('me', 'From me', Icons.person_rounded),
+                      ('others', 'From others', Icons.person_outline_rounded),
                     ], (v) => _setFilter(() => _sender = v.isEmpty ? null : v)),
                 icon: Icons.person_outline_rounded,
                 menu: true),
-          ),
-          chip(_inChat == null ? 'In any chat' : 'In ${_inChat!['name']}',
-              _inChat != null, _pickChat,
-              icon: Icons.forum_outlined, menu: true),
-          Builder(
-            builder: (c) => chip(
+            chip(_inChat == null ? 'In any chat' : 'In ${_inChat!['name']}',
+                _inChat != null, _pickChat,
+                icon: Icons.forum_outlined, menu: true),
+            chip(
                 when,
                 _sinceDays != null,
-                () => _pick<int>(c, [
-                      (0, 'Any time'),
-                      (7, 'Last 7 days'),
-                      (30, 'Last 30 days'),
+                (c) => _pick<int>(c, _sinceDays ?? 0, [
+                      (0, 'Any time', Icons.all_inclusive_rounded),
+                      (7, 'Last 7 days', Icons.date_range_rounded),
+                      (30, 'Last 30 days', Icons.calendar_month_rounded),
                     ], (v) => _setFilter(() => _sinceDays = v == 0 ? null : v)),
                 icon: Icons.schedule_rounded,
                 menu: true),
-          ),
-          if (_filtered)
-            chip('Clear', false, () => _setFilter(() {
-                  _kind = null;
-                  _sender = null;
-                  _inChat = null;
-                  _sinceDays = null;
-                }), icon: Icons.close_rounded),
-        ],
+            if (_filtered)
+              chip('Clear', false, (_) => _setFilter(() {
+                    _kind = null;
+                    _sender = null;
+                    _inChat = null;
+                    _sinceDays = null;
+                  }), icon: Icons.close_rounded),
+          ],
+        ),
       ),
     );
   }
 
-  /// A small menu growing out of a chip (Aluta's genie menu).
-  void _pick<T>(BuildContext c, List<(T, String)> options,
-      void Function(T value) onPick) {
+  Rect? _rectOf(BuildContext c) {
     final box = c.findRenderObject() as RenderBox?;
-    if (box == null) return;
-    final rect = box.localToGlobal(Offset.zero) & box.size;
-    showGenieMenu(c, anchor: rect, width: 200, entries: [
+    if (box == null || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
+  /// The ✓ on the option in force.
+  Widget _tick() => Icon(Icons.check_rounded,
+      size: 18, color: accentInk(Theme.of(context).colorScheme));
+
+  /// A small dropdown growing out of a chip (Aluta's genie menu), the
+  /// option in force ticked.
+  void _pick<T>(BuildContext c, T current, List<(T, String, IconData)> options,
+      void Function(T value) onPick) {
+    final rect = _rectOf(c);
+    if (rect == null) return;
+    showGenieMenu(c, anchor: rect, width: 210, entries: [
       for (final o in options)
         GenieMenuEntry(
+            icon: o.$3,
             label: o.$2,
+            trailing: o.$1 == current ? _tick() : null,
             onTap: () {
               if (mounted) onPick(o.$1);
             }),
     ]);
   }
 
-  /// "In …": pick one chat (my friends and groups).
-  Future<void> _pickChat() async {
+  /// "In …": pick one chat (my friends and groups) — the same dropdown as
+  /// the other chips, capped in height; a long list scrolls inside it.
+  void _pickChat(BuildContext c) {
+    final rect = _rectOf(c);
+    if (rect == null) return;
     final scheme = Theme.of(context).colorScheme;
-    final picked = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      isScrollControlled: true,
-      constraints: const BoxConstraints(maxWidth: 560),
-      builder: (ctx) => SafeArea(
-        child: SizedBox(
-          height: MediaQuery.sizeOf(ctx).height * 0.6,
-          child: ListView(children: [
-            ListTile(
-              leading: const Icon(Icons.all_inclusive_rounded),
-              title: const Text('Any chat'),
-              onTap: () => Navigator.pop(ctx, const <String, dynamic>{}),
-            ),
-            for (final g in widget.groups)
-              ListTile(
-                leading: InitialsAvatar(
-                    name: (g['title'] ?? 'Group').toString(),
-                    radius: 16,
-                    imageUrl: widget.avatarOf?.call(g['avatar_url'])),
-                title: Text((g['title'] ?? 'Group').toString()),
-                trailing: Icon(Icons.groups_rounded,
-                    size: 18, color: scheme.onSurfaceVariant),
-                onTap: () => Navigator.pop(ctx, {
-                  'group': true,
-                  'id': (g['id'] as num).toInt(),
-                  'name': (g['title'] ?? 'Group').toString(),
-                }),
-              ),
-            for (final f in widget.people)
-              Builder(builder: (_) {
-                final n = ContactNames.instance.displayName(
-                    of: f, registered: (f['username'] ?? '').toString());
-                return ListTile(
-                  leading: InitialsAvatar(
-                      name: n,
-                      radius: 16,
-                      imageUrl: widget.avatarOf?.call(f['avatar_url'])),
-                  title: Text(n),
-                  onTap: () => Navigator.pop(ctx, {
-                    'group': false,
-                    'id': (f['id'] as num).toInt(),
-                    'name': n,
-                  }),
-                );
-              }),
-          ]),
-        ),
+    final curGroup = _inChat?['group'] == true;
+    final curId = _inChat?['id'];
+    Widget row(Widget lead, String name, {Widget? trailing}) => Row(children: [
+          lead,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 14, color: scheme.onSurface)),
+          ),
+          ?trailing,
+        ]);
+    void choose(Map<String, dynamic>? v) {
+      if (mounted) _setFilter(() => _inChat = v);
+    }
+
+    final entries = <GenieMenuEntry>[
+      GenieMenuEntry(
+        icon: Icons.all_inclusive_rounded,
+        label: 'Any chat',
+        trailing: _inChat == null ? _tick() : null,
+        onTap: () => choose(null),
       ),
-    );
-    if (picked == null) return;
-    _setFilter(() => _inChat = picked.isEmpty ? null : picked);
+      if (widget.groups.isNotEmpty || widget.people.isNotEmpty)
+        const GenieMenuEntry.divider(),
+    ];
+    for (final g in widget.groups) {
+      final id = (g['id'] as num).toInt();
+      final name = (g['title'] ?? 'Group').toString();
+      entries.add(GenieMenuEntry(
+        label: name,
+        custom: row(
+            InitialsAvatar(
+                name: name,
+                radius: 14,
+                imageUrl: widget.avatarOf?.call(g['avatar_url'])),
+            name,
+            trailing: curGroup && curId == id
+                ? _tick()
+                : Icon(Icons.groups_rounded,
+                    size: 16, color: scheme.onSurfaceVariant)),
+        onTap: () => choose({'group': true, 'id': id, 'name': name}),
+      ));
+    }
+    for (final f in widget.people) {
+      final id = (f['id'] as num).toInt();
+      final name = ContactNames.instance
+          .displayName(of: f, registered: (f['username'] ?? '').toString());
+      entries.add(GenieMenuEntry(
+        label: name,
+        custom: row(
+            InitialsAvatar(
+                name: name,
+                radius: 14,
+                imageUrl: widget.avatarOf?.call(f['avatar_url'])),
+            name,
+            trailing: !curGroup && curId == id ? _tick() : null),
+        onTap: () => choose({'group': false, 'id': id, 'name': name}),
+      ));
+    }
+    showGenieMenu(c,
+        anchor: rect, width: 260, maxHeight: 360, entries: entries);
   }
 
   /// Before typing: recent searches and one-tap browsing by kind.
@@ -755,7 +788,9 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
       _sectionLabel(scheme, 'Chats', trailing: '· ${m.length}'),
       SizedBox(
         height: 92,
-        child: ListView.separated(
+        child: EdgeScrollRow(
+          builder: (context, ctrl) => ListView.separated(
+          controller: ctrl,
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           itemCount: m.length,
@@ -798,6 +833,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
               ),
             );
           },
+        ),
         ),
       ),
     ]);

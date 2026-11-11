@@ -213,7 +213,14 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             Text(
               'Wallpaper sets the backdrop for every chat — override any single '
               'chat from its \u22ee menu → Wallpaper. Status videos pre-load '
-              'quietly on Wi-Fi so they open instantly.',
+              'quietly on Wi-Fi so they open instantly, and Save to Gallery '
+              'keeps received photos before the server lets them go. Secret '
+              'hearts can ask for your fingerprint, face or PIN, and you choose '
+              'whether the sender sees “Opened”. Music nudges notice your '
+              'songs on repeat and send a Sunday recap. Section transitions '
+              'set how Aluta moves everywhere: Circle\u2019s All · Status · '
+              'Listening · Circle, Glow\u2019s categories, and Harmony · '
+              'Circle · Glow — on a phone the move follows your finger.',
               style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
             ),
           ],
@@ -250,7 +257,10 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                   Expanded(
                     child: Text(
                       'Want a colour just for one bond? Open an Our Space and '
-                      'tap edit to give it its own theme.',
+                      'tap edit to give it its own theme.\n'
+                      'Everything you choose here travels with your account — '
+                      'it comes back after an app update, a reinstall or on a '
+                      'new device.',
                       style: TextStyle(fontSize: 12.5, color: scheme.onSurface),
                     ),
                   ),
@@ -1357,7 +1367,7 @@ class _SectionTransitionsSection extends StatelessWidget {
                                 fontWeight: FontWeight.w700,
                                 color: scheme.onSurface)),
                         const SizedBox(height: 2),
-                        Text('${s.label} · how Circle switches sections',
+                        Text('${s.label} · how Aluta moves between sections',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -1414,7 +1424,7 @@ class _MusicNudgesSection extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                         on
-                            ? 'Songs on repeat, the feel strip and your Sunday recap · stays on this phone'
+                            ? 'Songs on repeat, the feel strip and your Sunday recap · kept with your account'
                             : 'Aluta won\'t nudge you about your music',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,

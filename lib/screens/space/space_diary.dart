@@ -638,10 +638,11 @@ class _DiaryComposerState extends State<_DiaryComposer> {
                   fontFamily: _planMode ? null : diaryFontFamily(_font),
                   fontWeight: FontWeight.w700),
               decoration: _fieldDecoration(
-                  scheme,
-                  _planMode
-                      ? 'What are you planning?'
-                      : 'Give this memory a title'),
+                      scheme,
+                      _planMode
+                          ? 'What are you planning?'
+                          : 'Give this memory a title')
+                  .copyWith(suffixIcon: spaceEmojiButton(context, _title)),
             ),
             const SizedBox(height: 6),
             _sectionLabel(scheme, _planMode ? 'Details' : 'The story'),
@@ -653,10 +654,11 @@ class _DiaryComposerState extends State<_DiaryComposer> {
                   fontFamily: _planMode ? null : diaryFontFamily(_font),
                   height: 1.5),
               decoration: _fieldDecoration(
-                  scheme,
-                  _planMode
-                      ? 'Where, when, why it will be special…'
-                      : 'Tell the story of this moment…'),
+                      scheme,
+                      _planMode
+                          ? 'Where, when, why it will be special…'
+                          : 'Tell the story of this moment…')
+                  .copyWith(suffixIcon: spaceEmojiButton(context, _body)),
             ),
             if (_planMode) ...[
               const SizedBox(height: 10),

@@ -331,6 +331,7 @@ class _MomentCommentsSheetState extends State<_MomentCommentsSheet> {
                       onChanged: (_) => setState(() {}),
                       onSubmitted: (_) => _send(),
                       decoration: InputDecoration(
+                        suffixIcon: spaceEmojiButton(context, _c),
                         hintText: _editingId != null
                             ? 'Edit your comment…'
                             : 'Add a comment…',
@@ -896,6 +897,7 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
                       textInputAction: TextInputAction.send,
                       onSubmitted: (_) => _addComment(),
                       decoration: InputDecoration(
+                        suffixIcon: spaceEmojiButton(context, _c),
                         hintText: _editingId != null
                             ? 'Edit your comment…'
                             : 'Add a comment…',

@@ -494,6 +494,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
           TextField(
             controller: _c,
             decoration: InputDecoration(
+              suffixIcon: spaceEmojiButton(context, _c),
               hintText: 'What do you call this bond?',
               filled: true,
               fillColor: scheme.surfaceContainerHighest,

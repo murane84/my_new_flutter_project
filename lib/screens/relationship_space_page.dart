@@ -60,6 +60,8 @@ import '../widgets/edge_scroll_row.dart';
 import '../widgets/section_switch.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/emoji_field.dart'
+    show emojiFloats, showFloatingCard, emojiSuffixButton;
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
 part 'space/space_edit_sheet.dart'; // edit-space sheet + wallpaper picker
@@ -255,6 +257,14 @@ String _diaryAgo(DateTime dt) {
 /// emoji keyboard. Returns the chosen glyph, or null if dismissed.
 Future<String?> pickDiaryReaction(BuildContext context, Color accent) {
   final scheme = Theme.of(context).colorScheme;
+  // Desktop / wide web: the same picker as a card floating where I clicked
+  // (like every emoji picker there); phones keep the sheet.
+  if (emojiFloats(context)) {
+    return showFloatingCard<String>(context,
+        width: 340,
+        height: 400,
+        builder: (ctx) => _diaryReactionBody(ctx, accent, grabber: false));
+  }
   return showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,
@@ -262,13 +272,20 @@ Future<String?> pickDiaryReaction(BuildContext context, Color accent) {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
     ),
-    builder: (ctx) {
+    builder: (ctx) => _diaryReactionBody(ctx, accent, grabber: true),
+  );
+}
+
+Widget _diaryReactionBody(BuildContext ctx, Color accent,
+    {required bool grabber}) {
+  final scheme = Theme.of(ctx).colorScheme;
       var showAll = false;
       return StatefulBuilder(
         builder: (ctx, setS) => SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (grabber) ...[
               const SizedBox(height: 10),
               Container(
                 width: 40,
@@ -277,6 +294,7 @@ Future<String?> pickDiaryReaction(BuildContext context, Color accent) {
                     color: scheme.outlineVariant,
                     borderRadius: BorderRadius.circular(2)),
               ),
+              ],
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
                 child: Align(
@@ -357,9 +375,12 @@ Future<String?> pickDiaryReaction(BuildContext context, Color accent) {
           ),
         ),
       );
-    },
-  );
 }
+
+/// Our Space's writing fields get an emoji button on desktop (no emoji key
+/// there); phones have one on their keyboard.
+Widget? spaceEmojiButton(BuildContext context, TextEditingController c) =>
+    emojiFloats(context) ? emojiSuffixButton(context, c) : null;
 
 /// The reaction strip for a diary entry: a chip per emoji (with its count,
 /// highlighted when I'm one of the reactors) plus a "React" button. [onToggle]

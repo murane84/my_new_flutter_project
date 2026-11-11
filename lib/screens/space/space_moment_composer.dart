@@ -796,6 +796,7 @@ class _MomentComposerState extends State<_MomentComposer> {
               maxLines: 3,
               maxLength: 240,
               decoration: InputDecoration(
+                suffixIcon: spaceEmojiButton(context, _c),
                 hintText: _mode == 'note'
                     ? 'Write a note you want to keep…'
                     : (_mode == 'song'

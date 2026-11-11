@@ -546,7 +546,9 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
           maxLines: 3,
           maxLength: 140,
           textCapitalization: TextCapitalization.sentences,
-          decoration: const InputDecoration(hintText: 'playing the night we\u2026'),
+          decoration: InputDecoration(
+              hintText: 'playing the night we\u2026',
+              suffixIcon: spaceEmojiButton(ctx, ctrl)),
         ),
         actions: [
           TextButton(

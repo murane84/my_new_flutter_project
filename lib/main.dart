@@ -50,6 +50,7 @@ import 'utils/chat_background.dart' show loadChatBackground;
 import 'services/haptics.dart';
 import 'utils/motion.dart';
 import 'utils/radii.dart';
+import 'utils/emoji_field.dart' show startPointerTracking;
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool _spaceFullHooked = false;
@@ -125,6 +126,9 @@ void main() async {
   Future.delayed(const Duration(seconds: 4), _liftNativeSplash);
   // My Vibration choice, read before the first tap can buzz.
   unawaited(Haptics.init());
+  // Floating cards (desktop emoji / reaction pickers) grow out of where
+  // the click that opened them landed.
+  startPointerTracking();
   // Paint the app (its splash) AS SOON AS POSSIBLE. Only Sentry wraps runApp, so
   // it still installs capture of BOTH uncaught Flutter framework errors and
   // async (PlatformDispatcher / zone) errors. Everything heavy — the audio

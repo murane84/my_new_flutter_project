@@ -299,6 +299,7 @@ class _CapsuleComposeSheetState extends State<_CapsuleComposeSheet> {
               maxLines: 3,
               maxLength: 600,
               decoration: InputDecoration(
+                suffixIcon: spaceEmojiButton(context, _msg),
                 hintText: 'Write the message they\'ll open…',
                 filled: true,
                 fillColor: scheme.surfaceContainerHighest,
@@ -653,6 +654,7 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
             maxLength: 300,
             textCapitalization: TextCapitalization.sentences,
             decoration: InputDecoration(
+              suffixIcon: spaceEmojiButton(context, _noteCtrl),
               hintText: 'A line, if you like…',
               filled: true,
               fillColor: scheme.surfaceContainerHighest,

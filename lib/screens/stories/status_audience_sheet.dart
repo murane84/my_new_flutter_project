@@ -5,6 +5,7 @@ import '../../services/contact_names.dart';
 import '../../services/status_privacy.dart';
 import '../../utils/readable.dart' show accentInk;
 import '../api_service.dart';
+import '../../widgets/pill_search.dart';
 
 /// "Who can see my status": My circle / Bonds only, plus friends to hide it
 /// from either way. Saved to the account; the server applies it.
@@ -146,11 +147,13 @@ class _StatusAudienceSheetState extends State<_StatusAudienceSheet> {
                 child: TextField(
                   onChanged: (v) => setState(() => _q = v.trim().toLowerCase()),
                   decoration: InputDecoration(
+                    // Pill, like every search box (theme borders are 12 px boxes).
+                    border: pillSearchBorder(scheme),
+                    enabledBorder: pillSearchBorder(scheme),
+                    focusedBorder: pillSearchBorder(scheme, focused: true),
                     isDense: true,
                     prefixIcon: const Icon(Icons.search_rounded, size: 20),
                     hintText: 'Search friends',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(999)),
                   ),
                 ),
               ),

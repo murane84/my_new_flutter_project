@@ -24,6 +24,7 @@ import '../services/now_playing_presence.dart';
 import '../services/live_rooms_registry.dart';
 import '../services/group_meta.dart';
 import 'stories/story_viewer.dart' show StoryHooks;
+import '../widgets/pill_search.dart';
 
 // Groups are presented as CARD POPUPS (AppPopupShell) — not full-window routes —
 // so on desktop they never hide the music/chat panels. Selecting or creating a
@@ -334,15 +335,15 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
             child: TextField(
               controller: _search,
               decoration: InputDecoration(
+                // Pill, like every search box (theme borders are 12 px boxes).
+                border: pillSearchBorder(scheme),
+                enabledBorder: pillSearchBorder(scheme),
+                focusedBorder: pillSearchBorder(scheme, focused: true),
                 hintText: 'Search contacts…',
                 prefixIcon: const Icon(Icons.search, size: 20),
                 isDense: true,
                 filled: true,
-                fillColor: scheme.surfaceContainerHighest,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(999),
-                  borderSide: BorderSide.none,
-                ),
+                fillColor: scheme.surfaceContainerHighest,
               ),
             ),
           ),
@@ -1118,15 +1119,15 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                 child: TextField(
                   onChanged: (v) => setState(() => _memberQuery = v),
                   decoration: InputDecoration(
+                    // Pill, like every search box (theme borders are 12 px boxes).
+                    border: pillSearchBorder(scheme),
+                    enabledBorder: pillSearchBorder(scheme),
+                    focusedBorder: pillSearchBorder(scheme, focused: true),
                     hintText: 'Search members…',
                     prefixIcon: const Icon(Icons.search, size: 20),
                     isDense: true,
                     filled: true,
-                    fillColor: scheme.surfaceContainerHighest,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(999),
-                      borderSide: BorderSide.none,
-                    ),
+                    fillColor: scheme.surfaceContainerHighest,
                   ),
                 ),
               ),

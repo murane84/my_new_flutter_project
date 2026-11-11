@@ -120,6 +120,7 @@ import '../widgets/photo_viewer.dart';
 import '../widgets/aluta_composer_field.dart';
 import '../widgets/pixel_snap.dart';
 import '../utils/readable.dart';
+import '../widgets/pill_search.dart';
 
 // Split out for maintainability (Dart parts — same library, shared
 // imports & privacy, zero behaviour change):

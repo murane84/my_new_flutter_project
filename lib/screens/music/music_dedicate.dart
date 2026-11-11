@@ -646,6 +646,10 @@ class _DedicateFriendPickerState extends State<_DedicateFriendPicker> {
                             setState(() => _q = v.trim().toLowerCase()),
                         style: const TextStyle(fontSize: 13.5),
                         decoration: InputDecoration(
+                          // Pill, like every search box (theme borders are 12 px boxes).
+                          border: pillSearchBorder(scheme),
+                          enabledBorder: pillSearchBorder(scheme),
+                          focusedBorder: pillSearchBorder(scheme, focused: true),
                           isDense: true,
                           hintText: 'Search friends',
                           prefixIcon:
@@ -654,11 +658,7 @@ class _DedicateFriendPickerState extends State<_DedicateFriendPicker> {
                           fillColor: scheme.surfaceContainerHighest
                               .withValues(alpha: isDark ? 0.5 : 0.7),
                           contentPadding:
-                              const EdgeInsets.symmetric(vertical: 8),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(999),
-                            borderSide: BorderSide.none,
-                          ),
+                              const EdgeInsets.symmetric(vertical: 8),
                         ),
                       ),
                     ),

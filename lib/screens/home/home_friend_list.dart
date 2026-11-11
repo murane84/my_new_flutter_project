@@ -301,15 +301,15 @@ extension _HomeFriendListView on HomePageState {
       controller: controller,
       onChanged: onChanged,
       decoration: InputDecoration(
+        // Pill, like every search box (theme borders are 12 px boxes).
+        border: pillSearchBorder(scheme),
+        enabledBorder: pillSearchBorder(scheme),
+        focusedBorder: pillSearchBorder(scheme, focused: true),
         hintText: hint,
         prefixIcon: const Icon(Icons.search, size: 20),
         isDense: true,
         filled: true,
-        fillColor: scheme.surfaceContainerHighest,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(999),
-          borderSide: BorderSide.none,
-        ),
+        fillColor: scheme.surfaceContainerHighest,
       ),
     );
   }

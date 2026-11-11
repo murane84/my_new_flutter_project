@@ -738,15 +738,16 @@ extension _ChatPollsAdmin on _ChatPageState {
                     child: TextField(
                       onChanged: (v) => setC(() => query = v),
                       decoration: InputDecoration(
+                        // Pill, like every search box (theme borders are 12 px boxes).
+                        border: pillSearchBorder(scheme),
+                        enabledBorder: pillSearchBorder(scheme),
+                        focusedBorder: pillSearchBorder(scheme, focused: true),
                         isDense: true,
                         hintText: 'Search your songs',
                         prefixIcon: const Icon(Icons.search_rounded, size: 20),
                         filled: true,
                         fillColor: scheme.surfaceContainerHighest
-                            .withValues(alpha: 0.6),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(999),
-                            borderSide: BorderSide.none),
+                            .withValues(alpha: 0.6),
                       ),
                     ),
                   ),

@@ -140,6 +140,7 @@ import '../utils/readable.dart';
 import '../services/account_prefs.dart';
 import '../services/gallery_autosave.dart';
 import '../widgets/week_in_music_sheet.dart';
+import '../widgets/pill_search.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -6424,17 +6425,17 @@ class _WebQueueSheetState extends State<_WebQueueSheet> {
               controller: _searchCtrl,
               style: const TextStyle(fontSize: 14),
               decoration: InputDecoration(
+                // Pill, like every search box (theme borders are 12 px boxes).
+                border: pillSearchBorder(scheme),
+                enabledBorder: pillSearchBorder(scheme),
+                focusedBorder: pillSearchBorder(scheme, focused: true),
                 isDense: true,
                 hintText: 'Search tracks…',
                 prefixIcon: const Icon(Icons.search_rounded, size: 20),
                 filled: true,
                 fillColor:
                     scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(999),
-                  borderSide: BorderSide.none,
-                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 0),
               ),
             ),
           ),

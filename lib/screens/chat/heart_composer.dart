@@ -321,11 +321,13 @@ extension _ChatHeartComposer on _ChatPageState {
                     autofocus: false,
                     onChanged: (v) => setSheet(() => q = v),
                     decoration: InputDecoration(
+                      // Pill, like every search box (theme borders are 12 px boxes).
+                      border: pillSearchBorder(scheme),
+                      enabledBorder: pillSearchBorder(scheme),
+                      focusedBorder: pillSearchBorder(scheme, focused: true),
                       hintText: 'Find a song to dedicate…',
                       prefixIcon: Icon(Icons.search_rounded, color: tint),
-                      isDense: true,
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(999)),
+                      isDense: true,
                     ),
                   ),
                 ),

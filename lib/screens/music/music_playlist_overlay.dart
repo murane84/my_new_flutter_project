@@ -1422,17 +1422,17 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                       controller: _searchCtrl,
                       onChanged: (v) => setState(() => _search = v),
                       decoration: InputDecoration(
+                        // Pill, like every search box (theme borders are 12 px boxes).
+                        border: pillSearchBorder(scheme),
+                        enabledBorder: pillSearchBorder(scheme),
+                        focusedBorder: pillSearchBorder(scheme, focused: true),
                         hintText: 'Search tracks…',
                         prefixIcon: const Icon(Icons.search, size: 18),
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 10),
                         filled: true,
-                        fillColor: scheme.surfaceContainerHighest,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(999),
-                          borderSide: BorderSide.none,
-                        ),
+                        fillColor: scheme.surfaceContainerHighest,
                       ),
                     ),
                   ),

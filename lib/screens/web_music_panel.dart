@@ -33,6 +33,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/vocal_map.dart';
 import '../utils/typing_guard.dart';
 import '../utils/on_accent.dart';
+import '../widgets/pill_search.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
 ///
@@ -953,17 +954,17 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                       setState(() => _sheetQuery = v.trim().toLowerCase()),
                   style: const TextStyle(fontSize: 13.5),
                   decoration: InputDecoration(
+                    // Pill, like every search box (theme borders are 12 px boxes).
+                    border: pillSearchBorder(scheme),
+                    enabledBorder: pillSearchBorder(scheme),
+                    focusedBorder: pillSearchBorder(scheme, focused: true),
                     isDense: true,
                     hintText: 'Search the queue',
                     prefixIcon: const Icon(Icons.search_rounded, size: 18),
                     filled: true,
                     fillColor: scheme.surfaceContainerHighest
                         .withValues(alpha: isDark ? 0.5 : 0.7),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(999),
-                      borderSide: BorderSide.none,
-                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
                   ),
                 ),
               ),

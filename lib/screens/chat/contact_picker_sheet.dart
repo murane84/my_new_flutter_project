@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import '../../utils/readable.dart' show accentInk;
+import '../../widgets/pill_search.dart';
 
 /// Fast, searchable phone-book picker for sharing a contact.
 ///
@@ -99,12 +100,13 @@ class _ContactPickerSheetState extends State<ContactPickerSheet> {
               child: TextField(
                 onChanged: (v) => setState(() => _query = v),
                 decoration: InputDecoration(
+                  // Pill, like every search box (theme borders are 12 px boxes).
+                  border: pillSearchBorder(scheme),
+                  enabledBorder: pillSearchBorder(scheme),
+                  focusedBorder: pillSearchBorder(scheme, focused: true),
                   hintText: 'Search contacts',
                   prefixIcon: const Icon(Icons.search_rounded),
                   isDense: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(999),
-                  ),
                 ),
               ),
             ),

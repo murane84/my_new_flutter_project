@@ -6,6 +6,7 @@ import 'api_service.dart';
 import '../utils/bounce_tap.dart';
 import '../services/contact_names.dart';
 import '../widgets/person_avatar.dart';
+import '../widgets/pill_search.dart';
 
 /// The music-player toggle for broadcasting "listening now" to friends.
 /// Tap flips sharing on/off; long-press opens the audience sheet (who can see).
@@ -349,6 +350,10 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
                           setState(() => _query = v.trim().toLowerCase()),
                       style: const TextStyle(fontSize: 13.5),
                       decoration: InputDecoration(
+                        // Pill, like every search box (theme borders are 12 px boxes).
+                        border: pillSearchBorder(scheme),
+                        enabledBorder: pillSearchBorder(scheme),
+                        focusedBorder: pillSearchBorder(scheme, focused: true),
                         isDense: true,
                         hintText: 'Search friends',
                         prefixIcon:
@@ -357,11 +362,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
                         fillColor: scheme.surfaceContainerHighest
                             .withValues(alpha: isDark ? 0.5 : 0.7),
                         contentPadding:
-                            const EdgeInsets.symmetric(vertical: 8),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(999),
-                          borderSide: BorderSide.none,
-                        ),
+                            const EdgeInsets.symmetric(vertical: 8),
                       ),
                     ),
                   ),

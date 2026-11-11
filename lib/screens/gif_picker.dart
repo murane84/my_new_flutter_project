@@ -7,6 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
+import '../widgets/pill_search.dart';
 
 /// GIPHY API key.
 ///
@@ -266,6 +267,10 @@ class _GifPickerState extends State<GifPicker> {
                     textInputAction: TextInputAction.search,
                     style: const TextStyle(fontSize: 14),
                     decoration: InputDecoration(
+                      // Pill, like every search box (theme borders are 12 px boxes).
+                      border: pillSearchBorder(scheme),
+                      enabledBorder: pillSearchBorder(scheme),
+                      focusedBorder: pillSearchBorder(scheme, focused: true),
                       isDense: true,
                       prefixIcon: const Icon(Icons.search_rounded, size: 20),
                       hintText: _stickers ? 'Search stickers' : 'Search GIFs',
@@ -273,10 +278,6 @@ class _GifPickerState extends State<GifPicker> {
                       filled: true,
                       fillColor: scheme.surfaceContainerHighest,
                       contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(999),
-                        borderSide: BorderSide.none,
-                      ),
                       suffixIcon: _searchCtrl.text.isEmpty
                           ? null
                           : IconButton(

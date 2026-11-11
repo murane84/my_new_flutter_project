@@ -64,6 +64,7 @@ import '../utils/app_config.dart';
 import '../utils/avatar_widget.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import '../services/account_prefs.dart';
+import '../widgets/pill_search.dart';
 
 part 'music/music_control_widgets.dart'; // _CtrlBtn, _CtrlChip, _SpeedPanel
 part 'music/music_playlist_overlay.dart'; // _PlaylistOverlay + state

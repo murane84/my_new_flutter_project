@@ -17,6 +17,7 @@ import '../../widgets/tap_chip.dart';
 import '../home_page.dart' show freeMusicInbox, playbackBus;
 import '../token_helper.dart';
 import '../../utils/readable.dart' show accentInk;
+import '../../widgets/pill_search.dart';
 
 /// Free music: search songs artists released to be downloaded for free —
 /// Jamendo (Creative Commons) and the Internet Archive (CC / public domain).
@@ -323,6 +324,10 @@ class _FreeMusicPanelState extends State<FreeMusicPanel> {
             onSubmitted: _search,
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
+              // Pill, like every search box (theme borders are 12 px boxes).
+              border: pillSearchBorder(scheme),
+              enabledBorder: pillSearchBorder(scheme),
+              focusedBorder: pillSearchBorder(scheme, focused: true),
               hintText: 'Search free songs, artists, genres…',
               prefixIcon: const Icon(Icons.search, size: 18),
               isDense: true,
@@ -330,9 +335,6 @@ class _FreeMusicPanelState extends State<FreeMusicPanel> {
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               filled: true,
               fillColor: scheme.surfaceContainerHighest,
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(999),
-                  borderSide: BorderSide.none),
             ),
           ),
         ),

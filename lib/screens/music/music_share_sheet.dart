@@ -584,11 +584,13 @@ class _SongPickSheetState extends State<_SongPickSheet> {
               child: TextField(
                 onChanged: (v) => setState(() => _q = v.trim()),
                 decoration: InputDecoration(
+                  // Pill, like every search box (theme borders are 12 px boxes).
+                  border: pillSearchBorder(scheme),
+                  enabledBorder: pillSearchBorder(scheme),
+                  focusedBorder: pillSearchBorder(scheme, focused: true),
                   hintText: 'Search your songs',
                   prefixIcon: const Icon(Icons.search_rounded),
-                  isDense: true,
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(999)),
+                  isDense: true,
                 ),
               ),
             ),

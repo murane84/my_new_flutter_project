@@ -272,11 +272,17 @@ def search_messages(
     #  sender — "me" | "others"
     #  conversation_id / friend_id — only that chat
     #  since_days — only the last N days
+    #  chat_kind — "group" (group chats only) | "dm" (direct chats only)
+    #  since / until — a custom period: ISO-8601 instants (UTC if no zone),
+    #          since inclusive, until exclusive; either may be left out
     kind: Optional[str] = None,
     sender: Optional[str] = None,
     conversation_id: Optional[int] = None,
     friend_id: Optional[int] = None,
     since_days: Optional[int] = None,
+    chat_kind: Optional[str] = None,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -337,9 +343,28 @@ def search_messages(
         query = query.filter(Message.conversation_id.is_(None)).filter(or_(
             (Message.sender_id == me) & (Message.receiver_id == friend_id),
             (Message.sender_id == friend_id) & (Message.receiver_id == me)))
+    elif chat_kind == "group":
+        query = query.filter(Message.conversation_id.isnot(None))
+    elif chat_kind == "dm":
+        query = query.filter(Message.conversation_id.is_(None))
     if since_days:
         query = query.filter(Message.timestamp >= datetime.now(_tz.utc)
                              - timedelta(days=max(1, min(since_days, 3650))))
+
+    def _instant(v: Optional[str]):
+        if not v:
+            return None
+        try:
+            d = datetime.fromisoformat(v.strip().replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Bad date")
+        return d if d.tzinfo else d.replace(tzinfo=_tz.utc)
+
+    t_from, t_to = _instant(since), _instant(until)
+    if t_from is not None:
+        query = query.filter(Message.timestamp >= t_from)
+    if t_to is not None:
+        query = query.filter(Message.timestamp < t_to)
     rows = (
         query
         # Only what I can see in the chat (not held back by a block, not

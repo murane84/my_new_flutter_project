@@ -77,7 +77,12 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
   String? _kind; // media · link · voice · song · file
   String? _sender; // 'me' | 'others'
   Map<String, dynamic>? _inChat; // {'group': bool, 'id': int, 'name': str}
-  int? _sinceDays; // 7 · 30
+  int? _sinceDays; // 7 · 30 · 90 · 365
+  // Or a period of my own (Today is one too): whole days, start..end.
+  DateTimeRange? _range;
+  // Only group chats ('group') or only direct chats ('dm'); a picked chat
+  // (_inChat) replaces it.
+  String? _chatKind;
   List<String> _recent = const [];
   static const _kRecent = 'msg_search_recent_v1';
   // Keyboard: the highlighted hit (↑ ↓ Enter) in what's on screen.
@@ -86,7 +91,14 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
   List<Map<String, dynamic>> _flat = const [];
 
   bool get _filtered =>
-      _kind != null || _sender != null || _inChat != null || _sinceDays != null;
+      _kind != null ||
+      _sender != null ||
+      _inChat != null ||
+      _chatKind != null ||
+      _sinceDays != null ||
+      _range != null;
+
+  static DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
 
   @override
   void initState() {
@@ -144,7 +156,8 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
       _loading = true;
       _lastTerm = q;
     });
-    final sig = '$q|$_kind|$_sender|${_inChat?['id']}|$_sinceDays';
+    final sig = '$q|$_kind|$_sender|${_inChat?['id']}|$_chatKind|'
+        '$_sinceDays|${_range?.start}|${_range?.end}';
     _sig = sig;
     final res = await ApiService().searchMessages(q,
         limit: 100,
@@ -155,7 +168,14 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
         friendId: _inChat != null && _inChat!['group'] != true
             ? _inChat!['id'] as int
             : null,
-        sinceDays: _sinceDays);
+        chatKind: _inChat == null ? _chatKind : null,
+        sinceDays: _range == null ? _sinceDays : null,
+        // Whole local days: from the first day's start to the day after
+        // the last one.
+        since: _range == null ? null : _day(_range!.start),
+        until: _range == null
+            ? null
+            : _day(_range!.end).add(const Duration(days: 1)));
     if (!mounted || q != _lastTerm || sig != _sig) return;
     setState(() {
       _cursor = -1;
@@ -558,11 +578,22 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
       'others' => 'From others',
       _ => 'From anyone',
     };
-    final when = switch (_sinceDays) {
-      7 => 'Last 7 days',
-      30 => 'Last 30 days',
-      _ => 'Any time',
-    };
+    final when = _range != null
+        ? _rangeLabel(_range!)
+        : switch (_sinceDays) {
+            7 => 'Last 7 days',
+            30 => 'Last 30 days',
+            90 => 'Last 3 months',
+            365 => 'Last year',
+            _ => 'Any time',
+          };
+    final inLabel = _inChat != null
+        ? 'In ${_inChat!['name']}'
+        : switch (_chatKind) {
+            'group' => 'In group chats',
+            'dm' => 'In direct chats',
+            _ => 'In any chat',
+          };
     return SizedBox(
       height: 32,
       child: EdgeScrollRow(
@@ -582,17 +613,12 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                     ], (v) => _setFilter(() => _sender = v.isEmpty ? null : v)),
                 icon: Icons.person_outline_rounded,
                 menu: true),
-            chip(_inChat == null ? 'In any chat' : 'In ${_inChat!['name']}',
-                _inChat != null, _pickChat,
+            chip(inLabel, _inChat != null || _chatKind != null, _pickChat,
                 icon: Icons.forum_outlined, menu: true),
             chip(
                 when,
-                _sinceDays != null,
-                (c) => _pick<int>(c, _sinceDays ?? 0, [
-                      (0, 'Any time', Icons.all_inclusive_rounded),
-                      (7, 'Last 7 days', Icons.date_range_rounded),
-                      (30, 'Last 30 days', Icons.calendar_month_rounded),
-                    ], (v) => _setFilter(() => _sinceDays = v == 0 ? null : v)),
+                _sinceDays != null || _range != null,
+                _pickWhen,
                 icon: Icons.schedule_rounded,
                 menu: true),
             if (_filtered)
@@ -600,7 +626,9 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                     _kind = null;
                     _sender = null;
                     _inChat = null;
+                    _chatKind = null;
                     _sinceDays = null;
+                    _range = null;
                   }), icon: Icons.close_rounded),
           ],
         ),
@@ -636,6 +664,98 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
     ]);
   }
 
+  /// How a period of my own reads on its chip.
+  String _rangeLabel(DateTimeRange r) {
+    final l = MaterialLocalizations.of(context);
+    final now = DateTime.now();
+    final today = _day(now);
+    String d(DateTime x) => x.year == now.year
+        ? l.formatShortMonthDay(x)
+        : l.formatShortDate(x);
+    final s = _day(r.start), e = _day(r.end);
+    if (s == e) return s == today ? 'Today' : d(s);
+    return '${d(s)} – ${d(e)}';
+  }
+
+  /// "When": quick periods, or "Choose dates…" for a period of my own.
+  void _pickWhen(BuildContext c) {
+    final rect = _rectOf(c);
+    if (rect == null) return;
+    final today = _day(DateTime.now());
+    final isToday = _range != null &&
+        _day(_range!.start) == today &&
+        _day(_range!.end) == today;
+    final custom = _range != null && !isToday;
+    void days(int? n) {
+      if (mounted) {
+        _setFilter(() {
+          _range = null;
+          _sinceDays = n;
+        });
+      }
+    }
+
+    GenieMenuEntry quick(int n, String label, IconData icon) => GenieMenuEntry(
+          icon: icon,
+          label: label,
+          trailing: _range == null && _sinceDays == n ? _tick() : null,
+          onTap: () => days(n),
+        );
+    showGenieMenu(c, anchor: rect, width: 230, entries: [
+      GenieMenuEntry(
+        icon: Icons.all_inclusive_rounded,
+        label: 'Any time',
+        trailing: _range == null && _sinceDays == null ? _tick() : null,
+        onTap: () => days(null),
+      ),
+      GenieMenuEntry(
+        icon: Icons.today_rounded,
+        label: 'Today',
+        trailing: isToday ? _tick() : null,
+        onTap: () {
+          if (mounted) {
+            _setFilter(() {
+              _sinceDays = null;
+              _range = DateTimeRange(start: today, end: today);
+            });
+          }
+        },
+      ),
+      quick(7, 'Last 7 days', Icons.date_range_rounded),
+      quick(30, 'Last 30 days', Icons.calendar_month_rounded),
+      quick(90, 'Last 3 months', Icons.calendar_view_month_rounded),
+      quick(365, 'Last year', Icons.event_repeat_rounded),
+      const GenieMenuEntry.divider(),
+      GenieMenuEntry(
+        icon: Icons.edit_calendar_rounded,
+        label: custom ? _rangeLabel(_range!) : 'Choose dates…',
+        trailing: custom ? _tick() : null,
+        onTap: _chooseDates,
+      ),
+    ]);
+  }
+
+  /// A period of my own: any start and end day (up to today).
+  Future<void> _chooseDates() async {
+    if (!mounted) return;
+    final today = _day(DateTime.now());
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: today,
+      initialDateRange: _range ??
+          DateTimeRange(
+              start: today.subtract(const Duration(days: 6)), end: today),
+      helpText: 'Search messages between',
+      saveText: 'Search',
+    );
+    if (picked == null || !mounted) return;
+    _setFilter(() {
+      _sinceDays = null;
+      _range = picked;
+    });
+  }
+
   /// "In …": pick one chat (my friends and groups) — the same dropdown as
   /// the other chips, capped in height; a long list scrolls inside it.
   void _pickChat(BuildContext c) {
@@ -655,20 +775,51 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
           ),
           ?trailing,
         ]);
-    void choose(Map<String, dynamic>? v) {
-      if (mounted) _setFilter(() => _inChat = v);
+    void choose(Map<String, dynamic>? v, {String? kind}) {
+      if (!mounted) return;
+      _setFilter(() {
+        _inChat = v;
+        _chatKind = v == null ? kind : null;
+      });
     }
 
+    final anyChat = _inChat == null && _chatKind == null;
     final entries = <GenieMenuEntry>[
       GenieMenuEntry(
         icon: Icons.all_inclusive_rounded,
         label: 'Any chat',
-        trailing: _inChat == null ? _tick() : null,
+        trailing: anyChat ? _tick() : null,
         onTap: () => choose(null),
       ),
-      if (widget.groups.isNotEmpty || widget.people.isNotEmpty)
-        const GenieMenuEntry.divider(),
+      GenieMenuEntry(
+        icon: Icons.groups_rounded,
+        label: 'Group chats only',
+        trailing: _inChat == null && _chatKind == 'group' ? _tick() : null,
+        onTap: () => choose(null, kind: 'group'),
+      ),
+      GenieMenuEntry(
+        icon: Icons.person_rounded,
+        label: 'Direct chats only',
+        trailing: _inChat == null && _chatKind == 'dm' ? _tick() : null,
+        onTap: () => choose(null, kind: 'dm'),
+      ),
     ];
+    // One chat in particular: groups, then people — each under its name.
+    Widget heading(String t) => Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(t,
+              style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
+                  color: scheme.onSurfaceVariant)),
+        );
+    if (widget.groups.isNotEmpty) {
+      entries
+        ..add(const GenieMenuEntry.divider())
+        ..add(GenieMenuEntry(
+            label: 'GROUPS', enabled: false, custom: heading('GROUPS')));
+    }
     for (final g in widget.groups) {
       final id = (g['id'] as num).toInt();
       final name = (g['title'] ?? 'Group').toString();
@@ -686,6 +837,12 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                     size: 16, color: scheme.onSurfaceVariant)),
         onTap: () => choose({'group': true, 'id': id, 'name': name}),
       ));
+    }
+    if (widget.people.isNotEmpty) {
+      entries
+        ..add(const GenieMenuEntry.divider())
+        ..add(GenieMenuEntry(
+            label: 'PEOPLE', enabled: false, custom: heading('PEOPLE')));
     }
     for (final f in widget.people) {
       final id = (f['id'] as num).toInt();

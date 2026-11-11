@@ -3208,14 +3208,19 @@ class ApiService {
   /// matches first, each enriched with the thread it belongs to.
   /// Global search. [kind] (media · link · voice · song · file) may run
   /// with an empty [q] (browse that kind); [sender] 'me' | 'others';
-  /// [conversationId] / [friendId] = only that chat; [sinceDays].
+  /// [conversationId] / [friendId] = only that chat; [chatKind] 'group' |
+  /// 'dm' = only that kind of chat; [sinceDays], or a custom period
+  /// [since] (inclusive) – [until] (exclusive).
   Future<List<Map<String, dynamic>>> searchMessages(String q,
       {int limit = 40,
       String? kind,
       String? sender,
       int? conversationId,
       int? friendId,
-      int? sinceDays}) async {
+      String? chatKind,
+      int? sinceDays,
+      DateTime? since,
+      DateTime? until}) async {
     final term = q.trim();
     if (term.length < 2 && kind == null) return [];
     try {
@@ -3229,6 +3234,9 @@ class ApiService {
         if (conversationId != null) 'conversation_id': '$conversationId',
         if (friendId != null) 'friend_id': '$friendId',
         if (sinceDays != null) 'since_days': '$sinceDays',
+        'chat_kind': ?chatKind,
+        if (since != null) 'since': since.toUtc().toIso8601String(),
+        if (until != null) 'until': until.toUtc().toIso8601String(),
       };
       final uri = Uri.parse('${await _baseUrl}/messages/search')
           .replace(queryParameters: params);

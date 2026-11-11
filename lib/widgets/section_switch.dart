@@ -181,10 +181,7 @@ class SectionSwitch extends StatelessWidget {
       case SectionTransitionStyle.slide:
         return _slide(w, t, incoming, dir);
       case SectionTransitionStyle.heartbeat:
-        // Lub-dub: the leaving page settles back and is gone by 40 %; the
-        // arriving one (from 15 %) beats in — a little past full size, then
-        // home — drifting a touch from its side so swipes still read.
-        // The leaving page contracts away, easing in (gone by 40 %).
+        // The leaving page contracts away, easing (gone by 40 %).
         if (!incoming) {
           return Opacity(
             opacity: _outFade(t),
@@ -192,24 +189,19 @@ class SectionSwitch extends StatelessWidget {
                 scale: 0.9 + 0.1 * Curves.easeOut.transform(t), child: w),
           );
         }
-        // The arriving page is solid early (so it reads as a BEAT, not a
-        // fade) and beats twice — a big "lub", a smaller "dub" — while an
-        // accent pulse ring goes out from the centre on the first beat.
+        // The arriving page is solid early (so it reads as a beat, not a
+        // fade) and swells in on one smooth spring — a little past full
+        // size, a soft give, home.
         final k = ((t - 0.15) / 0.85).clamp(0.0, 1.0);
-        return Stack(fit: StackFit.expand, children: [
-          Opacity(
-            opacity: Curves.easeOutCubic.transform((k / 0.35).clamp(0.0, 1.0)),
-            // The drift from its side rides the SAME spring as the swell
-            // (a hair past centre, then home) — one gesture, not two.
-            child: Transform.translate(
-              offset: Offset(12 * dir * _spring(k), 0),
-              child: Transform.scale(scale: _beat(k), child: w),
-            ),
+        return Opacity(
+          opacity: Curves.easeOutCubic.transform((k / 0.35).clamp(0.0, 1.0)),
+          // The drift from its side glides straight home (no sideways
+          // wobble — only the swell carries the beat).
+          child: Transform.translate(
+            offset: Offset(12 * dir * (1 - Curves.easeOutCubic.transform(k)), 0),
+            child: Transform.scale(scale: _beat(k), child: w),
           ),
-          IgnorePointer(
-            child: CustomPaint(painter: _PulseRingPainter(k, accent)),
-          ),
-        ]);
+        );
       case SectionTransitionStyle.depth:
         return Opacity(
           opacity: incoming ? _inFade(t) : _outFade(t),
@@ -425,43 +417,6 @@ class _WaveClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(_WaveClipper o) => o.t != t || o.dir != dir;
-}
-
-/// Heartbeat's pulse: one accent ring going out from the centre on the
-/// first beat, fading as it spreads.
-class _PulseRingPainter extends CustomPainter {
-  _PulseRingPainter(this.k, this.color);
-  final double k;
-  final Color color;
-  @override
-  void paint(Canvas canvas, Size s) {
-    final c = Offset(s.width / 2, s.height * 0.4);
-    final maxR = math.sqrt(s.width * s.width + s.height * s.height) * 0.55;
-    // Two soft rings, like the beat itself: the "lub" leaves as the page
-    // swells past full size, a fainter "dub" echoes on the give.
-    void ring(double start, double span, double reach, double strength) {
-      final r = ((k - start) / span).clamp(0.0, 1.0);
-      if (r <= 0 || r >= 1) return;
-      final radius = maxR * reach * Curves.easeOutCubic.transform(r);
-      final fade = 1 - Curves.easeIn.transform(r);
-      // A blurred band (glow), not a hard line.
-      canvas.drawCircle(
-        c,
-        radius,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 10 * (1 - r) + 2
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6)
-          ..color = color.withValues(alpha: strength * fade),
-      );
-    }
-
-    ring(0.14, 0.62, 1.0, 0.32);
-    ring(0.42, 0.5, 0.7, 0.16);
-  }
-
-  @override
-  bool shouldRepaint(_PulseRingPainter o) => o.k != k || o.color != color;
 }
 
 /// The accent sound-wave line riding the edge (fades in and out).

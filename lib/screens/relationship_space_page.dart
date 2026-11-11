@@ -57,6 +57,7 @@ import '../widgets/heart_burst.dart';
 import '../utils/prefs_now.dart';
 import '../services/haptics.dart';
 import '../widgets/edge_scroll_row.dart';
+import '../widgets/section_switch.dart';
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
 part 'space/space_edit_sheet.dart'; // edit-space sheet + wallpaper picker
@@ -1529,6 +1530,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   /// From a diary entry grown out of a kept moment: hop to the Pinned moments
   /// wall and glide to that very moment, with a brief glow so it's easy to spot.
   void _jumpToMoment(int momentId) {
+    final order = _visibleSections().map((s) => s.$1).toList();
+    _sectionFrom = _section == null ? -1 : order.indexOf(_section!);
     setState(() {
       _section = 'moments';
       _navDrawerOpen = false;
@@ -1557,8 +1560,14 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   }
   void _openDiary([Offset? origin]) => _goSection('diary');
 
+  // The place of the section I came from (which side the next one enters).
+  int _sectionFrom = -1;
+
   void _goSection(String key) {
     if (key != _section) Haptics.tab();
+    // Which way the new section comes from: its place vs. the one I'm on.
+    final order = _visibleSections().map((s) => s.$1).toList();
+    _sectionFrom = _section == null ? -1 : order.indexOf(_section!);
     setState(() {
         _markSeen(_section);
         _markSeen(key);
@@ -1587,14 +1596,28 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   /// the header's list button, dismissed by tapping out, its minimize button, or
   /// a swipe to the left.
   Widget _sectionScaffold(ColorScheme scheme) {
+    // Fixed NOW: while closing, this page keeps rebuilding as it fades out —
+    // reading the live _section there (already null) broke the fade.
+    final sec = _section;
+    if (sec == null) return const SizedBox.shrink();
+    final order = _visibleSections().map((s) => s.$1).toList();
     return LayoutBuilder(
       builder: (ctx, c) {
         final wide = c.maxWidth >= 720;
-        final rawContent = _sectionContent(
-          scheme,
-          wide,
-          _section!,
-          onMenu: wide ? null : () => setState(() => _navDrawerOpen = true),
+        // Section → section: Aluta's chosen transition (Appearance →
+        // Section transitions), from the side the new one sits on — like
+        // Circle, Glow and Harmony · Circle · Glow.
+        final rawContent = SectionSwitch(
+          forward: order.indexOf(sec) >= _sectionFrom,
+          child: KeyedSubtree(
+            key: ValueKey('space-sec-$sec'),
+            child: _sectionContent(
+              scheme,
+              wide,
+              sec,
+              onMenu: wide ? null : () => setState(() => _navDrawerOpen = true),
+            ),
+          ),
         );
         // Keep rawContent as a STABLE first child of the Stack whether the
         // guide is open or not — toggling only adds/removes the overlay layer.
@@ -1604,7 +1627,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           rawContent,
           if (_guideOpen && _section != null)
             Positioned.fill(
-                child: _sectionGuideOverlay(scheme, _section!)),
+                child: _sectionGuideOverlay(scheme, sec)),
         ]);
         if (wide) {
           return Row(

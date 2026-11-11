@@ -204,21 +204,52 @@ class SectionSwitch extends StatelessWidget {
           _WaveLine(t: t, dir: -dir, color: accent, opacity: 1),
         ]);
       case SectionTransitionStyle.cube:
-        final angle = (1 - e) * 0.55 * (incoming ? dir : -dir);
-        final hinge = incoming
-            ? (dir > 0 ? Alignment.centerLeft : Alignment.centerRight)
-            : (dir > 0 ? Alignment.centerRight : Alignment.centerLeft);
-        return Opacity(
-          opacity: incoming ? _inFade(t) : _outFade(t),
-          child: Transform(
-            alignment: hinge,
-            transform: Matrix4.identity()
-              ..setEntry(3, 2, 0.0014)
-              ..rotateY(angle),
-            child: w,
-          ),
-        );
+        // A real cube: the two pages are neighbouring faces sharing ONE
+        // edge, which travels across as the cube turns — the leaving face
+        // swings away on one side while the arriving face swings in on the
+        // other. Side by side, so they never print over each other, and no
+        // fading (the old version faded two tilted pages at once: muddy).
+        return _cubeFace(w, incoming ? t : 1 - t, incoming, dir);
     }
+  }
+
+  /// How far a cube face turns at the edge (≈ 70°; a full 90° would show
+  /// the faces edge-on, which reads as a flicker on a phone).
+  static const double _cubeTurn = 1.22;
+
+  /// One face of the cube at change progress [c] (0 → 1 for the whole
+  /// change, whichever face this is). Also used under the finger.
+  static Widget _cubeFace(Widget w, double c, bool incoming, double dir) {
+    final k = Curves.easeInOutCubic.transform(c.clamp(0.0, 1.0));
+    // Arriving: comes from the [dir] side, turned in; leaving: goes to the
+    // other side, turning away. Both hinge on the edge they share.
+    final away = incoming ? 1 - k : k; // 0 = facing me, 1 = turned away
+    final shift = incoming ? dir * (1 - k) : -dir * k;
+    final angle = (incoming ? dir : -dir) * _cubeTurn * away;
+    final hinge = (incoming ? dir > 0 : dir < 0)
+        ? Alignment.centerLeft
+        : Alignment.centerRight;
+    return FractionalTranslation(
+      translation: Offset(shift, 0),
+      child: Transform(
+        alignment: hinge,
+        transform: Matrix4.identity()
+          ..setEntry(3, 2, 0.0011)
+          ..rotateY(angle),
+        // The face turning away dims a little — the cube's own shading,
+        // which is what makes the turn read as depth.
+        // (Always the same children — a drag must never rebuild the page.)
+        child: Stack(fit: StackFit.passthrough, children: [
+          w,
+          Positioned.fill(
+            child: IgnorePointer(
+              child: ColoredBox(
+                  color: Colors.black.withValues(alpha: 0.18 * away)),
+            ),
+          ),
+        ]),
+      ),
+    );
   }
 
   /// The page under the finger while a swipe is in progress (p = how far,
@@ -227,6 +258,8 @@ class SectionSwitch extends StatelessWidget {
   /// starts / ends. Follows the same hand-over rule as [frame].
   static Widget dragOutgoing(
       SectionTransitionStyle s, Widget w, double p, double dir) {
+    // The cube turns under the finger exactly as it does on a tap.
+    if (s == SectionTransitionStyle.cube) return _cubeFace(w, p, false, dir);
     var o = 1.0;
     var m = Matrix4.identity();
     var a = Alignment.center;
@@ -242,11 +275,7 @@ class SectionSwitch extends StatelessWidget {
       case SectionTransitionStyle.fade:
         o = (1 - p * 3).clamp(0.0, 1.0);
       case SectionTransitionStyle.cube:
-        o = out;
-        a = dir > 0 ? Alignment.centerRight : Alignment.centerLeft;
-        m = Matrix4.identity()
-          ..setEntry(3, 2, 0.0014)
-          ..rotateY(-0.55 * dir * _ease(p));
+        break; // (handled above)
       case SectionTransitionStyle.ripple:
       case SectionTransitionStyle.wave:
       case SectionTransitionStyle.equaliser:

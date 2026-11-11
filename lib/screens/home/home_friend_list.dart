@@ -614,8 +614,7 @@ extension _HomeFriendListView on HomePageState {
 
   /// A zone header in the conversation list ("LISTENING NOW · 2", "YOUR
   /// CIRCLE") — a small caps label, an optional coral count, and a hairline.
-  Widget _listHeader(ColorScheme scheme, String label,
-      [int? count, String? maxKey]) {
+  Widget _listHeader(ColorScheme scheme, String label, [int? count]) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(6, 16, 6, 8),
       child: Row(
@@ -645,11 +644,6 @@ extension _HomeFriendListView on HomePageState {
             child: Container(
                 height: 1, color: scheme.outlineVariant.withAlpha(70)),
           ),
-          // Circle sections: open this one at full height.
-          if (maxKey != null) ...[
-            const SizedBox(width: 4),
-            _maxControl(scheme, maxKey),
-          ],
         ],
       ),
     );

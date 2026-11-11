@@ -117,9 +117,9 @@ extension _HomeHub on HomePageState {
 
   /// The CIRCLE sections below the search, shared by the phone layer and the
   /// desktop column. By default ('all') Status & Stories, Listening now and
-  /// Your circle share the height. Each header carries a full-height control:
-  /// that section then takes the whole column / screen (Status as a grid,
-  /// Listening / chats as full lists); All on the switcher brings it back.
+  /// Your circle share the height. The switcher above opens any one of them
+  /// at full height (Status as a grid, Listening / chats as full lists); All
+  /// brings the shared view back.
   List<Widget> _circleSections(
       List<Map<String, dynamic>> listening,
       List<Map<String, dynamic>> circle,
@@ -144,11 +144,11 @@ extension _HomeHub on HomePageState {
     }
     final k = wide ? 'wide-' : '';
     return [
-      // A maximised section: the 3D switcher (the shared view keeps its own
-      // per-section headers).
-      if (view != 'all')
-        _circleSwitcher(
-            scheme, storiesUnseen, listening, circle, textColor, view),
+      // The 3D switcher, on every Circle view (All included): one row, one
+      // place, to move between them. The sections below have no buttons of
+      // their own.
+      _circleSwitcher(
+          scheme, storiesUnseen, listening, circle, textColor, view),
       // Every change of section turns like a cube face (← forward, → back).
       Expanded(
         child: _CircleFlip(
@@ -268,7 +268,7 @@ extension _HomeHub on HomePageState {
     return Column(children: [
       if (_myUserId != null) _collapsibleStories(scheme),
       if (showListening) ...[
-        _listHeader(scheme, 'Listening now', listening.length, 'listening'),
+        _listHeader(scheme, 'Listening now', listening.length),
         // Capped so a growing listener count scrolls WITHIN this zone instead
         // of pushing "Your circle" down — maximise it for the full list.
         ConstrainedBox(
@@ -287,7 +287,7 @@ extension _HomeHub on HomePageState {
         ),
       ],
       // Pinned "Your circle" header (fixed above the scrolling list).
-      if (chats.isNotEmpty) _listHeader(scheme, 'Your circle', null, 'chats'),
+      if (chats.isNotEmpty) _listHeader(scheme, 'Your circle'),
       Expanded(child: list),
     ]);
   }
@@ -301,25 +301,7 @@ extension _HomeHub on HomePageState {
         _ => 'Search chats & people…',
       };
 
-  /// Full-height control on a section header in the All view: opens that
-  /// section on its own. (The way back is All on the switcher. There is no
-  /// separate minimise anywhere.)
-  Widget _maxControl(ColorScheme scheme, String key) {
-    return Tooltip(
-      message: 'Full height',
-      child: InkWell(
-        onTap: () => _goCircleView(key),
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          child: Icon(Icons.open_in_full_rounded,
-              size: 15, color: accentInk(scheme)),
-        ),
-      ),
-    );
-  }
-
-  /// The 3D section switcher above a maximised Circle section — one row:
+  /// The 3D section switcher above every Circle view — one row:
   /// a sunken track with All · Status · Listening · Circle, the current one
   /// on a raised, lit "key" that SLIDES between segments (springy), each
   /// other segment showing what's waiting there (and breathing once when it
@@ -481,7 +463,12 @@ extension _HomeHub on HomePageState {
       message: message + tip,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => selected ? _goCircleView('all') : _goCircleView(key),
+        // The lit one again → back to All; All again → glide to the top.
+        onTap: () => !selected
+            ? _goCircleView(key)
+            : key == 'all'
+                ? _scrollListToTop(_circleScroll)
+                : _goCircleView('all'),
         // Hold → that section peeks over this one; let go → gone.
         onLongPressStart: selected
             ? null
@@ -665,8 +652,6 @@ extension _HomeHub on HomePageState {
               ),
             ),
           ),
-          // Full height: Status takes the whole column / screen as a grid.
-          _maxControl(scheme, 'stories'),
         ]),
         AnimatedSize(
           duration: const Duration(milliseconds: 220),

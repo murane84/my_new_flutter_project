@@ -112,14 +112,16 @@ class SectionSwitch extends StatelessWidget {
   /// (no stitched segments, so the speed never jumps and nothing snaps).
   /// From 0.86 at rest it swells past full size (≈1.04, the "lub"), gives a
   /// little (≈0.99, the "dub") and settles — landing on exactly 1.0.
-  static double _beat(double k) {
-    const s0 = 0.86, w = 10.0, d = 4.2;
+  static double _beat(double k) => 1 - (1 - 0.86) * _spring(k);
+
+  /// The damped spring itself: 1 at rest (start) → 0 settled, swinging a
+  /// little past 0 and back. Its last ~0.2 % is folded away smoothly so
+  /// everything lands on exactly its final value.
+  static double _spring(double k) {
+    const w = 10.0, d = 4.2;
     final env = math.exp(-d * k);
     final spring = env * (math.cos(w * k) + (d / w) * math.sin(w * k));
-    // The spring's last ~0.2 % is folded away smoothly so the page ends at
-    // exactly full size (it would otherwise rest a hair small).
-    final fold = 1 - math.pow(k, 6);
-    return 1 - (1 - s0) * spring * fold;
+    return spring * (1 - math.pow(k, 6));
   }
 
   static Widget _layout(Widget? cur, List<Widget> prev) {
@@ -197,8 +199,10 @@ class SectionSwitch extends StatelessWidget {
         return Stack(fit: StackFit.expand, children: [
           Opacity(
             opacity: Curves.easeOutCubic.transform((k / 0.35).clamp(0.0, 1.0)),
+            // The drift from its side rides the SAME spring as the swell
+            // (a hair past centre, then home) — one gesture, not two.
             child: Transform.translate(
-              offset: Offset((1 - _ease(k)) * 12 * dir, 0),
+              offset: Offset(12 * dir * _spring(k), 0),
               child: Transform.scale(scale: _beat(k), child: w),
             ),
           ),
@@ -431,18 +435,29 @@ class _PulseRingPainter extends CustomPainter {
   final Color color;
   @override
   void paint(Canvas canvas, Size s) {
-    final r = ((k - 0.05) / 0.6).clamp(0.0, 1.0);
-    if (r <= 0 || r >= 1) return;
     final c = Offset(s.width / 2, s.height * 0.4);
     final maxR = math.sqrt(s.width * s.width + s.height * s.height) * 0.55;
-    canvas.drawCircle(
-      c,
-      maxR * Curves.easeOutCubic.transform(r),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3 + 6 * (1 - r)
-        ..color = color.withValues(alpha: 0.35 * (1 - r)),
-    );
+    // Two soft rings, like the beat itself: the "lub" leaves as the page
+    // swells past full size, a fainter "dub" echoes on the give.
+    void ring(double start, double span, double reach, double strength) {
+      final r = ((k - start) / span).clamp(0.0, 1.0);
+      if (r <= 0 || r >= 1) return;
+      final radius = maxR * reach * Curves.easeOutCubic.transform(r);
+      final fade = 1 - Curves.easeIn.transform(r);
+      // A blurred band (glow), not a hard line.
+      canvas.drawCircle(
+        c,
+        radius,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 10 * (1 - r) + 2
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6)
+          ..color = color.withValues(alpha: strength * fade),
+      );
+    }
+
+    ring(0.14, 0.62, 1.0, 0.32);
+    ring(0.42, 0.5, 0.7, 0.16);
   }
 
   @override

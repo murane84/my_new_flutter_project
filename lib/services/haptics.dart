@@ -3,6 +3,7 @@ import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'account_prefs.dart';
+import 'section_transition.dart';
 
 /// Every vibration in Aluta goes through here, so the user's choice in
 /// Appearance → Vibration is respected everywhere — never some taps buzzing
@@ -69,7 +70,17 @@ class Haptics {
 
   /// Switching a tab / section — one light tick, on every tab bar alike.
   static Future<void> tab() async {
-    if (_on && instance.tabs.value) await HapticFeedback.selectionClick();
+    if (!_on || !instance.tabs.value) return;
+    // With the Heartbeat transition the tick is a soft "lub-dub", timed
+    // with the page's swell and give — the beat you see, you also feel.
+    if (SectionTransition.instance.style.value ==
+        SectionTransitionStyle.heartbeat) {
+      await HapticFeedback.lightImpact();
+      await Future<void>.delayed(const Duration(milliseconds: 170));
+      if (_on) await HapticFeedback.selectionClick();
+      return;
+    }
+    await HapticFeedback.selectionClick();
   }
 
   /// A long-press landed (menu / sheet / peek opened, hold completed).

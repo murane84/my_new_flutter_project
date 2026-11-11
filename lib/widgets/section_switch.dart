@@ -141,9 +141,12 @@ class SectionSwitch extends StatelessWidget {
         return _RippleClipper(Curves.easeInOutCubic.transform(r),
             rippleFrom ?? (dir > 0 ? 0.75 : 0.25));
       case SectionTransitionStyle.wave:
-        return _WaveClipper(_ease(r), dir);
+        // The sweep starts on the side the new page COMES FROM (forward =
+        // from the right, like the slide and a finger dragging left) —
+        // the clippers count their own way, hence -dir.
+        return _WaveClipper(_ease(r), -dir);
       case SectionTransitionStyle.equaliser:
-        return _BarsClipper(r, dir);
+        return _BarsClipper(r, -dir);
       default:
         return null;
     }
@@ -162,7 +165,7 @@ class SectionSwitch extends StatelessWidget {
         return incoming
             ? Stack(fit: StackFit.expand, children: [
                 _slide(w, t, incoming, dir),
-                _WaveLine(t: t, dir: dir, color: accent, opacity: 0.45),
+                _WaveLine(t: t, dir: -dir, color: accent, opacity: 0.45),
               ])
             : _slide(w, t, incoming, dir);
       case SectionTransitionStyle.depth:
@@ -198,7 +201,7 @@ class SectionSwitch extends StatelessWidget {
         if (s != SectionTransitionStyle.wave) return revealed;
         return Stack(fit: StackFit.expand, children: [
           revealed,
-          _WaveLine(t: t, dir: dir, color: accent, opacity: 1),
+          _WaveLine(t: t, dir: -dir, color: accent, opacity: 1),
         ]);
       case SectionTransitionStyle.cube:
         final angle = (1 - e) * 0.55 * (incoming ? dir : -dir);

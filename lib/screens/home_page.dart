@@ -393,9 +393,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// the left), instead of leaving toward the far right.
   void _toggleGlowFrom(BuildContext button) {
     final fx = _rippleXOf(button);
-    final toLeft = (fx ?? 0) < 0.5;
+    // forward = "comes from the right"; the button sits on the left, so
+    // both ways come from the left (backward).
+    final onRight = (fx ?? 0) >= 0.5;
     _setFriendLayer(_friendLayer == 'glow' ? 'circle' : 'glow',
-        forward: toLeft, rippleFrom: fx);
+        forward: onRight, rippleFrom: fx);
   }
   static const List<String> _kLayers = ['harmony', 'circle', 'glow'];
 

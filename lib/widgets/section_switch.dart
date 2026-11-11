@@ -225,16 +225,24 @@ class SectionSwitch extends StatelessWidget {
     // other side, turning away. Both hinge on the edge they share.
     final away = incoming ? 1 - k : k; // 0 = facing me, 1 = turned away
     final shift = incoming ? dir * (1 - k) : -dir * k;
-    final angle = (incoming ? dir : -dir) * _cubeTurn * away;
+    // The free side of each face goes BACK, into the screen (it swung
+    // toward the viewer before: the leaving page ballooned).
+    final angle = (incoming ? -dir : dir) * _cubeTurn * away;
     final hinge = (incoming ? dir > 0 : dir < 0)
         ? Alignment.centerLeft
         : Alignment.centerRight;
     return FractionalTranslation(
       translation: Offset(shift, 0),
-      child: Transform(
+      // Depth relative to the panel's width: a phone and a wide desktop
+      // column turn alike (a fixed depth made the wide one extreme).
+      child: LayoutBuilder(builder: (context, box) {
+        final width = box.maxWidth.isFinite && box.maxWidth > 0
+            ? box.maxWidth
+            : 400.0;
+        return Transform(
         alignment: hinge,
         transform: Matrix4.identity()
-          ..setEntry(3, 2, 0.0011)
+          ..setEntry(3, 2, 1 / (2.4 * width))
           ..rotateY(angle),
         // The face turning away dims a little — the cube's own shading,
         // which is what makes the turn read as depth.
@@ -248,7 +256,8 @@ class SectionSwitch extends StatelessWidget {
             ),
           ),
         ]),
-      ),
+      );
+      }),
     );
   }
 

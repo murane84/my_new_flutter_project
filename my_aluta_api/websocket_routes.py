@@ -522,10 +522,17 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                         if state == "away" and t not in _mutual:
                             state = "offline"
                         counts[state] += 1
-                        if state != "here":
+                        # "Show to …" also reaches a friend who's in the app
+                        # but in another chat / screen: a gentle nudge there
+                        # ("… wants to show you a message · See"), instead
+                        # of a dead-end "try again" for the sender. (A
+                        # resend request stays live-only.)
+                        nudge = (etype == "msg_pulse" and state == "away")
+                        if state != "here" and not nudge:
                             continue
                         await notify_user(t, {
                             "type": etype,
+                            **({"away": True} if nudge else {}),
                             "user_id": int(user_id),
                             "message_id": mid,
                             **({"conversation_id": str(cid)} if cid is not None else {}),

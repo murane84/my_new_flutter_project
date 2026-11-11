@@ -4288,9 +4288,12 @@ class _ChatPageState extends State<ChatPage>
           ? {'type': 'msg_pulse', 'conv': _cid, 'message_id': id}
           : {'type': 'msg_pulse', 'to': widget.friendId, 'message_id': id});
     } catch (_) {}
-    // Feedback here too: the same rings, on my side.
-    _jumpToMessage(id);
+    // My own rings wait for the answer (_onPulseResult): they mean "it
+    // reached them", not "I pressed the button".
+    _pulsePending = id;
   }
+
+  String? _pulsePending; // the message my last "Show to …" was about
 
   String get _peerFirst => _livePeerLabel.split(' ').first;
 
@@ -4302,14 +4305,18 @@ class _ChatPageState extends State<ChatPage>
     final String line;
     if (e['found'] == false) {
       line = "That message can't be shown anymore";
-    } else if (here > 0) {
+    } else if (here > 0 || away > 0) {
+      // Reached them: in this chat it rings now; elsewhere in Aluta they
+      // get a "· See" nudge that brings them straight to it.
       line = _isGroup
-          ? 'Showing it to $here ${here == 1 ? 'person' : 'people'} 👀'
-          : 'Showing it to $_peerFirst 👀';
-    } else if (away > 0) {
-      line = _isGroup
-          ? 'Nobody else has the group open right now — try again in a moment'
-          : "$_peerFirst isn't in your chat right now — try again in a moment";
+          ? (here > 0
+              ? 'Showing it to ${here + away} ${here + away == 1 ? 'person' : 'people'} 👀'
+              : 'Nudged ${away == 1 ? '1 person' : '$away people'} to look 👀')
+          : here > 0
+              ? 'Showing it to $_peerFirst 👀'
+              : "Nudged $_peerFirst to look — they'll see it in a tap 👀";
+      final id = _pulsePending ?? e['message_id']?.toString();
+      if (id != null) _jumpToMessage(id);
     } else {
       final fid = widget.friendId;
       if (!_isGroup && fid > 0) {

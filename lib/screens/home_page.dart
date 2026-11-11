@@ -2699,6 +2699,34 @@ class HomePageState extends rp.ConsumerState<HomePage>
       NowPlayingPresence.instance.applyEvent(event);
       return;
     }
+    // "Show to …" while I'm elsewhere in Aluta (not in that chat): a gentle
+    // nudge with See → the chat opens and lands on the message, ringing.
+    if (type == 'msg_pulse' && event['away'] == true) {
+      final who = ContactNames.instance.displayName(
+          of: {'username': event['name'], 'phone': event['phone']},
+          registered: (event['name'] ?? 'Someone').toString());
+      final cid = event['conversation_id']?.toString();
+      final from = event['user_id']?.toString();
+      // That chat is already open here → it rings there itself.
+      final open = cid != null
+          ? _activeGroup?['id']?.toString() == cid
+          : _activeGroup == null && _activeFriendId == from;
+      if (mounted && !open) {
+        showToast(context, '$who wants to show you a message 👀',
+            duration: const Duration(seconds: 8),
+            actions: [
+              ToastAction('See', () {
+                _handleMessageTap({
+                  'message_id': event['message_id'],
+                  if (cid != null) 'conversation_id': cid,
+                  if (cid == null) 'friend_id': from,
+                  'sender_name': event['name'],
+                });
+              }),
+            ]);
+      }
+      return;
+    }
     // A friend I asked about just came online (one-shot watch, server
     // online_watch.py). Phones also get the push; this is the in-app line.
     if (type == 'friend_status') {

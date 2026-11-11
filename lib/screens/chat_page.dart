@@ -123,6 +123,7 @@ import '../utils/readable.dart';
 import '../widgets/pill_search.dart';
 import '../services/haptics.dart';
 import '../widgets/edge_scroll_row.dart';
+import '../widgets/slide_track.dart';
 
 // Split out for maintainability (Dart parts — same library, shared
 // imports & privacy, zero behaviour change):
@@ -829,6 +830,7 @@ class _ChatPageState extends State<ChatPage>
     pendingVoiceReply.removeListener(_onPendingVoice);
     pendingListenTogether.removeListener(_onPendingListen);
     _emojiPanelFocus.dispose();
+    _emojiYieldTimer?.cancel();
     _pillTimer?.cancel();
     if (_isAtBottom) _markSeenUpToNewest();
     chatSearchRequest.removeListener(_onSearchRequest);
@@ -905,14 +907,53 @@ class _ChatPageState extends State<ChatPage>
     // emoji" / "Search GIFs") has focus — closing the panel then bounced the
     // user straight back to the Message box mid-search. (⌨ asked for the
     // keyboard → the panel yields on any tab.)
-    if (View.of(context).viewInsets.bottom > 0 &&
-        _showEmoji &&
-        (_emojiToKeyboard ||
-            (_emojiTab != 1 && !_emojiPanelFocus.hasFocus))) {
-      _emojiToKeyboard = false;
-      setState(() => _showEmoji = false);
+    final v = View.of(context);
+    final inset = v.viewInsets.bottom / v.devicePixelRatio;
+    // Learn this phone's keyboard height: the emoji panel takes exactly
+    // that height, so swapping one for the other never moves the composer.
+    if (inset > 150 && inset > (_kbHeight ?? 0) + 1) {
+      _kbHeight = inset;
+      prefsNow?.setDouble(_kKbHeight, inset);
+    }
+    if (inset > 0 && _showEmoji && _panelYields) {
+      if (inset >= _panelFull - 2) {
+        // The keyboard now fills the panel's place: hand over.
+        _emojiToKeyboard = false;
+        setState(() => _showEmoji = false);
+      } else {
+        // Still rising (the panel shrinks under it — see build). A keyboard
+        // shorter than the panel: finish once it has settled.
+        _emojiYieldTimer ??= Timer(const Duration(milliseconds: 700), () {
+          _emojiYieldTimer = null;
+          if (mounted && _showEmoji && _panelYields) {
+            _emojiToKeyboard = false;
+            setState(() => _showEmoji = false);
+          }
+        });
+      }
     }
   }
+
+  static const _kKbHeight = 'kb_height_v1';
+  double? _kbHeight = prefsNow?.getDouble(_kKbHeight);
+  Timer? _emojiYieldTimer;
+
+  /// The emoji panel's height: this phone's keyboard height once known (so
+  /// emoji ⇄ keyboard swaps in place), else a sensible default.
+  double get _panelH {
+    final kb = _kbHeight;
+    if (kb == null) return 306;
+    return kb.clamp(280.0, 420.0);
+  }
+
+  /// The panel's full height on its current tab (GIFs a little taller, so
+  /// the grid shows 2–3 rows).
+  double get _panelFull => _emojiTab == 1 ? math.max(_panelH, 340.0) : _panelH;
+
+  /// The panel gives way to a RISING keyboard meant for the Message box
+  /// (⌨, or a tap on the box) — never to its own search field's keyboard,
+  /// and not while the keyboard is merely dropping away (😊).
+  bool get _panelYields => _emojiToKeyboard || _composerFocus.hasFocus;
 
   // ⌨ was tapped: the panel stays until the keyboard has risen into its
   // place (no empty gap, no jump), then yields.
@@ -940,9 +981,12 @@ class _ChatPageState extends State<ChatPage>
     }
     SystemChannels.textInput.invokeMethod<void>('TextInput.show');
     _emojiToKeyboard = true;
-    // A hardware keyboard (or none rising): don't keep the panel waiting.
-    Future.delayed(const Duration(milliseconds: 650), () {
-      if (mounted && _showEmoji && _emojiToKeyboard) {
+    // A hardware keyboard (none rises): don't keep the panel waiting.
+    Future.delayed(const Duration(milliseconds: 900), () {
+      if (mounted &&
+          _showEmoji &&
+          _emojiToKeyboard &&
+          MediaQuery.viewInsetsOf(context).bottom == 0) {
         _emojiToKeyboard = false;
         setState(() => _showEmoji = false);
       }
@@ -7064,17 +7108,51 @@ class _ChatPageState extends State<ChatPage>
           // sitting flush on the input like a sheet.
           Offstage(
             offstage: !_showEmoji,
-            // A focus scope around the panel: when ITS search field (emoji or
-            // GIF) takes the keyboard, didChangeMetrics keeps the panel open.
-            child: Focus(
+            // Keyboard ⇄ panel hand over IN PLACE: while the keyboard drops
+            // (😊) or rises (⌨ / a tap on the box), the panel shows only the
+            // part the keyboard doesn't cover — so the composer stays still
+            // instead of jumping up by a panel and back down.
+            child: Builder(builder: (context) {
+              final full = _panelFull;
+              final inset = MediaQuery.viewInsetsOf(context).bottom;
+              // Any keyboard but the panel's own search: show only the part
+              // it doesn't cover (rising for the box, or dropping after 😊).
+              final shown = _emojiPanelFocus.hasFocus
+                  ? full
+                  : (full - inset).clamp(0.0, full);
+              return AnimatedContainer(
+                duration: inset > 0
+                    ? Duration.zero // follows the keyboard frame by frame
+                    : const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                height: shown,
+                child: ClipRect(
+                  child: OverflowBox(
+                    alignment: Alignment.topCenter,
+                    minHeight: full,
+                    maxHeight: full,
+                    child: _emojiPanel(context, full),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The emoji / GIF panel itself (full height; the caller shows part of it
+  /// while the keyboard hands over).
+  Widget _emojiPanel(BuildContext context, double full) {
+    final scheme = Theme.of(context).colorScheme;
+    // A focus scope around the panel: when ITS search field (emoji or GIF)
+    // takes the keyboard, didChangeMetrics keeps the panel open.
+    return Focus(
               focusNode: _emojiPanelFocus,
               canRequestFocus: false,
               child: Container(
-              // GIF/sticker tab gets a taller panel so the denser grid shows
-              // ~2–3 rows at a glance (was 306 → only one big row fit). The
-              // emoji tab keeps 306 so the emoji picker (fixed 262 internal
-              // height) doesn't leave a gap below it.
-              height: _emojiTab == 1 ? 372 : 306,
+              height: full,
               decoration: BoxDecoration(
                 color: scheme.surface,
                 border: Border(
@@ -7087,74 +7165,45 @@ class _ChatPageState extends State<ChatPage>
                   _emojiTabBar(scheme),
                   Expanded(
                     child: _emojiTab == 0
-                        ? _buildEmojiPicker(scheme)
+                        ? _emojiPickerFor(scheme, _ctrl,
+                            height: full - _kEmojiTabBarH)
                         : GifPicker(onSelected: (g) => _sendGif(g.fullUrl)),
                   ),
                 ],
               ),
-            )),
-          ),
-        ],
-      ),
-    );
+            ));
   }
 
-  // Segmented Emoji / GIFs header for the panel.
+  static const double _kEmojiTabBarH = 50;
+
+  // Emoji / GIFs: Aluta's one sliding bar (as Circle, Glow, search).
   Widget _emojiTabBar(ColorScheme scheme) {
-    Widget tab(String label, IconData icon, int index) {
-      final selected = _emojiTab == index;
-      return Expanded(
-        child: InkWell(
+    const tabs = [
+      (Icons.emoji_emotions_rounded, 'Emoji'),
+      (Icons.gif_box_rounded, 'GIFs'),
+    ];
+    return Container(
+      height: _kEmojiTabBarH,
+      color: scheme.surfaceContainerHighest,
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+      child: SlideTrack(
+        count: tabs.length,
+        selected: _emojiTab,
+        segment: (context, i, selected, labelled, onKey) => SlideTrackSegment(
+          icon: tabs[i].$1,
+          label: tabs[i].$2,
+          selected: selected,
+          labelled: labelled,
+          onKey: onKey,
           onTap: () {
+            if (_emojiTab == i) return;
+            Haptics.tab();
             // Leaving the GIF tab → drop the search keyboard so it doesn't
             // hang over the emoji grid.
-            if (index == 0) FocusScope.of(context).unfocus();
-            setState(() => _emojiTab = index);
+            if (i == 0) FocusScope.of(context).unfocus();
+            setState(() => _emojiTab = i);
           },
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 9),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: selected ? scheme.primary : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon,
-                    size: 18,
-                    color: selected
-                        ? scheme.primary
-                        : scheme.onSurfaceVariant),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight:
-                        selected ? FontWeight.w700 : FontWeight.w500,
-                    color: selected
-                        ? scheme.primary
-                        : scheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
-      );
-    }
-
-    return Container(
-      color: scheme.surfaceContainerHighest,
-      child: Row(
-        children: [
-          tab('Emoji', Icons.emoji_emotions_rounded, 0),
-          tab('GIFs', Icons.gif_box_rounded, 1),
-        ],
       ),
     );
   }

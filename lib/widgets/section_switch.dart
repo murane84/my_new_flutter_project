@@ -167,7 +167,9 @@ class SectionSwitch extends StatelessWidget {
       {bool finger = false}) {
     switch (s) {
       case SectionTransitionStyle.ripple:
-        return _RippleClipper(Curves.easeInOutCubic.transform(r),
+        // (Under a finger the ripple grows exactly with the swipe.)
+        return _RippleClipper(
+            finger ? r : Curves.easeInOutCubic.transform(r),
             rippleFrom ?? (dir > 0 ? 0.75 : 0.25));
       case SectionTransitionStyle.wave:
         // The sweep starts on the side the new page COMES FROM (forward =

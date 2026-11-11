@@ -686,6 +686,7 @@ class _ChatPageState extends State<ChatPage>
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_emojiShortcut);
     // 🎤 Voice reply asked for this thread (notification / reply banner) →
     // start recording once the chat is up.
     pendingVoiceReply.addListener(_onPendingVoice);
@@ -834,6 +835,12 @@ class _ChatPageState extends State<ChatPage>
     pendingListenTogether.removeListener(_onPendingListen);
     _emojiPanelFocus.dispose();
     _emojiYieldTimer?.cancel();
+    HardwareKeyboard.instance.removeHandler(_emojiShortcut);
+    if (_emojiCard != null) {
+      HardwareKeyboard.instance.removeHandler(_emojiCardKeys);
+      _emojiCard!.remove();
+      _emojiCard = null;
+    }
     _pillTimer?.cancel();
     if (_isAtBottom) _markSeenUpToNewest();
     chatSearchRequest.removeListener(_onSearchRequest);
@@ -946,6 +953,124 @@ class _ChatPageState extends State<ChatPage>
     return v.viewInsets.bottom / v.devicePixelRatio;
   }
 
+  // ── Desktop emoji card ────────────────────────────────────────────────
+  // On desktop there's no on-screen keyboard to swap with, so the panel
+  // pushing the composer up only took room from the chat. Like WhatsApp,
+  // 😊 opens a card FLOATING above the composer, growing out of the
+  // button: the chat doesn't move, the cursor stays in the Message box (pick,
+  // type, pick again), a click outside or Esc closes it, Ctrl/⌘+E toggles.
+
+  OverlayEntry? _emojiCard;
+  static final Object _emojiCardGroup = Object();
+  final GlobalKey _emojiBtnKey = GlobalKey();
+
+  /// Ctrl/⌘+E in the Message box toggles the desktop emoji card.
+  bool _emojiShortcut(KeyEvent e) {
+    if (e is! KeyDownEvent || e.logicalKey != LogicalKeyboardKey.keyE) {
+      return false;
+    }
+    final k = HardwareKeyboard.instance;
+    if (!(k.isControlPressed || k.isMetaPressed) || k.isShiftPressed) {
+      return false;
+    }
+    if (!mounted || !_composerFocus.hasFocus || !_emojiFloats(context)) {
+      return false;
+    }
+    _toggleEmojiKeyboard(_emojiBtnKey.currentContext);
+    return true;
+  }
+
+  /// Desktop apps, and the web on a wide screen.
+  bool _emojiFloats(BuildContext context) {
+    final mobileOs = defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    if (!kIsWeb) return !mobileOs;
+    return MediaQuery.sizeOf(context).width >= 600;
+  }
+
+  void _openEmojiCard(BuildContext? button) {
+    final overlay = Overlay.maybeOf(context);
+    final btnBox = button?.findRenderObject() as RenderBox?;
+    final ovBox = overlay?.context.findRenderObject() as RenderBox?;
+    if (overlay == null || btnBox == null || ovBox == null) return;
+    final btn = ovBox.globalToLocal(btnBox.localToGlobal(Offset.zero)) &
+        btnBox.size;
+    final screen = ovBox.size;
+    final w = math.min(screen.width >= 1200 ? 420.0 : 380.0, screen.width - 16);
+    final h = math.min(440.0, btn.top - 16).clamp(260.0, 440.0);
+    final left = (btn.left - 6).clamp(8.0, math.max(8.0, screen.width - w - 8));
+    final bottom = screen.height - btn.top + 8;
+    _emojiCard = OverlayEntry(builder: (ctx) {
+      final scheme = Theme.of(context).colorScheme;
+      return Positioned(
+        left: left,
+        bottom: bottom,
+        width: w,
+        height: h,
+        child: TapRegion(
+          groupId: _emojiCardGroup,
+          onTapOutside: (_) => _closeEmojiCard(),
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: Motion.standard,
+            curve: Motion.enter,
+            builder: (_, v, child) => Opacity(
+              opacity: v,
+              child: Transform.scale(
+                scale: 0.9 + 0.1 * v,
+                alignment: Alignment.bottomLeft, // grows out of 😊
+                child: child,
+              ),
+            ),
+            child: Material(
+              color: scheme.surface,
+              elevation: 10,
+              shadowColor: Colors.black.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(Radii.lg),
+              clipBehavior: Clip.antiAlias,
+              child: Column(children: [
+                _emojiTabBar(scheme),
+                Expanded(
+                  child: _emojiTab == 0
+                      ? _emojiPickerFor(scheme, _ctrl,
+                          height: h - _kEmojiTabBarH,
+                          // Back to the Message box after each pick, so
+                          // typing carries on.
+                          onPicked: () => _composerFocus.requestFocus())
+                      : GifPicker(onSelected: (g) {
+                          _closeEmojiCard();
+                          _sendGif(g.fullUrl);
+                        }),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      );
+    });
+    overlay.insert(_emojiCard!);
+    HardwareKeyboard.instance.addHandler(_emojiCardKeys);
+    _composerFocus.requestFocus();
+    setState(() {});
+  }
+
+  void _closeEmojiCard() {
+    final e = _emojiCard;
+    if (e == null) return;
+    _emojiCard = null;
+    HardwareKeyboard.instance.removeHandler(_emojiCardKeys);
+    e.remove();
+    if (mounted) setState(() {});
+  }
+
+  bool _emojiCardKeys(KeyEvent e) {
+    if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) {
+      _closeEmojiCard();
+      return true;
+    }
+    return false;
+  }
+
   static const _kKbHeight = 'kb_height_v1';
   double? _kbHeight = prefsNow?.getDouble(_kKbHeight);
   Timer? _emojiYieldTimer;
@@ -976,7 +1101,12 @@ class _ChatPageState extends State<ChatPage>
   ///  • ⌨: the Message box gets focus and the keyboard comes straight up
   ///    (before, the panel just closed and a second tap on the box was
   ///    needed to type).
-  void _toggleEmojiKeyboard() {
+  void _toggleEmojiKeyboard([BuildContext? button]) {
+    // Desktop / wide web: WhatsApp-style floating card over the composer.
+    if (_emojiFloats(context)) {
+      _emojiCard != null ? _closeEmojiCard() : _openEmojiCard(button);
+      return;
+    }
     if (!_showEmoji) {
       FocusScope.of(context).unfocus();
       setState(() => _showEmoji = true);
@@ -6883,21 +7013,40 @@ class _ChatPageState extends State<ChatPage>
                                 // While the panel is open the ⌨ stays, even
                                 // with text (picking emoji IS typing) — so the
                                 // way back to the keyboard is always one tap.
-                                child: hasText && !_showEmoji
+                                // (Desktop: always there, like WhatsApp —
+                                // the card floats, nothing to make room for.)
+                                child: hasText &&
+                                        !_showEmoji &&
+                                        !_emojiFloats(context)
                                     ? const SizedBox.shrink(
                                         key: ValueKey('emoji-off'))
-                                    : IconButton(
+                                    : TapRegion(
                                         key: const ValueKey('emoji-on'),
-                                        tooltip:
-                                            _showEmoji ? 'Keyboard' : 'Emoji',
+                                        groupId: _emojiCardGroup,
+                                        child: Builder(
+                                          builder: (btnCtx) => IconButton(
+                                        key: _emojiBtnKey,
+                                        tooltip: _showEmoji
+                                            ? 'Keyboard'
+                                            : _emojiFloats(context)
+                                                ? 'Emoji (Ctrl+E)'
+                                                : 'Emoji',
                                         icon: Icon(
                                           _showEmoji
                                               ? Icons.keyboard_rounded
-                                              : Icons.emoji_emotions_outlined,
-                                          color: scheme.onSurfaceVariant,
+                                              : _emojiCard != null
+                                                  ? Icons.emoji_emotions_rounded
+                                                  : Icons
+                                                      .emoji_emotions_outlined,
+                                          color: _emojiCard != null
+                                              ? scheme.primary
+                                              : scheme.onSurfaceVariant,
                                         ),
-                                        onPressed: _toggleEmojiKeyboard,
+                                        onPressed: () =>
+                                            _toggleEmojiKeyboard(btnCtx),
                                         visualDensity: VisualDensity.compact,
+                                      ),
+                                        ),
                                       ),
                               ),
                               // Secret-heart toggle — stays visible while
@@ -7216,8 +7365,9 @@ class _ChatPageState extends State<ChatPage>
             Haptics.tab();
             // Leaving the GIF tab → drop the search keyboard so it doesn't
             // hang over the emoji grid.
-            if (i == 0) FocusScope.of(context).unfocus();
+            if (i == 0 && _emojiCard == null) FocusScope.of(context).unfocus();
             setState(() => _emojiTab = i);
+            _emojiCard?.markNeedsBuild();
           },
         ),
       ),

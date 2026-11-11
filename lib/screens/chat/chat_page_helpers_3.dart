@@ -2374,12 +2374,12 @@ extension _ChatPageHelpers3 on _ChatPageState {
   }
 
   Widget _emojiPickerFor(ColorScheme scheme, TextEditingController controller,
-      {double height = 262}) {
+      {double height = 262, VoidCallback? onPicked}) {
     return EmojiPicker(
                 // When `textEditingController` is provided, EmojiPicker already
                 // inserts the tapped emoji into it (at the cursor). Do NOT also
                 // append it here — doing both made every emoji appear twice.
-                onEmojiSelected: (_, _) {},
+                onEmojiSelected: (_, _) => onPicked?.call(),
                 textEditingController: controller,
                 config: Config(
                   height: height,

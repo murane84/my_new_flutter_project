@@ -474,6 +474,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // them — 'stories', 'listening' or 'chats' — can be maximised to take the
   // whole column (desktop) / screen (mobile), and minimised back. Remembered.
   String _circleView = 'all';
+  // The switcher's bar is folded (a very narrow phone: only the chosen key
+  // shows its label) — the ripple origin follows that layout.
+  bool _circleTrackFolded = false;
   void _setCircleView(String v) {
     // Tapping the maximised section's control again minimises it.
     _goCircleView((_circleView == v) ? 'all' : v);
@@ -494,7 +497,15 @@ class HomePageState extends rp.ConsumerState<HomePage>
         .where((k) => k != 'stories' || _myUserId != null)
         .toList();
     final si = segs.indexOf(next);
-    _CircleFlip.rippleFrom = si < 0 ? null : (si + 0.5) / segs.length;
+    if (si < 0) {
+      _CircleFlip.rippleFrom = null;
+    } else if (!_circleTrackFolded) {
+      _CircleFlip.rippleFrom = (si + 0.5) / segs.length;
+    } else {
+      // Folded: the chosen key is wider (7 : 3) — use the NEW layout.
+      final total = 7.0 + 3.0 * (segs.length - 1);
+      _CircleFlip.rippleFrom = (3.0 * si + 3.5) / total;
+    }
     // The same tab tick as every tab bar (not for the automatic landing).
     if (remember) Haptics.tab();
     setState(() {

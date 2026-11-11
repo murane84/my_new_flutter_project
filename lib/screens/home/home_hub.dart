@@ -327,6 +327,7 @@ extension _HomeHub on HomePageState {
         // the way back — no separate minimise button).
         final trackW = cons.maxWidth - 38 - 6;
         final wideKeys = cons.maxWidth >= 560;
+        _circleTrackFolded = trackW / segs.length < SlideTrack.labelWidth;
         return Row(children: [
           // Aluta's one sliding bar (Glow and search use the same).
           SizedBox(

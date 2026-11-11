@@ -912,6 +912,9 @@ class _ChatPageState extends State<ChatPage>
     // keyboard → the panel yields on any tab.)
     final v = View.of(context);
     final inset = v.viewInsets.bottom / v.devicePixelRatio;
+    // While the panel is up, follow the keyboard frame by frame (see the
+    // panel's height in build), so the two trade places smoothly.
+    if (_showEmoji && mounted) setState(() {});
     // Learn this phone's keyboard height: the emoji panel takes exactly
     // that height, so swapping one for the other never moves the composer.
     if (inset > 150 && inset > (_kbHeight ?? 0) + 1) {
@@ -935,6 +938,12 @@ class _ChatPageState extends State<ChatPage>
         });
       }
     }
+  }
+
+  /// The keyboard's height right now, in logical pixels.
+  double _keyboardNow(BuildContext context) {
+    final v = View.of(context);
+    return v.viewInsets.bottom / v.devicePixelRatio;
   }
 
   static const _kKbHeight = 'kb_height_v1';
@@ -989,7 +998,7 @@ class _ChatPageState extends State<ChatPage>
       if (mounted &&
           _showEmoji &&
           _emojiToKeyboard &&
-          MediaQuery.viewInsetsOf(context).bottom == 0) {
+          _keyboardNow(context) == 0) {
         _emojiToKeyboard = false;
         setState(() => _showEmoji = false);
       }
@@ -7117,7 +7126,11 @@ class _ChatPageState extends State<ChatPage>
             // instead of jumping up by a panel and back down.
             child: Builder(builder: (context) {
               final full = _panelFull;
-              final inset = MediaQuery.viewInsetsOf(context).bottom;
+              // The REAL keyboard height, this frame. (The page's own
+              // MediaQuery reports 0 here — the Scaffold has already lifted
+              // the page by it — so reading that showed the full panel on
+              // top of a dropping keyboard and the composer jumped.)
+              final inset = _keyboardNow(context);
               // Any keyboard but the panel's own search: show only the part
               // it doesn't cover (rising for the box, or dropping after 😊).
               final shown = _emojiPanelFocus.hasFocus

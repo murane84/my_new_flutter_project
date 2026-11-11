@@ -103,7 +103,7 @@ class _ContactPickerSheetState extends State<ContactPickerSheet> {
                   prefixIcon: const Icon(Icons.search_rounded),
                   isDense: true,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(999),
                   ),
                 ),
               ),

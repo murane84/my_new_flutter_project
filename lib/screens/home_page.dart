@@ -6432,7 +6432,7 @@ class _WebQueueSheetState extends State<_WebQueueSheet> {
                     scheme.surfaceContainerHighest.withValues(alpha: 0.5),
                 contentPadding: const EdgeInsets.symmetric(vertical: 0),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(999),
                   borderSide: BorderSide.none,
                 ),
               ),

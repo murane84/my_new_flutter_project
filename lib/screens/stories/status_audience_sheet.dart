@@ -150,7 +150,7 @@ class _StatusAudienceSheetState extends State<_StatusAudienceSheet> {
                     prefixIcon: const Icon(Icons.search_rounded, size: 20),
                     hintText: 'Search friends',
                     border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14)),
+                        borderRadius: BorderRadius.circular(999)),
                   ),
                 ),
               ),

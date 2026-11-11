@@ -745,7 +745,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                         fillColor: scheme.surfaceContainerHighest
                             .withValues(alpha: 0.6),
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(24),
+                            borderRadius: BorderRadius.circular(999),
                             borderSide: BorderSide.none),
                       ),
                     ),

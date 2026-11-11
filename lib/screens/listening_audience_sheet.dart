@@ -359,7 +359,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
                         contentPadding:
                             const EdgeInsets.symmetric(vertical: 8),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(999),
                           borderSide: BorderSide.none,
                         ),
                       ),

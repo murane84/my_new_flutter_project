@@ -325,7 +325,7 @@ extension _ChatHeartComposer on _ChatPageState {
                       prefixIcon: Icon(Icons.search_rounded, color: tint),
                       isDense: true,
                       border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                          borderRadius: BorderRadius.circular(999)),
                     ),
                   ),
                 ),

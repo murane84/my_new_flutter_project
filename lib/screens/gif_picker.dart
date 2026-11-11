@@ -274,7 +274,7 @@ class _GifPickerState extends State<GifPicker> {
                       fillColor: scheme.surfaceContainerHighest,
                       contentPadding: const EdgeInsets.symmetric(vertical: 0),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(999),
                         borderSide: BorderSide.none,
                       ),
                       suffixIcon: _searchCtrl.text.isEmpty

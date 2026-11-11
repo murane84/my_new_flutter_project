@@ -340,7 +340,7 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
                 filled: true,
                 fillColor: scheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(999),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -1124,7 +1124,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                     filled: true,
                     fillColor: scheme.surfaceContainerHighest,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(999),
                       borderSide: BorderSide.none,
                     ),
                   ),

@@ -588,7 +588,7 @@ class _SongPickSheetState extends State<_SongPickSheet> {
                   prefixIcon: const Icon(Icons.search_rounded),
                   isDense: true,
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                      borderRadius: BorderRadius.circular(999)),
                 ),
               ),
             ),

@@ -307,7 +307,7 @@ extension _HomeFriendListView on HomePageState {
         filled: true,
         fillColor: scheme.surfaceContainerHighest,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(999),
           borderSide: BorderSide.none,
         ),
       ),

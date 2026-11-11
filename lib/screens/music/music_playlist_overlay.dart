@@ -1430,7 +1430,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                         filled: true,
                         fillColor: scheme.surfaceContainerHighest,
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(999),
                           borderSide: BorderSide.none,
                         ),
                       ),

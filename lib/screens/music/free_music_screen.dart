@@ -331,7 +331,7 @@ class _FreeMusicPanelState extends State<FreeMusicPanel> {
               filled: true,
               fillColor: scheme.surfaceContainerHighest,
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(999),
                   borderSide: BorderSide.none),
             ),
           ),

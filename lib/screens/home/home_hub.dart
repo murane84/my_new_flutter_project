@@ -435,9 +435,15 @@ extension _HomeHub on HomePageState {
       child: SizedBox(
         height: 38,
         child: Stack(children: [
+          // The hidden side is out of reach for taps, Tab focus and screen
+          // readers alike (both stay mounted so nothing jumps).
           Positioned.fill(
             child: IgnorePointer(
               ignoring: searching,
+              child: ExcludeFocus(
+              excluding: searching,
+              child: ExcludeSemantics(
+              excluding: searching,
               child: AnimatedOpacity(
                 opacity: searching ? 0 : 1,
                 duration: dur,
@@ -449,11 +455,17 @@ extension _HomeHub on HomePageState {
                   child: pills,
                 ),
               ),
+              ),
+              ),
             ),
           ),
           Positioned.fill(
             child: IgnorePointer(
               ignoring: !searching,
+              child: ExcludeFocus(
+              excluding: !searching,
+              child: ExcludeSemantics(
+              excluding: !searching,
               child: AnimatedOpacity(
                 opacity: searching ? 1 : 0,
                 duration: dur,
@@ -466,6 +478,8 @@ extension _HomeHub on HomePageState {
                       ? _circleSearchReplica(scheme, view)
                       : _circleSearchBar(scheme, view, isDark),
                 ),
+              ),
+              ),
               ),
             ),
           ),

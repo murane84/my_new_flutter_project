@@ -142,7 +142,9 @@ class _EdgeScrollRowState extends State<EdgeScrollRow> {
               if (mounted) setState(() {});
             });
           }
-          if (!left && !right) return child!;
+          // ALWAYS the same tree (a mask that may fade nothing): swapping the
+          // mask in and out would rebuild the row from scratch — it jumped,
+          // blinked and lost its place.
           return ShaderMask(
             blendMode: BlendMode.dstIn,
             shaderCallback: (r) {

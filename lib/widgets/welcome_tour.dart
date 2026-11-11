@@ -101,7 +101,7 @@ const _pages = [
         (Icons.wb_sunny_rounded, 'Daily card'),
       ]),
   _Page(Icons.graphic_eq_rounded, 'Your music has feelings',
-      'Tell Aluta how a song makes you feel 😍🥹💪😌💔 and it helps you share it with the right person. It all stays on your phone.',
+      'Tell Aluta how a song makes you feel 😍🥹💪😌💔 and it helps you share it with the right person. It\u2019s yours — kept with your account, so it follows you to a new phone.',
       tint: Color(0xFF8B5CF6),
       chips: [
         (Icons.mood_rounded, 'Feels'),

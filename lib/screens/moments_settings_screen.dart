@@ -466,7 +466,9 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
           ),
           const SizedBox(height: 10),
           Text(
-            'Everything Aluta learns for these moments stays on this phone.',
+            'What Aluta learns for these moments is kept with your account, so it '
+            'follows you to a new phone. Your partner sees your week in music '
+            'only if you share what you\u2019re listening to.',
             textAlign: TextAlign.center,
             style: TextStyle(
                 fontSize: 11.5,

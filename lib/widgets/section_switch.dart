@@ -107,6 +107,39 @@ class SectionSwitch extends StatelessWidget {
   /// Our section key, under AnimatedSwitcher's own entry wrapper.
   static Key? _innerKey(Widget w) => (w is KeyedSubtree ? w.child : w).key;
 
+  // ── The hand-over rule (every style) ───────────────────────────────────
+  // Real sections are see-through (they sit on the panel's background), so
+  // the leaving page and the arriving one must never both be fully drawn in
+  // the same place, or their texts print over each other. So:
+  //  • fading / moving styles: the leaving page is gone by 40 % of the
+  //    change, and the arriving one only starts showing at 15 %;
+  //  • revealing styles (ripple, wave, equaliser): the leaving page is cut
+  //    to exactly what is not revealed yet, so they never overlap at all.
+
+  /// Leaving page's opacity at its progress [t] (1 → 0 as it leaves).
+  static double _outFade(double t) => ((t - 0.6) / 0.4).clamp(0.0, 1.0);
+
+  /// Arriving page's opacity at its progress [t] (0 → 1).
+  static double _inFade(double t) =>
+      _ease(((t - 0.15) / 0.85).clamp(0.0, 1.0));
+
+  /// The revealed area of a revealing style at reveal progress [r] (0..1);
+  /// null for styles that don't reveal.
+  static CustomClipper<Path>? _revealClip(
+      SectionTransitionStyle s, double r, double dir, double? rippleFrom) {
+    switch (s) {
+      case SectionTransitionStyle.ripple:
+        return _RippleClipper(Curves.easeInOutCubic.transform(r),
+            rippleFrom ?? (dir > 0 ? 0.75 : 0.25));
+      case SectionTransitionStyle.wave:
+        return _WaveClipper(_ease(r), dir);
+      case SectionTransitionStyle.equaliser:
+        return _BarsClipper(r, dir);
+      default:
+        return null;
+    }
+  }
+
   /// One frame of style [s] at progress [t] (0 → 1 arriving; 1 → 0
   /// leaving) — also driven by a finger in the chat screen's swipe path.
   static Widget frame(SectionTransitionStyle s, Widget w, double t,
@@ -115,17 +148,17 @@ class SectionSwitch extends StatelessWidget {
     final e = _ease(t);
     switch (s) {
       case SectionTransitionStyle.slide:
-        return _slide(w, e, incoming, dir);
+        return _slide(w, t, incoming, dir);
       case SectionTransitionStyle.slideWave:
         return incoming
             ? Stack(fit: StackFit.expand, children: [
-                _slide(w, e, incoming, dir),
+                _slide(w, t, incoming, dir),
                 _WaveLine(t: t, dir: dir, color: accent, opacity: 0.45),
               ])
-            : _slide(w, e, incoming, dir);
+            : _slide(w, t, incoming, dir);
       case SectionTransitionStyle.depth:
         return Opacity(
-          opacity: e.clamp(0.0, 1.0),
+          opacity: incoming ? _inFade(t) : _outFade(t),
           child: Transform.scale(
             scale: incoming ? 1.05 - 0.05 * e : 0.93 + 0.07 * e,
             child: w,
@@ -141,28 +174,30 @@ class SectionSwitch extends StatelessWidget {
           child: Transform.scale(scale: 0.92 + 0.08 * ek, child: w),
         );
       case SectionTransitionStyle.ripple:
-        if (!incoming) return w; // revealed over, then removed
-        return ClipPath(
-          clipper: _RippleClipper(Curves.easeInOutCubic.transform(t),
-              rippleFrom ?? (dir > 0 ? 0.75 : 0.25)),
-          child: w,
-        );
       case SectionTransitionStyle.wave:
-        if (!incoming) return w;
+      case SectionTransitionStyle.equaliser:
+        // Leaving: keep only what the arriving page hasn't covered yet
+        // (its reveal is at 1 - t).
+        if (!incoming) {
+          return ClipPath(
+            clipper: _Outside(_revealClip(s, 1 - t, dir, rippleFrom)!),
+            child: w,
+          );
+        }
+        final revealed =
+            ClipPath(clipper: _revealClip(s, t, dir, rippleFrom), child: w);
+        if (s != SectionTransitionStyle.wave) return revealed;
         return Stack(fit: StackFit.expand, children: [
-          ClipPath(clipper: _WaveClipper(_ease(t), dir), child: w),
+          revealed,
           _WaveLine(t: t, dir: dir, color: accent, opacity: 1),
         ]);
-      case SectionTransitionStyle.equaliser:
-        if (!incoming) return w;
-        return ClipPath(clipper: _BarsClipper(t, dir), child: w);
       case SectionTransitionStyle.cube:
         final angle = (1 - e) * 0.55 * (incoming ? dir : -dir);
         final hinge = incoming
             ? (dir > 0 ? Alignment.centerLeft : Alignment.centerRight)
             : (dir > 0 ? Alignment.centerRight : Alignment.centerLeft);
         return Opacity(
-          opacity: e.clamp(0.0, 1.0),
+          opacity: incoming ? _inFade(t) : _outFade(t),
           child: Transform(
             alignment: hinge,
             transform: Matrix4.identity()
@@ -175,48 +210,81 @@ class SectionSwitch extends StatelessWidget {
   }
 
   /// The page under the finger while a swipe is in progress (p = how far,
-  /// 0..1). ONE fixed shape (Opacity › Transform) for every style and every
-  /// p — so the page is never rebuilt from scratch as a drag starts / ends.
+  /// 0..1). ONE fixed shape (Opacity › Transform › ClipPath) for every style
+  /// and every p — so the page is never rebuilt from scratch as a drag
+  /// starts / ends. Follows the same hand-over rule as [frame].
   static Widget dragOutgoing(
       SectionTransitionStyle s, Widget w, double p, double dir) {
     var o = 1.0;
     var m = Matrix4.identity();
     var a = Alignment.center;
+    final out = _outFade(1 - p);
     switch (s) {
       case SectionTransitionStyle.slide:
       case SectionTransitionStyle.slideWave:
-        o = 1 - p;
-        m = Matrix4.translationValues(-60 * dir * p, 0, 0);
+        o = out;
+        m = Matrix4.translationValues(-30 * dir * _ease(p), 0, 0);
       case SectionTransitionStyle.depth:
-        o = 1 - p;
+        o = out;
         m = Matrix4.diagonal3Values(1 - 0.07 * p, 1 - 0.07 * p, 1);
       case SectionTransitionStyle.fade:
-        o = (1 - p * 1.6).clamp(0.0, 1.0);
+        o = (1 - p * 3).clamp(0.0, 1.0);
       case SectionTransitionStyle.cube:
-        o = 1 - p;
+        o = out;
         a = dir > 0 ? Alignment.centerRight : Alignment.centerLeft;
         m = Matrix4.identity()
           ..setEntry(3, 2, 0.0014)
-          ..rotateY(-0.55 * dir * p);
+          ..rotateY(-0.55 * dir * _ease(p));
       case SectionTransitionStyle.ripple:
       case SectionTransitionStyle.wave:
       case SectionTransitionStyle.equaliser:
-        // The new page is revealed over this one; it stays put.
+        // Stays put; only what isn't revealed yet shows (below).
         break;
     }
+    final reveal = _revealClip(s, p, dir, null);
     return Opacity(
       opacity: o.clamp(0.0, 1.0),
-      child: Transform(alignment: a, transform: m, child: w),
+      child: Transform(
+        alignment: a,
+        transform: m,
+        child: ClipPath(
+          clipper: reveal == null ? const _Whole() : _Outside(reveal),
+          child: w,
+        ),
+      ),
     );
   }
 
-  static Widget _slide(Widget w, double e, bool incoming, double dir) {
+  static Widget _slide(Widget w, double t, bool incoming, double dir) {
+    final e = _ease(t);
     final dx = (1 - e) * 30 * (incoming ? dir : -dir);
     return Opacity(
-      opacity: e.clamp(0.0, 1.0),
+      opacity: incoming ? _inFade(t) : _outFade(t),
       child: Transform.translate(offset: Offset(dx, 0), child: w),
     );
   }
+}
+
+/// Everything EXCEPT [inner]'s area (the part not revealed yet).
+class _Outside extends CustomClipper<Path> {
+  _Outside(this.inner);
+  final CustomClipper<Path> inner;
+  @override
+  Path getClip(Size s) => Path.combine(PathOperation.difference,
+      Path()..addRect(Offset.zero & s), inner.getClip(s));
+  @override
+  bool shouldReclip(_Outside o) =>
+      o.inner.runtimeType != inner.runtimeType ||
+      inner.shouldReclip(o.inner);
+}
+
+/// The whole box (a no-op clip, so the drag's widget shape never changes).
+class _Whole extends CustomClipper<Path> {
+  const _Whole();
+  @override
+  Path getClip(Size s) => Path()..addRect(Offset.zero & s);
+  @override
+  bool shouldReclip(_Whole o) => false;
 }
 
 /// A circle growing out of the switcher (top, on the tapped side).
@@ -237,6 +305,11 @@ class _RippleClipper extends CustomClipper<Path> {
 double _waveX(double t, double w, double dir) =>
     dir > 0 ? w * t : w * (1 - t);
 
+/// The wave's swing: none at the very start and end, so a finished change
+/// leaves no sliver of the old page along the edge (and an unstarted one
+/// cuts nothing off the current page).
+double _waveAmp(double t) => 7 * math.sin(math.pi * t.clamp(0.0, 1.0));
+
 /// Everything behind a sound-wave edge sweeping across.
 class _WaveClipper extends CustomClipper<Path> {
   _WaveClipper(this.t, this.dir);
@@ -244,9 +317,10 @@ class _WaveClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size s) {
     final x = _waveX(t, s.width, dir);
+    final amp = _waveAmp(t);
     final p = Path()..moveTo(dir > 0 ? 0 : s.width, 0);
     for (double y = 0; y <= s.height; y += 6) {
-      p.lineTo(x + 7 * math.sin(y / 14 + t * 18), y);
+      p.lineTo(x + amp * math.sin(y / 14 + t * 18), y);
     }
     p
       ..lineTo(x, s.height)
@@ -286,9 +360,10 @@ class _WavePainter extends CustomPainter {
   void paint(Canvas canvas, Size s) {
     if (color.a == 0) return;
     final x = _waveX(t, s.width, dir);
-    final p = Path()..moveTo(x + 7 * math.sin(t * 18), 0);
+    final amp = _waveAmp(t);
+    final p = Path()..moveTo(x + amp * math.sin(t * 18), 0);
     for (double y = 6; y <= s.height; y += 6) {
-      p.lineTo(x + 7 * math.sin(y / 14 + t * 18), y);
+      p.lineTo(x + amp * math.sin(y / 14 + t * 18), y);
     }
     canvas.drawPath(
         p,

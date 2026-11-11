@@ -3569,6 +3569,7 @@ class _ChatPageState extends State<ChatPage>
 
   void _showMessageMenu(BuildContext context, Map<String, dynamic> msg,
       {Offset? anchor}) {
+    Haptics.hold(); // the long-press landed (no-op on desktop)
     final isMe = msg['sender_id'].toString() == _myId;
     final content = msg['content'] as String? ?? '';
     final scheme = Theme.of(context).colorScheme;

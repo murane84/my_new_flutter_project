@@ -2351,7 +2351,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           onTap: current ? null : () => _playAt(i),
           // Hold a song to share it with friends (as on Android / Windows).
           onLongPress: () {
-            Haptics.mediumImpact();
+            Haptics.holdInk();
             _shareAt(i);
           },
           child: Padding(

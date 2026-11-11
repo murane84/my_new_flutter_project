@@ -1101,7 +1101,7 @@ class _CirclePeek {
 
   static void show(BuildContext context, Widget content, String title) {
     hide();
-    Haptics.selectionClick();
+    Haptics.hold(); // a long-press on a switcher segment
     final overlay = Overlay.of(context);
     final scheme = Theme.of(context).colorScheme;
     final size = MediaQuery.sizeOf(context);

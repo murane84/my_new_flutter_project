@@ -222,8 +222,9 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
               'quietly on Wi-Fi so they open instantly, and Save to Gallery '
               'keeps received photos before the server lets them go. Secret '
               'hearts can ask for your fingerprint, face or PIN, and you choose '
-              'whether the sender sees “Opened”. Vibration turns every touch buzz on '
-              'or off, and whether switching tabs ticks too. Music nudges notice your '
+              'whether the sender sees “Opened”. Vibration turns touch buzzes on or '
+              'off (a long-press always answers with one), and whether '
+              'switching tabs ticks too. Music nudges notice your '
               'songs on repeat and send a Sunday recap. Section transitions '
               'set how Aluta moves everywhere: Circle\u2019s All · Status · '
               'Listening · Circle, Glow\u2019s categories, and Harmony · '
@@ -1495,8 +1496,8 @@ class _VibrationSection extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                             on
-                                ? 'A soft tick when you hold, swipe or react'
-                                : 'Off — Aluta never vibrates on touch',
+                                ? 'A soft tick when you tap, swipe or react'
+                                : 'Off — only a long-press still answers',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(

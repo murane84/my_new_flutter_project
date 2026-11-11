@@ -636,7 +636,7 @@ class _LyricsViewState extends State<_LyricsView> {
   /// Long-press: this line starts NOW — it and every line after it move by
   /// the same amount (what came before stays as it was).
   void _startsNow(List<(Duration, String)> lines, int i, Duration now) {
-    Haptics.mediumImpact();
+    Haptics.holdInk(); // long-press on an InkWell line
     final delta = now - lines[i].$1;
     _saveTimed([
       for (var j = 0; j < lines.length; j++)

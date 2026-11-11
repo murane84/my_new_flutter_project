@@ -1030,7 +1030,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     final path = _playlist[_currentIndex];
     final scheme = Theme.of(context).colorScheme;
     final hasPartner = _partnerId != null;
-    Haptics.mediumImpact();
+    Haptics.hold(); // long-press on the disc / record key
     final pick = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: scheme.surface,

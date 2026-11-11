@@ -776,7 +776,7 @@ class _HeartBubbleState extends State<HeartBubble>
     if (_reduceMotion || _downAt == null) return;
     const steps = [0.0, 0.35, 0.6, 0.8, 0.93];
     while (_hapticStep < steps.length && _hold.value >= steps[_hapticStep]) {
-      Haptics.selectionClick();
+      Haptics.holdTick(); // a hold always answers (Vibration setting aside)
       _hapticStep++;
     }
   }
@@ -799,7 +799,7 @@ class _HeartBubbleState extends State<HeartBubble>
     if (!widget.isMe && !HeartLock.instance.coachSeen) {
       unawaited(HeartLock.instance.markCoachSeen());
     }
-    _heartbeatHaptic();
+    _heartbeatHaptic(hold: true);
     if (!widget.isMe && !_reported) {
       _reported = true;
       widget.onFirstOpen?.call();
@@ -918,11 +918,12 @@ class _HeartBubbleState extends State<HeartBubble>
   }
 
   /// A soft "lub-dub" you feel. No-op without a vibrator (desktop).
-  Future<void> _heartbeatHaptic() async {
+  /// [hold]: it answers a completed hold — felt even with Vibration off.
+  Future<void> _heartbeatHaptic({bool hold = false}) async {
     if (_reduceMotion) return;
-    Haptics.mediumImpact();
+    hold ? Haptics.hold() : Haptics.mediumImpact();
     await Future.delayed(const Duration(milliseconds: 150));
-    Haptics.lightImpact();
+    hold ? Haptics.holdTick() : Haptics.lightImpact();
   }
 
   void _loveBack() {

@@ -9,6 +9,9 @@ import 'account_prefs.dart';
 /// and others not. Same method names as [HapticFeedback].
 ///
 /// • [enabled] — all vibration on/off (default on).
+/// • Long-press is the exception: [hold] always answers, whatever the
+///   setting — the "handshake" that a hold landed (Android's own long-press
+///   buzz ignores app settings too, so this keeps every hold alike).
 /// • [tabs] — the tick when switching a tab or section (Harmony · Circle ·
 ///   Glow, Circle's All · Status · Listening · Circle, Glow's categories,
 ///   Our Space sections). Default on; only matters while [enabled].
@@ -67,6 +70,25 @@ class Haptics {
   /// Switching a tab / section — one light tick, on every tab bar alike.
   static Future<void> tab() async {
     if (_on && instance.tabs.value) await HapticFeedback.selectionClick();
+  }
+
+  /// A long-press landed (menu / sheet / peek opened, hold completed).
+  /// Always on — the one vibration the Vibration switch leaves alone.
+  static Future<void> hold() async {
+    if (supported) await HapticFeedback.mediumImpact();
+  }
+
+  /// The same, for a long-press on an InkWell / ListTile: Android already
+  /// buzzed for it natively, so only iOS needs ours (never two buzzes).
+  static Future<void> holdInk() async {
+    if (supported && defaultTargetPlatform == TargetPlatform.iOS) {
+      await HapticFeedback.mediumImpact();
+    }
+  }
+
+  /// The small ticks while a hold builds up (the secret heart racing).
+  static Future<void> holdTick() async {
+    if (supported) await HapticFeedback.selectionClick();
   }
 
   static Future<void> selectionClick() async {

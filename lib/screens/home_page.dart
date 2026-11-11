@@ -6607,7 +6607,7 @@ class _WebQueueSheetState extends State<_WebQueueSheet> {
                         onLongPress: playbackBus.webShareAt == null
                             ? null
                             : () {
-                                Haptics.mediumImpact();
+                                Haptics.holdInk();
                                 playbackBus.webShareAt?.call(i);
                               },
                         trailing: GeniePopupMenuButton<String>(

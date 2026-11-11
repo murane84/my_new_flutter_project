@@ -727,7 +727,10 @@ extension _HomeFriendListView on HomePageState {
             _spaceOpenOriginId = spaceId;
           },
           onTap: () => _openSpace(space),
-          onLongPress: () => _showSpaceManageSheet(space),
+          onLongPress: () {
+            Haptics.holdInk();
+            _showSpaceManageSheet(space);
+          },
           child: Container(
             padding: const EdgeInsets.fromLTRB(18, 20, 16, 20),
             decoration: BoxDecoration(
@@ -1199,7 +1202,10 @@ extension _HomeFriendListView on HomePageState {
         _spaceOpenOriginId = chipSpaceId;
       },
       onTap: () => _openSpace(space),
-      onLongPress: () => _showSpaceManageSheet(space),
+      onLongPress: () {
+        Haptics.hold();
+        _showSpaceManageSheet(space);
+      },
       child: Container(
         width: 80,
         margin: const EdgeInsets.only(right: 8),
@@ -1813,7 +1819,12 @@ extension _HomeFriendListView on HomePageState {
       splashColor: scheme.primary.withValues(alpha: 0.12),
       highlightColor: scheme.primary.withValues(alpha: 0.05),
       onTap: () => _isSharing ? _sendShareTo(friend: f) : openChat(f),
-      onLongPress: _isSharing ? null : () => _showFriendQuickSheet(f, name),
+      onLongPress: _isSharing
+          ? null
+          : () {
+              Haptics.holdInk();
+              _showFriendQuickSheet(f, name);
+            },
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 64),
         child: Padding(
@@ -2399,7 +2410,12 @@ extension _HomeFriendListView on HomePageState {
       color: Colors.transparent,
       child: InkWell(
       onTap: () => _isSharing ? _sendShareTo(group: g) : openGroupInPanel(g),
-      onLongPress: _isSharing ? null : () => _groupRowMenu(g, name),
+      onLongPress: _isSharing
+          ? null
+          : () {
+              Haptics.holdInk();
+              _groupRowMenu(g, name);
+            },
       borderRadius: BorderRadius.circular(16),
       child: Container(
         constraints: const BoxConstraints(minHeight: 64),

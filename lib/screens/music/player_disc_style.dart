@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/account_prefs.dart';
 import '../../utils/readable.dart';
 import '../home_page.dart' show playProgressNotifier;
 
@@ -74,7 +75,13 @@ extension PlayerDiscStyleX on PlayerDiscStyle {
 
 /// Remembers the chosen disc style and notifies the player when it changes.
 class PlayerStyleController extends ChangeNotifier {
-  PlayerStyleController._();
+  PlayerStyleController._() {
+    // The account copy came back (update / reinstall / new device) → re-read.
+    AccountPrefs.onRestore(() {
+      _loaded = false;
+      return load();
+    });
+  }
   static final PlayerStyleController instance = PlayerStyleController._();
 
   static const _key = 'player_disc_style_v1';
@@ -131,6 +138,7 @@ class PlayerStyleController extends ChangeNotifier {
     try {
       final p = await SharedPreferences.getInstance();
       await p.setString(_key, s.id);
+      AccountPrefs.touch();
     } catch (_) {
       // Best-effort — selection still applies this session.
     }
@@ -145,6 +153,7 @@ class PlayerStyleController extends ChangeNotifier {
     try {
       final p = await SharedPreferences.getInstance();
       await p.setBool(_dimKey, v);
+      AccountPrefs.touch();
     } catch (_) {
       // Best-effort — toggle still applies this session.
     }

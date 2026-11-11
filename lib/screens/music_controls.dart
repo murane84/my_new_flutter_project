@@ -475,6 +475,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _restoreEqualizer();
       AccountPrefs.onRestore(_eqRestore); // EQ back from the account
     }
+    AccountPrefs.onRestore(_restorePlayModes); // repeat / shuffle, likewise
 
     // Ambient controls (now-playing bar, car/lock-screen buttons) drive the
     // local player — or the LIVE session when one is active (live-aware).
@@ -565,6 +566,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _revealFresh.dispose();
     freeMusicInbox.removeListener(_takeFreeMusic);
     AccountPrefs.offRestore(_eqRestore);
+    AccountPrefs.offRestore(_restorePlayModes);
     _setHostingBusy(false);
     // Only clear the bus if we're still the registered owner.
     if (playbackBus.onToggle == _transportPlayPause) {
@@ -1949,6 +1951,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       await p.setString('music_repeat_mode',
           _repeatOne ? 'one' : (_repeatAll ? 'all' : 'off'));
       await p.setBool('music_shuffle', _shuffle);
+      AccountPrefs.touch(); // survives updates / reinstalls with the account
     } catch (_) {}
   }
 

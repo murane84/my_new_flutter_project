@@ -65,6 +65,15 @@ class AccountPrefs {
     'gallery_autosave_on', 'gallery_autosave_videos', 'gallery_autosave_wifi',
     // Appearance → section transitions (services/section_transition)
     'section_transition_v1',
+    // Circle: which view I'm on + the Status strip's Hide / Show (home)
+    'circle_view_v1', 'stories_strip_open_v1',
+    // Share as status: the last background colour I picked
+    'quick_status_bg_v1',
+    // Music player habits: repeat / shuffle, disc style (music controls)
+    'music_repeat_mode', 'music_shuffle',
+    'player_disc_style_v1', 'player_orb_dimmed_v1',
+    // Voice notes: my playback speed (chat)
+    'voice_note_speed',
   ];
 
   static final List<FutureOr<void> Function()> _reloaders = [];

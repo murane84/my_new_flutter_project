@@ -376,10 +376,19 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
   // Remembered across launches, separately from the music player's speed.
   static final ValueNotifier<double> _speedN = ValueNotifier<double>(1.0);
   static bool _speedLoaded = false;
+  static bool _speedHooked = false;
   static const _kVoiceSpeed = 'voice_note_speed';
   double get _speed => _speedN.value;
   static Future<void> _loadSpeed() async {
     if (_speedLoaded) return;
+    if (!_speedHooked) {
+      // The account copy came back (update / reinstall) → re-read it.
+      _speedHooked = true;
+      AccountPrefs.onRestore(() {
+        _speedLoaded = false;
+        return _loadSpeed();
+      });
+    }
     _speedLoaded = true;
     try {
       final p = await SharedPreferences.getInstance();
@@ -520,6 +529,7 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
     _speedN.value = next;
     SharedPreferences.getInstance()
         .then((p) => p.setDouble(_kVoiceSpeed, next))
+        .then((_) => AccountPrefs.touch())
         .ignore();
     if (_prepared) await _player.setSpeed(next);
   }

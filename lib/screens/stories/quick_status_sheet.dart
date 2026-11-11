@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../services/account_prefs.dart';
 import '../../services/status_privacy.dart';
 import '../../utils/prefs_now.dart';
 import 'create_story_sheet.dart' show kStatusBgs, StatusPaletteButton;
@@ -351,7 +352,9 @@ class _QuickStatusSheetState extends State<_QuickStatusSheet> {
                         _words.text.trim().isEmpty)
                     ? null
                     : () {
-                        prefsNow?.setString(_kLastBg, _value);
+                        prefsNow
+                            ?.setString(_kLastBg, _value)
+                            .then((_) => AccountPrefs.touch());
                         Navigator.pop(context,
                             QuickStatusChoice(_value, _words.text.trim()));
                       },

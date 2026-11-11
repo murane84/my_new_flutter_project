@@ -374,7 +374,24 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // must never undo "Hide".
     SharedPreferences.getInstance()
         .then((p) => p.setBool('stories_strip_open_v1', _storiesExpanded))
-        .catchError((_) => false);
+        .then((_) => AccountPrefs.touch())
+        .catchError((_) {});
+  }
+
+  /// The account copy came back (new install / update / another device):
+  /// re-read the Circle view + strip choice it carries.
+  Future<void> _reloadCirclePrefs() async {
+    final p = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    final open = p.getBool('stories_strip_open_v1');
+    final view = p.getString('circle_view_v1');
+    setState(() {
+      if (open != null) _storiesExpanded = open;
+      if (view != null &&
+          const {'all', 'stories', 'listening', 'chats'}.contains(view)) {
+        _circleView = view;
+      }
+    });
   }
 
   // Circle sections share the column's height by default ('all'). Any one of
@@ -411,7 +428,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     if (!remember) return;
     SharedPreferences.getInstance()
         .then((p) => p.setString('circle_view_v1', next))
-        .catchError((_) => false);
+        .then((_) => AccountPrefs.touch())
+        .catchError((_) {});
   }
 
   /// Order for swiping / Alt+1…4: All · Status · Listening · Your circle.
@@ -609,6 +627,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     warmSpacePrefs();
     _loadPinnedChats();
     AccountPrefs.onRestore(_loadPinnedChats); // pins back from the account
+    AccountPrefs.onRestore(_reloadCirclePrefs); // view + strip, likewise
     _wireSongMoments();
     // Drives the playlist drawer's smooth slide/fade in & out. MusicControls
     // flips playlistDrawerBus.isOpen; we animate the host from that.
@@ -815,6 +834,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     NowPlayingPresence.instance.removeListener(_onPresenceChanged);
     QuickStatus.instance.removeListener(_onPresenceChanged);
     AccountPrefs.offRestore(_loadPinnedChats);
+    AccountPrefs.offRestore(_reloadCirclePrefs);
     NowPlayingPresence.instance.stopReceiving();
     for (final t in _typingTimers.values) {
       t.cancel();

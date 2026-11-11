@@ -924,8 +924,11 @@ def friends_quick_statuses(db: Session = Depends(get_db),
 
 # ── Account-backed settings (wallpapers, …) ─────────────────────────────────
 _SETTING_KEYS = {"chat_wallpaper", "app_prefs", "song_insights"}
-# Per-key size caps (bytes of JSON). Listening history is the big one.
-_SETTING_CAPS = {"song_insights": 768 * 1024}
+# Per-key size caps (bytes of JSON). Listening history is the big one;
+# app_prefs carries saved Glow cards + pins + EQ + every Appearance choice,
+# and a rejected upload silently backed up NOTHING (so a later choice like
+# the section transition was lost on update) — give it real room.
+_SETTING_CAPS = {"song_insights": 768 * 1024, "app_prefs": 256 * 1024}
 
 
 @router.get("/users/me/settings/{key}", tags=["Users"])

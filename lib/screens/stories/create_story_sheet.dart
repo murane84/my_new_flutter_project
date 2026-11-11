@@ -1153,15 +1153,16 @@ class _TextStoryPageState extends State<_TextStoryPage> {
     return 19;
   }
 
-  BoxDecoration _decoration(List<Color> cs) => cs.length >= 2
-      ? BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: cs,
-          ),
-        )
-      : BoxDecoration(color: cs[0]);
+  // Always a gradient (a plain colour = the same colour twice): animating
+  // between a plain colour and a gradient fades through transparent, which
+  // flashed the dark backdrop whenever you left purple.
+  BoxDecoration _decoration(List<Color> cs) => BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: cs.length >= 2 ? cs : [cs[0], cs[0]],
+        ),
+      );
 
   Future<void> _post() async {
     final text = _text.text.trim();
@@ -1207,7 +1208,10 @@ class _TextStoryPageState extends State<_TextStoryPage> {
       ),
     ];
     return Scaffold(
-      body: Container(
+      // Glides to the picked colour (the same calm 260 ms as Share as status).
+      body: AnimatedContainer(
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOut,
         decoration: _decoration(cs),
         child: SafeArea(
           child: Column(
@@ -1427,15 +1431,16 @@ class _StickerComposePageState extends State<_StickerComposePage> {
     return l > 0.55 ? const Color(0xFF15171C) : Colors.white;
   }
 
-  BoxDecoration _decoration(List<Color> cs) => cs.length >= 2
-      ? BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: cs,
-          ),
-        )
-      : BoxDecoration(color: cs[0]);
+  // Always a gradient (a plain colour = the same colour twice): animating
+  // between a plain colour and a gradient fades through transparent, which
+  // flashed the dark backdrop whenever you left purple.
+  BoxDecoration _decoration(List<Color> cs) => BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: cs.length >= 2 ? cs : [cs[0], cs[0]],
+        ),
+      );
 
   Future<void> _post() async {
     setState(() => _posting = true);
@@ -1460,7 +1465,10 @@ class _StickerComposePageState extends State<_StickerComposePage> {
     final cs = _cur;
     final ink = _inkFor(cs);
     return Scaffold(
-      body: Container(
+      // Glides to the picked colour (the same calm 260 ms as Share as status).
+      body: AnimatedContainer(
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOut,
         decoration: _decoration(cs),
         child: SafeArea(
           child: Column(

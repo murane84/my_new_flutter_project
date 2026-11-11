@@ -116,16 +116,26 @@ class _QuickStatusSheetState extends State<_QuickStatusSheet> {
           .every((x) => x);
 
   Widget _preview() {
-    final ink = _ink(_cur);
+    // The words' ink glides to the new colour with the background, instead
+    // of snapping white ↔ dark mid-change.
+    return TweenAnimationBuilder<Color?>(
+      tween: ColorTween(end: _ink(_cur)),
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOut,
+      builder: (context, c, _) => _previewWith(c ?? _ink(_cur)),
+    );
+  }
+
+  Widget _previewWith(Color ink) {
+    // Always a gradient (a plain colour = the same colour twice): animating
+    // between a plain colour and a gradient fades through transparent, which
+    // flashed the dark backdrop whenever you left purple.
     final deco = BoxDecoration(
       borderRadius: BorderRadius.circular(20),
-      gradient: _cur.length >= 2
-          ? LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: _cur)
-          : null,
-      color: _cur.length >= 2 ? null : _cur.first,
+      gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: _cur.length >= 2 ? _cur : [_cur.first, _cur.first]),
     );
     Widget body;
     switch (widget.kind) {
@@ -183,7 +193,8 @@ class _QuickStatusSheetState extends State<_QuickStatusSheet> {
         ]);
     }
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOut,
       height: 260,
       width: double.infinity,
       alignment: Alignment.center,

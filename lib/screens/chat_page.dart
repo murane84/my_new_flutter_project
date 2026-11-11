@@ -128,7 +128,12 @@ import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../widgets/skeleton.dart';
 import '../utils/emoji_field.dart'
-    show emojiFloats, toggleComposerEmoji;
+    show
+        emojiFloats,
+        toggleComposerEmoji,
+        emojiStartTab,
+        emojiStartTabRefresh;
+import '../widgets/emoji_colon_suggest.dart';
 import '../utils/adaptive_sheet.dart';
 import '../utils/depth.dart';
 
@@ -570,6 +575,8 @@ class _ChatPageState extends State<ChatPage>
   final FocusNode _searchFocus = FocusNode();
   // The message field (rituals focus it: "keep the streak going").
   final FocusNode _composerFocus = FocusNode();
+  // Desktop ":hea" quick emoji strip above the box.
+  final _colonKey = GlobalKey<EmojiColonSuggestState>();
   List<String> _searchHits = const [];
   int _searchIdx = 0;
   Timer? _searchDebounce;
@@ -6989,6 +6996,11 @@ class _ChatPageState extends State<ChatPage>
                                 _buildHeldStrip(scheme),
                               if (_replyTo != null)
                                 _buildReplyPreview(_replyTo!),
+                              if (emojiFloats(context))
+                                EmojiColonSuggest(
+                                    key: _colonKey,
+                                    controller: _ctrl,
+                                    focus: _composerFocus),
                               Row(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
@@ -7082,6 +7094,13 @@ class _ChatPageState extends State<ChatPage>
                                     }
                                   },
                                   onKeyEvent: (node, event) {
+                                    // ":hea" strip open: Tab / Enter / ↑ ↓ /
+                                    // Esc belong to it first.
+                                    if (_colonKey.currentState
+                                            ?.handleKey(event) ==
+                                        KeyEventResult.handled) {
+                                      return KeyEventResult.handled;
+                                    }
                                     if (event is KeyDownEvent &&
                                         event.logicalKey ==
                                             LogicalKeyboardKey.enter &&

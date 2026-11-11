@@ -2379,7 +2379,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 // When `textEditingController` is provided, EmojiPicker already
                 // inserts the tapped emoji into it (at the cursor). Do NOT also
                 // append it here — doing both made every emoji appear twice.
-                onEmojiSelected: (_, _) => onPicked?.call(),
+                onEmojiSelected: (_, _) {
+                  emojiStartTabRefresh();
+                  onPicked?.call();
+                },
                 textEditingController: controller,
                 config: Config(
                   height: height,
@@ -2398,6 +2401,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                     ),
                   ),
                   categoryViewConfig: CategoryViewConfig(
+                    initCategory: emojiStartTab(),
                     backgroundColor: scheme.surfaceContainerHighest,
                     indicatorColor: scheme.primary,
                     iconColor: scheme.onSurfaceVariant,

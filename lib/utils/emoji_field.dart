@@ -26,7 +26,23 @@ Offset? _lastPointer;
 bool _tracking = false;
 
 /// Start remembering where clicks land (call once at start-up).
-void startPointerTracking() => _trackPointer();
+void startPointerTracking() {
+  _trackPointer();
+  emojiStartTabRefresh();
+}
+
+/// Pickers open on Recent once you have some; before that, on Smileys
+/// (an empty "No recent emoji yet" page was the first thing you saw).
+bool _hasRecents = false;
+Category emojiStartTab() => _hasRecents ? Category.RECENT : Category.SMILEYS;
+
+/// Re-check after picks so the next picker opens on Recent.
+void emojiStartTabRefresh() {
+  EmojiPickerUtils()
+      .getRecentEmojis()
+      .then((r) => _hasRecents = r.isNotEmpty)
+      .catchError((_) => _hasRecents);
+}
 
 void _trackPointer() {
   if (_tracking) return;
@@ -133,7 +149,7 @@ Future<void> showEmojiPickerSheet(
         // cursor) itself when `textEditingController` is set — so onEmojiSelected
         // stays a no-op to avoid inserting twice.
         child: EmojiPicker(
-          onEmojiSelected: (_, _) {},
+          onEmojiSelected: (_, _) => emojiStartTabRefresh(),
           textEditingController: controller,
           config: Config(
             height: 320,
@@ -150,6 +166,7 @@ Future<void> showEmojiPickerSheet(
               ),
             ),
             categoryViewConfig: CategoryViewConfig(
+              initCategory: emojiStartTab(),
               backgroundColor: scheme.surfaceContainerHighest,
               indicatorColor: scheme.primary,
               iconColor: scheme.onSurfaceVariant,
@@ -183,7 +200,7 @@ Widget inlineEmojiPicker(
     {double height = 300}) {
   final scheme = Theme.of(context).colorScheme;
   return EmojiPicker(
-    onEmojiSelected: (_, _) {},
+    onEmojiSelected: (_, _) => emojiStartTabRefresh(),
     textEditingController: controller,
     config: Config(
       height: height,
@@ -199,6 +216,7 @@ Widget inlineEmojiPicker(
         ),
       ),
       categoryViewConfig: CategoryViewConfig(
+        initCategory: emojiStartTab(),
         backgroundColor: scheme.surfaceContainerHighest,
         indicatorColor: scheme.primary,
         iconColor: scheme.onSurfaceVariant,

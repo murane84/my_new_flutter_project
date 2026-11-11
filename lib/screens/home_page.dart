@@ -45,6 +45,7 @@ import '../utils/brand_theme.dart';
 import '../widgets/chat_wallpaper_sheet.dart';
 import '../widgets/person_avatar.dart';
 import '../widgets/net_gate.dart';
+import '../widgets/now_glow.dart';
 import 'api_service.dart';
 import '../services/device_report.dart';
 import '../services/net_check.dart';
@@ -3785,7 +3786,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   // ── List navigation ─────────────────────────────────────────────────────
 
-  /// Blink these rows twice (theme glow) — "here it is".
+  /// "Here it is": these rows breathe once (the ⌖ glow; a partner's row also
+  /// gets its circling hearts).
   void _flashRows(Set<String> keys) {
     if (keys.isEmpty) return;
     _flashTimer?.cancel();

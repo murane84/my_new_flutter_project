@@ -81,8 +81,8 @@ class _PlaylistOverlay extends StatefulWidget {
 
   /// Songs the last scan just found: tinted with a NEW chip while this list
   /// is open. When [revealFresh] turns true (the "Added N new songs" toast was
-  /// tapped) the list clears its filters, scrolls to the first one and makes
-  /// them all blink — then sets it back to false.
+  /// tapped) the list clears its filters, scrolls to the first one and lets
+  /// them all breathe once — then sets it back to false.
   final Set<String> fresh;
   final ValueNotifier<bool>? revealFresh;
 
@@ -205,7 +205,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   }
 
   /// Bring the newly found songs into view: drop any filter that hides them,
-  /// scroll to the first, and blink every one of them a few times.
+  /// scroll to the first, and let them all breathe once (the ⌖ breath).
   Future<void> _revealFreshSongs() async {
     await _filtersRestored;
     if (!mounted || widget.fresh.isEmpty) return;
@@ -234,11 +234,15 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           duration: const Duration(milliseconds: 460),
           curve: Curves.easeOutCubic);
     }
-    for (var k = 0; k < 3 && mounted; k++) {
-      await _freshCtrl.forward(from: 0);
-      if (!mounted) return;
-      await _freshCtrl.reverse();
-    }
+    // One breath: rises over ~35 % of it, settles slower (as calmBreath).
+    final ms = kCalmBreath.inMilliseconds;
+    await _freshCtrl.animateTo(1,
+        duration: Duration(milliseconds: (ms * 0.35).round()),
+        curve: Curves.easeOut);
+    if (!mounted) return;
+    await _freshCtrl.animateBack(0,
+        duration: Duration(milliseconds: (ms * 0.65).round()),
+        curve: Curves.easeInOut);
   }
 
   // ── Filter / sort persistence ───────────────────────────────────────────────

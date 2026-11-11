@@ -894,8 +894,8 @@ class _PulseOnRise extends StatefulWidget {
 
 class _PulseOnRiseState extends State<_PulseOnRise>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _a = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1000));
+  late final AnimationController _a =
+      AnimationController(vsync: this, duration: kCalmBreath);
 
   @override
   void didUpdateWidget(_PulseOnRise old) {
@@ -917,9 +917,7 @@ class _PulseOnRiseState extends State<_PulseOnRise>
       builder: (_, child) {
         final t = _a.value;
         if (t == 0 || t == 1) return child!;
-        final i = t < 0.35
-            ? Curves.easeOut.transform(t / 0.35)
-            : 1 - Curves.easeInOut.transform((t - 0.35) / 0.65);
+        final i = calmBreath(t);
         return Transform.scale(
           scale: 1 + 0.08 * i,
           child: DecoratedBox(

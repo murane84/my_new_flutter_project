@@ -4447,7 +4447,7 @@ class _ChatPageState extends State<ChatPage>
         _ringPulse++;
       });
       HapticFeedback.selectionClick();
-      Future.delayed(const Duration(milliseconds: 1600), () {
+      Future.delayed(const Duration(milliseconds: 1200), () {
         if (mounted && _highlightedId == id) {
           setState(() => _highlightedId = null);
         }
@@ -4713,19 +4713,15 @@ class _ChatPageState extends State<ChatPage>
     );
     if (!mounted || seq != _flashSeq) return false;
     if (!flash) return true;
-    // "Here it is": the bubble sends out rings in its own outline + colour
-    // (JumpRings), then everything settles — no colour band, no jump in size.
-    // One light tick as each of the three rings leaves the bubble.
+    // "Here it is": the bubble breathes once in its own outline and colour
+    // (JumpRings, the same calm breath as ⌖ in the playlist), then settles.
+    // No colour band, no jump in size, and one light tick.
     setState(() {
       _highlightedId = id;
       _ringPulse++;
     });
-    for (var i = 0; i < 3; i++) {
-      Future.delayed(Duration(milliseconds: 255 * i), () {
-        if (mounted && seq == _flashSeq) HapticFeedback.selectionClick();
-      });
-    }
-    await Future.delayed(const Duration(milliseconds: 1600));
+    HapticFeedback.selectionClick();
+    await Future.delayed(const Duration(milliseconds: 1200));
     if (mounted && seq == _flashSeq) {
       setState(() => _highlightedId = null);
     }

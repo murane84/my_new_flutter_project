@@ -2285,7 +2285,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   }
 
   /// "Added N new songs" — tap (or Show) jumps to them in the playlist and
-  /// makes them blink; with a partner, "Share one" sends them the newest.
+  /// lets them breathe once; with a partner, "Share one" sends them the newest.
   void _announceFresh(List<String> added) {
     if (!mounted || added.isEmpty) return;
     setState(() {

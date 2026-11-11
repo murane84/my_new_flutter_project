@@ -560,11 +560,10 @@ extension _HomeFriendListView on HomePageState {
     // next, so the old hairline divider between tiles is gone.
     final isGroup = item['is_group'] == true;
     final key = isGroup ? 'g${item['id']}' : 's${item['id']}';
-    // Blinks when it's the row I came back from, or a chat that just got a
-    // new message and glided into view — and the closer they are, the more
-    // it means: my Harmony partner's row beats like a heart with a warm
-    // glow and a 💞, other bonds get a gentle heartbeat, everyone else a
-    // soft blink.
+    // Breathes once when it's the row I came back from, or a chat that just
+    // got a new message and glided into view. It is the ⌖ breath for
+    // everyone, warmed to rose for a bond; only my Harmony partner's row
+    // also gets hearts circling its rim.
     final fid = (item['id'] as num?)?.toInt() ?? -1;
     final tier = isGroup
         ? FlashTier.circle

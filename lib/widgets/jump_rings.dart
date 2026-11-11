@@ -1,11 +1,11 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
-/// Rings that ripple OUTWARD from a widget in its own outline — the chat's
-/// "here it is" when you jump to a replied / pinned / searched message. Like
-/// the player disc's rings: a few soft strokes leave the edge one after
-/// another, grow and fade. Nothing behind the bubble changes colour.
+import 'now_glow.dart';
+
+/// The chat's "here it is" when you jump to a replied, pinned or searched
+/// message. It is the same calm breath as ⌖ Find the playing song: ONE soft
+/// ring in the message's own outline swells a little way out, glows, and
+/// settles. It never pulses twice. Nothing behind the bubble changes colour.
 ///
 /// Give the outline either as a [shape] (a bubble's ShapeBorder, tail and
 /// all) or as [pathFor] (a custom outline in the child's own box, e.g. the
@@ -41,7 +41,7 @@ class JumpRings extends StatefulWidget {
 class _JumpRingsState extends State<JumpRings>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1500));
+      vsync: this, duration: kCalmBreath);
 
   @override
   void initState() {
@@ -137,16 +137,22 @@ class _RingsPainter extends CustomPainter {
       );
       return;
     }
-    const rings = 3;
-    const stagger = 0.17;
-    const span = 1 - stagger * (rings - 1);
-    for (var k = 0; k < rings; k++) {
-      final p = ((t - k * stagger) / span).clamp(0.0, 1.0);
-      if (p <= 0 || p >= 1) continue;
-      final e = Curves.easeOutCubic.transform(p);
-      final grow = 1.5 + 24 * e;
-      final fade = math.pow(1 - p, 1.4).toDouble();
-      final w = 2.8 * (1 - p) + 0.6;
+    // One breath: the ring eases a short way out while its glow swells
+    // and settles (the same curve as the ⌖ glow).
+    {
+      final fade = calmBreath(t);
+      if (fade <= 0) return;
+      final grow = 1.5 + 9 * Curves.easeOutCubic.transform(t);
+      final w = 1.4 + 1.2 * fade;
+      // The soft halo under the ring (the breath's glow).
+      canvas.drawPath(
+        _outline(size, grow),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = w * 4
+          ..color = color.withValues(alpha: 0.22 * fade)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+      );
       if (neon) {
         // The glow: a wide, blurred stroke behind the ring.
         canvas.drawPath(

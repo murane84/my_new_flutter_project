@@ -2,6 +2,20 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+/// How long one calm "here it is" breath lasts. Every highlight in Aluta
+/// (⌖ Find the playing song, the row you came back from, a message you
+/// jumped to, freshly found songs, a Circle pill that went up) uses it.
+const Duration kCalmBreath = Duration(milliseconds: 1100);
+
+/// The breath itself, for t in 0…1: rises over the first 35 % and settles
+/// more slowly than it rose. It happens once and never flashes twice.
+double calmBreath(double t) {
+  if (t <= 0 || t >= 1) return 0;
+  return t < 0.35
+      ? Curves.easeOut.transform(t / 0.35)
+      : 1 - Curves.easeInOut.transform((t - 0.35) / 0.65);
+}
+
 /// Tells a [NowGlow] to breathe once. [ping] after the list has finished
 /// scrolling to the playing song; `soft` when it was already in view (a
 /// small nudge instead of the full glow).
@@ -40,7 +54,7 @@ class NowGlow extends StatefulWidget {
 
 class _NowGlowState extends State<NowGlow> with SingleTickerProviderStateMixin {
   late final AnimationController _a = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1100));
+      vsync: this, duration: kCalmBreath);
   double _strength = 1;
 
   @override
@@ -80,10 +94,7 @@ class _NowGlowState extends State<NowGlow> with SingleTickerProviderStateMixin {
         final t = _a.value;
         if (t == 0 || t == 1) return child!;
         // One breath: swells, then settles slower than it rose.
-        final rise = Curves.easeOut.transform((t / 0.35).clamp(0.0, 1.0));
-        final fall =
-            Curves.easeInOut.transform(((t - 0.35) / 0.65).clamp(0.0, 1.0));
-        final i = (t < 0.35 ? rise : 1 - fall) * _strength;
+        final i = calmBreath(t) * _strength;
         // The ♪ drifts up and fades over the whole breath.
         final noteT = Curves.easeOut.transform(t);
         return Transform.scale(

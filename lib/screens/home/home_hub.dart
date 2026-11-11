@@ -531,7 +531,12 @@ extension _HomeHub on HomePageState {
       'chats' => Icons.forum_rounded,
       _ => Icons.search_rounded,
     };
-    return DecoratedBox(
+    // The whole pill is the field: tap anywhere on it to type. The pill's
+    // own accent rim is the only focus sign (no theme box inside it).
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _circleSearchFocus.requestFocus,
+      child: DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(19),
         color: isDark
@@ -554,8 +559,21 @@ extension _HomeHub on HomePageState {
               focusNode: _circleSearchFocus,
               onChanged: _filterFriends,
               textInputAction: TextInputAction.search,
+              textAlignVertical: TextAlignVertical.center,
               style: TextStyle(fontSize: 14, color: scheme.onSurface),
-              decoration: InputDecoration.collapsed(
+              // Every edge + the fill set explicitly: the app theme's own
+              // filled 12 px box with a red focus ring would otherwise draw
+              // a second, smaller box inside the pill.
+              decoration: InputDecoration(
+                isDense: true,
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 9),
                 hintText: _circleSearchHintFor(view),
                 hintStyle: TextStyle(
                     fontSize: 14, color: scheme.onSurfaceVariant),
@@ -571,6 +589,7 @@ extension _HomeHub on HomePageState {
           onPressed: _closeCircleSearch,
         ),
       ]),
+      ),
     );
   }
 

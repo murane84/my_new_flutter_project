@@ -377,18 +377,22 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // The box the layers switch in (to place the desktop toggle's ripple).
   final GlobalKey _layerBoxKey = GlobalKey(debugLabel: 'layerBox');
 
+  /// Where [button]'s centre sits across the layer box (0..1) — a ripple
+  /// grows from right under it. Null if either isn't laid out.
+  double? _rippleXOf(BuildContext button) {
+    final b = button.findRenderObject() as RenderBox?;
+    final box = _layerBoxKey.currentContext?.findRenderObject() as RenderBox?;
+    if (b == null || box == null || !b.hasSize || !box.hasSize) return null;
+    final c = b.localToGlobal(b.size.center(Offset.zero));
+    final o = box.localToGlobal(Offset.zero);
+    return ((c.dx - o.dx) / box.size.width).clamp(0.0, 1.0);
+  }
+
   /// Desktop Glow toggle: in AND out from the button itself — the ripple
   /// starts under it and the wave / slide come from its side (it sits on
   /// the left), instead of leaving toward the far right.
   void _toggleGlowFrom(BuildContext button) {
-    double? fx;
-    final b = button.findRenderObject() as RenderBox?;
-    final box = _layerBoxKey.currentContext?.findRenderObject() as RenderBox?;
-    if (b != null && box != null && b.hasSize && box.hasSize) {
-      final c = b.localToGlobal(b.size.center(Offset.zero));
-      final o = box.localToGlobal(Offset.zero);
-      fx = ((c.dx - o.dx) / box.size.width).clamp(0.0, 1.0);
-    }
+    final fx = _rippleXOf(button);
     final toLeft = (fx ?? 0) < 0.5;
     _setFriendLayer(_friendLayer == 'glow' ? 'circle' : 'glow',
         forward: toLeft, rippleFrom: fx);

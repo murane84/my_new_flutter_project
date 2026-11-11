@@ -886,10 +886,13 @@ extension _HomeHub on HomePageState {
       message: label,
       child: Material(
       color: Colors.transparent,
-      child: InkWell(
+      child: Builder(builder: (pill) => InkWell(
         // Tapping the lit pill again → that list glides back to the top.
+        // Otherwise the change ripples out from under THIS pill.
         onTap: onTap ??
-            () => active ? _scrollLayerToTop(key) : _setFriendLayer(key),
+            () => active
+                ? _scrollLayerToTop(key)
+                : _setFriendLayer(key, rippleFrom: _rippleXOf(pill)),
         borderRadius: BorderRadius.circular(20),
         // The badge FLOATS on the corner (Stack, no clip) instead of sitting
         // inline — so it adds zero width to the pill. A growing count (even
@@ -956,7 +959,7 @@ extension _HomeHub on HomePageState {
               ),
           ],
         ),
-      ),
+      )),
       ),
     );
   }

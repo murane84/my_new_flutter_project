@@ -3224,8 +3224,8 @@ class ApiService {
       final params = <String, String>{
         'q': term,
         'limit': '$limit',
-        if (kind != null) 'kind': kind,
-        if (sender != null) 'sender': sender,
+        'kind': ?kind,
+        'sender': ?sender,
         if (conversationId != null) 'conversation_id': '$conversationId',
         if (friendId != null) 'friend_id': '$friendId',
         if (sinceDays != null) 'since_days': '$sinceDays',

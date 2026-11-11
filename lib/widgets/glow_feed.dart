@@ -341,12 +341,14 @@ class _GlowFeedState extends State<GlowFeed> {
     //  • roomy (desktop / tablet): six equal tabs, icon + label each;
     //  • compact (phone): the chosen tab opens to icon + label, the others
     //    fold to icons (with a tooltip) — all six fit, no sideways scroll.
+    // Same height and pill shape as Circle's switcher / Harmony's search
+    // (38 px, fully round), so the first row never jumps between layers.
     return Container(
-      height: 46,
-      padding: const EdgeInsets.all(4),
+      height: 38,
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: track,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(19),
         border: Border.all(
             color: scheme.outlineVariant.withValues(alpha: isDark ? 0.4 : 0.6)),
       ),
@@ -389,7 +391,7 @@ class _GlowFeedState extends State<GlowFeed> {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: isDark ? scheme.surface : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                         color: scheme.primary.withValues(alpha: 0.28)),
                     boxShadow: [
@@ -423,7 +425,7 @@ class _GlowFeedState extends State<GlowFeed> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           onTap: onTap,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 220),
@@ -434,7 +436,7 @@ class _GlowFeedState extends State<GlowFeed> {
               color: thumb
                   ? (isDark ? scheme.surface : Colors.white)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               border: thumb
                   ? Border.all(
                       color: scheme.primary.withValues(alpha: 0.28))

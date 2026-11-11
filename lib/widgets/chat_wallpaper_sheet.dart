@@ -12,6 +12,7 @@ import '../screens/api_service.dart';
 import 'wallpaper_gallery.dart';
 import 'edge_scroll_row.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 String _mimeForExt(String ext) {
   switch (ext.toLowerCase()) {
@@ -114,7 +115,7 @@ Future<void> showChatWallpaperSheet(
     isScrollControlled: true,
     backgroundColor: scheme.surface,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
     ),
     builder: (ctx) {
       return StatefulBuilder(builder: (ctx, setSheet) {
@@ -136,7 +137,7 @@ Future<void> showChatWallpaperSheet(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(Radii.lg),
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -232,7 +233,7 @@ Future<void> showChatWallpaperSheet(
                         decoration: BoxDecoration(
                             color: scheme.surfaceContainerHighest
                                 .withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(14)),
+                            borderRadius: BorderRadius.circular(Radii.lg)),
                         child: SwitchListTile(
                           contentPadding:
                               const EdgeInsets.symmetric(horizontal: 14),
@@ -317,7 +318,7 @@ Future<void> showChatWallpaperSheet(
                                       clipBehavior: Clip.antiAlias,
                                       decoration: BoxDecoration(
                                           borderRadius:
-                                              BorderRadius.circular(12),
+                                              BorderRadius.circular(Radii.md),
                                           border: Border.all(
                                               color: sel
                                                   ? scheme.primary
@@ -362,7 +363,7 @@ Future<void> showChatWallpaperSheet(
                       style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 13),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14))),
+                              borderRadius: BorderRadius.circular(Radii.lg))),
                     ),
                   ),
                 ),

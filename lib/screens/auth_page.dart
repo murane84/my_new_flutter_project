@@ -4,6 +4,7 @@ import 'theme_provider.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
 import '../utils/brand_theme.dart';
+import '../utils/radii.dart';
 
 class AuthPage extends StatelessWidget {
   static const String routeName = '/auth';
@@ -156,7 +157,7 @@ class AuthPage extends StatelessWidget {
                             foregroundColor: isDark ? primary : Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(28),
+                              borderRadius: BorderRadius.circular(Radii.xxl),
                             ),
                             elevation: 6,
                             shadowColor: Colors.black.withAlpha(120),
@@ -185,7 +186,7 @@ class AuthPage extends StatelessWidget {
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(28),
+                              borderRadius: BorderRadius.circular(Radii.xxl),
                             ),
                             textStyle: const TextStyle(
                               fontSize: 15.5,

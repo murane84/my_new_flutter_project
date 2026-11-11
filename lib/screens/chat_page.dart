@@ -125,6 +125,7 @@ import '../services/haptics.dart';
 import '../widgets/edge_scroll_row.dart';
 import '../widgets/slide_track.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 // Split out for maintainability (Dart parts — same library, shared
 // imports & privacy, zero behaviour change):
@@ -1736,7 +1737,7 @@ class _ChatPageState extends State<ChatPage>
         margin: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(Radii.xl),
         ),
         child: SafeArea(
           child: Column(
@@ -2090,7 +2091,7 @@ class _ChatPageState extends State<ChatPage>
       constraints: const BoxConstraints(maxWidth: 320),
       decoration: BoxDecoration(
         color: scheme.surface.withValues(alpha: isDark ? 0.86 : 0.92),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(Radii.xxl),
         border: Border.all(
             color: scheme.primary.withValues(alpha: isDark ? 0.28 : 0.14)),
         boxShadow: [
@@ -2105,7 +2106,7 @@ class _ChatPageState extends State<ChatPage>
         mainAxisSize: MainAxisSize.min,
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(Radii.lg),
             child: Image.asset('assets/images/logo.png',
                 width: 48,
                 height: 48,
@@ -2952,7 +2953,7 @@ class _ChatPageState extends State<ChatPage>
     return GestureDetector(
       onTap: () => _openImageViewer(url),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(Radii.lg),
         child: SizedBox(
           width: w,
           child: AspectRatio(aspectRatio: ar, child: _imageData(url)),
@@ -3527,7 +3528,7 @@ class _ChatPageState extends State<ChatPage>
                             horizontal: 12, vertical: 4),
                         decoration: BoxDecoration(
                           color: Colors.black.withAlpha(120),
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(Radii.xl),
                         ),
                         child: Text('${i + 1} of ${imgs.length}',
                             style: const TextStyle(
@@ -3553,13 +3554,13 @@ class _ChatPageState extends State<ChatPage>
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: () => _keepsakeMessage(msg),
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(Radii.xxl),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 9),
                       decoration: BoxDecoration(
                         color: accent.withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(24),
+                        borderRadius: BorderRadius.circular(Radii.xxl),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.3),
@@ -5441,7 +5442,7 @@ class _ChatPageState extends State<ChatPage>
                                   horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
                                 color: scheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(Radii.md),
                                 border: Border.all(
                                     color:
                                         scheme.outlineVariant.withAlpha(80)),
@@ -5504,7 +5505,7 @@ class _ChatPageState extends State<ChatPage>
                 alignment:
                     isMe ? Alignment.centerRight : Alignment.centerLeft,
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(Radii.md),
                   // No live blur: re-blurring under the text whenever
                   // anything near it repainted made the time shimmer on
                   // desktop. A slightly firmer frost reads the same.
@@ -5516,7 +5517,7 @@ class _ChatPageState extends State<ChatPage>
                         color: isDark
                             ? Colors.black.withValues(alpha: 0.42)
                             : Colors.white.withValues(alpha: 0.74),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(Radii.md),
                         border: Border.all(
                             color: isDark
                                 ? Colors.white.withValues(alpha: 0.08)
@@ -6132,7 +6133,7 @@ class _ChatPageState extends State<ChatPage>
                                 horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
                               color: Colors.black.withAlpha(30),
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(Radii.md),
                               border: Border(
                                 left: BorderSide(
                                     color: quoteBarColor, width: 3),
@@ -6356,7 +6357,7 @@ class _ChatPageState extends State<ChatPage>
                           scheme.primary.withValues(alpha: isDark ? 0.22 : 0.12),
                           isDark ? scheme.surfaceContainerHigh : scheme.surface)
                       : (isDark ? scheme.surfaceContainerHigh : scheme.surface),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(Radii.md),
                   border: Border.all(
                       width: 0.8,
                       color: scheme.outlineVariant.withValues(alpha: 0.35)),
@@ -6492,7 +6493,7 @@ class _ChatPageState extends State<ChatPage>
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl))),
       builder: (ctx) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(
@@ -6605,7 +6606,7 @@ class _ChatPageState extends State<ChatPage>
               Padding(
                 padding: const EdgeInsets.only(right: 10),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(Radii.sm),
                   child: authNetworkImage(
                     url: fullMediaUrl(mediaRel),
                     headers: mediaAuthHeaders(fullMediaUrl(mediaRel)),
@@ -6806,7 +6807,7 @@ class _ChatPageState extends State<ChatPage>
                                     Colors.white.withValues(alpha: 0.06),
                                     scheme.surface)
                                 : scheme.surface,
-                            borderRadius: BorderRadius.circular(26),
+                            borderRadius: BorderRadius.circular(Radii.xxl),
                             // Focused → a clear brand ring + soft brand glow
                             // (you're typing here); idle → a quiet hairline.
                             // Subtle, like the original focus line: a thin
@@ -7246,8 +7247,8 @@ class _ChatPageState extends State<ChatPage>
                 : const EdgeInsets.fromLTRB(6, 6, 6, 6),
             decoration: BoxDecoration(
               borderRadius: isPhone
-                  ? const BorderRadius.vertical(top: Radius.circular(18))
-                  : BorderRadius.circular(18),
+                  ? const BorderRadius.vertical(top: Radius.circular(Radii.xl))
+                  : BorderRadius.circular(Radii.xl),
               border: isPhone
                   ? Border(
                       top: BorderSide(
@@ -7531,7 +7532,7 @@ class _ChatPageState extends State<ChatPage>
                                   horizontal: 14, vertical: 7),
                               decoration: BoxDecoration(
                                 color: scheme.primary,
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: BorderRadius.circular(Radii.xl),
                                 boxShadow: [
                                   BoxShadow(
                                     color: scheme.primary.withAlpha(80),
@@ -7892,7 +7893,7 @@ class _MsgActionMenuState extends State<_MsgActionMenu> {
     return Expanded(
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 2),
           child: Column(
@@ -8006,7 +8007,7 @@ class _MsgActionMenuState extends State<_MsgActionMenu> {
     return Expanded(
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Radii.md),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
           child: Column(
@@ -8340,7 +8341,7 @@ class _FullMenuCardState extends State<_FullMenuCard> {
     final tint = s.primary;
     return Expanded(
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Radii.md),
         onTap: a.onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -8351,7 +8352,7 @@ class _FullMenuCardState extends State<_FullMenuCard> {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: tint.withValues(alpha: widget.isDark ? 0.16 : 0.10),
-                borderRadius: BorderRadius.circular(11),
+                borderRadius: BorderRadius.circular(Radii.md),
                 border: Border.all(
                     color: tint.withValues(alpha: widget.isDark ? 0.28 : 0.20)),
               ),
@@ -8399,7 +8400,7 @@ class _FullMenuCardState extends State<_FullMenuCard> {
       child: Scrollbar(
         controller: _sc,
         thumbVisibility: true,
-        radius: const Radius.circular(8),
+        radius: const Radius.circular(Radii.sm),
         child: SingleChildScrollView(
           controller: _sc,
           child: Padding(
@@ -8921,7 +8922,7 @@ class _HoverChevronState extends State<_HoverChevron> {
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
             decoration: BoxDecoration(
               color: scheme.surface,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(Radii.xl),
               border: Border.all(
                   color: scheme.outlineVariant.withValues(alpha: 0.55)),
               boxShadow: [
@@ -9461,13 +9462,13 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer>
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: widget.onKeep,
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(Radii.xxl),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 9),
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: 0.92),
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(Radii.xxl),
                     ),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,

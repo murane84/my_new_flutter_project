@@ -76,7 +76,7 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(Radii.xl),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -152,7 +152,7 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(Radii.xl),
           onTap: (sealed || text.isEmpty)
               ? () => showToast(
                   context,
@@ -164,7 +164,7 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
           child: Ink(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(Radii.xl),
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -268,7 +268,7 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
       // Whole photo, fitted to the letter (the words stay in view); double-
       // tap or the corner button opens it full size.
       return (w) => ClipRRect(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(Radii.lg),
             child: CompactPhoto(
               caption: (l['content'] ?? '').toString(),
               image: authNetworkImageProvider(url, mediaAuthHeaders(url)),
@@ -548,7 +548,7 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
             padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
             decoration: BoxDecoration(
               color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(Radii.lg),
               border: Border.all(
                   color: scheme.outlineVariant.withValues(alpha: 0.6)),
             ),
@@ -634,7 +634,7 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
                 padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
                 decoration: BoxDecoration(
                   color: scheme.surface,
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(Radii.xxl),
                   border:
                       Border.all(color: _accent.withValues(alpha: 0.25)),
                   boxShadow: [
@@ -745,12 +745,12 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Radii.xl),
         onTap: onOpen,
         child: Ink(
           padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(Radii.xl),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -806,7 +806,7 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: tint,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(Radii.xl),
               ),
               child: const Row(mainAxisSize: MainAxisSize.min, children: [
                 Icon(Icons.lock_open_rounded, size: 15, color: Colors.white),
@@ -930,7 +930,7 @@ class _HeartAudioPlayerState extends State<_HeartAudioPlayer> {
       padding: const EdgeInsets.fromLTRB(8, 8, 14, 8),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
       ),
       child: Row(children: [
         IconButton(

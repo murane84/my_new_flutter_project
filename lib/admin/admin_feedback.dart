@@ -4,6 +4,7 @@ import 'admin_api.dart';
 import 'admin_widgets.dart';
 import '../widgets/edge_scroll_row.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// Feedback from the app's "Send feedback" page: read, triage (Seen /
 /// Planned / Done / Not planned) and reply — the person sees the status and
@@ -333,7 +334,7 @@ class _AdminFeedbackPageState extends State<AdminFeedbackPage> {
     final on = _status == s.$1;
     final c = s.$1 == null ? kAdminRed : _statusColor(s.$1!);
     return InkWell(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(Radii.xl),
       onTap: () {
         setState(() => _status = s.$1);
         _load(reset: true);
@@ -455,7 +456,7 @@ class _AdminFeedbackPageState extends State<AdminFeedbackPage> {
                         color: p.dark
                             ? Colors.black.withValues(alpha: 0.25)
                             : p.card2,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(Radii.md),
                         border: Border.all(color: p.border),
                       ),
                       child: SelectableText((f['message'] ?? '').toString(),
@@ -473,7 +474,7 @@ class _AdminFeedbackPageState extends State<AdminFeedbackPage> {
                         decoration: BoxDecoration(
                           color: kAdminRed.withValues(
                               alpha: p.dark ? 0.12 : 0.06),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(Radii.md),
                           border: const Border(
                               left: BorderSide(color: kAdminRed, width: 3)),
                         ),
@@ -514,7 +515,7 @@ class _AdminFeedbackPageState extends State<AdminFeedbackPage> {
   Widget _action(AdminPalette p, String label, IconData icon, Color c,
       {bool primary = false, required VoidCallback onTap}) {
     return InkWell(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(Radii.lg),
       onTap: onTap,
       child: Ink(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

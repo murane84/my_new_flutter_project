@@ -7,6 +7,7 @@ import 'create_story_sheet.dart' show kStatusBgs, StatusPaletteButton;
 import 'status_audience_sheet.dart';
 import '../../widgets/edge_scroll_row.dart';
 import '../../utils/motion.dart';
+import '../../utils/radii.dart';
 
 /// What a one-tap share will look like, and in which colours.
 enum QuickStatusKind { text, music, sticker }
@@ -134,7 +135,7 @@ class _QuickStatusSheetState extends State<_QuickStatusSheet> {
     // between a plain colour and a gradient fades through transparent, which
     // flashed the dark backdrop whenever you left purple.
     final deco = BoxDecoration(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(Radii.xl),
       gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -313,7 +314,7 @@ class _QuickStatusSheetState extends State<_QuickStatusSheet> {
               filled: true,
               fillColor: scheme.surfaceContainerHighest,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(Radii.lg),
                 borderSide: BorderSide.none,
               ),
             ),

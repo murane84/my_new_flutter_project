@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'api_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/readable.dart';
+import '../utils/radii.dart';
 
 /// Link (or unlink) an Ozilane Key phone to this Aluta account.
 ///
@@ -317,7 +318,7 @@ class _LinkOzilaneScreenState extends State<LinkOzilaneScreen> {
               backgroundColor: scheme.primary,
               foregroundColor: readableOn(scheme.primary),
               shape:
-                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.lg)),
             ),
           ),
         ),
@@ -345,7 +346,7 @@ class _LinkOzilaneScreenState extends State<LinkOzilaneScreen> {
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(Radii.lg),
               border: Border.all(color: scheme.primary.withAlpha(60)),
             ),
             child: url.isEmpty
@@ -439,7 +440,7 @@ class _LinkOzilaneScreenState extends State<LinkOzilaneScreen> {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: scheme.primary.withAlpha(16),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(Radii.lg),
             border: Border.all(color: scheme.primary.withAlpha(50)),
           ),
           child: Text(

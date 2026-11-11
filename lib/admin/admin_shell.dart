@@ -10,6 +10,7 @@ import 'admin_feedback.dart';
 import 'admin_install.dart';
 import 'admin_overview.dart';
 import 'admin_widgets.dart';
+import '../utils/radii.dart';
 
 /// Tab order in the rail / bottom bar / ⋮ menu.
 const int _kOverview = 0,
@@ -212,7 +213,7 @@ class _AdminShellState extends State<AdminShell> {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: p.card2,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(Radii.xl),
                   border: Border.all(color: p.border),
                 ),
                 child: Row(
@@ -420,7 +421,7 @@ class _Banner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: color.withValues(alpha: p.dark ? 0.16 : 0.10),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Row(

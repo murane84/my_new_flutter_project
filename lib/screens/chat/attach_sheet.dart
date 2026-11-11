@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../../utils/readable.dart' show accentInk;
 import '../../widgets/edge_scroll_row.dart';
+import '../../utils/radii.dart';
 
 /// The chat "attach" bottom sheet — a compact, content-hugging sheet with a
 /// vibrant grid of share options and, on Android/iOS, a horizontally-scrolling
@@ -140,7 +141,7 @@ class _AttachSheetState extends State<AttachSheet> {
           ? null
           : BoxDecoration(
               color: scheme.surface,
-              borderRadius: BorderRadius.circular(26),
+              borderRadius: BorderRadius.circular(Radii.xxl),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(
@@ -250,7 +251,7 @@ class _AttachSheetState extends State<AttachSheet> {
 
   Widget _tile(ColorScheme scheme, _Opt o) {
     return InkWell(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(Radii.xl),
       onTap: o.onTap,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -383,7 +384,7 @@ class _AttachSheetState extends State<AttachSheet> {
     return GestureDetector(
       onTap: () => _sendAsset(asset),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         child: SizedBox(
           width: 96,
           height: 96,
@@ -417,7 +418,7 @@ class _AttachSheetState extends State<AttachSheet> {
           height: 96,
           decoration: BoxDecoration(
             color: scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(Radii.lg),
           ),
         ),
       )),
@@ -429,9 +430,9 @@ class _AttachSheetState extends State<AttachSheet> {
       padding: const EdgeInsets.fromLTRB(18, 6, 18, 10),
       child: Material(
         color: scheme.primary.withAlpha(22),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Radii.lg),
           onTap: () => PhotoManager.openSetting(),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),

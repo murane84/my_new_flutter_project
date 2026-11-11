@@ -881,7 +881,7 @@ extension _ChatHeartComposer on _ChatPageState {
       margin: const EdgeInsets.fromLTRB(8, 4, 8, 0),
       padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Radii.xl),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -1062,7 +1062,7 @@ extension _ChatHeartComposer on _ChatPageState {
           constraints: const BoxConstraints(maxWidth: 520),
           decoration: BoxDecoration(
             color: scheme.surface,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(Radii.xxl),
             border:
                 Border.all(color: scheme.primary.withValues(alpha: 0.18)),
           ),

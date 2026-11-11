@@ -16,6 +16,7 @@ import '../../widgets/jump_rings.dart';
 import '../../utils/readable.dart';
 import '../../services/haptics.dart';
 import '../../utils/motion.dart';
+import '../../utils/radii.dart';
 
 // ─── Secret hearts — the signature love note ────────────────────────────────
 // A "secret heart" (message_type 'heart') arrives covered, beating softly. It
@@ -1337,7 +1338,7 @@ class _CoachChipState extends State<_CoachChip>
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(Radii.lg),
           border: Border.all(color: widget.color.withValues(alpha: 0.6)),
         ),
         child: Row(
@@ -1900,7 +1901,7 @@ class _HeartGenieState extends State<_HeartGenie>
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(Radii.xl),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -2079,7 +2080,7 @@ class _HeartGenieState extends State<_HeartGenie>
         width: width,
         constraints: BoxConstraints(maxHeight: size.height * 0.82),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(Radii.xxl),
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -2104,7 +2105,7 @@ class _HeartGenieState extends State<_HeartGenie>
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(Radii.xxl),
           child: Stack(
             children: [
               Positioned(
@@ -2198,7 +2199,7 @@ class _HeartGenieState extends State<_HeartGenie>
                                 maxHeight: (size.height * 0.40)
                                     .clamp(60.0, 460.0)),
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(Radii.lg),
                               child: widget.media!(width - 48),
                             ),
                           ),

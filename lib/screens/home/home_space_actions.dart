@@ -225,7 +225,7 @@ extension _HomeSpaceActions on HomePageState {
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) => SafeArea(
         child: Column(
@@ -434,7 +434,7 @@ extension _HomeSpaceActions on HomePageState {
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) => SafeArea(
         child: Padding(
@@ -539,7 +539,7 @@ extension _HomeSpaceActions on HomePageState {
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) => SafeArea(
         child: ListenableBuilder(
@@ -777,7 +777,7 @@ extension _HomeSpaceActions on HomePageState {
       isScrollControlled: true,
       constraints: const BoxConstraints(maxWidth: 560),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) => SafeArea(
         child: SingleChildScrollView(

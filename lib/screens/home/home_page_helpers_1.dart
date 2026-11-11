@@ -86,7 +86,7 @@ extension _HomePageHelpers1 on HomePageState {
                     height: 30,
                     decoration: BoxDecoration(
                       color: scheme.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(9),
+                      borderRadius: BorderRadius.circular(Radii.md),
                     ),
                     child: Icon(icon, size: 17, color: accentInk(scheme)),
                   ),
@@ -108,7 +108,7 @@ extension _HomePageHelpers1 on HomePageState {
               const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
           clipBehavior: Clip.antiAlias,
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.xxl)),
           child: ConstrainedBox(
             // Caps the width so it reads as a tidy card on tablet/desktop
             // instead of stretching across the screen; full-width (minus the
@@ -190,7 +190,7 @@ extension _HomePageHelpers1 on HomePageState {
                             padding:
                                 const EdgeInsets.symmetric(vertical: 13),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14)),
+                                borderRadius: BorderRadius.circular(Radii.lg)),
                           ),
                           onPressed: () async {
                             // Snooze briefly so backing out doesn't re-prompt.
@@ -287,7 +287,7 @@ extension _HomePageHelpers1 on HomePageState {
                   decoration: InputDecoration(
                     labelText: 'Phone number',
                     border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                        borderRadius: BorderRadius.circular(Radii.md)),
                   ),
                   onChanged: (p) => ctrl.text = p.completeNumber,
                   invalidNumberMessage: 'Enter a valid phone number',
@@ -337,7 +337,7 @@ extension _HomePageHelpers1 on HomePageState {
       useRootNavigator: true,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (_) => const _WebQueueSheet(),
     );
@@ -1758,7 +1758,7 @@ extension _HomePageHelpers1 on HomePageState {
           backgroundColor: scheme.surface,
           insetPadding: const EdgeInsets.symmetric(horizontal: 36),
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.xxl)),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 360),
             child: ListenableBuilder(
@@ -2242,7 +2242,7 @@ extension _HomePageHelpers1 on HomePageState {
         margin: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(Radii.xl),
         ),
         child: SafeArea(
           child: Column(

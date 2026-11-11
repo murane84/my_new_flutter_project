@@ -4,6 +4,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 import 'api_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/popup_shell.dart';
+import '../utils/radii.dart';
 
 /// "Aluta Together" — the paywall / benefits surface (build step 6).
 ///
@@ -131,7 +132,7 @@ class _TogetherScreenState extends State<TogetherScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(Radii.xl),
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -144,7 +145,7 @@ class _TogetherScreenState extends State<TogetherScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
               color: _gold,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(Radii.xl),
             ),
             child: const Text('TOGETHER',
                 style: TextStyle(
@@ -196,7 +197,7 @@ class _TogetherScreenState extends State<TogetherScreen> {
             height: 42,
             decoration: BoxDecoration(
               color: _gold.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(Radii.md),
             ),
             child: Icon(b.$1, color: const Color(0xFFB88A12)),
           ),

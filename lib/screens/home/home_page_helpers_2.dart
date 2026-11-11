@@ -58,7 +58,7 @@ extension _HomePageHelpers2 on HomePageState {
       // (outside the clip), so it renders as a soft halo instead.
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(Radii.xl),
         boxShadow: visible
             ? [
                 BoxShadow(
@@ -122,7 +122,7 @@ extension _HomePageHelpers2 on HomePageState {
         // the bottom corners emerge from the footer just like the top corners
         // emerge from the header (both sit on the same surfaceContainerHighest
         // background), for a smoother, symmetric look.
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(Radii.xl),
         boxShadow: [
           BoxShadow(
             color: theme.shadowColor.withAlpha(35),
@@ -198,7 +198,7 @@ extension _HomePageHelpers2 on HomePageState {
               margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(Radii.md),
                 gradient: active
                     ? LinearGradient(
                         begin: Alignment.topCenter,
@@ -300,7 +300,7 @@ extension _HomePageHelpers2 on HomePageState {
         );
     return DecoratedBox(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(Radii.lg),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -318,7 +318,7 @@ extension _HomePageHelpers2 on HomePageState {
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(Radii.lg),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -401,9 +401,9 @@ extension _HomePageHelpers2 on HomePageState {
           padding: const EdgeInsets.only(top: 6),
           child: Material(
             color: scheme.primary,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(Radii.md),
             child: InkWell(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(Radii.md),
               onTap: () => _dropIntoRoom(r),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
@@ -460,9 +460,9 @@ extension _HomePageHelpers2 on HomePageState {
           padding: const EdgeInsets.only(top: 6),
           child: Material(
             color: const Color(0xFF1F8B4C),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(Radii.md),
             child: InkWell(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(Radii.md),
               onTap: () => _joinGroupCall(g),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
@@ -562,8 +562,8 @@ extension _HomePageHelpers2 on HomePageState {
             final BorderRadius panelRadius = fullWidth
                 ? BorderRadius.zero
                 : const BorderRadius.only(
-                    topLeft: Radius.circular(18),
-                    bottomLeft: Radius.circular(18),
+                    topLeft: Radius.circular(Radii.xl),
+                    bottomLeft: Radius.circular(Radii.xl),
                   );
             return Stack(
               children: [
@@ -750,13 +750,13 @@ extension _HomePageHelpers2 on HomePageState {
                     // Refresh the cached username in case it changed.
                     if (mounted) _loadUserData();
                   },
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(Radii.xl),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: scheme.primary.withAlpha(22),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(Radii.xl),
                       border: Border.all(color: scheme.primary.withAlpha(70)),
                     ),
                     child: Row(

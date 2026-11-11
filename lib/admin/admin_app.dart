@@ -8,6 +8,7 @@ import 'admin_install.dart';
 import 'admin_key.dart';
 import 'admin_shell.dart';
 import 'admin_widgets.dart';
+import '../utils/radii.dart';
 
 /// Aluta Admin root: sign-in → (pending approval | recovery wait | first-time
 /// recovery codes) → dashboard. The password is held in memory only while a
@@ -449,7 +450,7 @@ class _AdminRootState extends State<_AdminRoot> {
                 height: 38,
                 decoration: BoxDecoration(
                   color: Colors.white.withAlpha(30),
-                  borderRadius: BorderRadius.circular(11),
+                  borderRadius: BorderRadius.circular(Radii.md),
                   border: Border.all(color: Colors.white.withAlpha(50)),
                 ),
                 child: Icon(icon, color: Colors.white, size: 20),
@@ -554,7 +555,7 @@ class _AdminRootState extends State<_AdminRoot> {
         padding: const EdgeInsets.all(22),
         decoration: BoxDecoration(
           color: Colors.white.withAlpha(18),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(Radii.xl),
           border: Border.all(color: Colors.white.withAlpha(40)),
         ),
         child: child,
@@ -574,7 +575,7 @@ class _AdminRootState extends State<_AdminRoot> {
     TextCapitalization caps = TextCapitalization.none,
   }) {
     OutlineInputBorder b(Color c, [double w = 1]) => OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           borderSide: BorderSide(color: c, width: w),
         );
     return TextField(
@@ -607,7 +608,7 @@ class _AdminRootState extends State<_AdminRoot> {
   Widget _pill(String label, VoidCallback? onPressed,
       {bool outline = false, bool busy = false}) {
     final shape =
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(28));
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.xxl));
     const pad = EdgeInsets.symmetric(vertical: 15);
     final text = busy
         ? const SizedBox(
@@ -663,7 +664,7 @@ class _AdminRootState extends State<_AdminRoot> {
           ? Colors.white.withAlpha(30)
           : Colors.black.withAlpha(highlight ? 50 : 30),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         side: BorderSide(
           color: highlight
               ? Colors.white.withAlpha(open ? 200 : 120)
@@ -672,7 +673,7 @@ class _AdminRootState extends State<_AdminRoot> {
         ),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -683,7 +684,7 @@ class _AdminRootState extends State<_AdminRoot> {
                 height: 38,
                 decoration: BoxDecoration(
                   color: highlight ? kAdminRed : Colors.white.withAlpha(25),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(Radii.md),
                 ),
                 child: Icon(icon, color: Colors.white, size: 20),
               ),
@@ -876,7 +877,7 @@ class _AdminRootState extends State<_AdminRoot> {
             padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(
               color: Colors.black.withAlpha(60),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(Radii.lg),
             ),
             child: Center(
               child: SelectableText(

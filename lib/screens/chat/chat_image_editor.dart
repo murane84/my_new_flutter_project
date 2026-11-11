@@ -374,7 +374,7 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
                 child: AspectRatio(
                   aspectRatio: _aspect,
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(Radii.xl),
                     child: RepaintBoundary(
                       key: _boundaryKey,
                       child: LayoutBuilder(builder: (ctx, c) {
@@ -568,7 +568,7 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
                           horizontal: 12, vertical: 12),
                       decoration: BoxDecoration(
                         color: _hd ? scheme.primary : Colors.white10,
-                        borderRadius: BorderRadius.circular(24),
+                        borderRadius: BorderRadius.circular(Radii.xxl),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -758,7 +758,7 @@ class _AnnotationPainter extends CustomPainter {
         case _ShapeKind.box:
           canvas.drawRRect(
               RRect.fromRectAndRadius(
-                  Rect.fromPoints(a, b), const Radius.circular(8)),
+                  Rect.fromPoints(a, b), const Radius.circular(Radii.sm)),
               paint);
           break;
         case _ShapeKind.arrow:

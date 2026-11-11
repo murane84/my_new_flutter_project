@@ -6,6 +6,7 @@ import 'api_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/brand_theme.dart';
 import '../utils/readable.dart';
+import '../utils/radii.dart';
 
 /// Second step of a two-step sign-in: the password was accepted, now the linked
 /// Ozilane Key phone must approve. Shows the match number and polls until the
@@ -260,7 +261,7 @@ class _TwoStepVerifyScreenState extends State<TwoStepVerifyScreen> {
               backgroundColor: scheme.primary,
               foregroundColor: readableOn(scheme.primary),
               shape:
-                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.lg)),
             ),
             child: _busy
                 ? SizedBox(

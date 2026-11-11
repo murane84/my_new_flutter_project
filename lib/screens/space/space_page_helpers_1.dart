@@ -548,10 +548,10 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
     return Material(
       key: tileKey,
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(Radii.xl),
       child: Ink(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(Radii.xl),
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -575,7 +575,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
         ),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(Radii.xl),
           hoverColor: _accent.withValues(alpha: 0.06),
           highlightColor: _accent.withValues(alpha: 0.05),
           splashColor: _accent.withValues(alpha: 0.10),
@@ -588,7 +588,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(13),
+                    borderRadius: BorderRadius.circular(Radii.lg),
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -646,7 +646,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
                                 horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
                               color: _accent.withValues(alpha: 0.16),
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(Radii.md),
                             ),
                             child: Text('$count',
                                 style: TextStyle(
@@ -678,7 +678,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
     return Center(
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(Radii.xxl),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.12),
@@ -689,13 +689,13 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
         ),
         child: Material(
           color: fill,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(Radii.xxl),
           child: InkWell(
             onTap: _nudging ? null : _nudge,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(Radii.xxl),
             child: Container(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(Radii.xxl),
                 border: Border.all(
                     color: _accent.withValues(alpha: 0.45), width: 1.2),
               ),
@@ -744,8 +744,8 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
     // only the inner RIGHT edge that floats over the content.
     final drawer = onClose != null;
     final radius = drawer
-        ? const BorderRadius.horizontal(right: Radius.circular(18))
-        : BorderRadius.circular(18);
+        ? const BorderRadius.horizontal(right: Radius.circular(Radii.xl))
+        : BorderRadius.circular(Radii.xl);
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: radius,
@@ -863,7 +863,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -954,7 +954,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           onTap: active
               ? null
               : () {
@@ -973,7 +973,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
             decoration: BoxDecoration(
               color:
                   active ? _accent.withValues(alpha: 0.14) : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(Radii.md),
               border: Border.all(
                   color: active
                       ? _accent.withValues(alpha: 0.5)
@@ -1035,7 +1035,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
         color: active ? _accent : _accent.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(Radii.md),
       ),
       child: Text('$count',
           textAlign: TextAlign.center,

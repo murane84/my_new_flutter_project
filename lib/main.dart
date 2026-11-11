@@ -47,6 +47,7 @@ import 'utils/readable.dart';
 import 'utils/chat_background.dart' show loadChatBackground;
 import 'services/haptics.dart';
 import 'utils/motion.dart';
+import 'utils/radii.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool _spaceFullHooked = false;
@@ -264,7 +265,7 @@ class MyApp extends StatelessWidget {
           foregroundColor: scheme.onPrimary,
           minimumSize: const Size.fromHeight(50),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(Radii.lg),
           ),
           textStyle: const TextStyle(
             fontSize: 16,
@@ -280,23 +281,23 @@ class MyApp extends StatelessWidget {
           horizontal: 16,
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           borderSide: BorderSide(color: scheme.outlineVariant),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           borderSide: BorderSide(color: scheme.primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           borderSide: BorderSide(color: scheme.error),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           borderSide: BorderSide(color: scheme.error, width: 2),
         ),
         labelStyle: TextStyle(color: scheme.onSurfaceVariant),
@@ -307,7 +308,7 @@ class MyApp extends StatelessWidget {
       cardTheme: CardThemeData(
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Radii.lg),
           side: BorderSide(color: scheme.outlineVariant.withAlpha(80)),
         ),
         color: scheme.surface,
@@ -323,7 +324,7 @@ class MyApp extends StatelessWidget {
         surfaceTintColor: Colors.transparent,
         elevation: 14,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(Radii.xxl),
           side: BorderSide(color: scheme.primary.withAlpha(130)),
         ),
         insetPadding:
@@ -345,14 +346,14 @@ class MyApp extends StatelessWidget {
         backgroundColor: scheme.surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(Radii.xl)),
           side: BorderSide(color: scheme.primary.withAlpha(130)),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(Radii.lg),
           ),
         ),
       ),

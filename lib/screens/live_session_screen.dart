@@ -40,6 +40,7 @@ import '../widgets/playing_bars.dart';
 import '../services/online_watch.dart';
 import '../widgets/edge_scroll_row.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
 /// Presented with `showDialog(...)` so it floats over the chat instead of
@@ -921,7 +922,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) => SizedBox(
         height: MediaQuery.of(ctx).size.height * 0.6,
@@ -1139,7 +1140,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: scheme.surfaceContainerHigh.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(26),
+          borderRadius: BorderRadius.circular(Radii.xxl),
           border: Border.all(color: scheme.outlineVariant.withAlpha(55)),
         ),
         child: Row(
@@ -1758,7 +1759,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                   scheme.surfaceContainerHighest,
                 ],
               ),
-              borderRadius: BorderRadius.circular(28),
+              borderRadius: BorderRadius.circular(Radii.xxl),
               border: Border.all(
                   color: scheme.outlineVariant.withValues(alpha: 0.35)),
               boxShadow: [
@@ -1844,12 +1845,12 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Radii.lg),
           onTap: _isHost ? _addSongToQueue : _contributeSong,
           child: Container(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(Radii.lg),
               color: scheme.surface.withValues(alpha: isDark ? 0.55 : 0.75),
               border: Border.all(
                   color: scheme.primary.withValues(alpha: isDark ? 0.35 : 0.25),
@@ -1861,7 +1862,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(11),
+                    borderRadius: BorderRadius.circular(Radii.md),
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -1943,7 +1944,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                       const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
                   decoration: BoxDecoration(
                     color: scheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(Radii.md),
                   ),
                   child: Text('${people.length}',
                       style: TextStyle(
@@ -2299,7 +2300,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     final mine = r.mine;
     final Widget content = r.isGif
         ? ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(Radii.md),
             child: Image.network(
               r.gif!,
               height: 74,
@@ -2347,9 +2348,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
             decoration: BoxDecoration(
               color: scheme.primary.withValues(alpha: 0.18),
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(14),
-                topRight: Radius.circular(14),
-                bottomLeft: Radius.circular(14),
+                topLeft: Radius.circular(Radii.lg),
+                topRight: Radius.circular(Radii.lg),
+                bottomLeft: Radius.circular(Radii.lg),
                 bottomRight: Radius.circular(4),
               ),
             ),
@@ -2382,9 +2383,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                   color: scheme.surfaceContainerHighest,
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(4),
-                    topRight: Radius.circular(14),
-                    bottomLeft: Radius.circular(14),
-                    bottomRight: Radius.circular(14),
+                    topRight: Radius.circular(Radii.lg),
+                    bottomLeft: Radius.circular(Radii.lg),
+                    bottomRight: Radius.circular(Radii.lg),
                   ),
                 ),
                 child: Text(r.text ?? '',
@@ -2904,7 +2905,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               isCurrent ? scheme.primary.withValues(alpha: 0.07) : null,
           shape: isCurrent
               ? RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10))
+                  borderRadius: BorderRadius.circular(Radii.md))
               : null,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
           leading: isCurrent
@@ -2991,7 +2992,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
             decoration: BoxDecoration(
               color: scheme.primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(Radii.md),
             ),
             child: Text('$count',
                 style: TextStyle(
@@ -3079,7 +3080,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     final on = _c.allowContributions;
     return InkWell(
       onTap: () => setState(() => _c.setAllowContributions(!on)),
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(Radii.xl),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Row(
@@ -3119,7 +3120,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               isCurrent ? scheme.primary.withValues(alpha: 0.07) : null,
           shape: isCurrent
               ? RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10))
+                  borderRadius: BorderRadius.circular(Radii.md))
               : null,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
           leading: isCurrent
@@ -3220,7 +3221,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       showDragHandle: true,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) => SafeArea(
         child: Column(
@@ -3273,7 +3274,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       showDragHandle: true,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
@@ -3320,7 +3321,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                                     horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
                                   color: scheme.primary.withValues(alpha: 0.14),
-                                  borderRadius: BorderRadius.circular(10),
+                                  borderRadius: BorderRadius.circular(Radii.md),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -3681,7 +3682,7 @@ class _LiveWaveformSeekBarState extends State<_LiveWaveformSeekBar> {
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: widget.accent,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(Radii.sm),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.25),

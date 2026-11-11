@@ -6,6 +6,7 @@ import 'api_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/brand_theme.dart';
 import '../utils/readable.dart';
+import '../utils/radii.dart';
 
 enum OzMode { signIn, recover }
 
@@ -267,7 +268,7 @@ class _OzilaneApproveScreenState extends State<OzilaneApproveScreen> {
               backgroundColor: scheme.primary,
               foregroundColor: readableOn(scheme.primary),
               shape:
-                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.lg)),
             ),
           ),
         ),
@@ -464,7 +465,7 @@ class _OzilaneApproveScreenState extends State<OzilaneApproveScreen> {
         style: FilledButton.styleFrom(
           backgroundColor: scheme.primary,
           foregroundColor: readableOn(scheme.primary),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.lg)),
         ),
         child: _busy
             ? SizedBox(

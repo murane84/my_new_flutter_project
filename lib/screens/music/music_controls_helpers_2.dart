@@ -115,7 +115,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(Radii.md),
                   gradient: LinearGradient(colors: [
                     Color.lerp(accent, Colors.white, 0.15)!,
                     Color.lerp(accent, Colors.black, 0.15)!,
@@ -651,7 +651,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                         color: _showVolume
                             ? Colors.transparent
                             : (_muted ? scheme.error.withAlpha(28) : null),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(Radii.md),
                         boxShadow: _showVolume
                             ? null
                             : _glassLift(scheme,
@@ -719,7 +719,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                               ],
                             ),
                       color: _showSpeedPanel ? accent.withAlpha(30) : null,
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(Radii.xl),
                       boxShadow: _glassLift(scheme, scheme.primary,
                           active: _showSpeedPanel),
                       border: Border.all(
@@ -783,13 +783,13 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: (hasTrack || live) ? _openFullPlayer : null,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(Radii.lg),
                     child: AnimatedContainer(
                       duration: Motion.quick,
                       padding: EdgeInsets.symmetric(
                           horizontal: isNarrow ? 14 : 20, vertical: 5),
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(Radii.lg),
                         gradient: LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
@@ -972,7 +972,7 @@ Column(
                   ? [accent.withAlpha(38), Colors.white.withAlpha(10)]
                   : [accent.withAlpha(28), accent.withAlpha(8)],
             ),
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(Radii.xl),
             border: Border.all(
               color: isDark ? Colors.white.withAlpha(20) : accent.withAlpha(40),
             ),
@@ -1037,7 +1037,7 @@ Column(
                         const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                     decoration: BoxDecoration(
                       color: accent.withAlpha(isDark ? 40 : 26),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(Radii.xl),
                     ),
                     child: Text(
                       live
@@ -1156,7 +1156,7 @@ Column(
                           color: isDark
                               ? Colors.white.withAlpha(10)
                               : Colors.white.withAlpha(150),
-                          borderRadius: BorderRadius.circular(17),
+                          borderRadius: BorderRadius.circular(Radii.xl),
                           border: Border.all(color: accent.withAlpha(50)),
                         ),
                         child: Row(
@@ -1237,7 +1237,7 @@ Column(
                           accent.withAlpha(8),
                         ],
                 ),
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(Radii.xl),
                 border: Border.all(
                   color: isDark
                       ? Colors.white.withAlpha(20)
@@ -1580,7 +1580,7 @@ Column(
                   ? accent.withAlpha(b != null ? 34 : 20)
                   : scheme.surfaceContainerHighest.withAlpha(
                       scheme.brightness == Brightness.dark ? 110 : 160),
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(Radii.xl),
               boxShadow: _glassLift(scheme, accent, active: b != null),
               border: Border.all(
                   color: on ? accent.withAlpha(150) : accent.withAlpha(50)),
@@ -1632,7 +1632,7 @@ Column(
       child: Container(
         padding: padding,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(26),
+          borderRadius: BorderRadius.circular(Radii.xxl),
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -1783,7 +1783,7 @@ Column(
                   // Active = solid colour + contrasting glyph (a faint tint
                   // under a same-colour icon disappeared on some themes).
                   color: active ? color : null,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(Radii.lg),
                   border: Border.all(
                     color: active
                         ? Color.lerp(color, Colors.black, 0.15)!
@@ -1816,7 +1816,7 @@ Column(
                       // On a solid (active) tile the badge flips to the
                       // surface colour so it doesn't merge into the tile.
                       color: active ? scheme.surface : color,
-                      borderRadius: BorderRadius.circular(9),
+                      borderRadius: BorderRadius.circular(Radii.md),
                       border: Border.all(
                           color: active ? color : scheme.surface, width: 1.5),
                     ),
@@ -1861,7 +1861,7 @@ class _MeltRimPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rrect = RRect.fromRectAndRadius(
-        (Offset.zero & size).deflate(0.5), const Radius.circular(26));
+        (Offset.zero & size).deflate(0.5), const Radius.circular(Radii.xxl));
     final rect = Offset.zero & size;
     canvas.drawRRect(
       rrect,

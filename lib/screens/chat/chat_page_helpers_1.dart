@@ -486,7 +486,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
         if (type == 'image' && rel.isNotEmpty) {
           final url = fullMediaUrl(rel);
           preview = ClipRRect(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(Radii.lg),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 180),
               child: authNetworkImage(
@@ -519,7 +519,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
             decoration: BoxDecoration(
               color: Color.alphaBlend(
                   scheme.primary.withValues(alpha: 0.08), scheme.surface),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(Radii.lg),
               border: Border.all(
                   color: scheme.outlineVariant.withValues(alpha: 0.5)),
             ),
@@ -595,7 +595,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
                         hintText: 'Add a note for you two… (optional)',
                         filled: true,
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14)),
+                            borderRadius: BorderRadius.circular(Radii.lg)),
                         suffixIcon: IconButton(
                           tooltip: showEmoji ? 'Keyboard' : 'Emoji',
                           icon: Icon(
@@ -1138,7 +1138,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
       showDragHandle: true,
       backgroundColor: scheme.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(Radii.xl)),
         side: BorderSide(color: scheme.primary.withAlpha(130)),
       ),
       builder: (ctx) {
@@ -1257,7 +1257,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
                               horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
                             color: scheme.primary.withAlpha(22),
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(Radii.lg),
                             border: Border.all(
                                 color: scheme.primary.withAlpha(90)),
                           ),

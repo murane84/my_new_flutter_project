@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/radii.dart';
 
 /// The glossy card that holds a music player's controls (waveform, transport,
 /// tools), so they sit contained instead of floating. Same look as the native
@@ -24,7 +25,7 @@ class ControlsGlass extends StatelessWidget {
       child: Container(
         padding: padding,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(26),
+          borderRadius: BorderRadius.circular(Radii.xxl),
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -73,7 +74,7 @@ class _RimPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
     canvas.drawRRect(
-      RRect.fromRectAndRadius(rect.deflate(0.5), const Radius.circular(26)),
+      RRect.fromRectAndRadius(rect.deflate(0.5), const Radius.circular(Radii.xxl)),
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.1

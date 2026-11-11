@@ -68,6 +68,7 @@ import '../widgets/pill_search.dart';
 import '../services/haptics.dart';
 import '../widgets/edge_scroll_row.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 part 'music/music_control_widgets.dart'; // _CtrlBtn, _CtrlChip, _SpeedPanel
 part 'music/music_playlist_overlay.dart'; // _PlaylistOverlay + state
@@ -1037,7 +1038,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl))),
       builder: (ctx) {
         Widget item(IconData i, String label, String v) => ListTile(
               leading: Icon(i, color: accentInk(scheme)),
@@ -2098,7 +2099,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         // This dialog draws its own (inner) card border — drop the app-wide
         // dialogTheme border so it isn't doubled.
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(22)),
+          borderRadius: BorderRadius.all(Radius.circular(Radii.xl)),
         ),
         // Same width as the Speed card, so the two pickers match.
         child: ConstrainedBox(
@@ -2107,7 +2108,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
             padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
               color: scheme.surface,
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(Radii.xl),
               border: Border.all(color: scheme.primary.withAlpha(130)),
               boxShadow: [
                 BoxShadow(
@@ -2136,7 +2137,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                         width: 32,
                         height: 32,
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(Radii.md),
                           gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
@@ -2171,7 +2172,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                       ),
                       InkWell(
                         onTap: () => Navigator.pop(ctx),
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(Radii.xl),
                         child: Padding(
                           padding: const EdgeInsets.all(4),
                           child: Icon(Icons.close_rounded,
@@ -2818,7 +2819,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         padding: const EdgeInsets.only(right: 12),
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(Radii.xl),
           border: Border.all(color: scheme.primary.withAlpha(130)),
           boxShadow: [
             BoxShadow(

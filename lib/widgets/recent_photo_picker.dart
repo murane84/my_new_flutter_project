@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../utils/readable.dart' show accentInk;
 import 'edge_scroll_row.dart';
+import '../utils/radii.dart';
 
 /// What the person chose in [showRecentPhotoPicker].
 class PhotoPick {
@@ -221,7 +222,7 @@ class _RecentPhotoSheetState extends State<_RecentPhotoSheet> {
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(Radii.xl)),
         ),
         child: child,
       );

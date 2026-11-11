@@ -20,7 +20,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(Radii.lg),
           color: scheme.surfaceContainerHighest,
           border: Border.all(color: _accent.withValues(alpha: 0.35)),
         ),
@@ -59,7 +59,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Radii.lg),
           color: _accent.withValues(alpha: 0.10),
           border: Border.all(color: _accent.withValues(alpha: 0.35)),
         ),
@@ -126,7 +126,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Radii.lg),
           gradient: LinearGradient(
             colors: [_accent.withValues(alpha: 0.85), _accent],
           ),
@@ -178,7 +178,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
       padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
       decoration: BoxDecoration(
         color: _accent.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Radii.md),
         border: Border.all(color: _accent.withValues(alpha: 0.28)),
       ),
       child: Column(
@@ -203,7 +203,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
           if (progress != null) ...[
             const SizedBox(height: 8),
             ClipRRect(
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(Radii.sm),
               child: LinearProgressIndicator(
                 value: progress,
                 minHeight: 5,
@@ -232,7 +232,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Radii.xl),
         color: isDark
             ? scheme.surfaceContainerHigh
             : scheme.surfaceContainerHighest,
@@ -282,7 +282,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
               height: 40,
               decoration: BoxDecoration(
                 color: _accent.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(11),
+                borderRadius: BorderRadius.circular(Radii.md),
               ),
               child: Icon(Icons.music_note_rounded, color: _accent, size: 20),
             ),
@@ -408,14 +408,14 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Radii.lg),
           onTap: _listenTogether,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
               color: Color.alphaBlend(
                   _accent.withValues(alpha: 0.10), scheme.surface),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(Radii.lg),
               border: Border.all(color: _accent.withValues(alpha: 0.26)),
             ),
             child: Row(
@@ -491,7 +491,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
         decoration: BoxDecoration(
           color: Color.alphaBlend(
               _accent.withValues(alpha: 0.16), scheme.surface),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Radii.lg),
           border: Border.all(color: _accent.withValues(alpha: 0.35)),
           boxShadow: [
             BoxShadow(
@@ -611,7 +611,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
         color: isDark
             ? scheme.surfaceContainerHigh
             : scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Radii.xl),
         border: Border.all(
             color: _accent.withValues(alpha: locked ? 0.30 : 0.45),
             width: locked ? 1 : 1.4),
@@ -626,7 +626,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                 height: 38,
                 decoration: BoxDecoration(
                   color: _accent.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(11),
+                  borderRadius: BorderRadius.circular(Radii.md),
                 ),
                 child: Icon(
                     locked
@@ -684,7 +684,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               decoration: BoxDecoration(
                 color: _accent.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(Radii.md),
               ),
               child: Column(
                 children: [
@@ -752,7 +752,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: _accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(Radii.md),
                 ),
                 child: Row(
                   children: [
@@ -860,7 +860,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
         padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
         decoration: BoxDecoration(
           color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Radii.lg),
           border:
               Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
         ),
@@ -906,7 +906,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
           color: unopened
               ? Color.alphaBlend(_accent.withValues(alpha: 0.14), scheme.surface)
               : scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(Radii.lg),
           border: unopened
               ? Border.all(color: _accent.withValues(alpha: 0.5))
               : null,
@@ -933,7 +933,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                             horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(
                           color: _accent,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(Radii.sm),
                         ),
                         child: Text('New',
                             style: TextStyle(
@@ -1120,14 +1120,14 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
               Color.alphaBlend(_accent.withValues(alpha: 0.05), scheme.surface),
             ],
           ),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Radii.lg),
           border: Border.all(color: _accent.withValues(alpha: 0.26)),
         ),
         child: Row(
           children: [
             // Mini cover: the month's first photo, or a vinyl tile.
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(Radii.md),
               child: SizedBox(
                 width: 54,
                 height: 54,
@@ -1163,7 +1163,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                             horizontal: 7, vertical: 2),
                         decoration: BoxDecoration(
                           color: _accent.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(Radii.xl),
                         ),
                         child: Text('is ready',
                             style: TextStyle(
@@ -1233,7 +1233,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Color.alphaBlend(_accent.withValues(alpha: 0.08), scheme.surface),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(color: _accent.withValues(alpha: 0.22)),
       ),
       child: Column(
@@ -1261,7 +1261,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: _accent.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(Radii.xl),
                 ),
                 child: Text(stage,
                     style: TextStyle(
@@ -1273,7 +1273,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
           ),
           const SizedBox(height: 10),
           ClipRRect(
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(Radii.sm),
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 6,
@@ -1380,7 +1380,7 @@ class _CapsulePeekState extends State<_CapsulePeek> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: a.withValues(alpha: 0.07),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(Radii.md),
                     border: Border.all(color: a.withValues(alpha: 0.25)),
                   ),
                   child: Column(

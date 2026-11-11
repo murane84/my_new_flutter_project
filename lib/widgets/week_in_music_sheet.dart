@@ -6,6 +6,7 @@ import '../utils/readable.dart' show accentInk;
 import '../services/haptics.dart';
 import 'edge_scroll_row.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 const _momentLabel = {
   AlutaMoment.dawn: ('🌄', 'Dawn'),
@@ -66,7 +67,7 @@ Future<void> showWeekInMusic(
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
           decoration: BoxDecoration(
             color: scheme.primary.withValues(alpha: isDark ? 0.16 : 0.08),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(Radii.lg),
           ),
           child: Column(children: [
             Text(big,
@@ -129,7 +130,7 @@ Future<void> showWeekInMusic(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
         color: c.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(Radii.sm),
       ),
       child: Text(t,
           style: TextStyle(
@@ -145,7 +146,7 @@ Future<void> showWeekInMusic(
     constraints: const BoxConstraints(maxWidth: 680),
     backgroundColor: scheme.surface,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xxl))),
     builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
       final songs = filter == null
           ? all
@@ -262,7 +263,7 @@ Future<void> showWeekInMusic(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(Radii.sm),
                           child: SizedBox(
                             height: 12,
                             child: Row(children: [
@@ -303,7 +304,7 @@ Future<void> showWeekInMusic(
                                   color: (_feelColor[e.key] ?? scheme.primary)
                                       .withValues(
                                           alpha: filter == e.key ? 0.28 : 0.12),
-                                  borderRadius: BorderRadius.circular(10),
+                                  borderRadius: BorderRadius.circular(Radii.md),
                                 ),
                                 child: Text(
                                     '${e.key.emoji} ${(e.value * 100 / mixTotal).round()}% ${e.key.label.toLowerCase()}',
@@ -333,7 +334,7 @@ Future<void> showWeekInMusic(
                             decoration: BoxDecoration(
                               color: scheme.surfaceContainerHighest
                                   .withValues(alpha: 0.6),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(Radii.md),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -394,7 +395,7 @@ Future<void> showWeekInMusic(
                         margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                         padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(Radii.lg),
                           gradient: LinearGradient(colors: [
                             scheme.primary.withValues(alpha: 0.18),
                             scheme.primary.withValues(alpha: 0.05),
@@ -471,7 +472,7 @@ Future<void> showWeekInMusic(
                             ? scheme.primary
                                 .withValues(alpha: isDark ? 0.14 : 0.06)
                             : Colors.transparent,
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(Radii.lg),
                       ),
                       child: Row(children: [
                         rankBadge(i),
@@ -577,7 +578,7 @@ Future<void> showWeekInMusic(
                     style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(48),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16))),
+                            borderRadius: BorderRadius.circular(Radii.lg))),
                   ),
                 ),
               ),
@@ -642,7 +643,7 @@ Future<void> showSongInsight(BuildContext context, String title,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: scheme.primary.withValues(alpha: isDark ? 0.16 : 0.08),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(Radii.xl),
             ),
             child: Text(t,
                 style: TextStyle(
@@ -653,7 +654,7 @@ Future<void> showSongInsight(BuildContext context, String title,
       return Dialog(
         insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 40),
         backgroundColor: scheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.xxl)),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),
           child: SingleChildScrollView(
@@ -735,7 +736,7 @@ Future<void> showSongInsight(BuildContext context, String title,
                                           alpha: i == 6 ? 1 : 0.65)
                                       : scheme.outlineVariant
                                           .withValues(alpha: 0.5),
-                                  borderRadius: BorderRadius.circular(5),
+                                  borderRadius: BorderRadius.circular(Radii.sm),
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -801,7 +802,7 @@ Future<void> showSongInsight(BuildContext context, String title,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(7),
+                          borderRadius: BorderRadius.circular(Radii.sm),
                           child: SizedBox(
                             height: 10,
                             child: Row(children: [
@@ -894,7 +895,7 @@ Future<void> showSongInsight(BuildContext context, String title,
                   style: OutlinedButton.styleFrom(
                       minimumSize: const Size.fromHeight(44),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14))),
+                          borderRadius: BorderRadius.circular(Radii.lg))),
                 ),
               ],
             ),

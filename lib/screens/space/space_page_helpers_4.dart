@@ -22,7 +22,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: scheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Radii.md),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -62,7 +62,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(Radii.xl),
           border: Border.all(color: _accent.withValues(alpha: 0.3)),
         ),
         child: Row(
@@ -88,7 +88,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: _accent.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Radii.md),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -154,7 +154,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -181,7 +181,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: Column(
@@ -220,14 +220,14 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
           return Padding(
             padding: const EdgeInsets.only(left: 6),
             child: InkWell(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(Radii.lg),
               onTap: () => _playlistFilter.value = v,
               child: AnimatedContainer(
                 duration: Motion.quick,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(Radii.lg),
                   gradient: on
                       ? LinearGradient(colors: [
                           Color.lerp(_accent, Colors.white, 0.12)!,
@@ -309,13 +309,13 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Radii.lg),
           onTap: () => _playCrateTrack(t),
           onLongPress: id == null ? null : () => _editTrackMemo(t),
           child: Ink(
             padding: const EdgeInsets.fromLTRB(10, 10, 4, 10),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(Radii.lg),
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -354,7 +354,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
                       height: 40,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(Radii.md),
                         gradient: playingNow
                             ? LinearGradient(colors: [
                                 Color.lerp(_accent, Colors.white, 0.15)!,
@@ -451,7 +451,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
                           padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
                           decoration: BoxDecoration(
                             color: _accent.withValues(alpha: 0.07),
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(Radii.sm),
                             border: Border(
                                 left: BorderSide(color: _accent, width: 2.5)),
                           ),
@@ -574,7 +574,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
       padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: Column(
@@ -643,7 +643,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
           color: isDark
               ? scheme.surfaceContainerHigh
               : scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(Radii.xl),
           border: Border.all(
               color: scheme.outlineVariant.withValues(alpha: 0.5),
               width: 1),
@@ -718,7 +718,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
                       icon: Icon(Icons.more_horiz_rounded,
                           size: 19, color: scheme.onSurfaceVariant),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(Radii.md)),
                       onSelected: (v) {
                         if (v == 'delete') _confirmDeleteMoment(id);
                       },
@@ -748,7 +748,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: _accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(Radii.md),
                 ),
                 child: Row(
                   children: [
@@ -892,7 +892,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
   Widget _mediaWithCaption(ColorScheme scheme, Widget media, String caption) {
     if (caption.trim().isEmpty) return media;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(Radii.lg),
       child: Stack(
         children: [
           media,
@@ -986,7 +986,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
     return GestureDetector(
       onTap: () => _openMomentPhoto(url),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         child: ColoredBox(
           color: scheme.surfaceContainerHighest,
           child: ConstrainedBox(
@@ -1079,7 +1079,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (_) => _MomentCommentsSheet(
         spaceId: _id,
@@ -1165,7 +1165,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: _accent.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(color: _accent.withValues(alpha: 0.2)),
       ),
       child: Column(
@@ -1287,14 +1287,14 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
         // through this card, matching the other Our Space cards.
         color: Color.alphaBlend(
             _accent.withValues(alpha: 0.10), scheme.surface),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         child: InkWell(
           onTap: _openDiary,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Radii.lg),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(Radii.lg),
               border: Border.all(color: _accent.withValues(alpha: 0.30)),
             ),
             child: Row(
@@ -1334,7 +1334,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
       padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 16),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: Column(
@@ -1389,7 +1389,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: pinned
             ? Border.all(color: _accent.withValues(alpha: 0.5))
             : null,
@@ -1487,7 +1487,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
         const SizedBox(height: 6),
         InkWell(
           onTap: () => _openMemoryDetail(e),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(Radii.md),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
             child: Row(
@@ -1633,7 +1633,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (_) => _DiaryComposer(accent: _accent, existing: e, myName: widget.myName),
     );

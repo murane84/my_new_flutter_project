@@ -25,6 +25,7 @@ import '../widgets/section_switch.dart';
 import '../utils/toast_helper.dart';
 import '../services/haptics.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// The personalization surface (build step 5): whole-app **theme** (System /
 /// Light / Dark) + a curated **accent** preset set. Dark stays the brand's
@@ -258,7 +259,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(Radii.lg),
               ),
               child: Row(
                 children: [
@@ -310,7 +311,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             color: selected
                 ? scheme.primary.withAlpha(30)
                 : scheme.surfaceContainerHighest.withAlpha(110),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(Radii.lg),
             border: Border.all(
               color: selected
                   ? scheme.primary
@@ -477,7 +478,7 @@ class _BackdropSlidersCard extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                   decoration: BoxDecoration(
                     color: scheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(Radii.md),
                   ),
                   child: Text('${(v * 100).round()}%',
                       style: TextStyle(
@@ -589,7 +590,7 @@ class _BackdropSlidersCard extends StatelessWidget {
 // the Appearance cards read as the same 3D surfaces.
 BoxDecoration _raisedCardDecoration(ColorScheme scheme, bool isDark) =>
     BoxDecoration(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(Radii.xl),
       gradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
@@ -616,7 +617,7 @@ Widget _accentIconChip(ColorScheme scheme, IconData icon) => Container(
       width: 40,
       height: 40,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Radii.md),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -709,7 +710,7 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
       isScrollControlled: true,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) {
         void applyClose(String mode, {String? url, String? wideUrl}) {
@@ -819,7 +820,7 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
                       style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14))),
+                              borderRadius: BorderRadius.circular(Radii.lg))),
                     ),
                   ),
                 ),
@@ -840,7 +841,7 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
         duration: Motion.instant,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(Radii.lg),
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -893,11 +894,11 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         return Material(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(Radii.xl),
           child: Ink(
             decoration: _raisedCardDecoration(scheme, isDark),
             child: InkWell(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(Radii.xl),
               onTap: _openSheet,
               child: Padding(
                 padding:
@@ -1274,14 +1275,14 @@ class _SectionTransitionsSection extends StatelessWidget {
                             : scheme.surfaceContainerHighest
                                 .withValues(alpha: 0.45),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(Radii.lg),
                           side: BorderSide(
                               color: s == cur
                                   ? scheme.primary.withValues(alpha: 0.6)
                                   : Colors.transparent),
                         ),
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(Radii.lg),
                           onTap: () => SectionTransition.instance.set(s),
                           child: Padding(
                             padding: const EdgeInsets.all(8),
@@ -1307,7 +1308,7 @@ class _SectionTransitionsSection extends StatelessWidget {
                                               horizontal: 6, vertical: 1),
                                           decoration: BoxDecoration(
                                             borderRadius:
-                                                BorderRadius.circular(8),
+                                                BorderRadius.circular(Radii.sm),
                                             border: Border.all(
                                                 color: scheme.primary
                                                     .withValues(alpha: 0.5)),
@@ -1358,7 +1359,7 @@ class _SectionTransitionsSection extends StatelessWidget {
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(Radii.xl),
           onTap: () => _pick(context),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
@@ -1762,7 +1763,7 @@ class _BubbleThemeSection extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
           decoration: BoxDecoration(
             color: scheme.surfaceContainerHighest.withAlpha(90),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(Radii.lg),
             border: Border.all(color: scheme.outlineVariant.withAlpha(80)),
           ),
           child: Column(
@@ -1837,7 +1838,7 @@ class _BubbleThemeSection extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: scheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Radii.md),
         border: Border.all(color: scheme.outlineVariant.withAlpha(60)),
       ),
       child: Column(
@@ -1864,8 +1865,8 @@ class _BubbleThemeSection extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.only(
-          topLeft: const Radius.circular(14),
-          topRight: const Radius.circular(14),
+          topLeft: const Radius.circular(Radii.lg),
+          topRight: const Radius.circular(Radii.lg),
           bottomLeft: Radius.circular(mine ? 14 : 4),
           bottomRight: Radius.circular(mine ? 4 : 14),
         ),
@@ -1880,7 +1881,7 @@ class _BubbleThemeSection extends StatelessWidget {
       Color color, bool sent) {
     return InkWell(
       onTap: () => _pickColour(context, sent),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(Radii.md),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(
@@ -1894,7 +1895,7 @@ class _BubbleThemeSection extends StatelessWidget {
               height: 30,
               decoration: BoxDecoration(
                 color: color,
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: BorderRadius.circular(Radii.md),
                 border: Border.all(color: scheme.outlineVariant),
               ),
             ),
@@ -1913,7 +1914,7 @@ class _BubbleThemeSection extends StatelessWidget {
       showDragHandle: true,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) {
         final current = sent ? bubbleSentColor : bubbleRecvColor;

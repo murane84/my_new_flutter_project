@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../screens/theme_provider.dart';
+import 'radii.dart';
 
 /// Wraps pre-login / auth surfaces (welcome, sign in, register, splash, password
 /// reset) so they ALWAYS wear the Aluta brand red — independent of the in-app
@@ -50,7 +51,7 @@ class BrandTheme extends StatelessWidget {
             foregroundColor: onPrimary,
             minimumSize: const Size.fromHeight(50),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(Radii.lg),
             ),
             textStyle: const TextStyle(
               fontSize: 16,
@@ -61,7 +62,7 @@ class BrandTheme extends StatelessWidget {
         // The focused input border also bakes primary in.
         inputDecorationTheme: base.inputDecorationTheme.copyWith(
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(Radii.md),
             borderSide: BorderSide(color: primary, width: 2),
           ),
         ),
@@ -124,13 +125,13 @@ class PlayerTheme extends StatelessWidget {
             foregroundColor: onPrimary,
             minimumSize: const Size.fromHeight(50),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(Radii.lg),
             ),
           ),
         ),
         inputDecorationTheme: base.inputDecorationTheme.copyWith(
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(Radii.md),
             borderSide: BorderSide(color: primary, width: 2),
           ),
         ),

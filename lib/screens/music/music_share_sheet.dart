@@ -297,7 +297,7 @@ class _ShareSheetState extends State<_ShareSheet> {
       builder: (context, sc) => Container(
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(Radii.xl)),
         ),
         child: FutureBuilder<List<Map<String, dynamic>>>(
           future: _friends,
@@ -575,7 +575,7 @@ class _SongPickSheetState extends State<_SongPickSheet> {
       builder: (context, sc) => Container(
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(Radii.xl)),
         ),
         child: Column(
           children: [

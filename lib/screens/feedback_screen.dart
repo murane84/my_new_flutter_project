@@ -6,6 +6,7 @@ import '../utils/popup_shell.dart';
 import '../utils/toast_helper.dart';
 import 'api_service.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// "Send feedback" — tell the Aluta team what you love, what's broken and what
 /// you'd like next. Goes straight to the owner's admin panel; replies and
@@ -189,7 +190,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
             Container(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
+                borderRadius: BorderRadius.circular(Radii.xl),
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -281,7 +282,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
             // ── The words: an inset well ─────────────────────────────────
             Container(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(Radii.xl),
                 color: isDark
                     ? Colors.black.withValues(alpha: 0.22)
                     : Color.alphaBlend(
@@ -332,7 +333,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
             Material(
               color: Colors.transparent,
               child: InkWell(
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(Radii.xl),
                 onTap: _sending ? null : _send,
                 child: Ink(
                   decoration: _raised(scheme, on: true, radius: 18),
@@ -524,7 +525,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: c.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(Radii.xl),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -555,7 +556,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: scheme.primary.withAlpha(20),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(Radii.md),
                 border: Border(
                     left: BorderSide(color: scheme.primary, width: 3)),
               ),

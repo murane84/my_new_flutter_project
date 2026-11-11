@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'admin_widgets.dart';
+import '../utils/radii.dart';
 
 const String _js = r'''
 (function () {
@@ -157,7 +158,7 @@ class AdminInstallCard extends StatelessWidget {
             color: onGradient
                 ? Colors.white.withAlpha(22)
                 : kAdminRed.withValues(alpha: p.dark ? 0.14 : 0.07),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(Radii.lg),
             border: Border.all(
                 color: onGradient
                     ? Colors.white.withAlpha(60)

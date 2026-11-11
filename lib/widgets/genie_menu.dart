@@ -7,6 +7,7 @@ import '../services/app_busy.dart';
 import '../utils/readable.dart' show accentInk;
 import '../services/haptics.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 // ─── Genie menus ────────────────────────────────────────────────────────────
 // One menu motion for the whole app: a menu GROWS out of the button that
@@ -288,7 +289,7 @@ class _GenieMenuSurfaceState extends State<_GenieMenuSurface> {
                 decoration: ShapeDecoration(
                   color: fill,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16), side: edge),
+                      borderRadius: BorderRadius.circular(Radii.lg), side: edge),
                   shadows: shadow,
                 ),
                 clipBehavior: Clip.antiAlias,
@@ -829,7 +830,7 @@ class GeniePopupMenuButton<T> extends StatelessWidget {
     return Builder(builder: (ctx) {
       if (child != null) {
         return InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           onTap: enabled ? () => _open(ctx) : null,
           child: tooltip == null || tooltip!.isEmpty
               ? child!

@@ -14,6 +14,7 @@ import '../services/contact_names.dart';
 import '../utils/toast_helper.dart';
 import '../utils/popup_shell.dart';
 import '../utils/readable.dart' show accentInk;
+import '../utils/radii.dart';
 
 /// A friendly label + platform tag for THIS device (used when it links itself).
 ({String label, String platform}) _describeThisDevice() {
@@ -157,7 +158,7 @@ class _DesktopQrLoginScreenState extends State<DesktopQrLoginScreen> {
                         horizontal: 18, vertical: 12),
                     decoration: BoxDecoration(
                       color: scheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(Radii.lg),
                       border:
                           Border.all(color: scheme.primary.withAlpha(90)),
                     ),
@@ -209,7 +210,7 @@ class _DesktopQrLoginScreenState extends State<DesktopQrLoginScreen> {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(Radii.xl),
             border: Border.all(color: scheme.primary.withAlpha(60)),
           ),
           child: QrImageView(
@@ -366,7 +367,7 @@ class _DeviceLinkScanScreenState extends State<DeviceLinkScanScreen> {
                   height: 240,
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.white, width: 3),
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(Radii.xl),
                   ),
                 ),
               ],
@@ -578,7 +579,7 @@ class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
                         horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       color: scheme.primary.withAlpha(30),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(Radii.md),
                     ),
                     child: Text('This device',
                         style: TextStyle(

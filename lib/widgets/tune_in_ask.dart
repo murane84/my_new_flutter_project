@@ -5,6 +5,7 @@ import '../utils/toast_helper.dart';
 import 'net_gate.dart';
 import 'person_avatar.dart';
 import '../utils/readable.dart' show accentInk;
+import '../utils/radii.dart';
 
 /// Tap "Tune in" on a friend who's listening: ASK to join their song (they
 /// keep their rhythm; you join right where they are). A small waiting card
@@ -110,7 +111,7 @@ class _TuneInWaitingState extends State<_TuneInWaiting> {
                     ? Color.alphaBlend(
                         Colors.white.withValues(alpha: 0.05), scheme.surface)
                     : scheme.surface,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(Radii.xxl),
                 border: Border.all(
                     color: scheme.primary
                         .withValues(alpha: isDark ? 0.30 : 0.18)),
@@ -181,7 +182,7 @@ class _TuneInWaitingState extends State<_TuneInWaiting> {
                           horizontal: 12, vertical: 9),
                       decoration: BoxDecoration(
                         color: scheme.primary.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(Radii.md),
                       ),
                       child: Row(
                         children: [

@@ -16,6 +16,7 @@ import '../widgets/slide_track.dart';
 import '../services/haptics.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// Global search across my chats: the PEOPLE and GROUPS whose names match
 /// first ("Chats"), then the MESSAGES grouped by chat (best matches first,
@@ -361,7 +362,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
     final none =
         !_loading && _lastTerm.length >= 2 && _results.isEmpty;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(19),
+      borderRadius: BorderRadius.circular(Radii.xl),
       child: BackdropFilter(
         filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: AnimatedContainer(
@@ -372,7 +373,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
             color: isDark
                 ? Colors.black.withValues(alpha: 0.42)
                 : Colors.white.withValues(alpha: 0.72),
-            borderRadius: BorderRadius.circular(19),
+            borderRadius: BorderRadius.circular(Radii.xl),
             border: Border.all(
               color: none
                   ? scheme.error.withValues(alpha: 0.45)
@@ -1025,7 +1026,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
           itemBuilder: (_, i) {
             final (c, name, isGroup) = m[i];
             return InkWell(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(Radii.lg),
               onTap: () => _openChat(c, isGroup),
               child: SizedBox(
                 width: 74,
@@ -1079,7 +1080,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
       child: Material(
         color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         clipBehavior: Clip.antiAlias,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Padding(

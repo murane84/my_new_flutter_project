@@ -16,6 +16,7 @@ import '../widgets/avatar_flight.dart';
 import '../widgets/photo_viewer.dart';
 import '../utils/readable.dart' show accentInk;
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// A read-only profile card for ANOTHER user (a friend or a group member).
 /// Opens from a tap on their name/avatar. Shows the photo, the name (their saved
@@ -115,7 +116,7 @@ Future<void> showUserProfile(
     // — the profile card already draws its own (inner) border, so the theme
     // border was doubling it up. No side = no outer line.
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
     ),
     builder: (_) => _UserProfileSheet(
       username: username,
@@ -255,7 +256,7 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -296,7 +297,7 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
                     const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                 decoration: BoxDecoration(
                   color: flame.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(Radii.xl),
                 ),
                 child: Text(stage,
                     style: TextStyle(
@@ -357,7 +358,7 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
     return Container(
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest.withAlpha(120),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
       ),
       padding: EdgeInsets.fromLTRB(14, 10, action == null ? 14 : 6, 10),
       child: Row(
@@ -428,7 +429,7 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
       decoration: BoxDecoration(
         color: scheme.surface,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(Radii.xl),
         border: Border.all(color: scheme.primary.withAlpha(120)),
       ),
       constraints:
@@ -563,7 +564,7 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
               Container(
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHighest.withAlpha(120),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(Radii.lg),
                 ),
                 padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
                 child: Row(
@@ -620,10 +621,10 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
               const SizedBox(height: 10),
               Material(
                 color: scheme.primary.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(Radii.lg),
                 child: InkWell(
                   onTap: () => _addToContacts(ph),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(Radii.lg),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 12),

@@ -16,6 +16,7 @@ import '../services/song_insights.dart';
 import '../utils/popup_shell.dart';
 import '../widgets/welcome_tour.dart';
 import '../utils/readable.dart' show accentInk;
+import '../utils/radii.dart';
 
 /// Moments & nudges — every warm, app-initiated touch in one place, each with
 /// its own switch. Everything here is on-device.
@@ -66,15 +67,15 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Material(
         color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         child: SwitchListTile.adaptive(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.lg)),
           secondary: Container(
             width: 36,
             height: 36,
             decoration: BoxDecoration(
               color: scheme.primary.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(11),
+              borderRadius: BorderRadius.circular(Radii.md),
             ),
             child: Icon(icon, size: 19, color: accentInk(scheme)),
           ),
@@ -161,7 +162,7 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Material(
           color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Radii.lg),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             child: Column(
@@ -380,10 +381,10 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
                   child: Material(
                     color:
                         scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(Radii.lg),
                     child: ListTile(
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
+                          borderRadius: BorderRadius.circular(Radii.lg)),
                       leading: Icon(Icons.amp_stories_rounded,
                           color: accentInk(scheme)),
                       title: const Text('Who can see my status',
@@ -407,10 +408,10 @@ class _MomentsSettingsScreenState extends State<MomentsSettingsScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Material(
                   color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(Radii.lg),
                   child: ListTile(
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
+                        borderRadius: BorderRadius.circular(Radii.lg)),
                     leading: Icon(Icons.block_rounded, color: accentInk(scheme)),
                     title: const Text('Blocked',
                         style: TextStyle(fontWeight: FontWeight.w600)),

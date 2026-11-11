@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'admin_api.dart';
 import 'admin_widgets.dart';
+import '../utils/radii.dart';
 
 /// Admin devices: approve / deny requests (6-character code + password),
 /// remove devices, end a probation early, new recovery codes.
@@ -391,7 +392,7 @@ class _DeviceCard extends StatelessWidget {
     };
     return Card(
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Radii.xl),
         side: status == 'pending' && !expired
             ? const BorderSide(color: kAdminRed, width: 1.4)
             : BorderSide(color: p.border),
@@ -426,7 +427,7 @@ class _DeviceCard extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: color.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(Radii.xl),
                   ),
                   child: Text(label,
                       style: TextStyle(color: color, fontSize: 11)),

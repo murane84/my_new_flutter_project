@@ -121,7 +121,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
               margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(Radii.md),
                 gradient: active
                     ? LinearGradient(
                         begin: Alignment.topCenter,
@@ -165,7 +165,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
         width: 1, height: 22, color: _accent.withValues(alpha: 0.22));
     return DecoratedBox(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(Radii.lg),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -183,7 +183,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(Radii.lg),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -265,7 +265,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
           Container(
             decoration: BoxDecoration(
               color: paper,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(Radii.lg),
               border: Border.all(color: _accent.withValues(alpha: 0.20)),
               boxShadow: [
                 BoxShadow(
@@ -323,14 +323,14 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
                                 color: _accent.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(13),
+                                borderRadius: BorderRadius.circular(Radii.lg),
                                 border: Border.all(
                                     color: _accent.withValues(alpha: 0.28)),
                               ),
                               child: Row(
                                 children: [
                                   ClipRRect(
-                                    borderRadius: BorderRadius.circular(9),
+                                    borderRadius: BorderRadius.circular(Radii.md),
                                     child: SizedBox(
                                       width: 54,
                                       height: 54,
@@ -625,7 +625,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
       position: PopupMenuPosition.under,
       menuPadding: const EdgeInsets.symmetric(vertical: 6),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         side: BorderSide(color: _accent.withValues(alpha: 0.35), width: 1),
       ),
       onSelected: (v) {
@@ -714,7 +714,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
       isScrollControlled: true,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) => SafeArea(
         child: Padding(
@@ -748,7 +748,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
       padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 11),
       decoration: BoxDecoration(
         color: scheme.surface.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Radii.md),
         border:
             Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
       ),

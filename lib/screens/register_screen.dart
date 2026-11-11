@@ -9,6 +9,7 @@ import 'auth_page.dart';
 import '../utils/snackbar_helper.dart';
 import '../utils/brand_theme.dart';
 import '../utils/readable.dart';
+import '../utils/radii.dart';
 
 class RegisterPage extends StatefulWidget {
   static const String routeName = '/register';
@@ -253,7 +254,7 @@ class RegisterPageState extends State<RegisterPage> {
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
                             color: cardBg,
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: BorderRadius.circular(Radii.xl),
                             border: Border.all(color: cardBorder),
                             boxShadow: isDark
                                 ? null
@@ -296,7 +297,7 @@ class RegisterPageState extends State<RegisterPage> {
                                   decoration: InputDecoration(
                                     labelText: 'Phone number',
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(Radii.md),
                                     ),
                                   ),
                                   onChanged: (phone) =>
@@ -443,7 +444,7 @@ class RegisterPageState extends State<RegisterPage> {
                                         foregroundColor: readableOn(scheme.primary),
                                         shape: RoundedRectangleBorder(
                                           borderRadius:
-                                              BorderRadius.circular(24),
+                                              BorderRadius.circular(Radii.xxl),
                                         ),
                                         elevation: 4,
                                       ),
@@ -555,19 +556,19 @@ class RegisterPageState extends State<RegisterPage> {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           borderSide: BorderSide(color: borderCol),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           borderSide: BorderSide(color: focusCol, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           borderSide: const BorderSide(color: Colors.redAccent),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           borderSide:
               const BorderSide(color: Colors.redAccent, width: 1.5),
         ),

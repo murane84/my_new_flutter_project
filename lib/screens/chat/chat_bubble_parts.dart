@@ -182,7 +182,7 @@ class _ActionTile extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: tint.withValues(alpha: isDark ? 0.16 : 0.10),
-                borderRadius: BorderRadius.circular(11),
+                borderRadius: BorderRadius.circular(Radii.md),
                 border: Border.all(
                     color: tint.withValues(alpha: isDark ? 0.28 : 0.20),
                     width: 1),
@@ -667,7 +667,7 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
                           color: _speed == 1.0
                               ? widget.onColor.withAlpha(22)
                               : widget.accent.withAlpha(isDark ? 70 : 40),
-                          borderRadius: BorderRadius.circular(9),
+                          borderRadius: BorderRadius.circular(Radii.md),
                         ),
                         child: Text(_speedLabel(_speed),
                             style: TextStyle(

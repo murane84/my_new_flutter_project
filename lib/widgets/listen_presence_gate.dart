@@ -6,6 +6,7 @@ import '../services/online_watch.dart';
 import '../utils/toast_helper.dart';
 import 'net_gate.dart';
 import '../utils/readable.dart' show accentInk;
+import '../utils/radii.dart';
 
 /// Before going live with Listen Together: is the partner actually here?
 ///  • online (or we can't tell) → true, start as usual;
@@ -38,7 +39,7 @@ Future<bool> _presenceGate(BuildContext context,
     context: context,
     backgroundColor: scheme.surface,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xxl))),
     builder: (ctx) => SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
@@ -81,7 +82,7 @@ Future<bool> _presenceGate(BuildContext context,
             style: FilledButton.styleFrom(
                 minimumSize: const Size.fromHeight(48),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16))),
+                    borderRadius: BorderRadius.circular(Radii.lg))),
           ),
           const SizedBox(height: 8),
           TextButton(

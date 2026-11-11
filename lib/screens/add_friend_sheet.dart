@@ -5,6 +5,7 @@ import '../utils/readable.dart';
 import '../services/contact_names.dart';
 import '../widgets/person_avatar.dart';
 import '../widgets/pill_search.dart';
+import '../utils/radii.dart';
 
 /// Manual "Add friend" — the discovery path for desktop/web users with no
 /// phone-book to scan (and a quick add on mobile too). You look someone up by
@@ -193,7 +194,7 @@ class _AddFriendSheetState extends State<_AddFriendSheet> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(color: scheme.outlineVariant),
       ),
       child: Row(

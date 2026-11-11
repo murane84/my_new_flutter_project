@@ -6,6 +6,7 @@ import 'legal_screen.dart';
 import 'feedback_screen.dart';
 import '../utils/popup_shell.dart';
 import '../utils/readable.dart';
+import '../utils/radii.dart';
 
 /// A blocking "read & agree" consent gate for the Privacy Policy + Terms of Use.
 ///
@@ -175,7 +176,7 @@ class _PolicyGateDialogState extends State<_PolicyGateDialog> {
                 ),
                 const SizedBox(height: 8),
                 InkWell(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(Radii.md),
                   onTap: _busy ? null : () => setState(() => _agreed = !_agreed),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
@@ -289,7 +290,7 @@ class _DocLink extends StatelessWidget {
         side: BorderSide(color: scheme.outlineVariant),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.md)),
         alignment: Alignment.centerLeft,
       ),
       child: Row(

@@ -22,6 +22,7 @@ import '../widgets/photo_viewer.dart';
 import '../widgets/recent_photo_picker.dart';
 import '../utils/prefs_now.dart';
 import 'package:image_picker/image_picker.dart';
+import '../utils/radii.dart';
 
 /// Profile popup: edit username / phone / password (email is fixed), or
 /// permanently delete the account and wipe all data from the server. Rendered
@@ -600,7 +601,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: scheme.primary.withAlpha(22),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(Radii.lg),
                 border: Border.all(color: scheme.primary.withAlpha(70)),
               ),
               child: Row(
@@ -876,7 +877,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       disableLengthCheck: false,
       decoration: InputDecoration(
         labelText: 'Phone number',
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(Radii.md)),
       ),
       onChanged: (phone) => _phone.text = phone.completeNumber,
       invalidNumberMessage: 'Enter a valid phone number',
@@ -925,7 +926,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   /// password recovery — approve on the phone, no email or SMS needed.
   Widget _ozilaneSection(ColorScheme scheme) {
     return InkWell(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(Radii.lg),
       onTap: _saving
           ? null
           : () => Navigator.push(
@@ -936,7 +937,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
         decoration: BoxDecoration(
           color: scheme.surfaceContainerHighest.withAlpha(90),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(Radii.lg),
           border: Border.all(color: scheme.primary.withAlpha(60)),
         ),
         child: Row(
@@ -973,7 +974,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   /// path for a forgotten password.
   Widget _twoFactorSection(ColorScheme scheme) {
     return InkWell(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(Radii.lg),
       onTap: _saving
           ? null
           : () async {
@@ -990,7 +991,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
         decoration: BoxDecoration(
           color: scheme.surfaceContainerHighest.withAlpha(90),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(Radii.lg),
           border: Border.all(color: scheme.primary.withAlpha(60)),
         ),
         child: Row(
@@ -1025,7 +1026,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 color: _twoFAOn
                     ? Colors.green.withAlpha(40)
                     : scheme.primary.withAlpha(28),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(Radii.xl),
               ),
               child: Text(
                 _twoFAOn ? 'On' : 'Set up',
@@ -1050,7 +1051,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.fromLTRB(16, 4, 6, 4),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest.withAlpha(90),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(color: scheme.primary.withAlpha(60)),
       ),
       child: Row(
@@ -1088,7 +1089,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: scheme.errorContainer.withAlpha(60),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(color: scheme.error.withAlpha(90)),
       ),
       child: Column(
@@ -1115,7 +1116,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 foregroundColor: scheme.error,
                 padding: const EdgeInsets.symmetric(vertical: 13),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(Radii.md),
                   side: BorderSide(color: scheme.error.withAlpha(120)),
                 ),
                 textStyle: const TextStyle(fontWeight: FontWeight.w700),
@@ -1142,7 +1143,7 @@ class _ReadonlyTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Radii.md),
       ),
       child: Row(
         children: [

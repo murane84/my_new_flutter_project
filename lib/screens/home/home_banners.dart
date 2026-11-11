@@ -16,7 +16,7 @@ extension _HomeBanners on HomePageState {
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: scheme.primary.withAlpha(30),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(Radii.xl),
         border: Border.all(color: scheme.primary.withAlpha(120)),
       ),
       child: Row(

@@ -12,6 +12,7 @@ import '../../utils/toast_helper.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_picker/file_picker.dart';
 import '../../utils/readable.dart' show accentInk;
+import '../../utils/radii.dart';
 
 /// Shazam-style "what's this song?" flow. The user first picks a SOURCE:
 ///  - "From this phone" — captures the device's own audio output (what another
@@ -28,7 +29,7 @@ Future<void> showSongIdentifier(BuildContext context) {
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
     ),
     builder: (_) => const _SongIdentifierSheet(),
   );
@@ -293,7 +294,7 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
       decoration: BoxDecoration(
         color: scheme.surface,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(Radii.xl),
         border: Border.all(color: scheme.primary.withAlpha(120)),
       ),
       child: SafeArea(
@@ -445,7 +446,7 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
     return Opacity(
       opacity: enabled ? 1 : 0.55,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.all(15),
@@ -458,7 +459,7 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
                 scheme.surfaceContainerHigh,
               ],
             ),
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(Radii.xl),
             border: Border.all(
                 color: enabled
                     ? scheme.primary.withAlpha(55)
@@ -651,7 +652,7 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
       mainAxisSize: MainAxisSize.min,
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Radii.lg),
           child: artwork.isNotEmpty
               ? Image.network(
                   artwork,

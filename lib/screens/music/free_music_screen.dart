@@ -19,6 +19,7 @@ import '../token_helper.dart';
 import '../../utils/readable.dart' show accentInk;
 import '../../widgets/pill_search.dart';
 import '../../services/haptics.dart';
+import '../../utils/radii.dart';
 
 /// Free music: search songs artists released to be downloaded for free —
 /// Jamendo (Creative Commons) and the Internet Archive (CC / public domain).
@@ -287,7 +288,7 @@ class _FreeMusicPanelState extends State<FreeMusicPanel> {
                     const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
                 decoration: BoxDecoration(
                   color: scheme.primary.withAlpha(30),
-                  borderRadius: BorderRadius.circular(9),
+                  borderRadius: BorderRadius.circular(Radii.md),
                 ),
                 child: Text('${_results.length}',
                     style: TextStyle(
@@ -304,7 +305,7 @@ class _FreeMusicPanelState extends State<FreeMusicPanel> {
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: const Color(0xFF2BB673).withAlpha(30),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(Radii.md),
                 ),
                 child: const Text('LEGAL',
                     style: TextStyle(
@@ -401,7 +402,7 @@ class _FreeMusicPanelState extends State<FreeMusicPanel> {
           dense: true,
           visualDensity: const VisualDensity(vertical: -1),
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.md)),
           selected: playing,
           selectedTileColor: scheme.primary.withAlpha(22),
           contentPadding: const EdgeInsets.symmetric(horizontal: 10),
@@ -409,7 +410,7 @@ class _FreeMusicPanelState extends State<FreeMusicPanel> {
             onTap: () => _togglePreview(t),
             child: Stack(alignment: Alignment.center, children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(Radii.md),
                 child: SizedBox(
                   width: 44,
                   height: 44,

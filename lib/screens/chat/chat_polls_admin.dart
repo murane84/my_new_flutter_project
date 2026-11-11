@@ -35,7 +35,7 @@ extension _ChatPollsAdmin on _ChatPageState {
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
         decoration: BoxDecoration(
           color: c.withValues(alpha: 0.13),
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(Radii.sm),
           border: Border.all(color: c.withValues(alpha: 0.45)),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -56,7 +56,7 @@ extension _ChatPollsAdmin on _ChatPageState {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(Radii.xxl),
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
           child: Container(
@@ -66,7 +66,7 @@ extension _ChatPollsAdmin on _ChatPageState {
               color: isDark
                   ? Colors.black.withValues(alpha: 0.35)
                   : Colors.white.withValues(alpha: 0.65),
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(Radii.xxl),
               border: Border.all(
                   color: scheme.outlineVariant.withValues(alpha: 0.5)),
             ),
@@ -100,7 +100,7 @@ extension _ChatPollsAdmin on _ChatPageState {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(Radii.xxl),
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
           child: Container(
@@ -110,7 +110,7 @@ extension _ChatPollsAdmin on _ChatPageState {
               color: isDark
                   ? Colors.black.withValues(alpha: 0.35)
                   : Colors.white.withValues(alpha: 0.65),
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(Radii.xxl),
               border: Border.all(
                   color: scheme.outlineVariant.withValues(alpha: 0.5)),
             ),
@@ -275,7 +275,7 @@ extension _ChatPollsAdmin on _ChatPageState {
       isScrollControlled: true,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl))),
       builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
         final clean = opts
             .map((c) => c.text.trim())
@@ -319,10 +319,10 @@ extension _ChatPollsAdmin on _ChatPageState {
               fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
               suffixIcon: suffix,
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(Radii.lg),
                   borderSide: BorderSide.none),
               focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(Radii.lg),
                   borderSide: BorderSide(
                       color: scheme.primary.withValues(alpha: 0.5))),
             );
@@ -539,7 +539,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                     style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(46),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14))),
+                            borderRadius: BorderRadius.circular(Radii.lg))),
                   ),
                 ],
               ),
@@ -650,7 +650,7 @@ extension _ChatPollsAdmin on _ChatPageState {
       isScrollControlled: true,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xxl))),
       builder: (c) => StatefulBuilder(builder: (c, setC) {
         final q = query.trim().toLowerCase();
         final shown = q.isEmpty
@@ -779,7 +779,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                               child: Material(
                                 color: Colors.transparent,
                                 child: InkWell(
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(Radii.lg),
                                   onTap: () => setC(() {
                                     nudge = false;
                                     if (on) {
@@ -799,7 +799,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                                               alpha: isDark ? 0.18 : 0.08)
                                           : scheme.surfaceContainerHighest
                                               .withValues(alpha: 0.35),
-                                      borderRadius: BorderRadius.circular(16),
+                                      borderRadius: BorderRadius.circular(Radii.lg),
                                       border: Border.all(
                                         color: on
                                             ? scheme.primary
@@ -931,7 +931,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                               ? scheme.primary
                               : scheme.primary.withValues(alpha: 0.45),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16))),
+                              borderRadius: BorderRadius.circular(Radii.lg))),
                     ),
                   ]),
                 ),
@@ -1361,7 +1361,7 @@ extension _ChatPollsAdmin on _ChatPageState {
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
         decoration: BoxDecoration(
           color: c.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(Radii.sm),
           border: Border.all(color: c.withValues(alpha: 0.45)),
         ),
         child: Text('👑 DJ',
@@ -1691,18 +1691,18 @@ extension _ChatPollsAdmin on _ChatPageState {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Radii.md),
         onTap: onTap,
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(Radii.md),
             border: Border.all(
                 color: picked
                     ? accent.withValues(alpha: 0.7)
                     : textColor.withValues(alpha: 0.16)),
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(11),
+            borderRadius: BorderRadius.circular(Radii.md),
             child: Stack(
               children: [
                 Positioned.fill(

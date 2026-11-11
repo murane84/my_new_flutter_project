@@ -5,6 +5,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../../utils/motion.dart';
+import '../../utils/radii.dart';
 
 /// What a camera capture produced: the file plus whether it is a video (so the
 /// caller can route a recorded clip through the video pipeline and a still
@@ -342,7 +343,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: Colors.black54,
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(Radii.xl),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -393,7 +394,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   Widget _modeToggle() {
     Widget chip(String label, bool selected, VoidCallback onTap) => InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(Radii.xl),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             child: Text(
@@ -409,7 +410,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.black38,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(Radii.xl),
       ),
       padding: const EdgeInsets.all(4),
       child: Row(

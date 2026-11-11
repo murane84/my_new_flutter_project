@@ -42,7 +42,7 @@ extension _ChatMusicMoments on _ChatPageState {
       padding: const EdgeInsets.fromLTRB(3, 2, 8, 2),
       constraints: const BoxConstraints(maxWidth: 180),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Radii.md),
         gradient: LinearGradient(colors: [
           scheme.primary.withValues(alpha: 0.16),
           scheme.primary.withValues(alpha: 0.06),
@@ -106,7 +106,7 @@ extension _ChatMusicMoments on _ChatPageState {
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl))),
       builder: (ctx) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 10),
@@ -209,7 +209,7 @@ extension _ChatMusicMoments on _ChatPageState {
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(Radii.sm),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Icon(

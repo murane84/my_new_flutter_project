@@ -26,6 +26,7 @@ import '../services/live_rooms_registry.dart';
 import '../services/group_meta.dart';
 import 'stories/story_viewer.dart' show StoryHooks;
 import '../widgets/pill_search.dart';
+import '../utils/radii.dart';
 
 // Groups are presented as CARD POPUPS (AppPopupShell) — not full-window routes —
 // so on desktop they never hide the music/chat panels. Selecting or creating a
@@ -167,7 +168,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                   color: scheme.primary,
-                  borderRadius: BorderRadius.circular(20)),
+                  borderRadius: BorderRadius.circular(Radii.xl)),
               child: Text('$unread',
                   style: TextStyle(
                       color: readableOn(scheme.primary),
@@ -987,7 +988,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(color: scheme.outlineVariant.withAlpha(70)),
       ),
       child: Column(
@@ -1189,7 +1190,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: scheme.primary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(Radii.sm),
         border: Border.all(color: scheme.primary.withValues(alpha: 0.35)),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -1333,7 +1334,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
         : null;
 
     final row = InkWell(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(Radii.lg),
       // Tap a member to view their profile details (photo, name, number).
       onTap: () => showUserProfile(
         context,
@@ -1423,7 +1424,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     return Container(
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(
             color: track != null
                 ? ink.withValues(alpha: 0.45)

@@ -248,7 +248,7 @@ class _DedicateSheetState extends State<_DedicateSheet> {
       child: Container(
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(Radii.xxl)),
         ),
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
         child: SafeArea(
@@ -307,7 +307,7 @@ class _DedicateSheetState extends State<_DedicateSheet> {
                   filled: true,
                   fillColor: accent.withAlpha(18),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(Radii.lg),
                     borderSide: BorderSide.none,
                   ),
                 ),
@@ -321,7 +321,7 @@ class _DedicateSheetState extends State<_DedicateSheet> {
                     backgroundColor: accent,
                     foregroundColor: readableOn(accent),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24)),
+                        borderRadius: BorderRadius.circular(Radii.xxl)),
                   ),
                   onPressed: _sending ? null : _send,
                   icon: _sending
@@ -383,7 +383,7 @@ class _PeekNameState extends State<_PeekName> {
               color: on && _hover
                   ? widget.accent.withValues(alpha: 0.10)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(Radii.md),
             ),
             child: widget.child,
           ),
@@ -586,7 +586,7 @@ class _DedicateFriendPickerState extends State<_DedicateFriendPicker> {
                     ? Color.alphaBlend(
                         Colors.white.withValues(alpha: 0.05), scheme.surface)
                     : scheme.surface,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(Radii.xxl),
                 border: Border.all(
                     color: scheme.primary
                         .withValues(alpha: isDark ? 0.30 : 0.18)),
@@ -704,7 +704,7 @@ class _DedicateFriendPickerState extends State<_DedicateFriendPicker> {
                             final n = nameOf(f);
                             return ListTile(
                               shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14)),
+                                  borderRadius: BorderRadius.circular(Radii.lg)),
                               leading: PersonAvatar(
                                 name: n,
                                 avatar: f['avatar_url'] as String?,

@@ -189,14 +189,14 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(Radii.lg),
                 onTap: onTap,
                 child: AnimatedContainer(
                   duration: Motion.quick,
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
                     color: scheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(Radii.lg),
                     border: Border.all(
                       color: selected
                           ? accent
@@ -352,7 +352,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
       padding: padding ?? const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: _cardColor(scheme),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Radii.xl),
         border:
             Border.all(color: scheme.outlineVariant.withValues(alpha: 0.35)),
         boxShadow: [
@@ -500,11 +500,11 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(Radii.lg),
                 borderSide: BorderSide.none,
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(Radii.lg),
                 borderSide: BorderSide(color: accent, width: 1.6),
               ),
             ),
@@ -644,7 +644,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                         horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(Radii.xl),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -685,7 +685,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                     : scheme.onSurfaceVariant.withValues(alpha: 0.7),
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+                    borderRadius: BorderRadius.circular(Radii.lg)),
               ),
               child: _busy
                   ? SizedBox(
@@ -700,15 +700,15 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
           );
     final unpinCard = Material(
             color: _cardColor(scheme),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(Radii.lg),
             child: InkWell(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(Radii.lg),
               onTap: _busy ? null : () => _finish('unpin'),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                 decoration: BoxDecoration(
                   color: scheme.error.withValues(alpha: 0.055),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(Radii.lg),
                   border: Border.all(
                       color: scheme.error.withValues(alpha: 0.28)),
                 ),
@@ -801,7 +801,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(Radii.md),
             ),
             child: Icon(Icons.tune_rounded, size: 18, color: accent),
           ),
@@ -842,7 +842,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
             padding: const EdgeInsets.fromLTRB(4, 6, 8, 6),
             decoration: BoxDecoration(
               color: _cardColor(scheme),
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(Radii.xl),
               border: Border.all(
                   color: scheme.outlineVariant.withValues(alpha: 0.35)),
               boxShadow: [
@@ -991,7 +991,7 @@ class _WallpaperPickerPage extends StatelessWidget {
               side: BorderSide(color: accent.withValues(alpha: 0.6)),
               padding: const EdgeInsets.symmetric(vertical: 13),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14)),
+                  borderRadius: BorderRadius.circular(Radii.lg)),
             ),
           ),
         ),

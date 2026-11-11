@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/radii.dart';
 
 const Color kAdminRed = Color(0xFFD90429); // Aluta brand red
 
@@ -95,7 +96,7 @@ ThemeData adminTheme(Brightness b) {
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Radii.xl),
         side: BorderSide(color: p.border),
       ),
     ),
@@ -124,7 +125,7 @@ ThemeData adminTheme(Brightness b) {
       backgroundColor: p.card2,
       selectedColor: kAdminRed.withValues(alpha: p.dark ? 0.3 : 0.14),
       side: BorderSide(color: p.border),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.xl)),
       labelStyle: TextStyle(color: p.text, fontSize: 12.5),
     ),
   );
@@ -220,7 +221,7 @@ class AdminInline extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: c.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Radii.md),
         border: Border.all(color: c.withValues(alpha: 0.4)),
       ),
       child: Row(
@@ -252,7 +253,7 @@ class AdminCodesGrid extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: p.card2,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(Radii.md),
               border: Border.all(color: p.border),
             ),
             child: SelectableText(c,
@@ -515,7 +516,7 @@ class AdminDailyBars extends StatelessWidget {
                             : 3 + (height - 3) * counts[i] / maxV,
                         decoration: BoxDecoration(
                           borderRadius:
-                              const BorderRadius.vertical(top: Radius.circular(5)),
+                              const BorderRadius.vertical(top: Radius.circular(Radii.sm)),
                           color: counts[i] == 0 ? p.border : null,
                           gradient: counts[i] == 0
                               ? null
@@ -584,7 +585,7 @@ class AdminShareBars extends StatelessWidget {
                 ),
                 Expanded(
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(Radii.sm),
                     child: LinearProgressIndicator(
                       value: maxV == 0 ? 0 : (r.$2 / maxV).toDouble(),
                       minHeight: 10,
@@ -642,7 +643,7 @@ class _AdminPasswordFieldState extends State<AdminPasswordField> {
       onSubmitted: widget.onSubmitted,
       decoration: InputDecoration(
         labelText: widget.label,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(Radii.md)),
         prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
         suffixIcon: IconButton(
           tooltip: _obscure ? 'Show password' : 'Hide password',

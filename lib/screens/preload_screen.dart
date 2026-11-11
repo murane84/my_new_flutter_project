@@ -15,6 +15,7 @@ import '../services/contact_names.dart';
 import '../services/aluta_mood.dart';
 import '../services/song_insights.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// The post-unlock warm-up gate.
 ///
@@ -327,7 +328,7 @@ class _PreloadScreenState extends State<PreloadScreen>
                         SizedBox(
                           width: 220,
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: BorderRadius.circular(Radii.sm),
                             child: LinearProgressIndicator(
                               value: shown,
                               minHeight: 7,

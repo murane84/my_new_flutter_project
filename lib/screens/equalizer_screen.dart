@@ -5,6 +5,7 @@ import '../utils/popup_shell.dart';
 import '../services/song_insights.dart';
 import '../services/account_prefs.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// A functional equalizer + sound-enhancement screen.
 ///
@@ -335,7 +336,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
                         ])
                       : null,
                   color: active ? null : scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(Radii.md),
                 ),
                 child: Text(
                   n,

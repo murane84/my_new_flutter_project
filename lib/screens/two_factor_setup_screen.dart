@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'api_service.dart';
 import '../utils/toast_helper.dart';
 import '../utils/readable.dart';
+import '../utils/radii.dart';
 
 /// Set up (or turn off) authenticator-based two-factor, which doubles as the
 /// password-recovery method. Enrollment is a two-step handshake:
@@ -214,7 +215,7 @@ class _TwoFactorSetupScreenState extends State<TwoFactorSetupScreen> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.green.withAlpha(28),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(Radii.lg),
             border: Border.all(color: Colors.green.withAlpha(90)),
           ),
           child: Row(
@@ -289,7 +290,7 @@ class _TwoFactorSetupScreenState extends State<TwoFactorSetupScreen> {
               backgroundColor: scheme.primary,
               foregroundColor: readableOn(scheme.primary),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(Radii.lg),
               ),
             ),
           ),
@@ -318,7 +319,7 @@ class _TwoFactorSetupScreenState extends State<TwoFactorSetupScreen> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(Radii.lg),
               border: Border.all(color: scheme.primary.withAlpha(60)),
             ),
             child: uri.isEmpty
@@ -350,12 +351,12 @@ class _TwoFactorSetupScreenState extends State<TwoFactorSetupScreen> {
             Clipboard.setData(ClipboardData(text: secret));
             showToast(context, 'Setup key copied', type: ToastType.info);
           },
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(Radii.md),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               color: scheme.surfaceContainerHighest.withAlpha(120),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(Radii.md),
               border: Border.all(color: scheme.outlineVariant),
             ),
             child: Row(
@@ -426,7 +427,7 @@ class _TwoFactorSetupScreenState extends State<TwoFactorSetupScreen> {
               backgroundColor: scheme.primary,
               foregroundColor: readableOn(scheme.primary),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(Radii.lg),
               ),
             ),
             child: _busy

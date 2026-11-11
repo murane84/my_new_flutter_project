@@ -961,7 +961,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
             : null,
         borderRadius: sidePanel
             ? null
-            : const BorderRadius.vertical(top: Radius.circular(22)),
+            : const BorderRadius.vertical(top: Radius.circular(Radii.xl)),
         boxShadow: sidePanel
             ? null
             : [
@@ -1631,9 +1631,9 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
         Expanded(
           child: Material(
             color: accent.withAlpha(26),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(Radii.lg),
             child: InkWell(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(Radii.lg),
               onTap: _tapSyncTap,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),

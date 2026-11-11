@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/on_accent.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// A short, warm first-run tour: Aluta · Harmony · Circle · Glow · your
 /// music has feelings. Shown once; replay from Moments & nudges.
@@ -453,7 +454,7 @@ class _TourPagesState extends State<_TourPages>
                               horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
                             color: t.withValues(alpha: isDark ? 0.18 : 0.10),
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: BorderRadius.circular(Radii.xl),
                           ),
                           child: Row(mainAxisSize: MainAxisSize.min, children: [
                             Icon(icon, size: 14, color: t),

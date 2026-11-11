@@ -16,6 +16,7 @@ import '../screens/stories/quick_status_sheet.dart';
 import '../services/haptics.dart';
 import 'slide_track.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 int _glowDaySeed() {
   final d = DateTime.now();
@@ -373,7 +374,7 @@ class _GlowFeedState extends State<GlowFeed> {
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 16, 12, 12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(Radii.xl),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -467,7 +468,7 @@ class _GlowFeedState extends State<GlowFeed> {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(Radii.xl),
         color: isDark ? scheme.surfaceContainerHigh : Colors.white,
         border: Border.all(color: a.withValues(alpha: 0.45), width: 1.4),
         boxShadow: [
@@ -558,7 +559,7 @@ class _GlowFeedState extends State<GlowFeed> {
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
       decoration: BoxDecoration(
         color: isDark ? scheme.surfaceContainerHigh : Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Radii.xl),
         border: Border.all(color: a.withValues(alpha: isDark ? 0.3 : 0.18)),
         boxShadow: [
           BoxShadow(

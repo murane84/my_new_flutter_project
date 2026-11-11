@@ -109,7 +109,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: Colors.black.withAlpha(20),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -119,7 +119,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
               height: 40,
               decoration: BoxDecoration(
                 color: scheme.primary.withAlpha(40),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(Radii.md),
               ),
               child: Icon(_fileIcon(name), color: accentInk(scheme), size: 22),
             ),
@@ -1075,7 +1075,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
       // The card draws its own accent border — drop the theme's outer red
       // one so it isn't doubled up into a box-around-a-box.
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       elevation: 0,
       constraints: const BoxConstraints(maxWidth: 560),
@@ -1158,7 +1158,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                 decoration: BoxDecoration(
                   color: scheme.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(Radii.xl),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1289,7 +1289,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
             margin: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: scheme.surface,
-              borderRadius: BorderRadius.circular(26),
+              borderRadius: BorderRadius.circular(Radii.xxl),
               border: Border.all(
                   color:
                       scheme.primary.withValues(alpha: isDark ? 0.26 : 0.12)),
@@ -1329,7 +1329,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
           height: h,
           decoration: BoxDecoration(
             color: scheme.onSurfaceVariant.withAlpha(28),
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(Radii.sm),
           ),
         );
     return Padding(
@@ -1373,7 +1373,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
             padding: const EdgeInsets.fromLTRB(10, 6, 8, 6),
             decoration: BoxDecoration(
               color: color.withAlpha(22),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(Radii.xl),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -1395,7 +1395,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                       const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
                   decoration: BoxDecoration(
                     color: color.withAlpha(38),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(Radii.md),
                   ),
                   child: Text(
                     '${members.length}',
@@ -1721,7 +1721,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
         margin: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(Radii.xl),
         ),
         child: SafeArea(
           child: Column(
@@ -1871,14 +1871,14 @@ extension _ChatPageHelpers3 on _ChatPageState {
     // Lead with the address when we have it; fall back to raw coordinates.
     final detail = address.isNotEmpty ? address : coords;
     return InkWell(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(Radii.md),
       onTap: (lat != null && lng != null) ? () => _openMap(lat!, lng!) : null,
       child: Container(
         width: 232,
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: textColor.withAlpha(18),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
         ),
         child: Row(
           children: [
@@ -1967,7 +1967,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: textColor.withAlpha(18),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Radii.md),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2162,7 +2162,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
             decoration: BoxDecoration(
               // Solid, so no wallpaper can wash the date out.
               color: scheme.surface,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(Radii.lg),
               border: Border.all(color: lineColor),
             ),
             child: Text(
@@ -2263,9 +2263,9 @@ extension _ChatPageHelpers3 on _ChatPageState {
               decoration: BoxDecoration(
                 color: recvBubble,
                 borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(14),
-                  topRight: Radius.circular(14),
-                  bottomRight: Radius.circular(14),
+                  topLeft: Radius.circular(Radii.lg),
+                  topRight: Radius.circular(Radii.lg),
+                  bottomRight: Radius.circular(Radii.lg),
                   bottomLeft: Radius.circular(4),
                 ),
                 boxShadow: [

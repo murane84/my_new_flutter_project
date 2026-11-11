@@ -4,6 +4,7 @@ import '../utils/popup_shell.dart'
     show HeaderActionButton, gPanelBottomY, kAppFooterHeight;
 import '../utils/readable.dart' show accentInk;
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 // Height of the Aluta app header (toolbar). The full-page legal views start
 // just under it, so the "Aluta" title + overflow (⋮) menu stay visible above.
@@ -168,7 +169,7 @@ class _LegalHubState extends State<_LegalHub> {
           height: double.infinity,
           decoration: BoxDecoration(
             color: scheme.surface,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(Radii.xl),
             boxShadow: [
               BoxShadow(
                 color: Theme.of(context).shadowColor.withAlpha(35),
@@ -191,7 +192,7 @@ class _LegalHubState extends State<_LegalHub> {
                       height: 34,
                       decoration: BoxDecoration(
                         color: scheme.primary.withAlpha(28),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(Radii.md),
                       ),
                       child: Icon(doc.icon, size: 19, color: accentInk(scheme)),
                     ),
@@ -307,7 +308,7 @@ class _LegalHubState extends State<_LegalHub> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(Radii.xl),
         onTap: selected ? null : () => _selectTab(i),
         child: AnimatedContainer(
           duration: Motion.quick,
@@ -317,7 +318,7 @@ class _LegalHubState extends State<_LegalHub> {
             color: selected
                 ? scheme.primary.withAlpha(30)
                 : scheme.surfaceContainerHighest.withAlpha(120),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(Radii.xl),
             border: Border.all(
               color: selected
                   ? scheme.primary.withAlpha(150)

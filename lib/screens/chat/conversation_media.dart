@@ -6,6 +6,7 @@ import '../../services/haptics.dart';
 import '../../utils/net_image.dart' show authNetworkImageProvider;
 import '../../utils/readable.dart' show accentInk;
 import '../../utils/motion.dart';
+import '../../utils/radii.dart';
 
 /// One shared photo/video in the Media tab.
 class MediaItem {
@@ -283,7 +284,7 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
                         padding: EdgeInsets.symmetric(
                             horizontal: narrow ? 7 : 9, vertical: 4),
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(Radii.xl),
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
@@ -518,7 +519,7 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
           }
         },
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(Radii.md),
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -614,7 +615,7 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
         color: isDark
             ? Colors.white.withValues(alpha: 0.05)
             : scheme.primary.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(color: scheme.primary.withValues(alpha: 0.14)),
       ),
       child: Column(

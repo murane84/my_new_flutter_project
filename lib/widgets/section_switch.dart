@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../services/section_transition.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// Switches between sections with the user's chosen transition (Appearance
 /// → Section transitions). Give each section's child a distinct key; set
@@ -548,7 +549,7 @@ class _SectionTransitionDemoState extends State<SectionTransitionDemo> {
       builder: (context, snap) {
         if (snap.hasData) _b = snap.data!.isOdd;
         return ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(Radii.sm),
           child: SizedBox(
             width: 76,
             height: 52,

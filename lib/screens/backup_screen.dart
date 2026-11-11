@@ -12,6 +12,7 @@ import 'package:share_plus/share_plus.dart';
 import '../services/local_backup_service.dart';
 import '../utils/popup_shell.dart';
 import '../utils/toast_helper.dart';
+import '../utils/radii.dart';
 
 /// Encrypted backup & restore of the device's local history — the safety net
 /// for the "server stores almost nothing" model, so a new device or a reinstall
@@ -152,7 +153,7 @@ class _BackupScreenState extends State<BackupScreen> {
                   filled: true,
                   fillColor: scheme.surfaceContainerHighest,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(Radii.lg),
                     borderSide: BorderSide.none,
                   ),
                   suffixIcon: IconButton(
@@ -173,7 +174,7 @@ class _BackupScreenState extends State<BackupScreen> {
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
+                        borderRadius: BorderRadius.circular(Radii.lg)),
                   ),
                 ),
               ),
@@ -187,7 +188,7 @@ class _BackupScreenState extends State<BackupScreen> {
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
+                        borderRadius: BorderRadius.circular(Radii.lg)),
                   ),
                 ),
               ),
@@ -200,7 +201,7 @@ class _BackupScreenState extends State<BackupScreen> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(Radii.md),
                 ),
                 child: Row(
                   children: [

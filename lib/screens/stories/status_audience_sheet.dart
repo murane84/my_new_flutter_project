@@ -6,6 +6,7 @@ import '../../utils/readable.dart' show accentInk;
 import '../api_service.dart';
 import '../../widgets/pill_search.dart';
 import '../../services/haptics.dart';
+import '../../utils/radii.dart';
 
 /// "Who can see my status": My circle / Bonds only, plus friends to hide it
 /// from either way. Saved to the account; the server applies it.
@@ -18,7 +19,7 @@ Future<void> showStatusAudienceSheet(BuildContext context) async {
     useRootNavigator: true,
     backgroundColor: Theme.of(context).colorScheme.surface,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl))),
     builder: (_) => const _StatusAudienceSheet(),
   );
 }

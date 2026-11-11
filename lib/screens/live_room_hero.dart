@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../utils/toast_helper.dart';
 import '../utils/readable.dart' show accentInk;
+import '../utils/radii.dart';
 
 /// Front-end SHELL for the upcoming Listening Rooms (build stage C1).
 ///
@@ -33,7 +34,7 @@ class LiveRoomHeroShell extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(6, 2, 0, 12),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Radii.xl),
         // Theme-adaptive: a neutral surface warmed with a touch of the accent,
         // so it reads as a "live" card in both light and dark without going
         // fully dark in light mode.
@@ -75,7 +76,7 @@ class LiveRoomHeroShell extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: scheme.primary.withAlpha(28),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(Radii.xl),
                 ),
                 child: Text(
                   'SOON',

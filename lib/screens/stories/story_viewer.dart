@@ -19,6 +19,7 @@ import '../../utils/emoji_field.dart' show inlineEmojiPicker;
 import '../gif_picker.dart';
 import '../../services/haptics.dart';
 import '../../utils/motion.dart';
+import '../../utils/radii.dart';
 
 /// Full-screen, tap-through story viewer (Instagram/WhatsApp style).
 ///
@@ -168,7 +169,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       isScrollControlled: true,
       backgroundColor: const Color(0xFF1B1B1F),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) => SafeArea(
         child: SizedBox(
@@ -284,7 +285,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
             margin: const EdgeInsets.fromLTRB(10, 6, 10, 0),
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(26),
+              borderRadius: BorderRadius.circular(Radii.xxl),
               // Glossy dark glass: a lit top edge fading into a deep base.
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
@@ -423,7 +424,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                       ? Padding(
                           padding: const EdgeInsets.only(top: 8),
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(18),
+                            borderRadius: BorderRadius.circular(Radii.xl),
                             child: SizedBox(
                               height: 260,
                               child: inlineEmojiPicker(context, _replyCtrl),
@@ -1147,7 +1148,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                     ? _artImage(art)
                     : Container(
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(Radii.xl),
                           color: ink.withValues(alpha: 0.12),
                         ),
                         child: Icon(Icons.music_note_rounded,
@@ -1364,7 +1365,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         isScrollControlled: true,
         backgroundColor: const Color(0xFF1B1B1F),
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
         ),
         builder: (sctx) => SafeArea(
           child: SizedBox(
@@ -1420,7 +1421,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       showDragHandle: true,
       backgroundColor: const Color(0xFF1B1B1F),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) {
         return StatefulBuilder(builder: (ctx, setSheet) {
@@ -1559,7 +1560,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                                           color: Colors.white
                                               .withValues(alpha: 0.07),
                                           borderRadius:
-                                              BorderRadius.circular(22),
+                                              BorderRadius.circular(Radii.xl),
                                           border: Border.all(
                                               color: Colors.white
                                                   .withValues(alpha: 0.12)),

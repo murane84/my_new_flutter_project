@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../utils/readable.dart' show accentInk;
 import '../services/haptics.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// One action on a [showMomentCard].
 class MomentAction {
@@ -178,7 +179,7 @@ class _MomentCardState extends State<_MomentCard>
               child: Material(
                 type: MaterialType.transparency,
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(22),
+                  borderRadius: BorderRadius.circular(Radii.xl),
                   child: BackdropFilter(
                     filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                     child: Container(
@@ -187,7 +188,7 @@ class _MomentCardState extends State<_MomentCard>
                         color: isDark
                             ? Colors.black.withValues(alpha: 0.55)
                             : Colors.white.withValues(alpha: 0.82),
-                        borderRadius: BorderRadius.circular(22),
+                        borderRadius: BorderRadius.circular(Radii.xl),
                         border: Border.all(
                             color: scheme.primary.withValues(alpha: 0.35)),
                         boxShadow: [

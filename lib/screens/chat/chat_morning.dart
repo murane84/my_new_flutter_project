@@ -25,7 +25,7 @@ extension _ChatMorning on _ChatPageState {
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) => SafeArea(
         child: Column(
@@ -158,7 +158,7 @@ extension _ChatMorning on _ChatPageState {
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) => SafeArea(
         child: Column(

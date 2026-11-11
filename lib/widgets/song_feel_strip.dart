@@ -4,6 +4,7 @@ import '../services/song_insights.dart';
 import '../utils/readable.dart';
 import '../services/haptics.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// How this song feels to you — and, from that feeling, who it's for.
 /// 😍 → "Send to Belyner 💞" · Together; 🥹 → a heart; 💪 → share the energy;
@@ -116,7 +117,7 @@ class _SongFeelStripState extends State<SongFeelStrip> {
       color: Colors.transparent,
       child: Ink(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(Radii.xl),
           gradient: strong
               ? LinearGradient(colors: [
                   Color.lerp(a, Colors.white, 0.18)!,
@@ -137,7 +138,7 @@ class _SongFeelStripState extends State<SongFeelStrip> {
               : null,
         ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(Radii.xl),
           onTap: onTap,
           child: Padding(
             padding: EdgeInsets.symmetric(
@@ -256,7 +257,7 @@ class _SongFeelStripState extends State<SongFeelStrip> {
           padding: EdgeInsets.symmetric(
               horizontal: 12, vertical: widget.centered ? 10 : 7),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(Radii.xl),
             color: isDark
                 ? Colors.white.withValues(alpha: 0.05)
                 : Colors.white.withValues(alpha: 0.55),

@@ -262,7 +262,7 @@ class _MomentComposerState extends State<_MomentComposer> {
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl))),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -452,7 +452,7 @@ class _MomentComposerState extends State<_MomentComposer> {
           color: sel
               ? widget.accent.withValues(alpha: 0.16)
               : scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           border: Border.all(
               color: sel
                   ? widget.accent.withValues(alpha: 0.6)
@@ -502,13 +502,13 @@ class _MomentComposerState extends State<_MomentComposer> {
               if (i == _photos.length) {
                 return InkWell(
                   onTap: _pickPhotos,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(Radii.md),
                   child: Container(
                     width: 84,
                     height: 84,
                     decoration: BoxDecoration(
                       color: scheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(Radii.md),
                       border: Border.all(
                           color: widget.accent.withValues(alpha: 0.4),
                           width: 1.4),
@@ -532,7 +532,7 @@ class _MomentComposerState extends State<_MomentComposer> {
               return Stack(
                 children: [
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(Radii.md),
                     child: Image.memory(bytes,
                         width: 84, height: 84, fit: BoxFit.cover),
                   ),
@@ -571,13 +571,13 @@ class _MomentComposerState extends State<_MomentComposer> {
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Radii.md),
         border: Border.all(color: widget.accent.withValues(alpha: 0.25)),
       ),
       child: Row(
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(Radii.sm),
             child: SizedBox(
               width: 52,
               height: 52,
@@ -613,9 +613,9 @@ class _MomentComposerState extends State<_MomentComposer> {
           const SizedBox(width: 8),
           Material(
             color: widget.accent.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(Radii.xl),
             child: InkWell(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(Radii.xl),
               onTap: _pickMedia,
               child: Padding(
                 padding:
@@ -645,12 +645,12 @@ class _MomentComposerState extends State<_MomentComposer> {
       VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(Radii.md),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         decoration: BoxDecoration(
           color: scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           border: Border.all(
               color: widget.accent.withValues(alpha: 0.25)),
         ),
@@ -700,7 +700,7 @@ class _MomentComposerState extends State<_MomentComposer> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(Radii.md),
           ),
           child: Row(
             children: [
@@ -804,7 +804,7 @@ class _MomentComposerState extends State<_MomentComposer> {
                 filled: true,
                 fillColor: scheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(Radii.lg),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -878,7 +878,7 @@ class _PlaylistAddSheetState extends State<_PlaylistAddSheet> {
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl))),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -958,13 +958,13 @@ class _PlaylistAddSheetState extends State<_PlaylistAddSheet> {
           const SizedBox(height: 14),
           InkWell(
             onTap: _pickFromLibrary,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(Radii.md),
             child: Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(Radii.md),
               ),
               child: Row(
                 children: [
@@ -991,7 +991,7 @@ class _PlaylistAddSheetState extends State<_PlaylistAddSheet> {
               filled: true,
               fillColor: scheme.surfaceContainerHighest,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(Radii.lg),
                 borderSide: BorderSide.none,
               ),
             ),
@@ -1004,7 +1004,7 @@ class _PlaylistAddSheetState extends State<_PlaylistAddSheet> {
               filled: true,
               fillColor: scheme.surfaceContainerHighest,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(Radii.lg),
                 borderSide: BorderSide.none,
               ),
             ),

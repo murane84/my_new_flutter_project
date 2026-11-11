@@ -37,6 +37,7 @@ import '../widgets/pill_search.dart';
 import '../services/haptics.dart';
 import '../widgets/now_glow.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
 ///
@@ -242,7 +243,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
         padding: const EdgeInsets.fromLTRB(10, 8, 14, 8),
         decoration: BoxDecoration(
           color: accent,
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(Radii.xl),
           boxShadow: [
             BoxShadow(
                 color: accent.withValues(alpha: 0.45),
@@ -870,7 +871,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
               ? Color.alphaBlend(
                   Colors.white.withValues(alpha: 0.05), scheme.surface)
               : scheme.surface,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(Radii.xxl),
           border: Border.all(
               color: accent.withValues(alpha: isDark ? 0.30 : 0.18)),
           boxShadow: [
@@ -923,7 +924,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                               horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
                             color: accent.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(Radii.md),
                           ),
                           child: Text(
                               _index >= 0
@@ -990,7 +991,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                       accent.withValues(alpha: isDark ? 0.22 : 0.14),
                       accent.withValues(alpha: isDark ? 0.08 : 0.04),
                     ]),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(Radii.lg),
                   ),
                   child: Row(
                     children: [
@@ -1316,7 +1317,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Radii.xl),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -1647,7 +1648,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
             duration: Motion.quick,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(Radii.lg),
               color: on
                   ? accent.withValues(alpha: b != null ? 0.14 : 0.08)
                   : scheme.surfaceContainerHighest.withValues(alpha: 0.6),
@@ -1700,7 +1701,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(Radii.lg),
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -1879,7 +1880,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(Radii.lg),
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -1921,7 +1922,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                           horizontal: 5, vertical: 1),
                       decoration: BoxDecoration(
                         color: accent,
-                        borderRadius: BorderRadius.circular(9),
+                        borderRadius: BorderRadius.circular(Radii.md),
                       ),
                       child: Text(
                         badge,
@@ -2053,7 +2054,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                       accent.withValues(alpha: isDark ? 0.16 : 0.10),
                       scheme.surface,
                     ),
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(Radii.xxl),
                     border:
                         Border.all(color: accent.withValues(alpha: 0.38)),
                     boxShadow: [
@@ -2120,7 +2121,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       showDragHandle: true,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) {
         Widget row(String label, int minutes) => ListTile(
@@ -2277,7 +2278,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
         const SizedBox(width: 6),
         // Tap the title (or the expand button) for the full-height queue.
         InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(Radii.sm),
           onTap: _openSheet,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
@@ -2356,9 +2357,9 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
         color: current
             ? accent.withValues(alpha: isDark ? 0.10 : 0.07)
             : Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         child: InkWell(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(Radii.lg),
           onTap: current ? null : () => _playAt(i),
           // Hold a song to share it with friends (as on Android / Windows).
           onLongPress: () {
@@ -2633,7 +2634,7 @@ class _WebWaveformSeekBarState extends State<_WebWaveformSeekBar> {
                       child: Container(
                         decoration: BoxDecoration(
                           color: widget.accent.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(Radii.sm),
                           border: Border.all(
                               color: widget.accent.withValues(alpha: 0.35)),
                         ),
@@ -2669,7 +2670,7 @@ class _WebWaveformSeekBarState extends State<_WebWaveformSeekBar> {
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: widget.accent,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(Radii.sm),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.25),

@@ -149,7 +149,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
                 maxHeight: MediaQuery.of(ctx).size.height * 0.7),
             decoration: BoxDecoration(
               color: scheme.surface,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(Radii.xl),
             ),
             child: SafeArea(
               child: Column(
@@ -841,7 +841,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
     final local = msg['__localBytes'];
     if (type == 'image' && local is Uint8List) {
       return ClipRRect(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         child: ConstrainedBox(
           constraints: const BoxConstraints(
               maxWidth: 240, maxHeight: 300, minWidth: 120, minHeight: 80),
@@ -883,7 +883,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: textColor.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Radii.md),
       ),
       child: Builder(builder: (context) {
         final scheme = Theme.of(context).colorScheme;
@@ -1077,7 +1077,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
     return GestureDetector(
       onTap: () => _openImageViewer(url),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         child: kIsWeb
             ? box(provider(null))
             : FutureBuilder<File?>(
@@ -1248,7 +1248,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
                   margin: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: scheme.primary.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(22),
+                    borderRadius: BorderRadius.circular(Radii.xl),
                     border: Border.all(color: scheme.primary, width: 2),
                   ),
                   alignment: Alignment.center,
@@ -1257,7 +1257,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
                         horizontal: 18, vertical: 12),
                     decoration: BoxDecoration(
                       color: scheme.surface,
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(Radii.xl),
                       boxShadow: [
                         BoxShadow(
                             color: Colors.black.withValues(alpha: 0.15),
@@ -1403,7 +1403,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: scheme.surface,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(Radii.lg),
               border: Border.all(
                   color: scheme.outlineVariant.withValues(alpha: 0.5)),
             ),
@@ -1415,7 +1415,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: scheme.primary.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(Radii.md),
                   ),
                   child: Icon(Icons.insert_drive_file_rounded,
                       color: accentInk(scheme), size: 20),

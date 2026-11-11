@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'net.dart' show NetStatus;
 import 'motion.dart';
+import 'radii.dart';
 
 // ── Toast types ───────────────────────────────────────────────────────────────
 enum ToastType { info, error, success }
@@ -230,7 +231,7 @@ class _ToastOverlayState extends State<_ToastOverlay>
                     left: 6, right: 16, top: 10, bottom: 10),
                 decoration: BoxDecoration(
                   color: card,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(Radii.lg),
                   border: Border.all(
                       color: _accent.withAlpha(widget.isDark ? 90 : 130),
                       width: 1),

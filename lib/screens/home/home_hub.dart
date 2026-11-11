@@ -473,7 +473,7 @@ extension _HomeHub on HomePageState {
       onTap: _circleSearchFocus.requestFocus,
       child: DecoratedBox(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(19),
+        borderRadius: BorderRadius.circular(Radii.xl),
         color: isDark
             ? scheme.surfaceContainerHigh
             : scheme.surfaceContainerHighest,
@@ -534,7 +534,7 @@ extension _HomeHub on HomePageState {
     final q = _searchCtrl.text;
     return DecoratedBox(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(19),
+        borderRadius: BorderRadius.circular(Radii.xl),
         color: scheme.surfaceContainerHigh,
         border: Border.all(color: scheme.primary.withValues(alpha: 0.55)),
       ),
@@ -636,7 +636,7 @@ extension _HomeHub on HomePageState {
                         const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(
                       color: scheme.primary,
-                      borderRadius: BorderRadius.circular(9),
+                      borderRadius: BorderRadius.circular(Radii.md),
                     ),
                     child: Text(n > 99 ? '99+' : '$n',
                         style: TextStyle(
@@ -740,7 +740,7 @@ extension _HomeHub on HomePageState {
               color: Colors.transparent,
               child: InkWell(
                 onTap: _toggleStories,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(Radii.sm),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
                   child: Row(
@@ -828,7 +828,7 @@ extension _HomeHub on HomePageState {
             () => active
                 ? _scrollLayerToTop(key)
                 : _setFriendLayer(key, rippleFrom: _rippleXOf(pill)),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(Radii.xl),
         // The badge FLOATS on the corner (Stack, no clip) instead of sitting
         // inline — so it adds zero width to the pill. A growing count (even
         // "99+") can never nudge the neighbouring pill; the two stay put.
@@ -841,7 +841,7 @@ extension _HomeHub on HomePageState {
                   horizontal: showLabel ? 12 : 9, vertical: 7),
               decoration: BoxDecoration(
                 color: active ? scheme.primary.withAlpha(30) : idleBg,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(Radii.xl),
                 border: Border.all(
                   color: active
                       ? scheme.primary.withAlpha(130)
@@ -906,7 +906,7 @@ extension _HomeHub on HomePageState {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
         color: scheme.primary,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Radii.md),
       ),
       child: Text(
         count > 99 ? '99+' : '$count',
@@ -1052,7 +1052,7 @@ class _CirclePeek {
                 child: Material(
                   color: scheme.surface,
                   elevation: 12,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(Radii.xl),
                   clipBehavior: Clip.antiAlias,
                   child: SizedBox(
                     width: (size.width < 472 ? size.width : 472.0) - 32,

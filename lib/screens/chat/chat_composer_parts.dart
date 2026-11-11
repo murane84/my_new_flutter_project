@@ -24,7 +24,7 @@ class _RecordingBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(Radii.xxl),
       ),
       child: Row(
         children: [
@@ -90,7 +90,7 @@ class _EditBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
         color: scheme.surface.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(color: scheme.primary.withValues(alpha: 0.45)),
         boxShadow: [
           BoxShadow(
@@ -162,7 +162,7 @@ class _OfflineBanner extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: scheme.errorContainer,
-        borderRadius: BorderRadius.circular(19),
+        borderRadius: BorderRadius.circular(Radii.xl),
       ),
       child: isOffline
           ? Padding(
@@ -197,7 +197,7 @@ class _OfflineBanner extends StatelessWidget {
                                 horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
                               color: scheme.error,
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(Radii.md),
                             ),
                             child: Text(
                               'Go Online',

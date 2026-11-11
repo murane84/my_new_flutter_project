@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import '../widgets/pill_search.dart';
 import '../widgets/edge_scroll_row.dart';
+import '../utils/radii.dart';
 
 /// GIPHY API key.
 ///
@@ -344,7 +345,7 @@ class _GifPickerState extends State<GifPicker> {
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
           color: selected ? scheme.primary : scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(Radii.xl),
         ),
         child: Text(
           label,
@@ -384,7 +385,7 @@ class _GifPickerState extends State<GifPicker> {
                 color: active
                     ? scheme.primary.withAlpha(38)
                     : scheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(Radii.lg),
                 border: Border.all(
                     color: active
                         ? scheme.primary.withAlpha(150)
@@ -436,7 +437,7 @@ class _GifPickerState extends State<GifPicker> {
               return GestureDetector(
                 onTap: () => _pick(g),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(Radii.md),
                   child: CachedNetworkImage(
                     imageUrl: g.previewUrl,
                     width: 62,
@@ -516,7 +517,7 @@ class _GifPickerState extends State<GifPicker> {
             return GestureDetector(
               onTap: () => _pick(gif),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(Radii.md),
                 child: AspectRatio(
                   aspectRatio: gif.aspectRatio,
                   child: CachedNetworkImage(
@@ -584,7 +585,7 @@ class _GifPickerState extends State<GifPicker> {
       crossAxisSpacing: 6,
       itemCount: 12,
       itemBuilder: (_, i) => ClipRRect(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(Radii.md),
         child: SizedBox(
           height: heights[i % heights.length],
           child: _shimmerBox(scheme),

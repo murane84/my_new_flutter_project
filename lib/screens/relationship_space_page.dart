@@ -59,6 +59,7 @@ import '../services/haptics.dart';
 import '../widgets/edge_scroll_row.dart';
 import '../widgets/section_switch.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
 part 'space/space_edit_sheet.dart'; // edit-space sheet + wallpaper picker
@@ -259,7 +260,7 @@ Future<String?> pickDiaryReaction(BuildContext context, Color accent) {
     isScrollControlled: true,
     backgroundColor: scheme.surface,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
     ),
     builder: (ctx) {
       var showAll = false;
@@ -302,7 +303,7 @@ Future<String?> pickDiaryReaction(BuildContext context, Color accent) {
                             HeartBurst.react(ctx, em);
                             Navigator.pop(ctx, em);
                           },
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(Radii.lg),
                           child: Container(
                             padding: const EdgeInsets.all(8),
                             child: Text(em, style: const TextStyle(fontSize: 28)),
@@ -378,14 +379,14 @@ Widget diaryReactionRow({
       .toSet();
   Widget chip(String emoji, int count, bool isMine) => InkWell(
         onTap: () => onToggle(emoji),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(Radii.xl),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
           decoration: BoxDecoration(
             color: isMine
                 ? accent.withValues(alpha: 0.16)
                 : scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(Radii.xl),
             border: Border.all(
                 color: isMine
                     ? accent.withValues(alpha: 0.55)
@@ -417,11 +418,11 @@ Widget diaryReactionRow({
             mine.contains(r['emoji'].toString())),
       InkWell(
         onTap: onAdd,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(Radii.xl),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(Radii.xl),
             border: Border.all(color: accent.withValues(alpha: 0.5)),
           ),
           child: Row(
@@ -977,7 +978,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(Radii.xl),
           border: Border.all(color: _accent.withValues(alpha: 0.22)),
           boxShadow: [
             BoxShadow(
@@ -1005,7 +1006,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: _accent.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(11),
+                    borderRadius: BorderRadius.circular(Radii.md),
                   ),
                   child: Icon(Icons.headphones_rounded,
                       color: _accent, size: 20),
@@ -1043,9 +1044,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                         child: Material(
                           color: scheme.surfaceContainerHighest
                               .withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(Radii.lg),
                           child: InkWell(
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(Radii.lg),
                             onTap: () => Navigator.pop(ctx, paths[i]),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
@@ -1059,7 +1060,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                                     color: isNow
                                         ? _accent
                                         : _accent.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(11),
+                                    borderRadius: BorderRadius.circular(Radii.md),
                                   ),
                                   // The song playing right now dances.
                                   child: isNow
@@ -1104,7 +1105,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (_) => _MomentComposer(accent: _accent),
     );
@@ -1240,7 +1241,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (_) => _PlaylistAddSheet(accent: _accent),
     );
@@ -1782,7 +1783,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                 color: isDark
                     ? scheme.surfaceContainerHigh
                     : scheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(Radii.xl),
                 border: Border.all(color: _accent.withValues(alpha: 0.30)),
                 boxShadow: [
                   BoxShadow(
@@ -1855,7 +1856,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                               height: 34,
                               decoration: BoxDecoration(
                                 color: _accent.withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(Radii.md),
                               ),
                               child: Icon(icon, size: 18, color: _accent),
                             ),
@@ -2050,7 +2051,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         );
     return DecoratedBox(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(Radii.lg),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -2068,7 +2069,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(Radii.lg),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2095,7 +2096,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (_) => _DedicateComposeSheet(spaceId: _id, accent: _accent),
     );
@@ -2108,7 +2109,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (_) => _CapsuleComposeSheet(spaceId: _id, accent: _accent),
     );
@@ -2293,7 +2294,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                 filled: true,
                 fillColor: scheme.surface,
                 border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(Radii.md),
                     borderSide: BorderSide.none),
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -2315,7 +2316,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       decoration: BoxDecoration(
         color:
             Color.alphaBlend(_accent.withValues(alpha: 0.10), scheme.surface),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(color: _accent.withValues(alpha: 0.28)),
       ),
       child: Column(
@@ -2379,7 +2380,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (_) => _PlaylistAddSheet(accent: _accent),
     );
@@ -2456,7 +2457,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       isScrollControlled: true,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (_) => DraggableScrollableSheet(
         expand: false,
@@ -2527,7 +2528,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (_) => _DiaryComposer(
         accent: _accent,

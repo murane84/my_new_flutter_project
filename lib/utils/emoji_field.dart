@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+import 'radii.dart';
 
 /// Open an emoji picker that inserts the tapped emoji into [controller] at the
 /// cursor. Reusable anywhere a plain field wants emoji input (group name,
@@ -12,7 +13,7 @@ Future<void> showEmojiPickerSheet(
     backgroundColor: scheme.surface,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
     ),
     builder: (_) => SafeArea(
       top: false,

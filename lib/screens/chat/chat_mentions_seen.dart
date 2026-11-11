@@ -128,7 +128,7 @@ extension _ChatMentionsSeen on _ChatPageState {
                           constraints: const BoxConstraints(minWidth: 18),
                           decoration: BoxDecoration(
                             color: scheme.surface,
-                            borderRadius: BorderRadius.circular(9),
+                            borderRadius: BorderRadius.circular(Radii.md),
                             border: Border.all(
                                 color: scheme.primary, width: 1.2),
                           ),

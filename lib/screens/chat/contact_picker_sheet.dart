@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import '../../utils/readable.dart' show accentInk;
 import '../../widgets/pill_search.dart';
+import '../../utils/radii.dart';
 
 /// Fast, searchable phone-book picker for sharing a contact.
 ///
@@ -70,7 +71,7 @@ class _ContactPickerSheetState extends State<ContactPickerSheet> {
       builder: (context, controller) => Container(
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(Radii.xl)),
         ),
         child: Column(
           children: [

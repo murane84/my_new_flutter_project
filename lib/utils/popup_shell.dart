@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'readable.dart' show accentInk;
 import 'motion.dart';
+import 'radii.dart';
 
 /// The global-space position of the most recent pointer-down anywhere in the
 /// app, recorded by [GlobalTapOrigin] near the app root. Every [showAppPopup]
@@ -314,7 +315,7 @@ class AppPopupShell extends StatelessWidget {
             height: 34,
             decoration: BoxDecoration(
               color: scheme.primary.withAlpha(28),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(Radii.md),
             ),
             child: Icon(icon, size: 19, color: accentInk(scheme)),
           ),
@@ -390,7 +391,7 @@ class AppPopupShell extends StatelessWidget {
             // footer (or the now-playing bar).
             decoration: BoxDecoration(
               color: scheme.surface,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(Radii.xl),
               boxShadow: [
                 BoxShadow(
                   color: Theme.of(context).shadowColor.withAlpha(35),
@@ -479,7 +480,7 @@ class AppPopupShell extends StatelessWidget {
             child: Container(
               decoration: BoxDecoration(
                 color: scheme.surface,
-                borderRadius: BorderRadius.circular(22),
+                borderRadius: BorderRadius.circular(Radii.xl),
                 border: Border.all(color: scheme.primary.withAlpha(130)),
                 boxShadow: [
                   BoxShadow(
@@ -545,7 +546,7 @@ class _HeaderActionButtonState extends State<HeaderActionButton> {
         height: 38,
         margin: const EdgeInsets.symmetric(horizontal: 3),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -586,9 +587,9 @@ class _HeaderActionButtonState extends State<HeaderActionButton> {
         ),
         child: Material(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           child: InkWell(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(Radii.md),
             onTap: widget.onPressed,
             onHighlightChanged: (v) {
               if (mounted) setState(() => _down = v);

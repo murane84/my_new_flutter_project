@@ -11,6 +11,7 @@ import 'home_page.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/snackbar_helper.dart';
 import '../services/contact_names.dart';
+import '../utils/radii.dart';
 
 class FriendsListScreen extends StatefulWidget {
   static const routeName = '/friends';
@@ -162,7 +163,7 @@ class FriendsListScreenState extends State<FriendsListScreen> {
       onLongPress: () => showModalBottomSheet(
         context: context,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
         ),
         builder: (_) => FriendOptionsSheet(
           user: user,
@@ -270,7 +271,7 @@ class FriendsListScreenState extends State<FriendsListScreen> {
                         horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: scheme.primary,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(Radii.md),
                     ),
                     child: Text(
                       user.unreadCount > 99 ? '99+' : '${user.unreadCount}',

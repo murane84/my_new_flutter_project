@@ -11,6 +11,7 @@ import '../utils/readable.dart';
 import '../utils/toast_helper.dart';
 import '../services/haptics.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// Aluta's own message banner while the app is open: slides down from the
 /// top when a message arrives for a chat that isn't on screen.
@@ -412,7 +413,7 @@ class _ReplyBannerViewState extends State<_ReplyBannerView>
                   color: isDark
                       ? Colors.white.withValues(alpha: 0.06)
                       : scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(22),
+                  borderRadius: BorderRadius.circular(Radii.xl),
                   border: Border.all(color: a.withValues(alpha: 0.25)),
                 ),
                 child: TextField(
@@ -459,18 +460,18 @@ class _ReplyBannerViewState extends State<_ReplyBannerView>
                 color: scheme.surface,
                 elevation: 10,
                 shadowColor: Colors.black54,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(Radii.xl),
                 child: Container(
                   padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(Radii.xl),
                     border: Border.all(color: a.withValues(alpha: 0.30)),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       InkWell(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(Radii.lg),
                         onTap: _engaged ? null : widget.onOpen,
                         child: Row(children: [
                           CircleAvatar(

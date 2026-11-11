@@ -292,7 +292,7 @@ class _MixtapeScreenState extends State<_MixtapeScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Color.alphaBlend(accent.withValues(alpha: 0.10), scheme.surface),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(color: accent.withValues(alpha: 0.22)),
       ),
       child: Row(
@@ -336,7 +336,7 @@ class _MixtapeScreenState extends State<_MixtapeScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           onTap: () => widget.onPlaySong(t),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
@@ -348,7 +348,7 @@ class _MixtapeScreenState extends State<_MixtapeScreen> {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: accent.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(9),
+                    borderRadius: BorderRadius.circular(Radii.md),
                   ),
                   child: Icon(Icons.play_arrow_rounded, color: accent, size: 22),
                 ),
@@ -389,7 +389,7 @@ class _MixtapeScreenState extends State<_MixtapeScreen> {
     final url = _url(h['ref']);
     final caption = (h['caption'] ?? '').toString().trim();
     return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(Radii.md),
       child: SizedBox(
         width: 120,
         height: 120,

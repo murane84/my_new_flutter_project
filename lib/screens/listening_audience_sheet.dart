@@ -8,6 +8,7 @@ import '../widgets/person_avatar.dart';
 import '../widgets/pill_search.dart';
 import '../services/haptics.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// The music-player toggle for broadcasting "listening now" to friends.
 /// Tap flips sharing on/off; long-press opens the audience sheet (who can see).
@@ -136,7 +137,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
                     ? Color.alphaBlend(
                         Colors.white.withValues(alpha: 0.05), scheme.surface)
                     : scheme.surface,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(Radii.xxl),
                 border: Border.all(
                     color: scheme.primary
                         .withValues(alpha: isDark ? 0.30 : 0.18)),
@@ -188,7 +189,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(Radii.md),
                   gradient: on ? _grad(scheme) : null,
                   color: on ? null : scheme.surfaceContainerHighest,
                   boxShadow: on
@@ -246,9 +247,9 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
                 ? scheme.primary.withValues(alpha: isDark ? 0.16 : 0.08)
                 : scheme.surfaceContainerHighest
                     .withValues(alpha: isDark ? 0.5 : 0.7),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(Radii.lg),
             child: InkWell(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(Radii.lg),
               onTap: () {
                 Haptics.selectionClick();
                 _presence.setShareEnabled(!on);
@@ -419,7 +420,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
             style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(44),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14)),
+                  borderRadius: BorderRadius.circular(Radii.lg)),
             ),
             onPressed: () => Navigator.of(context).maybePop(),
             child: const Text('Done',
@@ -439,7 +440,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         onTap: () {
           Haptics.selectionClick();
           _presence.setAudience(value, _selected);
@@ -448,7 +449,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
           duration: Motion.quick,
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(Radii.lg),
             gradient: active ? _grad(scheme) : null,
             color: active
                 ? null
@@ -514,9 +515,9 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
       color: checked
           ? scheme.primary.withValues(alpha: 0.07)
           : Colors.transparent,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(Radii.lg),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         onTap: () {
           Haptics.selectionClick();
           final next = Set<int>.from(_selected);

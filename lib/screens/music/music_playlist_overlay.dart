@@ -479,7 +479,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       height: 40,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(Radii.md),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -504,7 +504,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     final id = _songId[path];
     if (id == null || !(Platform.isAndroid || Platform.isIOS)) return fallback;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(Radii.md),
       child: SizedBox(
         width: 40,
         height: 40,
@@ -514,7 +514,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           artworkWidth: 40,
           artworkHeight: 40,
           artworkFit: BoxFit.cover,
-          artworkBorder: BorderRadius.circular(10),
+          artworkBorder: BorderRadius.circular(Radii.md),
           keepOldArtwork: true,
           nullArtworkWidget: fallback,
         ),
@@ -729,7 +729,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       builder: (ctx) => Container(
         margin: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-            color: scheme.surface, borderRadius: BorderRadius.circular(22)),
+            color: scheme.surface, borderRadius: BorderRadius.circular(Radii.xl)),
         child: SafeArea(
           top: false,
           child: Column(
@@ -816,7 +816,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => SafeArea(
@@ -889,7 +889,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) => SafeArea(
         top: false,
@@ -947,7 +947,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         selected: on,
         selectedTileColor: scheme.primary.withValues(alpha: 0.10),
         shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12)),
+            borderRadius: BorderRadius.circular(Radii.md)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14),
         leading: Icon(icon,
             color: on ? scheme.primary : scheme.onSurfaceVariant),
@@ -975,7 +975,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(Radii.xl),
           border: Border.all(color: scheme.primary.withAlpha(50)),
           boxShadow: [
             BoxShadow(
@@ -1044,7 +1044,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         margin: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(Radii.xl),
         ),
         child: SafeArea(
           top: false,
@@ -1232,7 +1232,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             filled: true,
             fillColor: scheme.surfaceContainerHighest,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(Radii.md),
               borderSide: BorderSide.none,
             ),
           ),
@@ -1245,7 +1245,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       isScrollControlled: true,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(
@@ -1358,8 +1358,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         // music panel's rounded frame instead of squaring off against it.
         // Chat drawer: flush. Bottom sheet: its own rounded card.
         borderRadius: widget.fullPage
-            ? BorderRadius.circular(18)
-            : (widget.drawer ? BorderRadius.zero : BorderRadius.circular(20)),
+            ? BorderRadius.circular(Radii.xl)
+            : (widget.drawer ? BorderRadius.zero : BorderRadius.circular(Radii.xl)),
         border: widget.fullPage
             ? Border.all(color: scheme.primary.withAlpha(60))
             : (widget.drawer
@@ -1602,7 +1602,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
               color: scheme.primary.withAlpha(30),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(Radii.md),
             ),
             child: Text('${widget.playlist.length}',
                 style: TextStyle(
@@ -1652,7 +1652,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           child: Material(
             color: scheme.surface,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(Radii.lg),
               side: BorderSide(color: scheme.primary.withAlpha(40)),
             ),
             clipBehavior: Clip.antiAlias,
@@ -1682,7 +1682,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: scheme.primary.withAlpha(30),
-                            borderRadius: BorderRadius.circular(9),
+                            borderRadius: BorderRadius.circular(Radii.md),
                           ),
                           child: Text(_compactCount(shown),
                               maxLines: 1,
@@ -1709,7 +1709,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             height: 44,
             decoration: BoxDecoration(
               color: scheme.surface,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(Radii.lg),
               border: Border.all(color: scheme.primary.withAlpha(40)),
             ),
             child: Row(children: [
@@ -1730,7 +1730,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                     return Tooltip(
                       message: a.tip,
                       child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(Radii.md),
                         onTap: a.onTap == null ? null : () => a.onTap!(bctx),
                         child: SizedBox.expand(
                           child: Icon(a.icon, size: 21, color: color),
@@ -1795,7 +1795,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       context: context,
       position: RelativeRect.fromRect(
           topLeft & const Size(1, 1), Offset.zero & overlay.size),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.lg)),
       items: [
         PopupMenuItem(
           value: 'device',
@@ -1967,13 +1967,13 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     return Tooltip(
       message: 'Filter & play',
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(Radii.xl),
         onTap: () => _showFilterMenu(context),
         child: Container(
           padding: EdgeInsets.symmetric(horizontal: on ? 10 : 8, vertical: 7),
           decoration: BoxDecoration(
             color: on ? scheme.primary.withAlpha(28) : Colors.transparent,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(Radii.xl),
             border: Border.all(
                 color: on
                     ? scheme.primary.withAlpha(120)
@@ -2012,13 +2012,13 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     return Tooltip(
       message: 'Sort order',
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(Radii.xl),
         onTap: () => _showSort(context),
         child: Container(
           padding: EdgeInsets.symmetric(horizontal: on ? 10 : 8, vertical: 7),
           decoration: BoxDecoration(
             color: on ? scheme.primary.withAlpha(28) : Colors.transparent,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(Radii.xl),
             border: Border.all(
                 color: on
                     ? scheme.primary.withAlpha(120)
@@ -2070,7 +2070,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         selected: active,
         selectedTileColor: scheme.primary.withValues(alpha: 0.10),
         shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12)),
+            borderRadius: BorderRadius.circular(Radii.md)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14),
         leading:
             Icon(icon, color: active ? scheme.primary : scheme.onSurfaceVariant),
@@ -2096,7 +2096,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(Radii.xl),
           border: Border.all(color: scheme.primary.withAlpha(50)),
           boxShadow: [
             BoxShadow(
@@ -2290,7 +2290,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             ? scheme.primary.withAlpha(40)
             : scheme.primary.withAlpha(
                 isNow ? 22 + (70 * _pulseCtrl.value).round() : 22),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.md)),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
         leading: _selecting
@@ -2331,7 +2331,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                       // Same teal NEW mark as "Your week in music".
                       decoration: BoxDecoration(
                         color: const Color(0xFF2EC4B6).withAlpha(36),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(Radii.sm),
                       ),
                       child: const Text('NEW',
                           style: TextStyle(
@@ -2487,7 +2487,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                       // Spinning cover + title: tap to open Now Playing.
                       Expanded(
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(Radii.lg),
                           onTap: widget.onOpenNowPlaying,
                           child: Row(children: [
                             if (path != null) ...[

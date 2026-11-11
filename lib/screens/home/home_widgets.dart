@@ -37,7 +37,7 @@ class _PanelToggleBtn extends StatelessWidget {
             color: isFullScreen
                 ? scheme.primary
                 : scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: BorderRadius.circular(Radii.md),
           ),
           child: Icon(
             customIcon ??
@@ -325,7 +325,7 @@ class _LiveInviteDialog extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(22, 22, 22, 16),
               decoration: BoxDecoration(
                 color: scheme.surface,
-                borderRadius: BorderRadius.circular(26),
+                borderRadius: BorderRadius.circular(Radii.xxl),
                 border: Border.all(color: scheme.primary.withAlpha(130)),
                 boxShadow: [
                   BoxShadow(
@@ -411,7 +411,7 @@ class _LiveInviteDialog extends StatelessWidget {
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
                       color: scheme.surfaceContainerHighest.withAlpha(140),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(Radii.lg),
                       border:
                           Border.all(color: scheme.outlineVariant.withAlpha(70)),
                     ),
@@ -464,7 +464,7 @@ class _LiveInviteDialog extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 20, vertical: 12),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(Radii.lg),
                           ),
                         ),
                       ),

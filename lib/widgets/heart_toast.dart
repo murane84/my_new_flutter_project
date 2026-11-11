@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'glossy_heart.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// The "Neema opened your secret heart" moment — a small glossy pill that
 /// drops in at the TOP of the screen (so an open keyboard never hides it),
@@ -103,7 +104,7 @@ class _HeartToastState extends State<_HeartToast>
                   child: Container(
                     padding: const EdgeInsets.fromLTRB(12, 10, 18, 10),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(28),
+                      borderRadius: BorderRadius.circular(Radii.xxl),
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,

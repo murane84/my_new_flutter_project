@@ -219,7 +219,7 @@ extension _ChatRituals on _ChatPageState {
       child: Align(
         alignment: Alignment.centerLeft,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(Radii.xl),
           child: BackdropFilter(
             filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: Material(
@@ -227,7 +227,7 @@ extension _ChatRituals on _ChatPageState {
                   ? Colors.black.withValues(alpha: 0.35)
                   : Colors.white.withValues(alpha: 0.72),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(Radii.xl),
                 side: BorderSide(color: scheme.primary.withValues(alpha: 0.4)),
               ),
               child: InkWell(

@@ -8,6 +8,7 @@ import 'token_helper.dart';
 import '../utils/toast_helper.dart';
 import '../utils/brand_theme.dart';
 import '../utils/readable.dart';
+import '../utils/radii.dart';
 
 /// Shown right after sign-in when an operator reset the account's password
 /// (must_change_password). The user must set their own password before using
@@ -173,7 +174,7 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
                           backgroundColor: scheme.primary,
                           foregroundColor: readableOn(scheme.primary),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
+                              borderRadius: BorderRadius.circular(Radii.lg)),
                         ),
                         child: _busy
                             ? SizedBox(

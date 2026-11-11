@@ -110,7 +110,7 @@ extension _ChatUnread on _ChatPageState {
               color: Color.alphaBlend(
                   a.withValues(alpha: isDark ? 0.22 : 0.12),
                   scheme.surface),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(Radii.lg),
               border: Border.all(color: a.withValues(alpha: 0.45)),
               boxShadow: [
                 BoxShadow(

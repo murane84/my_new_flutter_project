@@ -10,6 +10,7 @@ import '../../utils/readable.dart';
 import '../../services/story_mute.dart';
 import '../../services/story_posting.dart';
 import '../../widgets/edge_scroll_row.dart';
+import '../../utils/radii.dart';
 
 /// Horizontal "stories" strip shown at the top of the Messages list. Owns its
 /// own data: it fetches the friends-only feed and reloads after posting or
@@ -91,7 +92,7 @@ class _StoriesTrayState extends State<StoriesTray> {
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl))),
       builder: (ctx) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 8),
@@ -469,7 +470,7 @@ class _TileScaffold extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       onLongPress: onLongPress,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(Radii.md),
       child: SizedBox(
         width: width,
         child: Column(

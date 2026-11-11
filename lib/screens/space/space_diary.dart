@@ -328,7 +328,7 @@ class _DiaryComposerState extends State<_DiaryComposer> {
           padding: const EdgeInsets.symmetric(vertical: 11),
           decoration: BoxDecoration(
             color: selected ? widget.accent : Colors.transparent,
-            borderRadius: BorderRadius.circular(11),
+            borderRadius: BorderRadius.circular(Radii.md),
             boxShadow: selected
                 ? [
                     BoxShadow(
@@ -369,7 +369,7 @@ class _DiaryComposerState extends State<_DiaryComposer> {
           color: selected
               ? widget.accent.withValues(alpha: 0.14)
               : scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(11),
+          borderRadius: BorderRadius.circular(Radii.md),
           border: Border.all(
             color: selected
                 ? widget.accent
@@ -406,16 +406,16 @@ class _DiaryComposerState extends State<_DiaryComposer> {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       counterStyle: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         borderSide:
             BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.35)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         borderSide: BorderSide(color: widget.accent, width: 1.6),
       ),
     );
@@ -428,7 +428,7 @@ class _DiaryComposerState extends State<_DiaryComposer> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 12, 18, 14),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -511,7 +511,7 @@ class _DiaryComposerState extends State<_DiaryComposer> {
                   height: 36,
                   decoration: BoxDecoration(
                     color: widget.accent.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(11),
+                    borderRadius: BorderRadius.circular(Radii.md),
                   ),
                   child: Icon(Icons.menu_book_rounded,
                       size: 20, color: widget.accent),
@@ -543,7 +543,7 @@ class _DiaryComposerState extends State<_DiaryComposer> {
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: widget.accent.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(Radii.md),
                   border: Border.all(
                       color: widget.accent.withValues(alpha: 0.24)),
                 ),
@@ -551,7 +551,7 @@ class _DiaryComposerState extends State<_DiaryComposer> {
                   children: [
                     if (widget.fromMomentThumb != null) ...[
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(9),
+                        borderRadius: BorderRadius.circular(Radii.md),
                         child: SizedBox(
                           width: 44,
                           height: 44,
@@ -606,7 +606,7 @@ class _DiaryComposerState extends State<_DiaryComposer> {
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(Radii.lg),
               ),
               child: Row(
                 children: [
@@ -662,14 +662,14 @@ class _DiaryComposerState extends State<_DiaryComposer> {
               const SizedBox(height: 10),
               InkWell(
                 onTap: _pickDate,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(Radii.lg),
                 child: Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
                   decoration: BoxDecoration(
                     color:
                         scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(Radii.lg),
                     border: Border.all(
                         color: scheme.outlineVariant.withValues(alpha: 0.35)),
                   ),
@@ -728,7 +728,7 @@ class _DiaryComposerState extends State<_DiaryComposer> {
                   backgroundColor: widget.accent,
                   foregroundColor: readableOn(widget.accent),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
+                      borderRadius: BorderRadius.circular(Radii.lg)),
                 ),
                 onPressed: _save,
                 icon: Icon(

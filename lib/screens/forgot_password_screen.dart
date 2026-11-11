@@ -6,6 +6,7 @@ import '../utils/toast_helper.dart';
 import '../utils/brand_theme.dart';
 import 'ozilane_approve_screen.dart';
 import '../utils/readable.dart';
+import '../utils/radii.dart';
 
 /// Recover a forgotten password two ways:
 ///   • Email code  — the backend emails a 6-digit code (works for everyone).
@@ -192,7 +193,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         backgroundColor: scheme.primary,
                         foregroundColor: readableOn(scheme.primary),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
+                            borderRadius: BorderRadius.circular(Radii.lg)),
                       ),
                     ),
                   ),
@@ -240,7 +241,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: scheme.primary.withAlpha(20),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(Radii.lg),
                     border: Border.all(color: scheme.primary.withAlpha(60)),
                   ),
                   child: Row(
@@ -389,7 +390,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         backgroundColor: scheme.primary,
                         foregroundColor: readableOn(scheme.primary),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(Radii.lg),
                         ),
                       ),
                       child: _busy

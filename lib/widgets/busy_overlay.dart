@@ -7,6 +7,7 @@ import '../services/aluta_mood.dart';
 import '../services/app_busy.dart';
 import 'aluta_loader.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// A global, app-wide busy indicator — the Aluta logo loader, centred, when a
 /// MAJOR background task (see [appBusy.runMajor]) runs beyond a brief moment.
@@ -195,7 +196,7 @@ class _BusyOverlayState extends State<BusyOverlay> {
   Widget _captionPill(BuildContext context, String text) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(Radii.lg),
       child: BackdropFilter(
         filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(

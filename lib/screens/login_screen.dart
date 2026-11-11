@@ -21,6 +21,7 @@ import '../services/biometric_service.dart';
 import '../utils/snackbar_helper.dart';
 import '../utils/brand_theme.dart';
 import '../utils/readable.dart';
+import '../utils/radii.dart';
 
 class LoginPage extends StatefulWidget {
   static const String routeName = '/login';
@@ -234,7 +235,7 @@ class LoginPageState extends State<LoginPage> {
             insetPadding: const EdgeInsets.all(24),
             backgroundColor: scheme.surface,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(Radii.xxl),
               side: BorderSide(color: scheme.primary.withAlpha(130)),
             ),
             child: ConstrainedBox(
@@ -310,7 +311,7 @@ class LoginPageState extends State<LoginPage> {
                               padding:
                                   const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(Radii.lg),
                               ),
                             ),
                             label: const Text('Enable'),
@@ -516,7 +517,7 @@ class LoginPageState extends State<LoginPage> {
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
                             color: cardBg,
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: BorderRadius.circular(Radii.xl),
                             border: Border.all(color: cardBorder),
                             boxShadow: isDark
                                 ? null
@@ -617,7 +618,7 @@ class LoginPageState extends State<LoginPage> {
                                       color: Colors.orange.withValues(
                                           alpha: 0.14),
                                       borderRadius:
-                                          BorderRadius.circular(12),
+                                          BorderRadius.circular(Radii.md),
                                       border: Border.all(
                                           color: Colors.orange
                                               .withValues(alpha: 0.5)),
@@ -654,7 +655,7 @@ class LoginPageState extends State<LoginPage> {
                                         foregroundColor: readableOn(scheme.primary),
                                         shape: RoundedRectangleBorder(
                                           borderRadius:
-                                              BorderRadius.circular(24),
+                                              BorderRadius.circular(Radii.xxl),
                                         ),
                                         elevation: 4,
                                       ),
@@ -703,7 +704,7 @@ class LoginPageState extends State<LoginPage> {
                                               vertical: 12),
                                           shape: RoundedRectangleBorder(
                                             borderRadius:
-                                                BorderRadius.circular(24),
+                                                BorderRadius.circular(Radii.xxl),
                                           ),
                                         ),
                                       ),
@@ -791,7 +792,7 @@ class LoginPageState extends State<LoginPage> {
                                         minimumSize: const Size(210, 46),
                                         shape: RoundedRectangleBorder(
                                           borderRadius:
-                                              BorderRadius.circular(24),
+                                              BorderRadius.circular(Radii.xxl),
                                         ),
                                       ),
                                     ),
@@ -889,19 +890,19 @@ class LoginPageState extends State<LoginPage> {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           borderSide: BorderSide(color: borderCol),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           borderSide: BorderSide(color: focusCol, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           borderSide: const BorderSide(color: Colors.redAccent),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
         ),
         errorStyle: const TextStyle(color: Colors.orange),

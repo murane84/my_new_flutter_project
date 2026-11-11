@@ -192,7 +192,7 @@ class _LyricsViewState extends State<_LyricsView> {
         color: scheme.surface,
         clipBehavior: Clip.antiAlias,
         borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(22)),
+            const BorderRadius.vertical(top: Radius.circular(Radii.xl)),
         child: Column(
           children: [
             Container(
@@ -381,7 +381,7 @@ class _LyricsViewState extends State<_LyricsView> {
                     .withValues(alpha: 0.6),
                 contentPadding: const EdgeInsets.all(14),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(Radii.lg),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -477,7 +477,7 @@ class _LyricsViewState extends State<_LyricsView> {
                 ? 255
                 : (i < active ? 95 : (200 - d * 22).clamp(90, 200));
             return InkWell(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(Radii.md),
               onTap: widget.onSeek == null
                   ? null
                   : () => widget.onSeek!(lines[i].$1),
@@ -726,7 +726,7 @@ class _LyricsViewState extends State<_LyricsView> {
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
             style: FilledButton.styleFrom(
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20))),
+                    borderRadius: BorderRadius.circular(Radii.xl))),
           ),
         ),
         const SizedBox(height: 10),

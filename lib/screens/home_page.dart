@@ -146,6 +146,7 @@ import '../services/haptics.dart';
 import '../widgets/slide_track.dart';
 import '../widgets/edge_scroll_row.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -2104,7 +2105,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                     color: _serverReachable
                         ? Colors.green.withAlpha(30)
                         : Colors.red.withAlpha(30),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(Radii.sm),
                     border: Border.all(
                       color: _serverReachable ? Colors.green : Colors.red,
                       width: 1,
@@ -2193,7 +2194,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   color: _serverReachable
                       ? Colors.green.withAlpha(30)
                       : Colors.red.withAlpha(30),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(Radii.sm),
                   border: Border.all(
                     color: _serverReachable ? Colors.green : Colors.red,
                     width: 1,
@@ -3824,7 +3825,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         .first;
     final banner = Material(
       color: scheme.surfaceContainerHighest.withValues(alpha: 0.7),
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(Radii.lg),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
         child: Row(children: [
@@ -4380,7 +4381,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         final scheme = Theme.of(ctx).colorScheme;
         return Dialog(
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.xl)),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 360),
             child: Padding(
@@ -4426,7 +4427,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                             padding:
                                 const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14)),
+                                borderRadius: BorderRadius.circular(Radii.lg)),
                           ),
                           child: const Text('Cancel'),
                         ),
@@ -4440,7 +4441,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                             padding:
                                 const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14)),
+                                borderRadius: BorderRadius.circular(Radii.lg)),
                           ),
                           child: const Text('Sign out'),
                         ),
@@ -4497,7 +4498,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           child: Material(
             color: scheme.surface,
             elevation: 12,
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(Radii.xl),
             clipBehavior: Clip.antiAlias,
             child: SizedBox(width: 560, child: screen),
           ),
@@ -4582,7 +4583,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                   padding: const EdgeInsets.symmetric(vertical: 18),
                   decoration: BoxDecoration(
                     color: scheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(Radii.xl),
                     border: Border.all(color: scheme.primary.withAlpha(60)),
                   ),
                   child: Column(
@@ -4691,7 +4692,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           Expanded(
             child: InkWell(
               onTap: _openGroupInfo,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(Radii.md),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                 child: Row(
@@ -5447,7 +5448,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: Colors.green.withAlpha(28),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(Radii.lg),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -5480,7 +5481,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                     horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: scheme.errorContainer,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(Radii.lg),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -5831,7 +5832,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: scheme.primary.withAlpha(28),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(Radii.xl),
           border: Border.all(color: scheme.primary.withAlpha(90)),
         ),
         child: Row(
@@ -5911,7 +5912,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         decoration: BoxDecoration(
           color: scheme.surfaceContainerHighest,
           borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(18)),
+              const BorderRadius.vertical(top: Radius.circular(Radii.xl)),
           border: Border(
             top: BorderSide(color: scheme.outlineVariant.withAlpha(70)),
           ),

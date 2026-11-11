@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'now_glow.dart';
+import '../utils/radii.dart';
 
 /// The chat's "here it is" when you jump to a replied, pinned or searched
 /// message. It is the same calm breath as ⌖ Find the playing song: ONE soft
@@ -110,7 +111,7 @@ class _RingsPainter extends CustomPainter {
     }
     final base = pathFor?.call(size) ??
         (Path()..addRRect(RRect.fromRectAndRadius(
-            Offset.zero & size, const Radius.circular(18))));
+            Offset.zero & size, const Radius.circular(Radii.xl))));
     // Scale the outline about its centre so it grows by [grow] at the edges.
     final sx = (size.width + grow * 2) / size.width;
     final sy = (size.height + grow * 2) / size.height;

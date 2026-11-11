@@ -93,7 +93,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
                 color: Colors.transparent,
                 elevation: 8 * anim.value,
                 shadowColor: _accent.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(Radii.xl),
                 child: c,
               ),
             ),
@@ -308,7 +308,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
           padding: EdgeInsets.symmetric(
               horizontal: roomy ? 12 : 10, vertical: roomy ? 8 : 6),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(Radii.lg),
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -448,7 +448,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
 
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(Radii.xl),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -473,7 +473,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
             child: IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(22),
+                  borderRadius: BorderRadius.circular(Radii.xl),
                   gradient: RadialGradient(
                     center: const Alignment(-0.6, -1.2),
                     radius: 1.3,

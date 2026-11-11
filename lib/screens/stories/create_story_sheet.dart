@@ -17,6 +17,7 @@ import 'status_audience_sheet.dart';
 import '../../services/status_privacy.dart';
 import '../../widgets/edge_scroll_row.dart';
 import '../../utils/motion.dart';
+import '../../utils/radii.dart';
 
 /// Entry point: a bottom sheet offering the four ways to post a story
 /// (photo from gallery, camera photo, a short video clip, or a "now playing"
@@ -233,7 +234,7 @@ class StatusPaletteButton extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) => SafeArea(
         child: SingleChildScrollView(
@@ -358,7 +359,7 @@ Future<bool> pickAndPostSticker(
     isScrollControlled: true,
     backgroundColor: Theme.of(context).colorScheme.surface,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
     ),
     builder: (ctx) => SafeArea(
       child: SizedBox(
@@ -767,7 +768,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) => SafeArea(
         child: SizedBox(
@@ -872,7 +873,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                                     children: [
                                       ClipRRect(
                                         borderRadius:
-                                            BorderRadius.circular(18),
+                                            BorderRadius.circular(Radii.xl),
                                         child: Image.network(
                                           _stickerUrl!,
                                           width: 150,
@@ -922,7 +923,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                                   )
                                 : Container(
                                     decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(18),
+                                      borderRadius: BorderRadius.circular(Radii.xl),
                                       color: ink.withValues(alpha: 0.12),
                                     ),
                                     child: Column(
@@ -1073,7 +1074,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
         filled: true,
         fillColor: ink.withValues(alpha: 0.12),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(Radii.lg),
           borderSide: BorderSide.none,
         ),
         suffixIcon: onEmoji == null

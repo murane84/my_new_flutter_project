@@ -11,6 +11,7 @@ import '../screens/home_page.dart' show playbackBus;
 
 import '../services/media_store.dart';
 import '../utils/motion.dart';
+import '../utils/radii.dart';
 
 /// A data-friendly video tile that plays from the DEVICE, never by live
 /// streaming. Behaviour:
@@ -712,7 +713,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
                           horizontal: 7, vertical: 3),
                       decoration: BoxDecoration(
                           color: Colors.black45,
-                          borderRadius: BorderRadius.circular(10)),
+                          borderRadius: BorderRadius.circular(Radii.md)),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -753,7 +754,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
                         padding: const EdgeInsets.all(5),
                         decoration: BoxDecoration(
                             color: Colors.black38,
-                            borderRadius: BorderRadius.circular(8)),
+                            borderRadius: BorderRadius.circular(Radii.sm)),
                         child: const Icon(Icons.fullscreen_rounded,
                             color: Colors.white, size: 18),
                       ),

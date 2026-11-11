@@ -160,7 +160,7 @@ class _MomentCommentsSheetState extends State<_MomentCommentsSheet> {
                   color: mine
                       ? widget.accent.withValues(alpha: isDark ? 0.30 : 0.16)
                       : scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(Radii.lg),
                   border: Border.all(
                       color: (mine ? widget.accent : scheme.outlineVariant)
                           .withValues(alpha: mine ? 0.35 : 0.4)),
@@ -340,7 +340,7 @@ class _MomentCommentsSheetState extends State<_MomentCommentsSheet> {
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 10),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(22),
+                          borderRadius: BorderRadius.circular(Radii.xl),
                           borderSide: BorderSide.none,
                         ),
                       ),
@@ -424,9 +424,9 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
           child: Material(
             color: color.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(Radii.lg),
             child: InkWell(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(Radii.lg),
               onTap: tap,
               child: Padding(
                 padding:
@@ -450,7 +450,7 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
       context: context,
       backgroundColor: scheme.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(Radii.xl)),
         side: BorderSide(color: _accent.withValues(alpha: 0.28)),
       ),
       builder: (ctx) => SafeArea(
@@ -692,7 +692,7 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 36),
       backgroundColor: scheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.xl)),
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: 560,
@@ -905,7 +905,7 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 10),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(22),
+                          borderRadius: BorderRadius.circular(Radii.xl),
                           borderSide: BorderSide.none,
                         ),
                       ),
@@ -978,8 +978,8 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
         decoration: BoxDecoration(
           color: bubbleColor,
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
+            topLeft: const Radius.circular(Radii.lg),
+            topRight: const Radius.circular(Radii.lg),
             bottomLeft: Radius.circular(mine ? 16 : 4),
             bottomRight: Radius.circular(mine ? 4 : 16),
           ),

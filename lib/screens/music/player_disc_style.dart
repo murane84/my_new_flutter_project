@@ -7,6 +7,7 @@ import '../../services/account_prefs.dart';
 import '../../utils/readable.dart';
 import '../home_page.dart' show playProgressNotifier;
 import '../../utils/motion.dart';
+import '../../utils/radii.dart';
 
 /// The look of the big rotating "now playing" glyph. The user can switch
 /// between these from the player; the choice is remembered across launches.
@@ -1795,7 +1796,7 @@ Future<void> showPlayerStyleSheet(BuildContext context,
     backgroundColor: scheme.surface,
     constraints: const BoxConstraints(maxWidth: 640),
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
     ),
     builder: (_) => _PlayerStyleSheet(accent: accent),
   );
@@ -1900,7 +1901,7 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
       },
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(Radii.xl),
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -1978,7 +1979,7 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
                             horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: accent,
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(Radii.xl),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,

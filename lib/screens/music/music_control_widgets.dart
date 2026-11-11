@@ -430,7 +430,7 @@ class _CtrlChip extends StatelessWidget {
                     ]
                   : _keyFill(scheme, scheme.primary).colors,
             ),
-            borderRadius: BorderRadius.circular(13),
+            borderRadius: BorderRadius.circular(Radii.lg),
             border: Border.all(
               color: active
                   ? activeColor.withValues(alpha: 0.85)
@@ -516,7 +516,7 @@ class _SpeedPanelState extends State<_SpeedPanel> {
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         decoration: BoxDecoration(
           color: scheme.surface,
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(Radii.xl),
           border: Border.all(color: scheme.primary.withAlpha(110)),
           boxShadow: [
             BoxShadow(
@@ -542,7 +542,7 @@ class _SpeedPanelState extends State<_SpeedPanel> {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(Radii.md),
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -586,7 +586,7 @@ class _SpeedPanelState extends State<_SpeedPanel> {
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: scheme.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(Radii.lg),
                       border: Border.all(
                           color: scheme.primary.withValues(alpha: 0.3)),
                     ),
@@ -716,7 +716,7 @@ Widget _musicPickChip(
   return Material(
     color: Colors.transparent,
     child: InkWell(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(Radii.md),
       onTap: () {
         Haptics.selectionClick();
         onTap();
@@ -742,7 +742,7 @@ Widget _musicPickChip(
                   ? scheme.surfaceContainerHighest
                   : Color.alphaBlend(scheme.primary.withValues(alpha: 0.04),
                       scheme.surfaceContainerHighest)),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           border: Border.all(
             color: active
                 ? scheme.primary
@@ -904,7 +904,7 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> {
                       child: Container(
                         decoration: BoxDecoration(
                           color: widget.accent.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(Radii.sm),
                           border: Border.all(
                               color: widget.accent.withValues(alpha: 0.35)),
                         ),
@@ -939,7 +939,7 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> {
                           const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: widget.accent,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(Radii.sm),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.25),

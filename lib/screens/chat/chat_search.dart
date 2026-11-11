@@ -159,7 +159,7 @@ extension _ChatSearch on _ChatPageState {
             _searchStep(false),
       },
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(19),
+        borderRadius: BorderRadius.circular(Radii.xl),
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
           child: AnimatedContainer(
@@ -170,7 +170,7 @@ extension _ChatSearch on _ChatPageState {
               color: isDark
                   ? Colors.black.withValues(alpha: 0.42)
                   : Colors.white.withValues(alpha: 0.72),
-              borderRadius: BorderRadius.circular(19),
+              borderRadius: BorderRadius.circular(Radii.xl),
               border: Border.all(
                 color: none
                     ? scheme.error.withValues(alpha: 0.45)

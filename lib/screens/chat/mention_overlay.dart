@@ -304,7 +304,7 @@ extension _ChatMentions on _ChatPageState {
       constraints: BoxConstraints(maxHeight: maxH, maxWidth: 560),
       decoration: BoxDecoration(
         color: scheme.surface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Radii.xl),
         border: Border.all(
             color: scheme.primary.withValues(alpha: isDark ? 0.30 : 0.16)),
         boxShadow: [

@@ -494,7 +494,7 @@ extension _HomeFriendListView on HomePageState {
       margin: const EdgeInsets.fromLTRB(0, 2, 0, 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Radii.xl),
         color: scheme.surfaceContainerHighest,
         border: Border.all(color: scheme.primary.withAlpha(60)),
       ),
@@ -728,7 +728,7 @@ extension _HomeFriendListView on HomePageState {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(Radii.xl),
           onTapDown: (d) {
             _spaceOpenOrigin = d.globalPosition;
             _spaceOpenOriginId = spaceId;
@@ -741,7 +741,7 @@ extension _HomeFriendListView on HomePageState {
           child: Container(
             padding: const EdgeInsets.fromLTRB(18, 20, 16, 20),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(Radii.xl),
               // Glossy 3D gradient: a light sheen top-left, the accent through
               // the middle, deep shade bottom-right — reads as a raised surface.
               gradient: LinearGradient(
@@ -1087,7 +1087,7 @@ extension _HomeFriendListView on HomePageState {
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
         decoration: BoxDecoration(
           color: const Color(0xFFF6D77A),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(Radii.xl),
         ),
         child: const Text(
           'TOGETHER',
@@ -1357,7 +1357,7 @@ extension _HomeFriendListView on HomePageState {
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (ctx) {
         final scheme = Theme.of(ctx).colorScheme;
@@ -1414,7 +1414,7 @@ extension _HomeFriendListView on HomePageState {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: scheme.primaryContainer,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(color: scheme.primary.withAlpha(120)),
       ),
       child: Row(
@@ -1485,7 +1485,7 @@ extension _HomeFriendListView on HomePageState {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: scheme.primaryContainer,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Radii.lg),
         border: Border.all(color: scheme.primary.withAlpha(120)),
       ),
       child: Row(
@@ -1556,7 +1556,7 @@ extension _HomeFriendListView on HomePageState {
   BoxDecoration _circleTileDecoration(ColorScheme scheme, bool isDark) {
     if (isDark) {
       return BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Radii.lg),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -1583,7 +1583,7 @@ extension _HomeFriendListView on HomePageState {
     // Neutral 3D in light mode — no theme tint, just a clean white card that
     // lifts off the page with a soft drop shadow and a tight contact shadow.
     return BoxDecoration(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(Radii.lg),
       gradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
@@ -1660,7 +1660,7 @@ extension _HomeFriendListView on HomePageState {
         decoration: BoxDecoration(
           color: (st == 'free' ? Colors.green : scheme.onSurfaceVariant)
               .withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(Radii.sm),
         ),
         child: Text(
           '${QuickStatus.emoji(st)} ${QuickStatus.label(st)}',
@@ -1742,7 +1742,7 @@ extension _HomeFriendListView on HomePageState {
                     color: scheme.primary.withValues(alpha: 0.40)))
             : _circleTileDecoration(scheme, isDark),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Radii.lg),
           child: Stack(children: [
           // Card moods, under the content: unread tint · the song's colour
           // washing in from the left while they listen · a pinned strip.
@@ -1884,7 +1884,7 @@ extension _HomeFriendListView on HomePageState {
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: scheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(Radii.md),
                 ),
                 child: Text(
                   '💞 bond',
@@ -1922,7 +1922,7 @@ extension _HomeFriendListView on HomePageState {
                         horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: scheme.primary,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(Radii.md),
                     ),
                     child: Text(
                       unread > 99 ? '99+' : '$unread',
@@ -2058,7 +2058,7 @@ extension _HomeFriendListView on HomePageState {
               color: live
                   ? scheme.primary.withValues(alpha: 0.14)
                   : textColor.withValues(alpha: 0.07),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(Radii.sm),
               border: live
                   ? Border.all(color: scheme.primary.withValues(alpha: 0.35))
                   : null,
@@ -2405,7 +2405,7 @@ extension _HomeFriendListView on HomePageState {
       // opens the group — the colour blooms across and it fires on its own.
       child: _PressDip(
       child: ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(Radii.lg),
       child: SwipeActionTile(
       key: ValueKey('group-${g['id']}'),
       rightIcon: Icons.groups_rounded,
@@ -2423,20 +2423,20 @@ extension _HomeFriendListView on HomePageState {
               Haptics.holdInk();
               _groupRowMenu(g, name);
             },
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(Radii.lg),
       child: Container(
         constraints: const BoxConstraints(minHeight: 64),
         // Unread (and not muted) → the same accent edge + tint as a friend.
         foregroundDecoration: hasUnread && !muted
             ? BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(Radii.lg),
                 border: Border.all(
                     color: scheme.primary.withValues(alpha: 0.40)),
               )
             : null,
         decoration: hasUnread && !muted
             ? BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(Radii.lg),
                 color: Color.alphaBlend(
                     scheme.primary.withValues(alpha: isDark ? 0.07 : 0.045),
                     isDark ? scheme.surfaceContainerHigh : scheme.surface),
@@ -2627,7 +2627,7 @@ extension _HomeFriendListView on HomePageState {
                       color: muted
                           ? textColor.withValues(alpha: 0.18)
                           : scheme.primary,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(Radii.md),
                     ),
                     child: Text(
                       unread > 99 ? '99+' : '$unread',
@@ -2718,7 +2718,7 @@ extension _HomeFriendListView on HomePageState {
       margin: const EdgeInsets.fromLTRB(0, 2, 0, 12),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Radii.xl),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -3042,7 +3042,7 @@ extension _HomeFriendListView on HomePageState {
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl))),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -3154,7 +3154,7 @@ extension _HomeFriendListView on HomePageState {
       context: context,
       backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl))),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,

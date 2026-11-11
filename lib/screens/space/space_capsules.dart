@@ -128,7 +128,7 @@ class _CapsuleComposeSheetState extends State<_CapsuleComposeSheet> {
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (_) => _PlaylistAddSheet(accent: widget.accent),
     );
@@ -200,7 +200,7 @@ class _CapsuleComposeSheetState extends State<_CapsuleComposeSheet> {
           padding: const EdgeInsets.symmetric(vertical: 11),
           decoration: BoxDecoration(
             color: sel ? widget.accent : Colors.transparent,
-            borderRadius: BorderRadius.circular(11),
+            borderRadius: BorderRadius.circular(Radii.md),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -225,12 +225,12 @@ class _CapsuleComposeSheetState extends State<_CapsuleComposeSheet> {
       ColorScheme scheme, IconData icon, String label, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(Radii.md),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
         decoration: BoxDecoration(
           color: scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(Radii.md),
           border: Border.all(color: widget.accent.withValues(alpha: 0.25)),
         ),
         child: Row(
@@ -303,7 +303,7 @@ class _CapsuleComposeSheetState extends State<_CapsuleComposeSheet> {
                 filled: true,
                 fillColor: scheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(Radii.lg),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -315,7 +315,7 @@ class _CapsuleComposeSheetState extends State<_CapsuleComposeSheet> {
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(Radii.lg),
               ),
               child: Row(
                 children: [
@@ -503,7 +503,7 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
       ),
       builder: (_) => _PlaylistAddSheet(accent: widget.accent),
     );
@@ -573,13 +573,13 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
           const SizedBox(height: 14),
           InkWell(
             onTap: _pickSong,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(Radii.md),
             child: Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(Radii.md),
                 border: Border.all(
                     color: _song == null
                         ? scheme.outlineVariant
@@ -628,7 +628,7 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
                       color: _mood == m
                           ? widget.accent.withValues(alpha: 0.18)
                           : scheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(Radii.xl),
                       border: Border.all(
                           color: _mood == m
                               ? widget.accent
@@ -657,7 +657,7 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
               filled: true,
               fillColor: scheme.surfaceContainerHighest,
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(Radii.md),
                   borderSide: BorderSide.none),
             ),
           ),
@@ -729,12 +729,12 @@ class _DedVoicePlayerState extends State<_DedVoicePlayer> {
     final scheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: !_ready ? null : () => _playing ? _p.pause() : _p.play(),
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(Radii.xl),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: widget.accent.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(Radii.xl),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

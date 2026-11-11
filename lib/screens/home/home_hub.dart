@@ -143,7 +143,7 @@ extension _HomeHub on HomePageState {
       // their own.
       _circleSwitcher(
           scheme, storiesUnseen, listening, circle, textColor, view,
-          neighbour: viewOverride != null),
+          neighbour: viewOverride != null, wide: wide),
       // Every change of section turns like a cube face (← forward, → back).
       Expanded(
         child: _CircleFlip(
@@ -309,7 +309,7 @@ extension _HomeHub on HomePageState {
       List<Map<String, dynamic>> circle,
       Color textColor,
       String view,
-      {bool neighbour = false}) {
+      {bool neighbour = false, bool wide = false}) {
     final unread = _circleBadge();
     final isDark = scheme.brightness == Brightness.dark;
     final segs = <(String, IconData, String, int, String)>[
@@ -431,7 +431,11 @@ extension _HomeHub on HomePageState {
     const dur = Duration(milliseconds: 240);
     const curve = Curves.easeOutCubic;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+      // Desktop: the same inset as Harmony's search pill beside it, so both
+      // columns start their first row on one line under the header.
+      padding: wide
+          ? const EdgeInsets.fromLTRB(6, 0, 6, 8)
+          : const EdgeInsets.fromLTRB(4, 4, 4, 8),
       child: SizedBox(
         height: 38,
         child: Stack(children: [

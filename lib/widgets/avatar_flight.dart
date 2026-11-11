@@ -109,9 +109,9 @@ class _AvatarFlightState extends State<AvatarFlight> {
       return const SizedBox.shrink();
     }
     final dst = box.localToGlobal(Offset.zero) & box.size;
-    final curve = a.status == AnimationStatus.reverse
-        ? Curves.easeInCubic
-        : Curves.easeOutCubic;
+    // The app's motion curves: arrive on enter, go home on exit.
+    final curve =
+        a.status == AnimationStatus.reverse ? Motion.exit : Motion.enter;
     final t = curve.transform(a.value.clamp(0.0, 1.0));
     final r = Rect.lerp(src, dst, t)!;
     return Positioned.fromRect(

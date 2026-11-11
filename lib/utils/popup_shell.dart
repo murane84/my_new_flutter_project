@@ -100,7 +100,7 @@ Future<T?> showAppPopup<T>(
   // How long the open/minimise animation runs. A larger value makes a big
   // surface (e.g. the full-screen Our Space page) ease in/out gracefully
   // instead of snapping.
-  Duration duration = const Duration(milliseconds: 340),
+  Duration duration = Motion.emphasized,
   // The genie's starting scale. The default 0.12 pops out of a tiny point
   // (great for small popups); a big page passes a gentler value like 0.85 so it
   // grows/settles softly from the tapped spot rather than zooming from nothing.
@@ -130,8 +130,8 @@ Future<T?> showAppPopup<T>(
     transitionBuilder: (dctx, anim, _, c) {
       final curved = CurvedAnimation(
         parent: anim,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeInCubic,
+        curve: Motion.enter,
+        reverseCurve: Motion.exit,
       );
       // Resolve the point LIVE each frame (resolver → snapshot), so the genie
       // tracks the launch widget's real, current location.

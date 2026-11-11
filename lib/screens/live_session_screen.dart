@@ -1290,7 +1290,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       _snack('Couldn’t get the song — try again', type: ToastType.error);
       return;
     }
-    final mime = _c.currentMime;
+    final mime = _c.songMime[hash] ?? _c.currentMime;
     final ext = mime.contains('mp4') || mime.contains('m4a')
         ? 'm4a'
         : mime.contains('aac')
@@ -2802,7 +2802,68 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   }
 
   // Listener's read-only view of the host's queue.
+  /// Listener: Up next, with the songs the host said yes to that I haven't
+  /// saved yet ("Ready to keep") on top. Each can be saved any time this
+  /// session, whatever is playing now.
   Widget _buildRemoteQueueList(ColorScheme scheme) {
+    final ready = _c.songYes.entries.toList();
+    final queue = _buildRemoteQueueOnly(scheme);
+    if (ready.isEmpty) return queue;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 2),
+          child: Row(children: [
+            Icon(Icons.favorite_rounded, size: 14, color: accentInk(scheme)),
+            const SizedBox(width: 6),
+            Text('READY TO KEEP · ${ready.length}',
+                style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                    color: accentInk(scheme))),
+          ]),
+        ),
+        for (final r in ready)
+          Builder(builder: (_) {
+            final hash = r.key;
+            final title = (r.value['title'] ?? 'Song').toString();
+            final saving = _songSaving.contains(hash);
+            return ListTile(
+              dense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+              leading: Icon(Icons.card_giftcard_rounded,
+                  size: 18, color: accentInk(scheme)),
+              title: Text(title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13, color: scheme.onSurface)),
+              subtitle: Text('${widget.peerName} said yes · not saved yet',
+                  style: TextStyle(
+                      fontSize: 10.5, color: scheme.onSurfaceVariant)),
+              trailing: TextButton.icon(
+                onPressed: saving ? null : () => _onSongShare(r.value),
+                icon: Icon(
+                    saving
+                        ? Icons.downloading_rounded
+                        : Icons.download_rounded,
+                    size: 16),
+                label: Text(saving ? 'Saving…' : 'Save'),
+                style: TextButton.styleFrom(
+                    foregroundColor: accentInk(scheme),
+                    visualDensity: VisualDensity.compact),
+              ),
+            );
+          }),
+        Divider(height: 10, color: scheme.outlineVariant.withAlpha(70)),
+        Flexible(child: queue),
+      ],
+    );
+  }
+
+  Widget _buildRemoteQueueOnly(ColorScheme scheme) {
     final titles = _c.remoteQueueTitles;
     if (titles.isEmpty) {
       return Padding(

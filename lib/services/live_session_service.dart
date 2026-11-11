@@ -2477,6 +2477,10 @@ class LiveSessionController {
   /// A yes I haven't saved yet (save dialog cancelled) → "Save it" retries.
   final Map<String, Map<String, dynamic>> songYes = {};
 
+  /// Each asked song's file type, noted when I asked (the song playing
+  /// may have moved on by the time I save it).
+  final Map<String, String> songMime = {};
+
   /// Listener: the song playing now (from the host's offer).
   String? currentHash;
   String currentMime = 'audio/mpeg';
@@ -2489,6 +2493,7 @@ class LiveSessionController {
     final h = currentHash;
     if (host == null || h == null || h.isEmpty) return false;
     songAsks[h] = 'asked';
+    songMime[h] = currentMime;
     _sendControl({
       'type': 'song_request',
       'to': host,

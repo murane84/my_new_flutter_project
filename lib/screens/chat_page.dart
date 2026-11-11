@@ -124,6 +124,7 @@ import '../widgets/pill_search.dart';
 import '../services/haptics.dart';
 import '../widgets/edge_scroll_row.dart';
 import '../widgets/slide_track.dart';
+import '../utils/motion.dart';
 
 // Split out for maintainability (Dart parts — same library, shared
 // imports & privacy, zero behaviour change):
@@ -391,7 +392,7 @@ class _ChatPageState extends State<ChatPage>
     return TweenAnimationBuilder<double>(
       key: ValueKey('in-${msg['id']}'),
       tween: Tween<double>(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 300),
+      duration: Motion.emphasized,
       curve: Curves.easeOutCubic,
       builder: (_, t, c) => Opacity(
         opacity: t.clamp(0.0, 1.0),
@@ -699,7 +700,7 @@ class _ChatPageState extends State<ChatPage>
     _replyTo = widget.initialReplyTo;
     WidgetsBinding.instance.addObserver(this);
     _viewerDismissCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 220));
+        vsync: this, duration: Motion.standard);
     AppConfig.baseUrl.then((b) {
       if (mounted) setState(() => _apiBase = b);
     });
@@ -1881,7 +1882,7 @@ class _ChatPageState extends State<ChatPage>
     }
     _scrollCtrl.animateTo(
       pos.minScrollExtent,
-      duration: const Duration(milliseconds: 320),
+      duration: Motion.emphasized,
       curve: Curves.easeOutCubic,
     );
     setState(() => _hasNewMsg = false);
@@ -1902,7 +1903,7 @@ class _ChatPageState extends State<ChatPage>
       if (!mounted || !_scrollCtrl.hasClients) return;
       _scrollCtrl.animateTo(
         _scrollCtrl.position.minScrollExtent,
-        duration: const Duration(milliseconds: 280),
+        duration: Motion.standard,
         curve: Curves.easeOut,
       );
       setState(() => _hasNewMsg = false);
@@ -2975,7 +2976,7 @@ class _ChatPageState extends State<ChatPage>
   // side — the exit is the entry played in reverse, never a snap.
   late final AnimationController _browserAnim = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 320),
+      duration: Motion.emphasized,
       reverseDuration: const Duration(milliseconds: 240));
   late final Animation<double> _browserIn = CurvedAnimation(
       parent: _browserAnim,
@@ -3159,7 +3160,7 @@ class _ChatPageState extends State<ChatPage>
       ignoring: !_viewerChrome,
       child: AnimatedOpacity(
         opacity: _viewerChrome ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 200),
+        duration: Motion.quick,
         child: Material(
           color: Colors.black.withAlpha(90),
           shape: const CircleBorder(),
@@ -3360,7 +3361,7 @@ class _ChatPageState extends State<ChatPage>
                 ignoring: !_viewerChrome,
                 child: AnimatedOpacity(
                   opacity: _viewerChrome ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 200),
+                  duration: Motion.quick,
                   child: Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -3490,7 +3491,7 @@ class _ChatPageState extends State<ChatPage>
                     Icons.chevron_left_rounded,
                     i > 0,
                     () => _viewerPageCtrl?.previousPage(
-                        duration: const Duration(milliseconds: 260),
+                        duration: Motion.standard,
                         curve: Curves.easeOut),
                   ),
                 ),
@@ -3504,7 +3505,7 @@ class _ChatPageState extends State<ChatPage>
                     Icons.chevron_right_rounded,
                     i < imgs.length - 1,
                     () => _viewerPageCtrl?.nextPage(
-                        duration: const Duration(milliseconds: 260),
+                        duration: Motion.standard,
                         curve: Curves.easeOut),
                   ),
                 ),
@@ -3519,7 +3520,7 @@ class _ChatPageState extends State<ChatPage>
                 child: IgnorePointer(
                   child: AnimatedOpacity(
                     opacity: _viewerChrome ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 200),
+                    duration: Motion.quick,
                     child: Center(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -3547,7 +3548,7 @@ class _ChatPageState extends State<ChatPage>
                   ignoring: !_viewerChrome,
                   child: AnimatedOpacity(
                     opacity: _viewerChrome ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 200),
+                    duration: Motion.quick,
                     child: Material(
                   color: Colors.transparent,
                   child: InkWell(
@@ -4788,7 +4789,7 @@ class _ChatPageState extends State<ChatPage>
     if (ctx == null || !ctx.mounted) return false;
     await Scrollable.ensureVisible(
       ctx,
-      duration: const Duration(milliseconds: 380),
+      duration: Motion.emphasized,
       alignment: 0.4,
       curve: Curves.easeOutCubic,
     );
@@ -5100,7 +5101,7 @@ class _ChatPageState extends State<ChatPage>
                 ),
                 AnimatedRotation(
                   turns: open ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 220),
+                  duration: Motion.standard,
                   child: Icon(Icons.expand_less_rounded,
                       size: 20, color: scheme.onSurfaceVariant),
                 ),
@@ -6339,7 +6340,7 @@ class _ChatPageState extends State<ChatPage>
               // A small pop whenever the set of reactions changes.
               key: ValueKey('rx_${msg['id']}_${map.length}_${emojis.join()}'),
               tween: Tween(begin: 0.6, end: 1),
-              duration: const Duration(milliseconds: 320),
+              duration: Motion.emphasized,
               curve: Curves.easeOutBack,
               builder: (_, s, child) =>
                   Transform.scale(scale: s, child: child),
@@ -6786,7 +6787,7 @@ class _ChatPageState extends State<ChatPage>
                       // Rounded input field: emoji · text · attach · camera.
                       Expanded(
                         child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
+                          duration: Motion.quick,
                           curve: Curves.easeOut,
                           // Matches the 48px mic/send disc beside it.
                           constraints: const BoxConstraints(minHeight: 48),
@@ -6857,7 +6858,7 @@ class _ChatPageState extends State<ChatPage>
                               // typing, leaving a clean box with just the heart
                               // (left) and send (right).
                               AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 220),
+                                duration: Motion.standard,
                                 switchInCurve: Curves.easeOut,
                                 switchOutCurve: Curves.easeIn,
                                 transitionBuilder: (child, anim) =>
@@ -6976,7 +6977,7 @@ class _ChatPageState extends State<ChatPage>
                                 ),
                               ),
                               AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 220),
+                                duration: Motion.standard,
                                 switchInCurve: Curves.easeOut,
                                 switchOutCurve: Curves.easeIn,
                                 transitionBuilder: (child, anim) =>
@@ -7050,7 +7051,7 @@ class _ChatPageState extends State<ChatPage>
                                 // light disc (never see-through) with a soft
                                 // brand ring; typing → solid brand send.
                                 child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 180),
+                                  duration: Motion.quick,
                                   width: 48,
                                   height: 48,
                                   decoration: BoxDecoration(
@@ -7359,7 +7360,7 @@ class _ChatPageState extends State<ChatPage>
                           // after the last message.
                           if (i == 0) {
                             return AnimatedSize(
-                              duration: const Duration(milliseconds: 220),
+                              duration: Motion.standard,
                               curve: Curves.easeOutCubic,
                               alignment: Alignment.bottomLeft,
                               child: _showTyping
@@ -7428,7 +7429,7 @@ class _ChatPageState extends State<ChatPage>
                                 // The run's older calls unfold above the
                                 // summary, which sits where the newest one is.
                                 final shown = AnimatedSize(
-                                  duration: const Duration(milliseconds: 240),
+                                  duration: Motion.standard,
                                   curve: Curves.easeOutCubic,
                                   alignment: Alignment.bottomCenter,
                                   child: open
@@ -7558,7 +7559,7 @@ class _ChatPageState extends State<ChatPage>
                     // "@" stepper: unread mentions of me, stacked above ⇊.
                     if (_isGroup)
                       AnimatedPositioned(
-                        duration: const Duration(milliseconds: 220),
+                        duration: Motion.standard,
                         curve: Curves.easeOutCubic,
                         right: 10,
                         bottom: _farFromBottom ? 60 : 10,
@@ -7573,11 +7574,11 @@ class _ChatPageState extends State<ChatPage>
                         ignoring: !_farFromBottom,
                         child: AnimatedScale(
                           scale: _farFromBottom ? 1 : 0.6,
-                          duration: const Duration(milliseconds: 200),
+                          duration: Motion.quick,
                           curve: Curves.easeOutBack,
                           child: AnimatedOpacity(
                             opacity: _farFromBottom ? 1 : 0,
-                            duration: const Duration(milliseconds: 180),
+                            duration: Motion.quick,
                             child: Material(
                               color: scheme.surface,
                               shape: CircleBorder(
@@ -7637,11 +7638,11 @@ class _ChatPageState extends State<ChatPage>
                           offset: _searchOpen
                               ? Offset.zero
                               : const Offset(0, -0.6),
-                          duration: const Duration(milliseconds: 240),
+                          duration: Motion.standard,
                           curve: Curves.easeOutCubic,
                           child: AnimatedOpacity(
                             opacity: _searchOpen ? 1 : 0,
-                            duration: const Duration(milliseconds: 180),
+                            duration: Motion.quick,
                             child: _searchOpen
                                 ? _buildSearchBar(scheme, isDark)
                                 : const SizedBox(height: 48),
@@ -7961,7 +7962,7 @@ class _MsgActionMenuState extends State<_MsgActionMenu> {
       decoration: _deco(22),
       clipBehavior: Clip.antiAlias,
       child: AnimatedSize(
-        duration: const Duration(milliseconds: 220),
+        duration: Motion.standard,
         curve: Curves.easeOutCubic,
         alignment: Alignment.topCenter,
         child: Column(
@@ -8201,10 +8202,10 @@ class _ReactionStrip extends StatelessWidget {
               child: ValueListenableBuilder<String?>(
                 valueListenable: _ReactSlide.hovered,
                 builder: (_, hov, child) => AnimatedSlide(
-                  duration: const Duration(milliseconds: 120),
+                  duration: Motion.instant,
                   offset: Offset(0, hov == reactions[i] ? -0.35 : 0),
                   child: AnimatedScale(
-                    duration: const Duration(milliseconds: 120),
+                    duration: Motion.instant,
                     scale: hov == reactions[i] ? 1.45 : 1.0,
                     child: child,
                   ),
@@ -8238,7 +8239,7 @@ class _ReactionStrip extends StatelessWidget {
       ValueListenableBuilder<bool>(
         valueListenable: _ReactSlide.sliding,
         builder: (_, sliding, _) => AnimatedSize(
-          duration: const Duration(milliseconds: 160),
+          duration: Motion.quick,
           child: !sliding
               ? const SizedBox(width: double.infinity)
               : ValueListenableBuilder<String?>(
@@ -8726,7 +8727,7 @@ class _GalleryVideoState extends State<_GalleryVideo> {
               ),
             AnimatedOpacity(
               opacity: c.value.isPlaying ? 0.0 : 1.0,
-              duration: const Duration(milliseconds: 200),
+              duration: Motion.quick,
               child: GestureDetector(
                 onTap: _toggle,
                 child: Container(
@@ -8973,11 +8974,11 @@ class _HoverChevronState extends State<_HoverChevron> {
         ? (widget.isMe ? Alignment.topRight : Alignment.topLeft)
         : (widget.isMe ? Alignment.bottomRight : Alignment.bottomLeft);
     final morph = AnimatedSize(
-      duration: const Duration(milliseconds: 200),
+      duration: Motion.quick,
       curve: Curves.easeOutCubic,
       alignment: anchor,
       child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 150),
+        duration: Motion.quick,
         switchInCurve: Curves.easeOut,
         switchOutCurve: Curves.easeIn,
         layoutBuilder: (cur, prev) => Stack(
@@ -8988,7 +8989,7 @@ class _HoverChevronState extends State<_HoverChevron> {
     );
     final shown = TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 180),
+      duration: Motion.quick,
       curve: Curves.easeOutBack,
       builder: (_, t, child) => Opacity(
         opacity: t.clamp(0.0, 1.0),
@@ -8996,10 +8997,10 @@ class _HoverChevronState extends State<_HoverChevron> {
             scale: 0.6 + 0.4 * t, alignment: anchor, child: child),
       ),
       child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 160),
+        duration: Motion.quick,
         opacity: _closing ? 0 : 1,
         child: AnimatedScale(
-          duration: const Duration(milliseconds: 160),
+          duration: Motion.quick,
           curve: Curves.easeIn,
           scale: _closing ? 0.7 : 1,
           alignment: anchor,
@@ -9075,10 +9076,10 @@ class _HoverChevronState extends State<_HoverChevron> {
                 child: IgnorePointer(
                   ignoring: !_hover,
                   child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 160),
+                    duration: Motion.quick,
                     opacity: _hover ? 1 : 0,
                     child: AnimatedScale(
-                      duration: const Duration(milliseconds: 180),
+                      duration: Motion.quick,
                       curve: _hover ? Curves.easeOutBack : Curves.easeIn,
                       scale: _hover ? 1 : 0.6,
                       child: GestureDetector(
@@ -9127,7 +9128,7 @@ class _HoverEmojiState extends State<_HoverEmoji> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedScale(
-          duration: const Duration(milliseconds: 120),
+          duration: Motion.instant,
           scale: _on ? 1.35 : 1,
           child: Container(
             padding: const EdgeInsets.all(4),
@@ -9182,7 +9183,7 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer>
   void initState() {
     super.initState();
     _settleCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 200));
+        vsync: this, duration: Motion.quick);
     _init();
   }
 
@@ -9539,11 +9540,11 @@ class _KeepSideButton extends StatelessWidget {
         final visible = on || _HoverScope.of(context);
         return AnimatedOpacity(
           opacity: visible ? 1 : 0,
-          duration: const Duration(milliseconds: 400),
+          duration: Motion.slow,
           curve: Curves.easeInOut,
           child: AnimatedScale(
             scale: visible ? 1 : 0.78,
-            duration: const Duration(milliseconds: 400),
+            duration: Motion.slow,
             curve: Curves.easeOutBack,
             child: IgnorePointer(ignoring: !visible, child: btn),
           ),

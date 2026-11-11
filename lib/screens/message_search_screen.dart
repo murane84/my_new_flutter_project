@@ -15,6 +15,7 @@ import '../widgets/edge_scroll_row.dart';
 import '../widgets/slide_track.dart';
 import '../services/haptics.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
+import '../utils/motion.dart';
 
 /// Global search across my chats: the PEOPLE and GROUPS whose names match
 /// first ("Chats"), then the MESSAGES grouped by chat (best matches first,
@@ -364,7 +365,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
       child: BackdropFilter(
         filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+          duration: Motion.quick,
           height: 38, // compact, like every search pill
           padding: const EdgeInsets.only(left: 6, right: 4),
           decoration: BoxDecoration(

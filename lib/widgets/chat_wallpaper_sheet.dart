@@ -11,6 +11,7 @@ import '../services/wallpapers_service.dart';
 import '../screens/api_service.dart';
 import 'wallpaper_gallery.dart';
 import 'edge_scroll_row.dart';
+import '../utils/motion.dart';
 
 String _mimeForExt(String ext) {
   switch (ext.toLowerCase()) {
@@ -131,7 +132,7 @@ Future<void> showChatWallpaperSheet(
             GestureDetector(
               onTap: onTap,
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 140),
+                duration: Motion.instant,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
                 decoration: BoxDecoration(

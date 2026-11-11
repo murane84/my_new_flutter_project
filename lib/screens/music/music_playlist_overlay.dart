@@ -211,7 +211,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     _loadTrackMeta();
     _filtersRestored = _restoreFilters();
     _freshCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 420));
+        vsync: this, duration: Motion.slow);
     widget.revealFresh?.addListener(_onRevealFresh);
     if (widget.revealFresh?.value == true) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _onRevealFresh());
@@ -252,7 +252,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       final target = (per * i - pos.viewportDimension * 0.3)
           .clamp(0.0, pos.maxScrollExtent);
       await _listCtrl.animateTo(target,
-          duration: const Duration(milliseconds: 460),
+          duration: Motion.slow,
           curve: Curves.easeOutCubic);
     }
     // One breath: rises over ~35 % of it, settles slower (as calmBreath).
@@ -2537,7 +2537,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                       if (path != null && roomy)
                         IconButton(
                           icon: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 220),
+                            duration: Motion.standard,
                             transitionBuilder: (c, an) =>
                                 ScaleTransition(scale: an, child: c),
                             child: Icon(

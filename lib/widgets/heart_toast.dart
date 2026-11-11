@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'glossy_heart.dart';
+import '../utils/motion.dart';
 
 /// The "Neema opened your secret heart" moment — a small glossy pill that
 /// drops in at the TOP of the screen (so an open keyboard never hides it),
@@ -37,7 +38,7 @@ class _HeartToast extends StatefulWidget {
 class _HeartToastState extends State<_HeartToast>
     with TickerProviderStateMixin {
   late final AnimationController _in = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 360));
+      vsync: this, duration: Motion.emphasized);
   late final AnimationController _beat = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 700));
   // lub (big) – dub (smaller) – rest.

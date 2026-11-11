@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'readable.dart' show accentInk;
+import 'motion.dart';
 
 /// The global-space position of the most recent pointer-down anywhere in the
 /// app, recorded by [GlobalTapOrigin] near the app root. Every [showAppPopup]
@@ -370,7 +371,7 @@ class AppPopupShell extends StatelessWidget {
       return ValueListenableBuilder<double?>(
         valueListenable: gPanelBottomY,
         builder: (context, panelBottom, child) => AnimatedPadding(
-          duration: const Duration(milliseconds: 260),
+          duration: Motion.standard,
           curve: Curves.easeOutCubic,
           padding: EdgeInsets.only(
               top: topInset,
@@ -537,7 +538,7 @@ class _HeaderActionButtonState extends State<HeaderActionButton> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final btn = AnimatedScale(
       scale: _down ? 0.92 : 1.0,
-      duration: const Duration(milliseconds: 110),
+      duration: Motion.instant,
       curve: Curves.easeOut,
       child: Container(
         width: 38,

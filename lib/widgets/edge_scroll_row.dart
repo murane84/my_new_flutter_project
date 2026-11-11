@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart'
     show PointerDeviceKind, PointerScrollEvent, kPrimaryButton;
 import 'package:flutter/material.dart';
+import '../utils/motion.dart';
 
 /// A sideways row of chips / avatars that never makes you hunt for what's
 /// hidden past the edge:
@@ -33,7 +34,7 @@ class EdgeScrollRow extends StatefulWidget {
     if (s == null || ro == null || !ro.attached) return;
     await s.position.ensureVisible(ro,
         alignment: 0.5,
-        duration: const Duration(milliseconds: 260),
+        duration: Motion.standard,
         curve: Curves.easeOutCubic);
   }
 
@@ -78,7 +79,7 @@ class _EdgeScrollRowState extends State<EdgeScrollRow> {
     }
     if (to == null) return;
     _c.animateTo(to.clamp(p.minScrollExtent, p.maxScrollExtent),
-        duration: const Duration(milliseconds: 320),
+        duration: Motion.emphasized,
         curve: Curves.easeOutCubic);
   }
 

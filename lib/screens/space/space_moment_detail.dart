@@ -541,7 +541,7 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
       final max = _listC.position.maxScrollExtent;
       if (animated) {
         _listC.animateTo(max,
-            duration: const Duration(milliseconds: 280),
+            duration: Motion.standard,
             curve: Curves.easeOut);
       } else {
         _listC.jumpTo(max);
@@ -758,7 +758,7 @@ class _MemoryDetailSheetState extends State<_MemoryDetailSheet> {
                     // Collapsed to a few lines by default so the CONVERSATION is
                     // the focus; expands (and scrolls, if very long) on request.
                     AnimatedSize(
-                      duration: const Duration(milliseconds: 200),
+                      duration: Motion.quick,
                       curve: Curves.easeOut,
                       alignment: Alignment.topCenter,
                       child: _memoExpanded

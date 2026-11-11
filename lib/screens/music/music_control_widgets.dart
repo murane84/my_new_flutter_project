@@ -136,7 +136,7 @@ class _PlayKeyState extends State<PlayKey>
                 children: [
                   // The orbit ring (only while playing).
                   AnimatedOpacity(
-                    duration: const Duration(milliseconds: 250),
+                    duration: Motion.standard,
                     opacity: widget.playing ? 1 : 0,
                     child: Transform.rotate(
                       angle: t * 6.283185307179586,
@@ -188,7 +188,7 @@ class _PlayKeyState extends State<PlayKey>
                           color: Colors.white, strokeWidth: 2.5),
                     )
                   : AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 220),
+                      duration: Motion.standard,
                       transitionBuilder: (c, an) => RotationTransition(
                         turns: Tween(begin: 0.75, end: 1.0).animate(an),
                         child: ScaleTransition(scale: an, child: c),
@@ -410,7 +410,7 @@ class _CtrlChip extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
+          duration: Motion.quick,
           width: 44,
           height: 44,
           decoration: BoxDecoration(
@@ -577,7 +577,7 @@ class _SpeedPanelState extends State<_SpeedPanel> {
                 // The current speed as a tinted value pill (the "×" reads as
                 // part of a number there, never as a second close button).
                 AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 160),
+                  duration: Motion.quick,
                   transitionBuilder: (c, a) =>
                       ScaleTransition(scale: a, child: c),
                   child: Container(
@@ -668,7 +668,7 @@ class _SpeedPanelState extends State<_SpeedPanel> {
                 ],
               ),
               AnimatedCrossFade(
-                duration: const Duration(milliseconds: 180),
+                duration: Motion.quick,
                 crossFadeState: normal
                     ? CrossFadeState.showFirst
                     : CrossFadeState.showSecond,
@@ -722,7 +722,7 @@ Widget _musicPickChip(
         onTap();
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
+        duration: Motion.quick,
         padding: const EdgeInsets.symmetric(vertical: 9),
         alignment: Alignment.center,
         decoration: BoxDecoration(

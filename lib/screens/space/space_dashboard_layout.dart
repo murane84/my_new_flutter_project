@@ -140,7 +140,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
             // Settings take this area in place (same door in and out: a soft
             // fade + rise), the hero staying put above.
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
+              duration: Motion.emphasized,
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
               transitionBuilder: (child, anim) => FadeTransition(
@@ -353,7 +353,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
     // balanced like the banner buttons, instead of both leaning left.
     Widget pulseOf({bool spread = false}) => AnimatedOpacity(
       opacity: hasStats ? 1 : 0,
-      duration: const Duration(milliseconds: 340),
+      duration: Motion.emphasized,
       curve: Curves.easeOut,
       child: Wrap(
         spacing: 8,

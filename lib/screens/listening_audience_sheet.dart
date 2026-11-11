@@ -7,6 +7,7 @@ import '../services/contact_names.dart';
 import '../widgets/person_avatar.dart';
 import '../widgets/pill_search.dart';
 import '../services/haptics.dart';
+import '../utils/motion.dart';
 
 /// The music-player toggle for broadcasting "listening now" to friends.
 /// Tap flips sharing on/off; long-press opens the audience sheet (who can see).
@@ -183,7 +184,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
           child: Row(
             children: [
               AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
+                duration: Motion.quick,
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
@@ -216,7 +217,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
                             color: scheme.onSurface)),
                     const SizedBox(height: 2),
                     AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
+                      duration: Motion.quick,
                       child: Text(summary,
                           key: ValueKey(summary),
                           maxLines: 1,
@@ -294,7 +295,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
         ),
         // Who can see — two choice cards, then (selected) the friend picker.
         AnimatedSize(
-          duration: const Duration(milliseconds: 240),
+          duration: Motion.standard,
           curve: Curves.easeOutCubic,
           alignment: Alignment.topCenter,
           child: !on
@@ -444,7 +445,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
           _presence.setAudience(value, _selected);
         },
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
+          duration: Motion.quick,
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
@@ -543,7 +544,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
                         color: scheme.onSurface)),
               ),
               AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
+                duration: Motion.quick,
                 width: 24,
                 height: 24,
                 decoration: BoxDecoration(

@@ -116,7 +116,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
             onTap: onTap,
             radius: 24,
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
+              duration: Motion.standard,
               curve: Curves.easeOutCubic,
               margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
@@ -251,7 +251,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
       final target = index + dir;
       if (target < 0 || target >= total) return;
       _diaryPageCtrl.animateToPage(target,
-          duration: const Duration(milliseconds: 340),
+          duration: Motion.emphasized,
           curve: Curves.easeOutCubic);
     }
 

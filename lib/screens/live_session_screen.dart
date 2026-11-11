@@ -39,6 +39,7 @@ import '../widgets/concert_stage.dart';
 import '../widgets/playing_bars.dart';
 import '../services/online_watch.dart';
 import '../widgets/edge_scroll_row.dart';
+import '../utils/motion.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
 /// Presented with `showDialog(...)` so it floats over the chat instead of
@@ -1969,7 +1970,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         ),
         // ── The avatar strip (hidden when collapsed) ──
         AnimatedSize(
-          duration: const Duration(milliseconds: 200),
+          duration: Motion.quick,
           curve: Curves.easeOut,
           child: _peopleCollapsed
               ? const SizedBox(width: double.infinity)
@@ -3557,7 +3558,7 @@ class _ReactionButtonState extends State<_ReactionButton> {
       onTap: _bounce,
       child: AnimatedScale(
         scale: _scale,
-        duration: const Duration(milliseconds: 120),
+        duration: Motion.instant,
         curve: Curves.easeOut,
         child: Container(
           width: 32,

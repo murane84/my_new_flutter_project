@@ -379,11 +379,11 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
     final active =
         track != null && (track['title'] ?? '').toString().trim().isNotEmpty;
     return AnimatedSize(
-      duration: const Duration(milliseconds: 320),
+      duration: Motion.emphasized,
       curve: Curves.easeOutCubic,
       alignment: Alignment.topCenter,
       child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 300),
+        duration: Motion.emphasized,
         child: KeyedSubtree(
           key: ValueKey(active ? 'tune-in' : 'invite'),
           child: _presenceHeroInner(scheme),
@@ -1370,7 +1370,7 @@ class _CapsulePeekState extends State<_CapsulePeek> {
           label: Text(_open ? 'Hide it again' : 'Peek at it'),
         ),
         AnimatedSize(
-          duration: const Duration(milliseconds: 220),
+          duration: Motion.standard,
           curve: Curves.easeOutCubic,
           child: !_open
               ? const SizedBox(width: double.infinity)

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/song_insights.dart';
 import '../utils/readable.dart';
 import '../services/haptics.dart';
+import '../utils/motion.dart';
 
 /// How this song feels to you — and, from that feeling, who it's for.
 /// 😍 → "Send to Belyner 💞" · Together; 🥹 → a heart; 💪 → share the energy;
@@ -80,7 +81,7 @@ class _SongFeelStripState extends State<SongFeelStrip> {
       child: GestureDetector(
         onTap: () => _pick(f),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
+          duration: Motion.quick,
           width: size,
           height: size,
           margin: EdgeInsets.symmetric(horizontal: widget.centered ? 5 : 2),
@@ -321,7 +322,7 @@ class _SongFeelStripState extends State<SongFeelStrip> {
             child: TweenAnimationBuilder<double>(
               key: ValueKey('pop_${feel.key}_${_justPicked?.key}'),
               tween: Tween(begin: _justPicked == feel ? 0.6 : 1, end: 1),
-              duration: const Duration(milliseconds: 420),
+              duration: Motion.slow,
               curve: Curves.elasticOut,
               builder: (_, s, child) =>
                   Transform.scale(scale: s, child: child),
@@ -397,11 +398,11 @@ class _SongFeelStripState extends State<SongFeelStrip> {
                 );
         }
         return _frame(AnimatedSize(
-          duration: const Duration(milliseconds: 220),
+          duration: Motion.standard,
           curve: Curves.easeOutCubic,
           alignment: Alignment.topCenter,
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 220),
+            duration: Motion.standard,
             child: body,
           ),
         ));

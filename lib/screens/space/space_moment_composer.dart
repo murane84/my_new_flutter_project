@@ -446,7 +446,7 @@ class _MomentComposerState extends State<_MomentComposer> {
       behavior: HitTestBehavior.opaque,
       onTap: () => _setMode(m),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
+        duration: Motion.instant,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(
           color: sel

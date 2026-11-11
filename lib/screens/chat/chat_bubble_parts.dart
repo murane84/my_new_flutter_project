@@ -231,7 +231,7 @@ class _ReactionButtonState extends State<_ReactionButton> {
       onTap: widget.onTap,
       child: AnimatedScale(
         scale: _down ? 0.72 : 1.0,
-        duration: const Duration(milliseconds: 110),
+        duration: Motion.instant,
         curve: Curves.easeOut,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 3),
@@ -578,7 +578,7 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
           GestureDetector(
             onTap: _toggle,
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
+              duration: Motion.quick,
               width: 38,
               height: 38,
               decoration: BoxDecoration(
@@ -660,7 +660,7 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
                     GestureDetector(
                       onTap: _cycleSpeed,
                       child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
+                        duration: Motion.quick,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 7, vertical: 1.5),
                         decoration: BoxDecoration(
@@ -1269,10 +1269,10 @@ class _SwipeToReplyState extends State<_SwipeToReply>
                 angle: (1 - t) * -0.9,
                 child: AnimatedScale(
                   scale: _armed ? 1.18 : (0.55 + 0.45 * t),
-                  duration: const Duration(milliseconds: 160),
+                  duration: Motion.quick,
                   curve: Curves.easeOutBack,
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 160),
+                    duration: Motion.quick,
                     padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
                       color: _armed

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'motion.dart';
 
 /// Reusable tactile feedback for taps.
 ///
@@ -30,7 +31,7 @@ class BounceTap extends StatefulWidget {
 class _BounceTapState extends State<BounceTap>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 260));
+      vsync: this, duration: Motion.standard);
   late final Animation<double> _scale = TweenSequence<double>([
     TweenSequenceItem(
         tween:
@@ -89,7 +90,7 @@ class _TactileState extends State<Tactile> with TickerProviderStateMixin {
       vsync: this, duration: const Duration(milliseconds: 90));
   // Release: pressedScale -> 1.0 with an elastic overshoot.
   late final AnimationController _release = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 340));
+      vsync: this, duration: Motion.emphasized);
   late final Animation<double> _releaseAnim =
       Tween<double>(begin: widget.pressedScale, end: 1.0)
           .chain(CurveTween(curve: Curves.elasticOut))

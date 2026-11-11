@@ -857,7 +857,7 @@ extension _HomeFriendListView on HomePageState {
                         child: SizedBox(
                           height: 22,
                           child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 320),
+                            duration: Motion.emphasized,
                             switchInCurve: Curves.easeOutCubic,
                             switchOutCurve: Curves.easeIn,
                             layoutBuilder: (cur, prev) => Stack(
@@ -1024,7 +1024,7 @@ extension _HomeFriendListView on HomePageState {
           Positioned.fill(
             child: AnimatedOpacity(
               opacity: listening ? 1 : 0,
-              duration: const Duration(milliseconds: 420),
+              duration: Motion.slow,
               curve: Curves.easeInOut,
               // Pause the spin while hidden (no wasted frames).
               child: TickerMode(
@@ -3292,7 +3292,7 @@ class _PressDipState extends State<_PressDip> {
         onPointerCancel: (_) => _set(false),
         child: AnimatedScale(
           scale: _down ? 0.98 : 1,
-          duration: const Duration(milliseconds: 110),
+          duration: Motion.instant,
           curve: Curves.easeOut,
           child: widget.child,
         ),

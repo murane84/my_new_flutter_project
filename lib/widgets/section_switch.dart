@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../services/section_transition.dart';
+import '../utils/motion.dart';
 
 /// Switches between sections with the user's chosen transition (Appearance
 /// → Section transitions). Give each section's child a distinct key; set
@@ -49,7 +50,7 @@ class SectionSwitch extends StatelessWidget {
     if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
       return ClipRect(
         child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 150),
+          duration: Motion.quick,
           layoutBuilder: _layout,
           // Same hand-over rule as every style: the leaving page is gone
           // by 40 %, the arriving one starts at 15 %, so they never print

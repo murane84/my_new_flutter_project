@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../utils/readable.dart' show readableOn;
+import '../utils/motion.dart';
 
 /// Aluta's ONE "pick one of these" control: a sunken track with a raised,
 /// lit key that slides (with a little spring) to the chosen segment.
@@ -186,7 +187,7 @@ class SlideTrackSegment extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 AnimatedScale(
-                  duration: const Duration(milliseconds: 260),
+                  duration: Motion.standard,
                   curve: Curves.easeOutBack,
                   scale: selected ? 1.12 : 1,
                   child: Icon(icon, size: 15, color: fg),
@@ -195,7 +196,7 @@ class SlideTrackSegment extends StatelessWidget {
                   const SizedBox(width: 5),
                   Flexible(
                     child: AnimatedDefaultTextStyle(
-                      duration: const Duration(milliseconds: 200),
+                      duration: Motion.quick,
                       style: TextStyle(
                           fontSize: 12,
                           fontWeight:

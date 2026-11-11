@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/on_accent.dart';
+import '../utils/motion.dart';
 
 /// A short, warm first-run tour: Aluta · Harmony · Circle · Glow · your
 /// music has feelings. Shown once; replay from Moments & nudges.
@@ -139,7 +140,7 @@ class _TourPagesState extends State<_TourPages>
       return;
     }
     _ctrl.animateToPage(to,
-        duration: const Duration(milliseconds: 360),
+        duration: Motion.emphasized,
         curve: Curves.easeOutCubic);
   }
 
@@ -164,7 +165,7 @@ class _TourPagesState extends State<_TourPages>
           child: Focus(
             autofocus: true,
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 360),
+              duration: Motion.emphasized,
               constraints: const BoxConstraints(maxWidth: 380, maxHeight: 560),
               margin: const EdgeInsets.all(20),
               clipBehavior: Clip.antiAlias,
@@ -203,7 +204,7 @@ class _TourPagesState extends State<_TourPages>
                         width: 96,
                         child: AnimatedOpacity(
                           opacity: _i == 0 ? 0 : 1,
-                          duration: const Duration(milliseconds: 200),
+                          duration: Motion.quick,
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
@@ -233,7 +234,7 @@ class _TourPagesState extends State<_TourPages>
                               GestureDetector(
                                 onTap: () => _go(k),
                                 child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 260),
+                                  duration: Motion.standard,
                                   margin:
                                       const EdgeInsets.symmetric(horizontal: 3),
                                   width: k == _i ? 22 : 7,

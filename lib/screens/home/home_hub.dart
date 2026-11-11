@@ -608,7 +608,7 @@ extension _HomeHub on HomePageState {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 AnimatedScale(
-                  duration: const Duration(milliseconds: 260),
+                  duration: Motion.standard,
                   curve: Curves.easeOutBack,
                   scale: selected ? 1.12 : 1,
                   child: Icon(icon, size: 15, color: fg),
@@ -617,7 +617,7 @@ extension _HomeHub on HomePageState {
                   const SizedBox(width: 5),
                   Flexible(
                     child: AnimatedDefaultTextStyle(
-                      duration: const Duration(milliseconds: 200),
+                      duration: Motion.quick,
                       style: TextStyle(
                           fontSize: 12,
                           fontWeight:
@@ -766,7 +766,7 @@ extension _HomeHub on HomePageState {
                       const SizedBox(width: 2),
                       AnimatedRotation(
                         turns: _storiesExpanded ? 0.0 : 0.5,
-                        duration: const Duration(milliseconds: 200),
+                        duration: Motion.quick,
                         child: Icon(Icons.keyboard_arrow_up_rounded,
                             size: 20, color: accentInk(scheme)),
                       ),
@@ -778,7 +778,7 @@ extension _HomeHub on HomePageState {
           ),
         ]),
         AnimatedSize(
-          duration: const Duration(milliseconds: 220),
+          duration: Motion.standard,
           curve: Curves.easeInOut,
           alignment: Alignment.topCenter,
           child: _storiesExpanded
@@ -836,7 +836,7 @@ extension _HomeHub on HomePageState {
           clipBehavior: Clip.none,
           children: [
             AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
+              duration: Motion.quick,
               padding: EdgeInsets.symmetric(
                   horizontal: showLabel ? 12 : 9, vertical: 7),
               decoration: BoxDecoration(
@@ -1043,7 +1043,7 @@ class _CirclePeek {
             child: Center(
               child: TweenAnimationBuilder<double>(
                 tween: Tween(begin: 0, end: 1),
-                duration: const Duration(milliseconds: 200),
+                duration: Motion.quick,
                 curve: Curves.easeOutBack,
                 builder: (_, t, child) => Opacity(
                   opacity: t.clamp(0.0, 1.0),
@@ -1147,7 +1147,7 @@ class _SwipePath extends StatefulWidget {
 class _SwipePathState extends State<_SwipePath>
     with SingleTickerProviderStateMixin {
   late final AnimationController _p = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 280));
+      vsync: this, duration: Motion.standard);
   double _dx = 0; // raw finger travel this drag
   bool? _fwd; // which way this drag is going
   bool _hasNext = false; // a page exists the way this drag goes

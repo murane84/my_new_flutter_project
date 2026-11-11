@@ -163,7 +163,7 @@ extension _ChatSearch on _ChatPageState {
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+            duration: Motion.quick,
             height: 38, // compact, like every search pill
             padding: const EdgeInsets.only(left: 6, right: 4),
             decoration: BoxDecoration(
@@ -231,7 +231,7 @@ extension _ChatSearch on _ChatPageState {
                   ),
                 ),
                 AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 160),
+                  duration: Motion.quick,
                   child: !has
                       ? const SizedBox.shrink()
                       : Padding(

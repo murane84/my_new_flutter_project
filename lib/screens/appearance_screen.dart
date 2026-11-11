@@ -24,6 +24,7 @@ import '../services/section_transition.dart';
 import '../widgets/section_switch.dart';
 import '../utils/toast_helper.dart';
 import '../services/haptics.dart';
+import '../utils/motion.dart';
 
 /// The personalization surface (build step 5): whole-app **theme** (System /
 /// Light / Dark) + a curated **accent** preset set. Dark stays the brand's
@@ -303,7 +304,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
       child: GestureDetector(
         onTap: () => theme.setThemeMode(mode),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
+          duration: Motion.quick,
           padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
             color: selected
@@ -401,7 +402,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
       child: GestureDetector(
         onTap: () => theme.setAccent(a.color),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
+          duration: Motion.quick,
           width: size,
           height: size,
           decoration: BoxDecoration(
@@ -836,7 +837,7 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
+        duration: Motion.instant,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
@@ -1520,7 +1521,7 @@ class _VibrationSection extends StatelessWidget {
                 ]),
                 // Only meaningful while vibration is on.
                 AnimatedSize(
-                  duration: const Duration(milliseconds: 200),
+                  duration: Motion.quick,
                   curve: Curves.easeOutCubic,
                   child: !on
                       ? const SizedBox(width: double.infinity)

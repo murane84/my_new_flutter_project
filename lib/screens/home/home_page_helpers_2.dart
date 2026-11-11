@@ -72,7 +72,7 @@ extension _HomePageHelpers2 on HomePageState {
         ignoring: !visible,
         child: AnimatedOpacity(
           opacity: opacity,
-          duration: const Duration(milliseconds: 120),
+          duration: Motion.instant,
           curve: Curves.easeIn,
           child: OverflowBox(
             minWidth: 0,
@@ -193,7 +193,7 @@ extension _HomePageHelpers2 on HomePageState {
             // (light top → deeper base), a fine top-light rim and a soft
             // accent drop shadow, with the icon in white.
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
+              duration: Motion.standard,
               curve: Curves.easeOutCubic,
               margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),

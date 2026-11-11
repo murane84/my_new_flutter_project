@@ -109,7 +109,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
           // place of the label — only while it's set, so the row stays calm.
           if (badge != null)
             AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
+              duration: Motion.quick,
               child: Container(
                 key: ValueKey(badge),
                 padding:
@@ -620,7 +620,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                     child: GestureDetector(
                     onTap: _openVolume,
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
+                      duration: Motion.quick,
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
@@ -692,7 +692,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                 GestureDetector(
                   onTap: _toggleSpeedPanel,
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
+                    duration: Motion.quick,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 11, vertical: 7),
                     decoration: BoxDecoration(
@@ -785,7 +785,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                     onTap: (hasTrack || live) ? _openFullPlayer : null,
                     borderRadius: BorderRadius.circular(16),
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
+                      duration: Motion.quick,
                       padding: EdgeInsets.symmetric(
                           horizontal: isNarrow ? 14 : 20, vertical: 5),
                       decoration: BoxDecoration(
@@ -918,7 +918,7 @@ Column(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 4),
                             child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
+                              duration: Motion.quick,
                               child: Icon(
                                 isFav
                                     ? Icons.favorite
@@ -1068,7 +1068,7 @@ Column(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 4),
                             child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
+                              duration: Motion.quick,
                               child: Icon(
                                 isFav
                                     ? Icons.favorite
@@ -1142,7 +1142,7 @@ Column(
                     SizedBox(
                       height: 38,
                       child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 260),
+                        duration: Motion.standard,
                         child: upNextOn
                             ? KeyedSubtree(
                                 key: const ValueKey('upnext'),
@@ -1573,7 +1573,7 @@ Column(
             after?.call();
           },
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+            duration: Motion.quick,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
               color: on
@@ -1586,7 +1586,7 @@ Column(
                   color: on ? accent.withAlpha(150) : accent.withAlpha(50)),
             ),
             child: AnimatedSize(
-              duration: const Duration(milliseconds: 220),
+              duration: Motion.standard,
               curve: Curves.easeOutCubic,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -1751,7 +1751,7 @@ Column(
             clipBehavior: Clip.none,
             children: [
               AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
+                duration: Motion.quick,
                 width: compact ? 40 : 46,
                 height: compact ? 40 : 46,
                 decoration: BoxDecoration(

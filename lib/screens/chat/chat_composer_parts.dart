@@ -154,7 +154,7 @@ class _OfflineBanner extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     // A floating pill on the wallpaper rather than a full-width strip.
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
+      duration: Motion.emphasized,
       height: isOffline ? 38 : 0,
       margin: isOffline
           ? const EdgeInsets.fromLTRB(10, 6, 10, 0)

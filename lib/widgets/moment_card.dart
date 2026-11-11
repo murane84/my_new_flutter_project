@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../utils/readable.dart' show accentInk;
 import '../services/haptics.dart';
+import '../utils/motion.dart';
 
 /// One action on a [showMomentCard].
 class MomentAction {
@@ -86,7 +87,7 @@ class _MomentCard extends StatefulWidget {
 class _MomentCardState extends State<_MomentCard>
     with SingleTickerProviderStateMixin {
   late final AnimationController _in = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 420));
+      vsync: this, duration: Motion.slow);
   Timer? _timer;
   double _drag = 0;
   bool _leaving = false;

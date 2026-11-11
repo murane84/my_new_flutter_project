@@ -31,7 +31,7 @@ class _PanelToggleBtn extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+          duration: Motion.quick,
           padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
             color: isFullScreen

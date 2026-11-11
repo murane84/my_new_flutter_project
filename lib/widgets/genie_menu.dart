@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../services/app_busy.dart';
 import '../utils/readable.dart' show accentInk;
 import '../services/haptics.dart';
+import '../utils/motion.dart';
 
 // ─── Genie menus ────────────────────────────────────────────────────────────
 // One menu motion for the whole app: a menu GROWS out of the button that
@@ -266,7 +267,7 @@ class _GenieMenuSurfaceState extends State<_GenieMenuSurface> {
         width: fw,
         child: TweenAnimationBuilder<double>(
           tween: Tween(begin: 0, end: 1),
-          duration: const Duration(milliseconds: 200),
+          duration: Motion.quick,
           curve: Curves.easeOutCubic,
           builder: (_, v, child) => Opacity(
             opacity: v,
@@ -662,11 +663,11 @@ class _GenieMenuListState extends State<_GenieMenuList> {
             // it slides away), so there's never a moment of blank card
             // waiting to shrink/grow after the switch.
             child: AnimatedSize(
-              duration: const Duration(milliseconds: 210),
+              duration: Motion.standard,
               curve: Curves.easeOutCubic,
               alignment: Alignment.topCenter,
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 210),
+                duration: Motion.standard,
                 reverseDuration: const Duration(milliseconds: 160),
                 switchInCurve: Curves.easeOutCubic,
                 switchOutCurve: Curves.easeInCubic,

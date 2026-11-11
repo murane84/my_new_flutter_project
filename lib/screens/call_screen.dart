@@ -9,6 +9,7 @@ import '../state/call_state.dart';
 import '../utils/app_config.dart';
 import '../utils/net_image.dart';
 import 'token_helper.dart' show mediaAuthHeaders;
+import '../utils/motion.dart';
 
 /// Full-screen UI for the single active Aluta voice call. It simply reflects
 /// [CallService]'s state — ring / calling / connected / ended — and drives the
@@ -165,7 +166,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                   const Spacer(flex: 2),
                   // Dim the avatar once the call has ended for a calm wind-down.
                   AnimatedOpacity(
-                    duration: const Duration(milliseconds: 300),
+                    duration: Motion.emphasized,
                     opacity: _ended ? 0.55 : 1,
                     child: _avatar(),
                   ),

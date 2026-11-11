@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/keystroke_sounds.dart';
+import '../utils/motion.dart';
 
 /// The chat thread's composer pill, shared by every place you type a message
 /// or caption (photo editor, file caption, new story…) so they all look,
@@ -162,7 +163,7 @@ class _AlutaComposerFieldState extends State<AlutaComposerField> {
     }
 
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
+      duration: Motion.quick,
       decoration: BoxDecoration(
         color: surface,
         borderRadius: BorderRadius.circular(26),

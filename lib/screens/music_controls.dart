@@ -67,6 +67,7 @@ import '../services/account_prefs.dart';
 import '../widgets/pill_search.dart';
 import '../services/haptics.dart';
 import '../widgets/edge_scroll_row.dart';
+import '../utils/motion.dart';
 
 part 'music/music_control_widgets.dart'; // _CtrlBtn, _CtrlChip, _SpeedPanel
 part 'music/music_playlist_overlay.dart'; // _PlaylistOverlay + state
@@ -462,19 +463,19 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     );
     PlayerStyleController.instance.load();
     _queueCtrl = AnimationController(
-      duration: const Duration(milliseconds: 320),
+      duration: Motion.emphasized,
       vsync: this,
     );
     _playlistCtrl = AnimationController(
-      duration: const Duration(milliseconds: 320),
+      duration: Motion.emphasized,
       vsync: this,
     );
     _speedCtrl = AnimationController(
-      duration: const Duration(milliseconds: 220),
+      duration: Motion.standard,
       vsync: this,
     );
     _volumeCtrl = AnimationController(
-      duration: const Duration(milliseconds: 200),
+      duration: Motion.quick,
       vsync: this,
     );
 

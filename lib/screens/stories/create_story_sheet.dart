@@ -16,6 +16,7 @@ import 'camera_capture.dart';
 import 'status_audience_sheet.dart';
 import '../../services/status_privacy.dart';
 import '../../widgets/edge_scroll_row.dart';
+import '../../utils/motion.dart';
 
 /// Entry point: a bottom sheet offering the four ways to post a story
 /// (photo from gallery, camera photo, a short video clip, or a "now playing"
@@ -306,7 +307,7 @@ class StatusPaletteButton extends StatelessWidget {
       child: GestureDetector(
         onTap: () => _open(context),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
+          duration: Motion.quick,
           width: size,
           height: size,
           alignment: Alignment.center,
@@ -717,7 +718,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
         if (_scroll.hasClients) {
           _scroll.animateTo(
             _scroll.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 250),
+            duration: Motion.standard,
             curve: Curves.easeOut,
           );
         }
@@ -1022,7 +1023,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                 _custom = null;
               }),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
+                duration: Motion.quick,
                 width: selected ? 38 : 30,
                 height: selected ? 38 : 30,
                 alignment: Alignment.center,
@@ -1211,7 +1212,7 @@ class _TextStoryPageState extends State<_TextStoryPage> {
     return Scaffold(
       // Glides to the picked colour (the same calm 260 ms as Share as status).
       body: AnimatedContainer(
-        duration: const Duration(milliseconds: 260),
+        duration: Motion.standard,
         curve: Curves.easeOut,
         decoration: _decoration(cs),
         child: SafeArea(
@@ -1363,7 +1364,7 @@ class _TextStoryPageState extends State<_TextStoryPage> {
               _custom = null;
             }),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
+              duration: Motion.quick,
               width: selected ? 40 : 32,
               height: selected ? 40 : 32,
               alignment: Alignment.center,
@@ -1468,7 +1469,7 @@ class _StickerComposePageState extends State<_StickerComposePage> {
     return Scaffold(
       // Glides to the picked colour (the same calm 260 ms as Share as status).
       body: AnimatedContainer(
-        duration: const Duration(milliseconds: 260),
+        duration: Motion.standard,
         curve: Curves.easeOut,
         decoration: _decoration(cs),
         child: SafeArea(
@@ -1556,7 +1557,7 @@ class _StickerComposePageState extends State<_StickerComposePage> {
               _custom = null;
             }),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
+              duration: Motion.quick,
               width: selected ? 40 : 32,
               height: selected ? 40 : 32,
               alignment: Alignment.center,

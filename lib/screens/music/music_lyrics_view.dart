@@ -177,7 +177,7 @@ class _LyricsViewState extends State<_LyricsView> {
     final target =
         (idx * 34.0 - 120).clamp(0.0, _scrollCtrl.position.maxScrollExtent);
     _scrollCtrl.animateTo(target,
-        duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+        duration: Motion.emphasized, curve: Curves.easeOut);
   }
 
   @override
@@ -488,10 +488,10 @@ class _LyricsViewState extends State<_LyricsView> {
                     const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                 child: AnimatedScale(
                   scale: on ? 1.0 : 0.94,
-                  duration: const Duration(milliseconds: 260),
+                  duration: Motion.standard,
                   curve: Curves.easeOutCubic,
                   child: AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 260),
+                    duration: Motion.standard,
                     curve: Curves.easeOutCubic,
                     textAlign: TextAlign.center,
                     style: TextStyle(

@@ -145,6 +145,7 @@ import '../widgets/pill_search.dart';
 import '../services/haptics.dart';
 import '../widgets/slide_track.dart';
 import '../widgets/edge_scroll_row.dart';
+import '../utils/motion.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -759,7 +760,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // flips playlistDrawerBus.isOpen; we animate the host from that.
     _playlistDrawerCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 340),
+      duration: Motion.emphasized,
       reverseDuration: const Duration(milliseconds: 260),
     );
     playlistDrawerBus.isOpen.addListener(_onPlaylistDrawerToggled);
@@ -4010,7 +4011,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     if (!c.hasClients) return;
     final fresh = Set<String>.of(_newWhileAway);
     c.animateTo(0,
-        duration: const Duration(milliseconds: 450),
+        duration: Motion.slow,
         curve: Curves.easeOutCubic);
     if (fresh.isNotEmpty) {
       setState(_newWhileAway.clear);
@@ -4029,7 +4030,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         if ((_circleView == 'stories' || _circleView == 'listening') &&
             _circleMaxScroll.hasClients) {
           _circleMaxScroll.animateTo(0,
-              duration: const Duration(milliseconds: 450),
+              duration: Motion.slow,
               curve: Curves.easeOutCubic);
         } else {
           _scrollListToTop(_circleScroll);
@@ -4116,11 +4117,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
           ignoring: !show,
           child: AnimatedSlide(
             offset: show ? Offset.zero : const Offset(0, 0.6),
-            duration: const Duration(milliseconds: 220),
+            duration: Motion.standard,
             curve: Curves.easeOutCubic,
             child: AnimatedOpacity(
               opacity: show ? 1 : 0,
-              duration: const Duration(milliseconds: 200),
+              duration: Motion.quick,
               child: Material(
                 color: n > 0 ? scheme.primary : scheme.surfaceContainerHigh,
                 elevation: 3,
@@ -4567,7 +4568,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final full = _avatarFull(_activeFriendAvatar);
     final show = _avatarExpanded && full != null;
     return AnimatedSize(
-      duration: const Duration(milliseconds: 260),
+      duration: Motion.standard,
       curve: Curves.easeOutCubic,
       child: !show
           ? const SizedBox(width: double.infinity)
@@ -4855,7 +4856,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                                 height: 15,
                                 child: AnimatedSwitcher(
                                   duration:
-                                      const Duration(milliseconds: 280),
+                                      Motion.standard,
                                   layoutBuilder: (cur, prev) => Stack(
                                     alignment: Alignment.centerLeft,
                                     children: [...prev, ?cur],
@@ -5017,7 +5018,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
             // 3 px into the header's padding), so the header row is exactly
             // as tall as it was with a bare photo — no jump, no extra height.
             child: _headerPhotoSlot(AnimatedContainer(
-              duration: const Duration(milliseconds: 380),
+              duration: Motion.emphasized,
               curve: Curves.easeOutCubic,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
@@ -5301,7 +5302,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                         // Changes (online → last seen, typing, listening,
                         // a minute older) fade instead of snapping.
                         child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 280),
+                          duration: Motion.standard,
                           layoutBuilder: (cur, prev) => Stack(
                             alignment: Alignment.centerLeft,
                             children: [...prev, ?cur],
@@ -5474,7 +5475,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
             child: GestureDetector(
               onTap: _goOnline,
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
+                duration: Motion.standard,
                 padding: const EdgeInsets.symmetric(
                     horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
@@ -5532,7 +5533,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
             child: Stack(
               children: [
                 AnimatedSwitcher(
-              duration: const Duration(milliseconds: 280),
+              duration: Motion.standard,
               switchInCurve: Curves.easeOutCubic,
               transitionBuilder: (child, anim) => FadeTransition(
                 opacity: anim,
@@ -5663,14 +5664,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
       child: MouseRegion(
         cursor: SystemMouseCursors.resizeLeftRight,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+          duration: Motion.quick,
           width: 14,
           color: _isDragging
               ? scheme.primary.withAlpha(30)
               : Colors.transparent,
           child: Center(
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
+              duration: Motion.quick,
               width: _isDragging ? 4 : 3,
               height: _isDragging ? 60 : 40,
               decoration: BoxDecoration(
@@ -6330,7 +6331,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
               // ── Draggable divider ────────────────────────────────────────
               AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
+                duration: Motion.emphasized,
                 curve: Curves.easeInOut,
                 width: showDiv ? divW : 0,
                 child: showDiv
@@ -6342,7 +6343,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
               Expanded(
                 child: AnimatedOpacity(
                   opacity: chatOpacity,
-                  duration: const Duration(milliseconds: 120),
+                  duration: Motion.instant,
                   curve: Curves.easeIn,
                   child: IgnorePointer(
                     ignoring: chatW < 1,

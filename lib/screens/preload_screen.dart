@@ -14,6 +14,7 @@ import '../services/connected_contacts_service.dart';
 import '../services/contact_names.dart';
 import '../services/aluta_mood.dart';
 import '../services/song_insights.dart';
+import '../utils/motion.dart';
 
 /// The post-unlock warm-up gate.
 ///
@@ -296,7 +297,7 @@ class _PreloadScreenState extends State<PreloadScreen>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 300),
+                          duration: Motion.emphasized,
                           child: Text(
                             _greeting.isNotEmpty
                                 ? _greeting
@@ -313,7 +314,7 @@ class _PreloadScreenState extends State<PreloadScreen>
                         ),
                         const SizedBox(height: 6),
                         AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 250),
+                          duration: Motion.standard,
                           child: Text(
                             _stage,
                             key: ValueKey(_stage),

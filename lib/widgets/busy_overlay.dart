@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../services/aluta_mood.dart';
 import '../services/app_busy.dart';
 import 'aluta_loader.dart';
+import '../utils/motion.dart';
 
 /// A global, app-wide busy indicator — the Aluta logo loader, centred, when a
 /// MAJOR background task (see [appBusy.runMajor]) runs beyond a brief moment.
@@ -168,7 +169,7 @@ class _BusyOverlayState extends State<BusyOverlay> {
                         completing: _phase == _Phase.closing,
                       ),
                       AnimatedSize(
-                        duration: const Duration(milliseconds: 220),
+                        duration: Motion.standard,
                         curve: Curves.easeOutCubic,
                         child: _caption == null
                             ? const SizedBox(width: 1)
@@ -204,7 +205,7 @@ class _BusyOverlayState extends State<BusyOverlay> {
               ? Colors.black.withValues(alpha: 0.35)
               : Colors.white.withValues(alpha: 0.7),
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 260),
+            duration: Motion.standard,
             child: Text(
               text,
               key: ValueKey(text),

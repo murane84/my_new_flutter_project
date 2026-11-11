@@ -36,6 +36,7 @@ import '../utils/on_accent.dart';
 import '../widgets/pill_search.dart';
 import '../services/haptics.dart';
 import '../widgets/now_glow.dart';
+import '../utils/motion.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
 ///
@@ -788,7 +789,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
             child: IgnorePointer(
               ignoring: !_sheetOpen,
               child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 220),
+                duration: Motion.standard,
                 opacity: _sheetOpen ? 1 : 0,
                 child: GestureDetector(
                   onTap: _closeSheet,
@@ -802,11 +803,11 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
             child: IgnorePointer(
               ignoring: !_sheetOpen,
               child: AnimatedSlide(
-                duration: const Duration(milliseconds: 320),
+                duration: Motion.emphasized,
                 curve: _sheetOpen ? Curves.easeOutCubic : Curves.easeInCubic,
                 offset: _sheetOpen ? Offset.zero : const Offset(0, 1.05),
                 child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 200),
+                  duration: Motion.quick,
                   opacity: _sheetOpen ? 1 : 0,
                   child: _queueSheet(theme),
                 ),
@@ -841,7 +842,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
         .clamp(0.0, pos.maxScrollExtent);
     animate
         ? _sheetScroll.animateTo(target,
-            duration: const Duration(milliseconds: 380),
+            duration: Motion.emphasized,
             curve: Curves.easeOutCubic)
         : _sheetScroll.jumpTo(target);
   }
@@ -1643,7 +1644,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           onTap: _cycleAB,
           onLongPress: _clearAB,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+            duration: Motion.quick,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
@@ -1654,7 +1655,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                   color: accent.withValues(alpha: on ? 0.6 : 0.22)),
             ),
             child: AnimatedSize(
-              duration: const Duration(milliseconds: 220),
+              duration: Motion.standard,
               curve: Curves.easeOutCubic,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -1752,7 +1753,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
             ? null
             : () => playing ? _player.pause() : _player.play(),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+          duration: Motion.quick,
           width: 60,
           height: 60,
           decoration: BoxDecoration(
@@ -2039,10 +2040,10 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
             ignoring: !_showVolume,
             child: AnimatedOpacity(
               opacity: _showVolume ? 1 : 0,
-              duration: const Duration(milliseconds: 160),
+              duration: Motion.quick,
               child: AnimatedScale(
                 scale: _showVolume ? 1 : 0.86,
-                duration: const Duration(milliseconds: 200),
+                duration: Motion.quick,
                 curve: Curves.easeOutBack,
                 child: Container(
                   constraints: const BoxConstraints(maxWidth: 300),

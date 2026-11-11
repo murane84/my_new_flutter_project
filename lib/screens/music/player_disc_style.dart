@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/account_prefs.dart';
 import '../../utils/readable.dart';
 import '../home_page.dart' show playProgressNotifier;
+import '../../utils/motion.dart';
 
 /// The look of the big rotating "now playing" glyph. The user can switch
 /// between these from the player; the choice is remembered across launches.
@@ -1299,7 +1300,7 @@ class _PulseDiscState extends State<_PulseDisc>
           Positioned.fill(
             child: AnimatedOpacity(
               opacity: widget.playing ? 1 : 0,
-              duration: const Duration(milliseconds: 260),
+              duration: Motion.standard,
               child: AnimatedBuilder(
                 animation: _c,
                 builder: (_, _) => CustomPaint(
@@ -1677,7 +1678,7 @@ class _EqualizerDiscState extends State<_EqualizerDisc>
             child: IgnorePointer(
               child: TweenAnimationBuilder<double>(
                 tween: Tween(end: widget.playing ? 1.0 : 0.0),
-                duration: const Duration(milliseconds: 420),
+                duration: Motion.slow,
                 curve: Curves.easeOutCubic,
                 builder: (_, energy, _) => AnimatedBuilder(
                   animation: Listenable.merge([_c, widget.spin]),

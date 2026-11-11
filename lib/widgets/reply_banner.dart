@@ -10,6 +10,7 @@ import '../screens/api_service.dart';
 import '../utils/readable.dart';
 import '../utils/toast_helper.dart';
 import '../services/haptics.dart';
+import '../utils/motion.dart';
 
 /// Aluta's own message banner while the app is open: slides down from the
 /// top when a message arrives for a chat that isn't on screen.
@@ -129,7 +130,7 @@ class _ReplyBannerView extends StatefulWidget {
 class _ReplyBannerViewState extends State<_ReplyBannerView>
     with SingleTickerProviderStateMixin {
   late final AnimationController _in = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 280))
+      vsync: this, duration: Motion.standard)
     ..forward();
   final _text = TextEditingController();
   final _focus = FocusNode();
@@ -338,7 +339,7 @@ class _ReplyBannerViewState extends State<_ReplyBannerView>
         GestureDetector(
           onTap: onTap,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
+            duration: Motion.quick,
             width: 44,
             height: 44,
             decoration: BoxDecoration(

@@ -73,7 +73,7 @@ class _DiscLoadRingState extends State<_DiscLoadRing>
     return IgnorePointer(
       child: AnimatedOpacity(
         opacity: _shown ? 1 : 0,
-        duration: const Duration(milliseconds: 240),
+        duration: Motion.standard,
         child: SizedBox(
           width: widget.side,
           height: widget.side,
@@ -377,7 +377,7 @@ class _PeekNameState extends State<_PeekName> {
           behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
+            duration: Motion.quick,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: on && _hover

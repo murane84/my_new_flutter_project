@@ -708,7 +708,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                                   color: scheme.onSurface)),
                           const SizedBox(height: 2),
                           AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 180),
+                            duration: Motion.quick,
                             child: Text(
                               n == 0
                                   ? 'Choose 2 to 12 — the group votes'
@@ -790,7 +790,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                                     }
                                   }),
                                   child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 170),
+                                    duration: Motion.quick,
                                     padding: const EdgeInsets.fromLTRB(
                                         10, 9, 12, 9),
                                     decoration: BoxDecoration(
@@ -860,7 +860,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                                       AnimatedScale(
                                         scale: on ? 1 : 0.9,
                                         duration:
-                                            const Duration(milliseconds: 160),
+                                            Motion.quick,
                                         curve: Curves.easeOutBack,
                                         child: Container(
                                           width: 26,
@@ -1200,7 +1200,7 @@ extension _ChatPollsAdmin on _ChatPageState {
               borderRadius: BorderRadius.circular(4),
               child: TweenAnimationBuilder<double>(
                 tween: Tween(end: decided ? 1.0 : frac),
-                duration: const Duration(milliseconds: 450),
+                duration: Motion.slow,
                 curve: Curves.easeOutCubic,
                 builder: (_, v, _) => LinearProgressIndicator(
                   value: v,
@@ -1710,7 +1710,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                     alignment: Alignment.centerLeft,
                     child: TweenAnimationBuilder<double>(
                       tween: Tween(end: frac.clamp(0.0, 1.0)),
-                      duration: const Duration(milliseconds: 420),
+                      duration: Motion.slow,
                       curve: Curves.easeOutCubic,
                       builder: (_, f, _) => FractionallySizedBox(
                         widthFactor: f <= 0 ? 0.0001 : f,
@@ -1729,7 +1729,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                   child: Row(
                     children: [
                       AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 180),
+                        duration: Motion.quick,
                         transitionBuilder: (c, a) =>
                             ScaleTransition(scale: a, child: c),
                         child: Icon(

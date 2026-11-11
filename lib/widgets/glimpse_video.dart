@@ -10,6 +10,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import '../screens/home_page.dart' show playbackBus;
 
 import '../services/media_store.dart';
+import '../utils/motion.dart';
 
 /// A data-friendly video tile that plays from the DEVICE, never by live
 /// streaming. Behaviour:
@@ -562,7 +563,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
                   IgnorePointer(
                     child: AnimatedOpacity(
                       opacity: ready ? 0.0 : 1.0,
-                      duration: const Duration(milliseconds: 280),
+                      duration: Motion.standard,
                       curve: Curves.easeOut,
                       child: _notReadyBackdrop(),
                     ),
@@ -622,7 +623,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
                     bottom: 0,
                     child: IgnorePointer(
                       child: AnimatedOpacity(
-                        duration: const Duration(milliseconds: 240),
+                        duration: Motion.standard,
                         curve: Curves.easeOut,
                         opacity: (_tapped || playing) ? 0.0 : 1.0,
                         child: Container(

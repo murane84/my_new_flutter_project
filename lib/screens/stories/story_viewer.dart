@@ -18,6 +18,7 @@ import '../../utils/anim_art.dart';
 import '../../utils/emoji_field.dart' show inlineEmojiPicker;
 import '../gif_picker.dart';
 import '../../services/haptics.dart';
+import '../../utils/motion.dart';
 
 /// Full-screen, tap-through story viewer (Instagram/WhatsApp style).
 ///
@@ -382,7 +383,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                       ),
                     ),
                     AnimatedSize(
-                      duration: const Duration(milliseconds: 200),
+                      duration: Motion.quick,
                       curve: Curves.easeOutCubic,
                       child: hasText || _replySending
                           ? Padding(
@@ -416,7 +417,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 ),
                 // Every emoji, inside the same card.
                 AnimatedSize(
-                  duration: const Duration(milliseconds: 240),
+                  duration: Motion.standard,
                   curve: Curves.easeOutCubic,
                   child: _replyEmoji
                       ? Padding(
@@ -1548,7 +1549,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                               // The nudge strip: tap an emoji, or ✨ for a
                               // sticker. Once sent, it shows what went.
                               AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 220),
+                                duration: Motion.standard,
                                 child: state == null
                                     ? Container(
                                         key: const ValueKey('nudge'),

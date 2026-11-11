@@ -7,6 +7,7 @@ import '../services/group_call_service.dart';
 import '../services/contact_names.dart';
 import '../widgets/person_avatar.dart';
 import '../state/group_call_state.dart';
+import '../utils/motion.dart';
 
 /// Full-screen UI for the single active Aluta GROUP voice call. Reflects
 /// [GroupCallService] — ringing (incoming) / active — and drives accept /
@@ -203,7 +204,7 @@ class _GroupCallScreenState extends ConsumerState<GroupCallScreen> {
       children: [
         // Glowing ring while this member is talking.
         AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
+          duration: Motion.quick,
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
             shape: BoxShape.circle,

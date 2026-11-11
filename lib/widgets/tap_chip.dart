@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../utils/on_accent.dart';
 import '../services/haptics.dart';
+import '../utils/motion.dart';
 
 /// A tactile header action for the music lists (playlist, Up next queue,
 /// Listen Together): a soft rounded chip that reads as a button at rest,
@@ -64,10 +65,10 @@ class _AlutaTapChipState extends State<AlutaTapChip> {
         message: widget.tooltip,
         child: AnimatedScale(
           scale: _down ? 0.9 : 1.0,
-          duration: const Duration(milliseconds: 110),
+          duration: Motion.instant,
           curve: Curves.easeOut,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
+            duration: Motion.quick,
             width: widget.size,
             height: widget.size,
             decoration: BoxDecoration(

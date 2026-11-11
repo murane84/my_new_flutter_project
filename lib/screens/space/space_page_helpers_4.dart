@@ -223,7 +223,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
               borderRadius: BorderRadius.circular(16),
               onTap: () => _playlistFilter.value = v,
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
+                duration: Motion.quick,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
                 decoration: BoxDecoration(
@@ -633,7 +633,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
         hearts: (_space['status'] ?? 'active').toString() == 'active',
         color: Color.lerp(_accent, BreathGlow.rose, 0.4)!,
         child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
+        duration: Motion.emphasized,
         curve: Curves.easeOut,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(

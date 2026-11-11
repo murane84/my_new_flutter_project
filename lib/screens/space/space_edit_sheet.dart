@@ -192,7 +192,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                 borderRadius: BorderRadius.circular(16),
                 onTap: onTap,
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 160),
+                  duration: Motion.quick,
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
                     color: scheme.surfaceContainerHighest,
@@ -378,7 +378,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
         widget.onPreviewTheme?.call(entry.key);
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
+        duration: Motion.quick,
         curve: Curves.easeOut,
         padding: EdgeInsets.all(sel ? 3 : 0),
         decoration: BoxDecoration(

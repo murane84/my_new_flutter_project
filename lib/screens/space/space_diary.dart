@@ -39,7 +39,7 @@ class _PressableRaisedState extends State<_PressableRaised> {
     final r = BorderRadius.circular(widget.radius);
     return AnimatedScale(
       scale: _down ? 0.97 : 1.0,
-      duration: const Duration(milliseconds: 110),
+      duration: Motion.instant,
       curve: Curves.easeOut,
       child: DecoratedBox(
         decoration: BoxDecoration(
@@ -323,7 +323,7 @@ class _DiaryComposerState extends State<_DiaryComposer> {
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
+          duration: Motion.quick,
           curve: Curves.easeOut,
           padding: const EdgeInsets.symmetric(vertical: 11),
           decoration: BoxDecoration(
@@ -363,7 +363,7 @@ class _DiaryComposerState extends State<_DiaryComposer> {
     return GestureDetector(
       onTap: () => setState(() => _font = f.$1),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
+        duration: Motion.instant,
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 9),
         decoration: BoxDecoration(
           color: selected

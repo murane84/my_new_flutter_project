@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'admin_api.dart';
 import 'admin_widgets.dart';
 import '../widgets/edge_scroll_row.dart';
+import '../utils/motion.dart';
 
 /// Feedback from the app's "Send feedback" page: read, triage (Seen /
 /// Planned / Done / Not planned) and reply — the person sees the status and
@@ -338,7 +339,7 @@ class _AdminFeedbackPageState extends State<AdminFeedbackPage> {
         _load(reset: true);
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
+        duration: Motion.quick,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: _raised(p, on: on, c: c, r: 20),
         child: Row(mainAxisSize: MainAxisSize.min, children: [

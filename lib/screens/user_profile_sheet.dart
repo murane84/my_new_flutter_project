@@ -15,6 +15,7 @@ import '../utils/toast_helper.dart';
 import '../widgets/avatar_flight.dart';
 import '../widgets/photo_viewer.dart';
 import '../utils/readable.dart' show accentInk;
+import '../utils/motion.dart';
 
 /// A read-only profile card for ANOTHER user (a friend or a group member).
 /// Opens from a tap on their name/avatar. Shows the photo, the name (their saved
@@ -525,7 +526,7 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
             // together (one update); if that's after opening, the card
             // grows smoothly instead of jumping.
             AnimatedSize(
-              duration: const Duration(milliseconds: 260),
+              duration: Motion.standard,
               curve: Curves.easeOutCubic,
               alignment: Alignment.topCenter,
               child: Column(

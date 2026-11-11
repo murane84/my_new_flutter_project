@@ -1400,7 +1400,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
             accent: accent,
             child: AnimatedOpacity(
             opacity: title == null ? 0 : 1,
-            duration: const Duration(milliseconds: 220),
+            duration: Motion.standard,
             child: Column(
               crossAxisAlignment:
                   left ? CrossAxisAlignment.start : CrossAxisAlignment.end,
@@ -1443,7 +1443,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
             children: [
               for (var i = first; i < first + n; i++)
                 AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
+                  duration: Motion.standard,
                   margin: const EdgeInsets.symmetric(horizontal: 3),
                   width: i == place - 1 ? 16 : 6,
                   height: 6,
@@ -1565,7 +1565,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
                   child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 360),
+                    duration: Motion.emphasized,
                     switchInCurve: Curves.easeOutCubic,
                     switchOutCurve: Curves.easeInCubic,
                     transitionBuilder: (child, anim) => FadeTransition(
@@ -1773,7 +1773,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
           child: GestureDetector(
             onTap: _openLyrics,
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
+              duration: Motion.standard,
               child: Text(
                 text,
                 key: ValueKey(text),

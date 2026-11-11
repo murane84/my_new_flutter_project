@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'net.dart' show NetStatus;
+import 'motion.dart';
 
 // ── Toast types ───────────────────────────────────────────────────────────────
 enum ToastType { info, error, success }
@@ -144,7 +145,7 @@ class _ToastOverlayState extends State<_ToastOverlay>
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-      duration: const Duration(milliseconds: 240),
+      duration: Motion.standard,
       vsync: this,
     );
     _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack);

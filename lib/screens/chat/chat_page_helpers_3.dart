@@ -1080,7 +1080,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
       elevation: 0,
       constraints: const BoxConstraints(maxWidth: 560),
       sheetAnimationStyle: const AnimationStyle(
-        duration: Duration(milliseconds: 440),
+        duration: Motion.slow,
         reverseDuration: Duration(milliseconds: 280),
       ),
       builder: (ctx) => DraggableScrollableSheet(
@@ -1240,7 +1240,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                   Flexible(
                     child: TweenAnimationBuilder<double>(
                       tween: Tween(begin: 0, end: 1),
-                      duration: const Duration(milliseconds: 360),
+                      duration: Motion.emphasized,
                       curve: Curves.easeOutCubic,
                       builder: (_, tv, child) => Opacity(
                         opacity: tv.clamp(0.0, 1.0),
@@ -2238,7 +2238,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
       child: TweenAnimationBuilder<double>(
         key: ValueKey('typing-${anyRecording ? 'rec' : 'dot'}-${shown.length}'),
         tween: Tween(begin: 0.0, end: 1.0),
-        duration: const Duration(milliseconds: 240),
+        duration: Motion.standard,
         curve: Curves.easeOutBack,
         builder: (context, t, child) {
           final c = t.clamp(0.0, 1.0);
@@ -2277,7 +2277,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 ],
               ),
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
+                duration: Motion.quick,
                 child: anyRecording
                     ? const _RecordingPulse(key: ValueKey('rec'))
                     : Row(

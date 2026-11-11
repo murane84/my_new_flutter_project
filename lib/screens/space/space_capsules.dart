@@ -52,7 +52,7 @@ class _PressPlayCountdownState extends State<_PressPlayCountdown> {
                   fontWeight: FontWeight.w700)),
           const SizedBox(height: 18),
           AnimatedSwitcher(
-            duration: const Duration(milliseconds: 280),
+            duration: Motion.standard,
             transitionBuilder: (child, anim) => ScaleTransition(
               scale: anim,
               child: FadeTransition(opacity: anim, child: child),
@@ -196,7 +196,7 @@ class _CapsuleComposeSheetState extends State<_CapsuleComposeSheet> {
         onTap: () => setState(() => _mode = m),
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+          duration: Motion.quick,
           padding: const EdgeInsets.symmetric(vertical: 11),
           decoration: BoxDecoration(
             color: sel ? widget.accent : Colors.transparent,

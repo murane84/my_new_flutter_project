@@ -46,6 +46,7 @@ import 'services/web_update_checker.dart';
 import 'utils/readable.dart';
 import 'utils/chat_background.dart' show loadChatBackground;
 import 'services/haptics.dart';
+import 'utils/motion.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool _spaceFullHooked = false;
@@ -581,7 +582,7 @@ class SplashScreenState extends State<SplashScreen>
   late final AnimationController _eq = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1100));
   late final AnimationController _exit = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 360));
+      vsync: this, duration: Motion.emphasized);
   late final Animation<double> _beat = CurvedAnimation(
       parent: _entrance, curve: const Interval(0.03, 0.24));
   late final Animation<double> _burst = CurvedAnimation(

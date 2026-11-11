@@ -1254,7 +1254,7 @@ class _HeartFitMediaState extends State<_HeartFitMedia> {
     // Does the picture fill the frame exactly, or is it fitted inside it?
     final fits = a != null && (a - frameA).abs() < 0.01;
     return AnimatedSize(
-      duration: const Duration(milliseconds: 220),
+      duration: Motion.standard,
       curve: Curves.easeOutCubic,
       alignment: Alignment.topCenter,
       child: SizedBox(

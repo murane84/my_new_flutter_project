@@ -103,7 +103,7 @@ extension _HomeSpaceActions on HomePageState {
       // Our Space is a whole full-screen page — ease it in/out over a longer
       // beat and grow it softly from the tile (85% → 100%) instead of popping
       // out of a tiny point, so appearing and minimising feel graceful.
-      duration: const Duration(milliseconds: 460),
+      duration: Motion.slow,
       genieMinScale: 0.85,
     );
     _loadSpaces();

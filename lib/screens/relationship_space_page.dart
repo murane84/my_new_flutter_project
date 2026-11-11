@@ -58,6 +58,7 @@ import '../utils/prefs_now.dart';
 import '../services/haptics.dart';
 import '../widgets/edge_scroll_row.dart';
 import '../widgets/section_switch.dart';
+import '../utils/motion.dart';
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
 part 'space/space_edit_sheet.dart'; // edit-space sheet + wallpaper picker
@@ -1351,14 +1352,14 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
               },
               child: AnimatedOpacity(
                 opacity: _navDrawerOpen ? 1 : 0,
-                duration: const Duration(milliseconds: 260),
+                duration: Motion.standard,
                 child: Container(color: Colors.black.withValues(alpha: 0.4)),
               ),
             ),
           ),
         ),
         AnimatedPositioned(
-          duration: const Duration(milliseconds: 300),
+          duration: Motion.emphasized,
           curve: Curves.easeOutCubic,
           top: 0,
           bottom: 0,
@@ -1463,7 +1464,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       // instead of snapping, without the tile-anchored zoom (which read as too
       // busy for an in-body switch).
       builder: (context, isWide) => AnimatedSwitcher(
-        duration: const Duration(milliseconds: 340),
+        duration: Motion.emphasized,
         switchInCurve: Curves.easeOutCubic,
         switchOutCurve: Curves.easeInCubic,
         transitionBuilder: (child, anim) {
@@ -1544,7 +1545,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       if (ctx != null && ctx.mounted) {
         await Scrollable.ensureVisible(
           ctx,
-          duration: const Duration(milliseconds: 450),
+          duration: Motion.slow,
           curve: Curves.easeOutCubic,
           alignment: 0.12,
         );
@@ -2008,7 +2009,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
               children: [
                 for (int i = 0; i < mems.length; i++)
                   AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
+                    duration: Motion.quick,
                     curve: Curves.easeOut,
                     margin: const EdgeInsets.symmetric(horizontal: 3),
                     width: i == _diaryPage ? 18 : 7,

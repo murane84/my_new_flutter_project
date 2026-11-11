@@ -15,6 +15,7 @@ import '../../widgets/glossy_heart.dart';
 import '../../widgets/jump_rings.dart';
 import '../../utils/readable.dart';
 import '../../services/haptics.dart';
+import '../../utils/motion.dart';
 
 // ─── Secret hearts — the signature love note ────────────────────────────────
 // A "secret heart" (message_type 'heart') arrives covered, beating softly. It
@@ -489,7 +490,7 @@ class _HeartBubbleState extends State<HeartBubble>
   ScrollPosition? _scrollPos;
   late final AnimationController _starFade = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 450),
+      duration: Motion.slow,
       reverseDuration: const Duration(milliseconds: 1100));
   bool _reduceMotion = false;
   bool _opening = false; // between hold-complete and the bloom (auth etc.)
@@ -761,7 +762,7 @@ class _HeartBubbleState extends State<HeartBubble>
     _downAt = null;
     if (_hold.status == AnimationStatus.completed) return;
     _hold.animateBack(0,
-        duration: const Duration(milliseconds: 220), curve: Curves.easeOut);
+        duration: Motion.standard, curve: Curves.easeOut);
     if (nudge) {
       _hintTimer?.cancel();
       setState(() => _hint = true);
@@ -788,7 +789,7 @@ class _HeartBubbleState extends State<HeartBubble>
     if (!mounted) return;
     _opening = false;
     if (!ok) {
-      _hold.animateBack(0, duration: const Duration(milliseconds: 260));
+      _hold.animateBack(0, duration: Motion.standard);
       return;
     }
     _open();
@@ -814,7 +815,7 @@ class _HeartBubbleState extends State<HeartBubble>
       } else {
         origin = Rect.zero;
       }
-      _hold.animateBack(0, duration: const Duration(milliseconds: 300));
+      _hold.animateBack(0, duration: Motion.emphasized);
       showHeartGenie(context,
           originRect: origin,
           text: widget.text,
@@ -1182,7 +1183,7 @@ class _HeartBubbleState extends State<HeartBubble>
           padding: const EdgeInsets.fromLTRB(20, 30, 20, 34),
           child: Center(
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 260),
+              duration: Motion.standard,
               transitionBuilder: (c, a) => FadeTransition(
                   opacity: a,
                   child: ScaleTransition(
@@ -1713,7 +1714,7 @@ class _HeartGenieState extends State<_HeartGenie>
     return bump(0.0, 0.18) + 0.7 * bump(0.18, 0.38);
   }
   late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 420))
+      vsync: this, duration: Motion.slow)
     ..forward();
   double _dragDy = 0;
   Timer? _idle;

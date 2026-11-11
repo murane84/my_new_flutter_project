@@ -73,11 +73,11 @@ extension _ChatMentionsSeen on _ChatPageState {
       ignoring: !show,
       child: AnimatedScale(
         scale: show ? 1 : 0.5,
-        duration: const Duration(milliseconds: 220),
+        duration: Motion.standard,
         curve: Curves.easeOutBack,
         child: AnimatedOpacity(
           opacity: show ? 1 : 0,
-          duration: const Duration(milliseconds: 180),
+          duration: Motion.quick,
           child: Tooltip(
             message: n == 1 ? 'You were mentioned' : '$n mentions',
             child: GestureDetector(
@@ -183,7 +183,7 @@ extension _ChatMentionsSeen on _ChatPageState {
             : const EdgeInsets.only(right: 10, top: 1, bottom: 2),
         child: TweenAnimationBuilder<double>(
           tween: Tween(begin: 0, end: 1),
-          duration: const Duration(milliseconds: 320),
+          duration: Motion.emphasized,
           curve: Curves.easeOutBack,
           builder: (_, t, child) => Transform.scale(
             scale: 0.6 + 0.4 * t,

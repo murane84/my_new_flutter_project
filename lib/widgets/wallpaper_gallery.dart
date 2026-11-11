@@ -8,6 +8,7 @@ import '../services/media_store.dart';
 import '../utils/net_image.dart' show authNetworkImageProvider;
 import '../screens/token_helper.dart' show mediaAuthHeaders;
 import '../utils/readable.dart';
+import '../utils/motion.dart';
 
 /// Resolve a possibly-relative wallpaper URL (e.g. "/wallpapers/w01") against
 /// the API base into an absolute URL.
@@ -107,7 +108,7 @@ class WallpaperGalleryGrid extends StatelessWidget {
             children: [
               Expanded(
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 140),
+                  duration: Motion.instant,
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),

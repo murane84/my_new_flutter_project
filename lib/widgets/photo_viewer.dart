@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../utils/motion.dart';
 
 /// Full-screen photo view: pinch / wheel to zoom, double-tap to zoom in/out,
 /// back arrow (and system Back / Esc) to leave, and a swipe to dismiss (when
@@ -61,7 +62,7 @@ class _PhotoViewerState extends State<_PhotoViewer>
   late int _at = widget.initial;
   bool _zoomed = false;
   late final AnimationController _back = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 200));
+      vsync: this, duration: Motion.quick);
   Offset _drag = Offset.zero;
   Offset _dragFrom = Offset.zero;
 
@@ -118,12 +119,12 @@ class _PhotoViewerState extends State<_PhotoViewer>
         if (_many)
           const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
               _pages.nextPage(
-                  duration: const Duration(milliseconds: 220),
+                  duration: Motion.standard,
                   curve: Curves.easeOutCubic),
         if (_many)
           const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
               _pages.previousPage(
-                  duration: const Duration(milliseconds: 220),
+                  duration: Motion.standard,
                   curve: Curves.easeOutCubic),
       },
       child: Focus(

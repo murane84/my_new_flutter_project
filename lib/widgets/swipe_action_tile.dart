@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../services/haptics.dart';
+import '../utils/motion.dart';
 
 /// Samsung-style swipe actions on a list tile.
 ///
@@ -151,7 +152,7 @@ class _SwipeActionTileState extends State<SwipeActionTile>
                         padding: const EdgeInsets.symmetric(horizontal: 22),
                         child: AnimatedScale(
                           scale: (_armed || _busy) ? 1.18 : 0.9,
-                          duration: const Duration(milliseconds: 160),
+                          duration: Motion.quick,
                           curve: Curves.easeOutBack,
                           child: Opacity(
                             opacity: (p * 4).clamp(0.0, 1.0),

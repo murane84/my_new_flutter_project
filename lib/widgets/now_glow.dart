@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../utils/motion.dart';
 
 /// How long one calm "here it is" breath lasts. Every highlight in Aluta
 /// (⌖ Find the playing song, the row you came back from, a message you
@@ -356,7 +357,7 @@ void _centreRow(BuildContext ctx, NowGlowController? glow,
   Scrollable.ensureVisible(
     ctx,
     alignment: 0.5,
-    duration: const Duration(milliseconds: 320),
+    duration: Motion.emphasized,
     curve: Curves.easeOutCubic,
   ).then((_) => glow?.ping(soft: soft));
 }

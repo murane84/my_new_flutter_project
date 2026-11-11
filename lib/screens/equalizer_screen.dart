@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/popup_shell.dart';
 import '../services/song_insights.dart';
 import '../services/account_prefs.dart';
+import '../utils/motion.dart';
 
 /// A functional equalizer + sound-enhancement screen.
 ///
@@ -276,7 +277,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
               child: GestureDetector(
                 onTap: () => _applyPreset(name),
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
+                  duration: Motion.quick,
                   width: 52,
                   height: 52,
                   alignment: Alignment.center,
@@ -322,7 +323,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
             return GestureDetector(
               onTap: () => _applyPreset(n),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
+                duration: Motion.quick,
                 width: chipW,
                 padding: const EdgeInsets.symmetric(vertical: 9),
                 alignment: Alignment.center,

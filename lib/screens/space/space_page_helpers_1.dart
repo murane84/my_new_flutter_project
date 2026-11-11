@@ -632,7 +632,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
                 // Fade + scale the count in when the fetch lands, rather than
                 // snapping a badge out of nowhere.
                 AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
+                  duration: Motion.emphasized,
                   transitionBuilder: (child, anim) => FadeTransition(
                     opacity: anim,
                     child: ScaleTransition(scale: anim, child: child),
@@ -967,7 +967,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
                   }
                 },
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
+            duration: Motion.quick,
             curve: Curves.easeOut,
             padding: const EdgeInsets.fromLTRB(8, 11, 10, 11),
             decoration: BoxDecoration(
@@ -985,7 +985,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
                 // fixed-width slot (transparent when idle) keeps every icon
                 // aligned whether or not the bar is showing.
                 AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
+                  duration: Motion.quick,
                   width: 3,
                   height: active ? 18 : 0,
                   decoration: BoxDecoration(

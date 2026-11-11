@@ -5,6 +5,7 @@ import '../../services/haptics.dart';
 
 import '../../utils/net_image.dart' show authNetworkImageProvider;
 import '../../utils/readable.dart' show accentInk;
+import '../../utils/motion.dart';
 
 /// One shared photo/video in the Media tab.
 class MediaItem {
@@ -130,7 +131,7 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
   double _dragX = 0;
   double _width = 1;
   late final AnimationController _settle =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 220))
+      AnimationController(vsync: this, duration: Motion.standard)
         ..addListener(() {
           if (_settleTween != null) {
             setState(() => _dragX = _settleTween!.evaluate(_settle));

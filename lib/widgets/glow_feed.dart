@@ -15,6 +15,7 @@ import '../screens/api_service.dart';
 import '../screens/stories/quick_status_sheet.dart';
 import '../services/haptics.dart';
 import 'slide_track.dart';
+import '../utils/motion.dart';
 
 int _glowDaySeed() {
   final d = DateTime.now();
@@ -124,7 +125,7 @@ class _GlowFeedState extends State<GlowFeed> {
   void _toTop() {
     if (_scroll.hasClients) {
       _scroll.animateTo(0,
-          duration: const Duration(milliseconds: 450),
+          duration: Motion.slow,
           curve: Curves.easeOutCubic);
     }
   }

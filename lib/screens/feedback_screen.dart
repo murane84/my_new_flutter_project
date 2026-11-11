@@ -5,6 +5,7 @@ import '../services/device_report.dart';
 import '../utils/popup_shell.dart';
 import '../utils/toast_helper.dart';
 import 'api_service.dart';
+import '../utils/motion.dart';
 
 /// "Send feedback" — tell the Aluta team what you love, what's broken and what
 /// you'd like next. Goes straight to the owner's admin panel; replies and
@@ -414,7 +415,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
+            duration: Motion.quick,
             curve: Curves.easeOutBack,
             width: 54,
             height: 54,
@@ -423,14 +424,14 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
             decoration: _raised(scheme, on: on, radius: 27),
             child: AnimatedScale(
               scale: on ? 1.2 : 1.0,
-              duration: const Duration(milliseconds: 180),
+              duration: Motion.quick,
               curve: Curves.easeOutBack,
               child: Text(emoji, style: const TextStyle(fontSize: 25)),
             ),
           ),
           const SizedBox(height: 6),
           AnimatedDefaultTextStyle(
-            duration: const Duration(milliseconds: 160),
+            duration: Motion.quick,
             style: TextStyle(
                 fontSize: 10.5,
                 fontWeight: on ? FontWeight.w800 : FontWeight.w500,
@@ -447,7 +448,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     return GestureDetector(
       onTap: () => setState(() => _kind = k.$1),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
+        duration: Motion.quick,
         padding: const EdgeInsets.symmetric(vertical: 12),
         transform: Matrix4.translationValues(0, on ? -2 : 0, 0),
         decoration: _raised(scheme, on: on, radius: 16),
@@ -456,7 +457,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           children: [
             AnimatedScale(
               scale: on ? 1.15 : 1.0,
-              duration: const Duration(milliseconds: 180),
+              duration: Motion.quick,
               child: Text(k.$2, style: const TextStyle(fontSize: 22)),
             ),
             const SizedBox(height: 4),
@@ -476,7 +477,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     return GestureDetector(
       onTap: () => setState(() => _area = on ? null : a.$1),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
+        duration: Motion.quick,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: _raised(scheme, on: on, radius: 20),
         child: Text(a.$2,

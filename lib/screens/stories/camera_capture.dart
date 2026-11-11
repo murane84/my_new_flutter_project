@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import '../../utils/motion.dart';
 
 /// What a camera capture produced: the file plus whether it is a video (so the
 /// caller can route a recorded clip through the video pipeline and a still
@@ -450,7 +451,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                       strokeWidth: 2, color: Colors.white),
                 )
               : AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
+                  duration: Motion.quick,
                   width: recording ? 30 : 60,
                   height: recording ? 30 : 60,
                   decoration: BoxDecoration(

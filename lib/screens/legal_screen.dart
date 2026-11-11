@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../utils/popup_shell.dart'
     show HeaderActionButton, gPanelBottomY, kAppFooterHeight;
 import '../utils/readable.dart' show accentInk;
+import '../utils/motion.dart';
 
 // Height of the Aluta app header (toolbar). The full-page legal views start
 // just under it, so the "Aluta" title + overflow (⋮) menu stay visible above.
@@ -100,7 +101,7 @@ class _LegalHubState extends State<_LegalHub> {
     if (!_pages.hasClients) return;
     _jumping = true;
     await _pages.animateToPage(i,
-        duration: const Duration(milliseconds: 320),
+        duration: Motion.emphasized,
         curve: Curves.easeOutCubic);
     _jumping = false;
   }
@@ -151,7 +152,7 @@ class _LegalHubState extends State<_LegalHub> {
       child: ValueListenableBuilder<double?>(
         valueListenable: gPanelBottomY,
         builder: (context, panelBottom, child) => AnimatedPadding(
-          duration: const Duration(milliseconds: 260),
+          duration: Motion.standard,
           curve: Curves.easeOutCubic,
           padding: EdgeInsets.only(
               top: topInset,
@@ -309,7 +310,7 @@ class _LegalHubState extends State<_LegalHub> {
         borderRadius: BorderRadius.circular(20),
         onTap: selected ? null : () => _selectTab(i),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
+          duration: Motion.quick,
           curve: Curves.easeOut,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(

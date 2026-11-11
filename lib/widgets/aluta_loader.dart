@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../services/aluta_mood.dart';
 import 'glossy_heart.dart';
+import '../utils/motion.dart';
 
 /// The Aluta logo loader. One look, four moods (see [AlutaMood.loaderStyle]):
 ///  • heartbeat — the mark gives a soft "lub-dub" every beat
@@ -36,7 +37,7 @@ class _AlutaLoaderState extends State<AlutaLoader>
   late final AnimationController _spin;
   late final AnimationController _pulse;
   late final AnimationController _done = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 420));
+      vsync: this, duration: Motion.slow);
   final AlutaMoment _moment = AlutaMood.moment;
   bool _still = false;
 

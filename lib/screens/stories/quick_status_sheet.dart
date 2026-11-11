@@ -6,6 +6,7 @@ import '../../utils/prefs_now.dart';
 import 'create_story_sheet.dart' show kStatusBgs, StatusPaletteButton;
 import 'status_audience_sheet.dart';
 import '../../widgets/edge_scroll_row.dart';
+import '../../utils/motion.dart';
 
 /// What a one-tap share will look like, and in which colours.
 enum QuickStatusKind { text, music, sticker }
@@ -122,7 +123,7 @@ class _QuickStatusSheetState extends State<_QuickStatusSheet> {
     // of snapping white ↔ dark mid-change.
     return TweenAnimationBuilder<Color?>(
       tween: ColorTween(end: _ink(_cur)),
-      duration: const Duration(milliseconds: 260),
+      duration: Motion.standard,
       curve: Curves.easeOut,
       builder: (context, c, _) => _previewWith(c ?? _ink(_cur)),
     );
@@ -195,7 +196,7 @@ class _QuickStatusSheetState extends State<_QuickStatusSheet> {
         ]);
     }
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 260),
+      duration: Motion.standard,
       curve: Curves.easeOut,
       height: 260,
       width: double.infinity,
@@ -268,7 +269,7 @@ class _QuickStatusSheetState extends State<_QuickStatusSheet> {
                   onTap: () => setState(() => _cur = pair),
                   child: Center(
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 160),
+                      duration: Motion.quick,
                       width: on ? 38 : 30,
                       height: on ? 38 : 30,
                       decoration: BoxDecoration(

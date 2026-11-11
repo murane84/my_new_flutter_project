@@ -56,7 +56,7 @@ extension _HomePhoneBody on HomePageState {
             // AnimatedPadding so the reflow eases in step with the bar's genie.
             Positioned.fill(
               child: AnimatedPadding(
-                duration: const Duration(milliseconds: 300),
+                duration: Motion.emphasized,
                 curve: Curves.easeOutCubic,
                 padding: EdgeInsets.only(
                     bottom: (_playerExpanded || !barVisible) ? 0 : barSpace),
@@ -74,11 +74,11 @@ extension _HomePhoneBody on HomePageState {
                 child: AnimatedScale(
                   scale: _playerExpanded ? 1.0 : 0.0,
                   alignment: Alignment.bottomCenter,
-                  duration: const Duration(milliseconds: 300),
+                  duration: Motion.emphasized,
                   curve: Curves.easeOutCubic,
                   child: AnimatedOpacity(
                     opacity: _playerExpanded ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 220),
+                    duration: Motion.standard,
                     curve: Curves.easeOut,
                     child: _buildPhonePlayerSheet(context),
                   ),
@@ -99,11 +99,11 @@ extension _HomePhoneBody on HomePageState {
                   child: AnimatedScale(
                     scale: _barDismissed ? 0.0 : 1.0,
                     alignment: Alignment.bottomCenter,
-                    duration: const Duration(milliseconds: 300),
+                    duration: Motion.emphasized,
                     curve: Curves.easeOutCubic,
                     child: AnimatedOpacity(
                       opacity: _barDismissed ? 0.0 : 1.0,
-                      duration: const Duration(milliseconds: 200),
+                      duration: Motion.quick,
                       curve: Curves.easeOut,
                       child: KeyedSubtree(
                           key: _npBarKey,

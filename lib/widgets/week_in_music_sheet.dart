@@ -5,6 +5,7 @@ import '../services/song_insights.dart';
 import '../utils/readable.dart' show accentInk;
 import '../services/haptics.dart';
 import 'edge_scroll_row.dart';
+import '../utils/motion.dart';
 
 const _momentLabel = {
   AlutaMoment.dawn: ('🌄', 'Dawn'),
@@ -273,7 +274,7 @@ Future<void> showWeekInMusic(
                                         filter == e.key ? null : e.key),
                                     child: AnimatedOpacity(
                                       duration:
-                                          const Duration(milliseconds: 150),
+                                          Motion.quick,
                                       opacity: filter == null ||
                                               filter == e.key
                                           ? 1
@@ -724,7 +725,7 @@ Future<void> showSongInsight(BuildContext context, String title,
                                         color: scheme.onSurfaceVariant)),
                               const SizedBox(height: 2),
                               AnimatedContainer(
-                                duration: const Duration(milliseconds: 300),
+                                duration: Motion.emphasized,
                                 height: 4 + 58 * st.last7[i] / peak,
                                 margin:
                                     const EdgeInsets.symmetric(horizontal: 6),

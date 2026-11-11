@@ -241,6 +241,7 @@ class _GlowFeedState extends State<GlowFeed> {
         Expanded(
           child: SectionSwitch(
             forward: _filterForward,
+            rippleFrom: _rippleFrom,
             child: KeyedSubtree(
               key: ValueKey('glow-${_filter.name}'),
               child: ListView(
@@ -288,12 +289,32 @@ class _GlowFeedState extends State<GlowFeed> {
   /// Which way the last category change went (→ the new tab is further
   /// right), for the transition's direction.
   bool _filterForward = true;
+  // Where a ripple starts across the top (0..1): under the tapped tab, like
+  // Circle's switcher — not a fixed side.
+  double? _rippleFrom;
+  bool _compactTabs = false;
 
   void _pickFilter(_Filter f) {
     if (f == _filter) return;
     HapticFeedback.selectionClick();
+    // The tapped tab's centre along the track: equal tabs when roomy; on a
+    // phone the chosen tab is wider (flex 7 vs 3) — use the NEW layout.
+    final vals = _Filter.values;
+    double centre;
+    if (!_compactTabs) {
+      centre = (f.index + 0.5) / vals.length;
+    } else {
+      var before = 0.0, total = 0.0;
+      for (final v in vals) {
+        final w = v == f ? 7.0 : 3.0;
+        if (v.index < f.index) before += w;
+        total += w;
+      }
+      centre = (before + 3.5) / total;
+    }
     setState(() {
       _filterForward = f.index > _filter.index;
+      _rippleFrom = centre.clamp(0.0, 1.0);
       _filter = f;
     });
   }
@@ -331,6 +352,7 @@ class _GlowFeedState extends State<GlowFeed> {
       ),
       child: LayoutBuilder(builder: (context, box) {
         final compact = box.maxWidth < 560;
+        _compactTabs = compact;
         final n = _Filter.values.length;
         final row = Row(
           children: [

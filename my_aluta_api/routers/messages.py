@@ -339,14 +339,26 @@ def search_messages(
         query = query.filter(Message.sender_id != me)
     if conversation_id is not None:
         query = query.filter(Message.conversation_id == conversation_id)
+    # A 1:1 chat may ALSO carry a conversation id (a two-member, non-group
+    # Conversation) — so "group" means the conversation is_group, never just
+    # "has a conversation id".
+    group_ids = [
+        c for (c,) in db.query(Conversation.id)
+        .filter(Conversation.id.in_(conv_ids or [-1]))
+        .filter(Conversation.is_group == True).all()  # noqa: E712
+    ]
+    not_group = or_(Message.conversation_id.is_(None),
+                    ~Message.conversation_id.in_(group_ids or [-1]))
+    if conversation_id is not None:
+        pass  # (handled above)
     elif friend_id is not None:
-        query = query.filter(Message.conversation_id.is_(None)).filter(or_(
+        query = query.filter(not_group).filter(or_(
             (Message.sender_id == me) & (Message.receiver_id == friend_id),
             (Message.sender_id == friend_id) & (Message.receiver_id == me)))
     elif chat_kind == "group":
-        query = query.filter(Message.conversation_id.isnot(None))
+        query = query.filter(Message.conversation_id.in_(group_ids or [-1]))
     elif chat_kind == "dm":
-        query = query.filter(Message.conversation_id.is_(None))
+        query = query.filter(not_group)
     if since_days:
         query = query.filter(Message.timestamp >= datetime.now(_tz.utc)
                              - timedelta(days=max(1, min(since_days, 3650))))

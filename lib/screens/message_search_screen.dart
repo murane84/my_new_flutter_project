@@ -184,7 +184,8 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
         ? null
         : _day(_range!.end).add(const Duration(days: 1));
     final kept = res.where((r) {
-      final isGroup = r['is_group'] == true || r['conversation_id'] != null;
+      // The server's own flag: a 1:1 chat can carry a conversation id too.
+      final isGroup = r['is_group'] == true;
       if (_inChat == null && _chatKind == 'group' && !isGroup) return false;
       if (_inChat == null && _chatKind == 'dm' && isGroup) return false;
       if (from != null) {

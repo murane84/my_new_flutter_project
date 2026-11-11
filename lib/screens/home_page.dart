@@ -485,7 +485,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final kb = HardwareKeyboard.instance;
     // Ctrl+Shift+F (⌘⇧F on a Mac): the chat panel full screen ↔ back —
     // the same as its ⤢ button (desktop / wide web only, Home in front).
-    if ((kb.isControlPressed || kb.isMetaPressed) &&
+    // (⌘ only on a Mac — on Windows that key is the system's Win key.)
+    final mod = defaultTargetPlatform == TargetPlatform.macOS
+        ? kb.isMetaPressed
+        : kb.isControlPressed;
+    if (mod &&
         kb.isShiftPressed &&
         e.logicalKey == LogicalKeyboardKey.keyF) {
       if (!mounted ||
@@ -5224,9 +5228,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
         ] else ...[
           _PanelToggleBtn(
             isFullScreen: _isChatFullScreen,
-            tooltip: _isChatFullScreen
-                ? 'Exit full screen  (Ctrl+Shift+F)'
-                : 'Full screen  (Ctrl+Shift+F)',
+            tooltip: '${_isChatFullScreen ? 'Exit full screen' : 'Full screen'}'
+                '  (${defaultTargetPlatform == TargetPlatform.macOS ? '⌘⇧F' : 'Ctrl+Shift+F'})',
             onTap: _toggleChatFullScreen,
           ),
           const SizedBox(width: 10),

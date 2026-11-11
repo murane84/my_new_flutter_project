@@ -151,12 +151,15 @@ class _ActionTile extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final Color? color;
+  // Compact rows for the full menu (more fit without scrolling).
+  final bool dense;
 
   const _ActionTile({
     required this.icon,
     required this.label,
     required this.onTap,
     this.color,
+    this.dense = false,
   });
 
   @override
@@ -169,13 +172,13 @@ class _ActionTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        padding: EdgeInsets.symmetric(horizontal: 14, vertical: dense ? 5 : 9),
         child: Row(
           children: [
             // Soft tinted chip behind the icon — matches the app's 3D chips.
             Container(
-              width: 36,
-              height: 36,
+              width: dense ? 30 : 36,
+              height: dense ? 30 : 36,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: tint.withValues(alpha: isDark ? 0.16 : 0.10),
@@ -184,15 +187,15 @@ class _ActionTile extends StatelessWidget {
                     color: tint.withValues(alpha: isDark ? 0.28 : 0.20),
                     width: 1),
               ),
-              child: Icon(icon, color: tint, size: 19),
+              child: Icon(icon, color: tint, size: dense ? 17 : 19),
             ),
-            const SizedBox(width: 14),
+            SizedBox(width: dense ? 12 : 14),
             Expanded(
               child: Text(
                 label,
                 style: TextStyle(
                   color: textColor,
-                  fontSize: 15,
+                  fontSize: dense ? 14 : 15,
                   fontWeight: FontWeight.w600,
                 ),
               ),

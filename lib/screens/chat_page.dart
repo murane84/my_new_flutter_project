@@ -8221,8 +8221,77 @@ class _FullMenuCardState extends State<_FullMenuCard> {
     super.dispose();
   }
 
+  // Laid out in three bands so the whole menu usually fits without a
+  // scroll: the everyday four as a quick strip on top, the rest as compact
+  // rows, and the deletes last, apart, in red.
+  static const _quickIds = ['reply', 'copy', 'forward', 'pin'];
+  static const _dangerIds = {'delme', 'delall'};
+
+  Widget _divider() => Divider(
+        height: 9,
+        thickness: 1,
+        indent: 14,
+        endIndent: 14,
+        color: widget.scheme.outlineVariant
+            .withValues(alpha: widget.isDark ? 0.30 : 0.5),
+      );
+
+  Widget _quickTile(_MenuAction a) {
+    final s = widget.scheme;
+    final tint = s.primary;
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: a.onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 34,
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: tint.withValues(alpha: widget.isDark ? 0.16 : 0.10),
+                borderRadius: BorderRadius.circular(11),
+                border: Border.all(
+                    color: tint.withValues(alpha: widget.isDark ? 0.28 : 0.20)),
+              ),
+              child: Icon(a.icon, color: tint, size: 18),
+            ),
+            const SizedBox(height: 5),
+            Text(a.short ?? a.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: s.onSurface)),
+          ]),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final all = widget.actions;
+    final quick = [
+      for (final id in _quickIds) ...all.where((a) => a.id == id),
+    ];
+    final danger = all.where((a) => _dangerIds.contains(a.id)).toList();
+    // The middle band, without what moved out — and no stray / doubled
+    // dividers left behind.
+    final mid = <_MenuAction>[];
+    for (final a in all) {
+      if (_quickIds.contains(a.id) || _dangerIds.contains(a.id)) continue;
+      if (a.id == '__div__' && (mid.isEmpty || mid.last.id == '__div__')) {
+        continue;
+      }
+      mid.add(a);
+    }
+    while (mid.isNotEmpty && mid.last.id == '__div__') {
+      mid.removeLast();
+    }
     final card = Container(
       decoration: widget.bare
           ? null
@@ -8235,26 +8304,45 @@ class _FullMenuCardState extends State<_FullMenuCard> {
         child: SingleChildScrollView(
           controller: _sc,
           child: Padding(
-            padding: const EdgeInsets.only(right: 4),
+            padding: const EdgeInsets.only(right: 4, top: 4),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                for (final a in widget.actions)
+                if (quick.length >= 2) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Row(children: [for (final a in quick) _quickTile(a)]),
+                  ),
+                  if (mid.isNotEmpty || danger.isNotEmpty) _divider(),
+                ] else
+                  for (final a in quick)
+                    _ActionTile(
+                        icon: a.icon,
+                        label: a.label,
+                        color: a.color,
+                        onTap: a.onTap,
+                        dense: true),
+                for (final a in mid)
                   if (a.id == '__div__')
-                    Divider(
-                      height: 9,
-                      thickness: 1,
-                      indent: 14,
-                      endIndent: 14,
-                      color: widget.scheme.outlineVariant
-                          .withValues(alpha: widget.isDark ? 0.30 : 0.5),
-                    )
+                    _divider()
                   else
                     _ActionTile(
                         icon: a.icon,
                         label: a.label,
                         color: a.color,
-                        onTap: a.onTap),
+                        onTap: a.onTap,
+                        dense: true),
+                if (danger.isNotEmpty) ...[
+                  if (mid.isNotEmpty) _divider(),
+                  for (final a in danger)
+                    _ActionTile(
+                        icon: a.icon,
+                        label: a.label,
+                        // Both deletes read as deletes.
+                        color: a.color ?? widget.scheme.error,
+                        onTap: a.onTap,
+                        dense: true),
+                ],
                 const SizedBox(height: 6),
               ],
             ),

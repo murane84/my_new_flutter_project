@@ -903,13 +903,50 @@ class _ChatPageState extends State<ChatPage>
     // A rising keyboard normally means the user tapped the composer, so the
     // emoji panel yields. EXCEPT when the panel's own search field ("Search
     // emoji" / "Search GIFs") has focus — closing the panel then bounced the
-    // user straight back to the Message box mid-search.
+    // user straight back to the Message box mid-search. (⌨ asked for the
+    // keyboard → the panel yields on any tab.)
     if (View.of(context).viewInsets.bottom > 0 &&
         _showEmoji &&
-        _emojiTab != 1 &&
-        !_emojiPanelFocus.hasFocus) {
+        (_emojiToKeyboard ||
+            (_emojiTab != 1 && !_emojiPanelFocus.hasFocus))) {
+      _emojiToKeyboard = false;
       setState(() => _showEmoji = false);
     }
+  }
+
+  // ⌨ was tapped: the panel stays until the keyboard has risen into its
+  // place (no empty gap, no jump), then yields.
+  bool _emojiToKeyboard = false;
+
+  /// 😊 ⇄ ⌨ — always ONE tap each way, like every chat app:
+  ///  • 😊: the keyboard drops and the emoji panel takes its place;
+  ///  • ⌨: the Message box gets focus and the keyboard comes straight up
+  ///    (before, the panel just closed and a second tap on the box was
+  ///    needed to type).
+  void _toggleEmojiKeyboard() {
+    if (!_showEmoji) {
+      FocusScope.of(context).unfocus();
+      setState(() => _showEmoji = true);
+      return;
+    }
+    final softKeyboard = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    _composerFocus.requestFocus();
+    if (!softKeyboard) {
+      // Desktop / web: no keyboard rises — close the panel right away.
+      setState(() => _showEmoji = false);
+      return;
+    }
+    SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+    _emojiToKeyboard = true;
+    // A hardware keyboard (or none rising): don't keep the panel waiting.
+    Future.delayed(const Duration(milliseconds: 650), () {
+      if (mounted && _showEmoji && _emojiToKeyboard) {
+        _emojiToKeyboard = false;
+        setState(() => _showEmoji = false);
+      }
+    });
   }
 
   @override
@@ -6787,7 +6824,10 @@ class _ChatPageState extends State<ChatPage>
                                   child:
                                       FadeTransition(opacity: anim, child: child),
                                 ),
-                                child: hasText
+                                // While the panel is open the ⌨ stays, even
+                                // with text (picking emoji IS typing) — so the
+                                // way back to the keyboard is always one tap.
+                                child: hasText && !_showEmoji
                                     ? const SizedBox.shrink(
                                         key: ValueKey('emoji-off'))
                                     : IconButton(
@@ -6800,11 +6840,7 @@ class _ChatPageState extends State<ChatPage>
                                               : Icons.emoji_emotions_outlined,
                                           color: scheme.onSurfaceVariant,
                                         ),
-                                        onPressed: () {
-                                          FocusScope.of(context).unfocus();
-                                          setState(
-                                              () => _showEmoji = !_showEmoji);
-                                        },
+                                        onPressed: _toggleEmojiKeyboard,
                                         visualDensity: VisualDensity.compact,
                                       ),
                               ),

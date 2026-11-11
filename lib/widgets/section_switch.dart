@@ -17,14 +17,12 @@ class SectionSwitch extends StatelessWidget {
     required this.child,
     required this.forward,
     this.style,
-    this.duration = const Duration(milliseconds: 420),
     this.rippleFrom,
   });
 
   final Widget child;
   final bool forward;
   final SectionTransitionStyle? style; // null = the user's choice
-  final Duration duration;
   // Ripple: where it starts across the top, 0..1 (the tapped segment's
   // centre); null = the side it comes from.
   final double? rippleFrom;
@@ -69,18 +67,7 @@ class SectionSwitch extends StatelessWidget {
       );
     }
     final skip = skipUntil != null && DateTime.now().isBefore(skipUntil!);
-    final ms = skip
-        ? Duration.zero
-        // Heartbeat gets room to settle (a spring hurried reads as a snap).
-        : s == SectionTransitionStyle.heartbeat
-            ? duration + const Duration(milliseconds: 300)
-            // The wave gets room to glide (a hurried wipe reads as a snap).
-            : s == SectionTransitionStyle.wave
-                ? duration + const Duration(milliseconds: 260)
-            : s == SectionTransitionStyle.ripple ||
-                    s == SectionTransitionStyle.equaliser
-                ? duration + const Duration(milliseconds: 120)
-                : duration;
+    final ms = skip ? Duration.zero : lengthOf(s);
     return ClipRect(
       child: AnimatedSwitcher(
         duration: ms,
@@ -97,8 +84,12 @@ class SectionSwitch extends StatelessWidget {
             animation: anim,
             child: c,
             builder: (context, w) {
-              // t: 0 → 1 while coming in; 1 → 0 while going out.
-              final t = anim.value;
+              // t: 0 → 1 while coming in; 1 → 0 while going out. On a tap
+              // the styles that would start fast get a soft start first
+              // (symmetric, so the leaving and arriving pages stay in step).
+              final t = _softStarts(s)
+                  ? _softStart.transform(anim.value)
+                  : anim.value;
               final body =
                   frame(s, w!, t, incoming, dir, accent, rippleFrom: rippleFrom);
               return IgnorePointer(ignoring: !incoming, child: body);
@@ -111,6 +102,35 @@ class SectionSwitch extends StatelessWidget {
   }
 
   static double _ease(double t) => Curves.easeOutCubic.transform(t);
+
+  /// One family of lengths (≈0.5–0.7 s), each style keeping its character:
+  /// the reveals and the spring get room to glide and settle, the plain
+  /// moves stay a touch shorter. (A hurried change reads as a snap.)
+  static Duration lengthOf(SectionTransitionStyle s) => Duration(
+        milliseconds: switch (s) {
+          SectionTransitionStyle.wave => 680,
+          SectionTransitionStyle.heartbeat => 720,
+          SectionTransitionStyle.equaliser => 620,
+          SectionTransitionStyle.ripple => 620,
+          SectionTransitionStyle.cube => 640,
+          SectionTransitionStyle.slide => 560,
+          SectionTransitionStyle.depth => 560,
+          SectionTransitionStyle.fade => 520,
+        },
+      );
+
+  /// Styles whose own easing starts fast: on a tap they first pass through
+  /// [_softStart], so a heavy first frame (a whole area drawn at once)
+  /// can't swallow their start and make them jump. (Wave has its own soft
+  /// curve, Heartbeat its spring, Ripple and 3D turn already ease in.)
+  static bool _softStarts(SectionTransitionStyle s) =>
+      s == SectionTransitionStyle.slide ||
+      s == SectionTransitionStyle.depth ||
+      s == SectionTransitionStyle.fade ||
+      s == SectionTransitionStyle.equaliser;
+
+  /// Symmetric (f(1 − x) = 1 − f(x)), so the hand-over rule holds.
+  static const Curve _softStart = Cubic(0.35, 0.0, 0.65, 1.0);
 
   /// The waveform wipe's travel: a SOFT start (a heavy first frame — a
   /// whole area drawn at once — barely moves it, so nothing jumps), a

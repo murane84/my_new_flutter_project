@@ -423,7 +423,7 @@ extension _HomeFriendListView on HomePageState {
 
   /// The header atop each desktop layer column: an accent icon + the layer's
   /// flagship name + a soft one-line tagline + the same persistent badge the
-  /// mobile hub uses, over a hairline.
+  /// mobile hub uses.
   Widget _layerColumnHeader(ColorScheme scheme, String name, IconData icon,
       String tagline, int badge,
       {Future<void> Function()? onRefresh, VoidCallback? onTitleTap}) {
@@ -473,8 +473,8 @@ extension _HomeFriendListView on HomePageState {
                 _RefreshSpinButton(onRefresh: onRefresh, scheme: scheme),
             ],
           ),
-          const SizedBox(height: 8),
-          Container(height: 1, color: scheme.outlineVariant.withAlpha(70)),
+          // (No hairline: the search pill / switcher right below already
+          // separates the header from the list.)
         ],
       ),
     );

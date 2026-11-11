@@ -431,11 +431,12 @@ extension _HomeHub on HomePageState {
     const dur = Duration(milliseconds: 240);
     const curve = Curves.easeOutCubic;
     return Padding(
-      // Desktop: the same inset as Harmony's search pill beside it, so both
-      // columns start their first row on one line under the header.
+      // Exactly Harmony's search-pill spacing on each layout, so swiping
+      // or looking across never shows the first row jump: desktop column
+      // (6, 0, 6, 8), phone / web page (flush, 10 below).
       padding: wide
           ? const EdgeInsets.fromLTRB(6, 0, 6, 8)
-          : const EdgeInsets.fromLTRB(4, 4, 4, 8),
+          : const EdgeInsets.only(bottom: 10),
       child: SizedBox(
         height: 38,
         child: Stack(children: [

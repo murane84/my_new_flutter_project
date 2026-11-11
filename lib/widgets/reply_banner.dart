@@ -3,13 +3,13 @@ import 'dart:io' show File;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../screens/api_service.dart';
 import '../utils/readable.dart';
 import '../utils/toast_helper.dart';
+import '../services/haptics.dart';
 
 /// Aluta's own message banner while the app is open: slides down from the
 /// top when a message arrives for a chat that isn't on screen.
@@ -210,7 +210,7 @@ class _ReplyBannerViewState extends State<_ReplyBannerView>
           type: ToastType.error);
       return; // keep the draft
     }
-    HapticFeedback.lightImpact();
+    Haptics.lightImpact();
     _markSeen();
     _text.clear();
     _replying = false;
@@ -303,7 +303,7 @@ class _ReplyBannerViewState extends State<_ReplyBannerView>
             type: ToastType.error);
         return;
       }
-      HapticFeedback.lightImpact();
+      Haptics.lightImpact();
       _markSeen();
       _replying = false;
       _close();

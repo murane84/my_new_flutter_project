@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../services/app_busy.dart';
 import '../utils/readable.dart' show accentInk;
+import '../services/haptics.dart';
 
 // ─── Genie menus ────────────────────────────────────────────────────────────
 // One menu motion for the whole app: a menu GROWS out of the button that
@@ -66,7 +67,7 @@ Future<void> showGenieMenu(
   double width = 248,
   Color? color,
 }) {
-  HapticFeedback.selectionClick();
+  Haptics.selectionClick();
   return Navigator.of(context).push(_GenieMenuRoute(
     anchor: anchor,
     entries: entries,
@@ -170,7 +171,7 @@ class _GenieMenuSurfaceState extends State<_GenieMenuSurface> {
 
   void _openFlyout(GenieMenuEntry e, Rect row) {
     if (identical(_fly, e)) return;
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     setState(() {
       _fly = e;
       _flyFrom = row;
@@ -499,7 +500,7 @@ class _GenieMenuListState extends State<_GenieMenuList> {
             ? widget.onCloseFlyout()
             : widget.onFlyout(e, _rectOf(rowCtx));
       } else {
-        HapticFeedback.selectionClick();
+        Haptics.selectionClick();
         setState(() => _page = e);
       }
       return;

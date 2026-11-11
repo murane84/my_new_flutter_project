@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
 
 import '../services/aluta_mood.dart' show AlutaMoment;
 import '../services/song_insights.dart';
 import '../utils/readable.dart' show accentInk;
+import '../services/haptics.dart';
 
 const _momentLabel = {
   AlutaMoment.dawn: ('🌄', 'Dawn'),
@@ -290,7 +290,7 @@ Future<void> showWeekInMusic(
                           for (final e in w.feelMix.entries)
                             GestureDetector(
                               onTap: () {
-                                HapticFeedback.selectionClick();
+                                Haptics.selectionClick();
                                 setS(() =>
                                     filter = filter == e.key ? null : e.key);
                               },
@@ -869,7 +869,7 @@ Future<void> showSongInsight(BuildContext context, String title,
                       selected: st.feel == f,
                       label: Text('${f.emoji} ${f.label}'),
                       onSelected: (_) {
-                        HapticFeedback.selectionClick();
+                        Haptics.selectionClick();
                         SongInsights.instance.setFeel(st.title, f);
                         setD(() {});
                       },

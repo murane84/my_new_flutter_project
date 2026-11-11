@@ -415,7 +415,7 @@ extension _HomeSpaceActions on HomePageState {
 
     Future<void> pick(BuildContext ctx, String? st) async {
       Navigator.pop(ctx);
-      HapticFeedback.selectionClick();
+      Haptics.selectionClick();
       final ok = await QuickStatus.instance.setMine(st);
       if (!mounted) return;
       showToast(

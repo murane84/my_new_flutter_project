@@ -526,7 +526,7 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
   }
 
   Future<void> _cycleSpeed() async {
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     final i = _speeds.indexOf(_speed);
     final next = _speeds[(i + 1) % _speeds.length];
     _speedN.value = next;
@@ -1231,17 +1231,17 @@ class _SwipeToReplyState extends State<_SwipeToReply>
         final next = _band(_raw);
         if (!_armed && next.abs() >= _trigger) {
           _armed = true;
-          HapticFeedback.mediumImpact();
+          Haptics.mediumImpact();
         } else if (_armed && next.abs() < _trigger - 6) {
           _armed = false; // a little hysteresis so it doesn't flicker
-          HapticFeedback.selectionClick();
+          Haptics.selectionClick();
         }
         setState(() => _dx = next);
       },
       onHorizontalDragEnd: (d) {
         if (_armed) {
           if (_dx < 0) {
-            HapticFeedback.selectionClick();
+            Haptics.selectionClick();
             widget.onForward?.call();
           } else {
             widget.onReply();

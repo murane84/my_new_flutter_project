@@ -17,6 +17,7 @@ import '../../utils/typing_guard.dart';
 import '../../utils/anim_art.dart';
 import '../../utils/emoji_field.dart' show inlineEmojiPicker;
 import '../gif_picker.dart';
+import '../../services/haptics.dart';
 
 /// Full-screen, tap-through story viewer (Instagram/WhatsApp style).
 ///
@@ -1777,7 +1778,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       child: InkWell(
         customBorder: const StadiumBorder(),
         onTap: () {
-          HapticFeedback.selectionClick();
+          Haptics.selectionClick();
           onTap();
         },
         child: Padding(

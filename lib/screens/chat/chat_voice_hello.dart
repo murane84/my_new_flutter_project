@@ -10,7 +10,7 @@ const int _kVoiceHelloMaxMs = 5000;
 extension _ChatVoiceHello on _ChatPageState {
   Future<void> _startVoiceHello() async {
     if (_isGroup || _heartMode || _isRecording) return;
-    HapticFeedback.mediumImpact();
+    Haptics.mediumImpact();
     rebuildWith(() => _helloMode = true);
     showToast(context, '🎙️ Say a quick hello — it stops at 5 seconds');
     await _startRecording();

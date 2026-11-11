@@ -54,8 +54,8 @@ import '../utils/marquee_text.dart';
 import '../services/contact_names.dart';
 import '../widgets/keepsake_photo.dart';
 import '../widgets/heart_burst.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
 import '../utils/prefs_now.dart';
+import '../services/haptics.dart';
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
 part 'space/space_edit_sheet.dart'; // edit-space sheet + wallpaper picker
@@ -1556,8 +1556,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   }
   void _openDiary([Offset? origin]) => _goSection('diary');
 
-  void _goSection(String key) =>
-      setState(() {
+  void _goSection(String key) {
+    if (key != _section) Haptics.tab();
+    setState(() {
         _markSeen(_section);
         _markSeen(key);
         _section = key;
@@ -1565,6 +1566,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         _guideOpen = false;
         _settingsOpen = false;
       });
+  }
 
   // ── Section navigation (master–detail) ────────────────────────────────────
   /// The sections available for this Space (playlist + diary only when paired).

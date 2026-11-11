@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
 
 import '../services/song_insights.dart';
 import '../utils/readable.dart';
+import '../services/haptics.dart';
 
 /// How this song feels to you — and, from that feeling, who it's for.
 /// 😍 → "Send to Belyner 💞" · Together; 🥹 → a heart; 💪 → share the energy;
@@ -57,7 +57,7 @@ class _SongFeelStripState extends State<SongFeelStrip> {
   }
 
   void _pick(SongFeel f) {
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     SongInsights.instance.setFeel(widget.title, f);
     setState(() {
       _choosing = false;

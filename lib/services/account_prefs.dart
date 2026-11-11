@@ -74,6 +74,8 @@ class AccountPrefs {
     'player_disc_style_v1', 'player_orb_dimmed_v1',
     // Voice notes: my playback speed (chat)
     'voice_note_speed',
+    // Vibration: all on/off, and the tick on tab switches (services/haptics)
+    'haptics_on_v1', 'haptics_tabs_v1',
   ];
 
   static final List<FutureOr<void> Function()> _reloaders = [];

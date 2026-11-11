@@ -202,7 +202,7 @@ extension _ChatPollsAdmin on _ChatPageState {
     } else {
       next = (mine.length == 1 && mine.first == option) ? [] : [option];
     }
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     final before = msg['poll'];
     void setPoll(Object? p) {
       final i = _messages.indexWhere((m) => m['id'].toString() == '$mid');
@@ -518,7 +518,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                     // Never a dead end: not ready yet → it says why.
                     onPressed: () {
                       if (!ok) {
-                        HapticFeedback.lightImpact();
+                        Haptics.lightImpact();
                         setS(() => showWhy = true);
                         return;
                       }
@@ -786,7 +786,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                                       chosen.remove(t);
                                     } else if (chosen.length < 12) {
                                       chosen.add(t);
-                                      HapticFeedback.selectionClick();
+                                      Haptics.selectionClick();
                                     }
                                   }),
                                   child: AnimatedContainer(
@@ -912,7 +912,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                     FilledButton.icon(
                       onPressed: () {
                         if (!ready) {
-                          HapticFeedback.lightImpact();
+                          Haptics.lightImpact();
                           setC(() => nudge = true);
                           return;
                         }
@@ -1120,7 +1120,7 @@ extension _ChatPollsAdmin on _ChatPageState {
     if (_jamSeenOpen.contains(mid) && _jamCheered.add(mid)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        HapticFeedback.mediumImpact();
+        Haptics.mediumImpact();
         HeartBurst.react(context, '🎉');
       });
     }

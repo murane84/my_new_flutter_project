@@ -23,6 +23,7 @@ import '../services/gallery_autosave.dart';
 import '../services/section_transition.dart';
 import '../widgets/section_switch.dart';
 import '../utils/toast_helper.dart';
+import '../services/haptics.dart';
 
 /// The personalization surface (build step 5): whole-app **theme** (System /
 /// Light / Dark) + a curated **accent** preset set. Dark stays the brand's
@@ -168,6 +169,11 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                     _MessageTonesSection(),
                   ],
                 ),
+          // Vibration (phones / tablets only — nothing to vibrate elsewhere).
+          if (Haptics.supported) ...[
+            const SizedBox(height: 10),
+            const _VibrationSection(),
+          ],
           const SizedBox(height: 10),
           // Secret-heart privacy pair — side by side on wide screens.
           isWide
@@ -216,7 +222,8 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
               'quietly on Wi-Fi so they open instantly, and Save to Gallery '
               'keeps received photos before the server lets them go. Secret '
               'hearts can ask for your fingerprint, face or PIN, and you choose '
-              'whether the sender sees “Opened”. Music nudges notice your '
+              'whether the sender sees “Opened”. Vibration turns every touch buzz on '
+              'or off, and whether switching tabs ticks too. Music nudges notice your '
               'songs on repeat and send a Sunday recap. Section transitions '
               'set how Aluta moves everywhere: Circle\u2019s All · Status · '
               'Listening · Circle, Glow\u2019s categories, and Harmony · '
@@ -1442,6 +1449,100 @@ class _MusicNudgesSection extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Vibration": one switch for every buzz in Aluta, plus whether switching
+/// a tab or section ticks too. Both follow the account to a new phone.
+class _VibrationSection extends StatelessWidget {
+  const _VibrationSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final h = Haptics.instance;
+    return DecoratedBox(
+      decoration: _raisedCardDecoration(scheme, isDark),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        child: ValueListenableBuilder<bool>(
+          valueListenable: h.enabled,
+          builder: (context, on, _) => ValueListenableBuilder<bool>(
+            valueListenable: h.tabs,
+            builder: (context, tabs, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  _accentIconChip(scheme, Icons.vibration_rounded),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Vibration',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                                color: scheme.onSurface)),
+                        const SizedBox(height: 2),
+                        Text(
+                            on
+                                ? 'A soft tick when you hold, swipe or react'
+                                : 'Off — Aluta never vibrates on touch',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: scheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: 24,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Switch(value: on, onChanged: h.setEnabled),
+                    ),
+                  ),
+                ]),
+                // Only meaningful while vibration is on.
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
+                  child: !on
+                      ? const SizedBox(width: double.infinity)
+                      : Padding(
+                          padding: const EdgeInsets.only(left: 44, top: 6),
+                          child: Row(children: [
+                            Expanded(
+                              child: Text(
+                                  'Also when switching tabs & sections',
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      color: scheme.onSurfaceVariant)),
+                            ),
+                            SizedBox(
+                              height: 22,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Switch(
+                                    value: tabs, onChanged: h.setTabs),
+                              ),
+                            ),
+                          ]),
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../utils/on_accent.dart';
+import '../services/haptics.dart';
 
 /// A tactile header action for the music lists (playlist, Up next queue,
 /// Listen Together): a soft rounded chip that reads as a button at rest,
@@ -93,7 +93,7 @@ class _AlutaTapChipState extends State<AlutaTapChip> {
                 onTap: !enabled
                     ? null
                     : () {
-                        HapticFeedback.selectionClick();
+                        Haptics.selectionClick();
                         widget.onTap!();
                       },
                 onTapDown: enabled ? (_) => _set(true) : null,

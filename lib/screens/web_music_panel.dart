@@ -34,6 +34,7 @@ import '../services/vocal_map.dart';
 import '../utils/typing_guard.dart';
 import '../utils/on_accent.dart';
 import '../widgets/pill_search.dart';
+import '../services/haptics.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
 ///
@@ -2350,7 +2351,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           onTap: current ? null : () => _playAt(i),
           // Hold a song to share it with friends (as on Android / Windows).
           onLongPress: () {
-            HapticFeedback.mediumImpact();
+            Haptics.mediumImpact();
             _shareAt(i);
           },
           child: Padding(

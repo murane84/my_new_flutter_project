@@ -18,6 +18,7 @@ import '../home_page.dart' show freeMusicInbox, playbackBus;
 import '../token_helper.dart';
 import '../../utils/readable.dart' show accentInk;
 import '../../widgets/pill_search.dart';
+import '../../services/haptics.dart';
 
 /// Free music: search songs artists released to be downloaded for free —
 /// Jamendo (Creative Commons) and the Internet Archive (CC / public domain).
@@ -227,7 +228,7 @@ class _FreeMusicPanelState extends State<FreeMusicPanel> {
               artist: artist.isEmpty ? null : artist));
       freeMusicInbox.value = [path];
       if (!mounted) return;
-      HapticFeedback.lightImpact();
+      Haptics.lightImpact();
       setState(() {
         _progress.remove(id);
         _done.add(id);

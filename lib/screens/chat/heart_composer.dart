@@ -715,7 +715,7 @@ extension _ChatHeartComposer on _ChatPageState {
       ),
     );
     if (!mounted || picked == null) return;
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     rebuildWith(() {
       if (picked.isEmpty) {
         _heartFor = null;
@@ -746,7 +746,7 @@ extension _ChatHeartComposer on _ChatPageState {
   /// fitting mood (a "sorry" is best answered with love).
   void _startHeartBack(Map<String, dynamic> msg) {
     final m = (msg['heart_mood'] ?? 'love').toString();
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     final sid = int.tryParse(msg['sender_id']?.toString() ?? '');
     final sm = (msg['sender'] as Map?) ?? const {};
     rebuildWith(() {
@@ -947,7 +947,7 @@ extension _ChatHeartComposer on _ChatPageState {
                     color: m.color,
                     on: m.key == _heartMood,
                     onTap: () {
-                      HapticFeedback.selectionClick();
+                      Haptics.selectionClick();
                       rebuildWith(() => _heartMood = m.key);
                     },
                   ),

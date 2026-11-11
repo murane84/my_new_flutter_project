@@ -121,6 +121,7 @@ import '../widgets/aluta_composer_field.dart';
 import '../widgets/pixel_snap.dart';
 import '../utils/readable.dart';
 import '../widgets/pill_search.dart';
+import '../services/haptics.dart';
 
 // Split out for maintainability (Dart parts — same library, shared
 // imports & privacy, zero behaviour change):
@@ -1446,7 +1447,7 @@ class _ChatPageState extends State<ChatPage>
             }
           });
           // The group sees "Neema opened it" live; only the sender feels it.
-          if (mine) HapticFeedback.lightImpact();
+          if (mine) Haptics.lightImpact();
         }
       }
     } else if (type == 'message_unpinned') {
@@ -1790,7 +1791,7 @@ class _ChatPageState extends State<ChatPage>
   /// (so it doesn't scroll for seconds), then glide the last screen.
   void _jumpToLatest() {
     if (!_scrollCtrl.hasClients) return;
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     final pos = _scrollCtrl.position;
     final screen = pos.viewportDimension;
     if (pos.pixels - pos.minScrollExtent > screen * 3) {
@@ -3960,7 +3961,7 @@ class _ChatPageState extends State<ChatPage>
   void _quickHeart(Map<String, dynamic> msg) {
     if (msg['is_deleted'] == true) return;
     if ((msg['id']?.toString() ?? 'tmp-').startsWith('tmp-')) return;
-    HapticFeedback.lightImpact();
+    Haptics.lightImpact();
     _addReaction(msg, '❤️');
   }
 
@@ -4444,7 +4445,7 @@ class _ChatPageState extends State<ChatPage>
         _highlightedId = id;
         _ringPulse++;
       });
-      HapticFeedback.selectionClick();
+      Haptics.selectionClick();
       Future.delayed(const Duration(milliseconds: 1200), () {
         if (mounted && _highlightedId == id) {
           setState(() => _highlightedId = null);
@@ -4718,7 +4719,7 @@ class _ChatPageState extends State<ChatPage>
       _highlightedId = id;
       _ringPulse++;
     });
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     await Future.delayed(const Duration(milliseconds: 1200));
     if (mounted && seq == _flashSeq) {
       setState(() => _highlightedId = null);
@@ -4981,7 +4982,7 @@ class _ChatPageState extends State<ChatPage>
           child: InkWell(
             customBorder: const StadiumBorder(),
             onTap: () {
-              HapticFeedback.selectionClick();
+              Haptics.selectionClick();
               setState(() {
                 final k = _messages[head]['id'].toString();
                 if (!_openCallRuns.remove(k)) _openCallRuns.add(k);
@@ -5215,7 +5216,7 @@ class _ChatPageState extends State<ChatPage>
           _SwipeToReply(
             isMe: isMe,
             onReply: () {
-              HapticFeedback.selectionClick();
+              Haptics.selectionClick();
               setState(() => _replyTo = msg);
               FocusScope.of(context).requestFocus(FocusNode());
             },
@@ -5689,7 +5690,7 @@ class _ChatPageState extends State<ChatPage>
           _SwipeToReply(
             isMe: isMe,
             onReply: () {
-              HapticFeedback.selectionClick();
+              Haptics.selectionClick();
               setState(() => _replyTo = msg);
               FocusScope.of(context).requestFocus(FocusNode());
             },
@@ -8018,7 +8019,7 @@ class _ReactSlide {
     });
     if (hit != hovered.value) {
       hovered.value = hit;
-      if (hit != null) HapticFeedback.selectionClick();
+      if (hit != null) Haptics.selectionClick();
     }
   }
 

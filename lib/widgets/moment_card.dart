@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
 import '../utils/readable.dart' show accentInk;
+import '../services/haptics.dart';
 
 /// One action on a [showMomentCard].
 class MomentAction {
@@ -97,7 +97,7 @@ class _MomentCardState extends State<_MomentCard>
   bool _canExpand = false; // set each build: is any text cut off?
 
   void _toggleExpand() {
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     setState(() => _expanded = !_expanded);
     _timer?.cancel();
     if (!_expanded) _timer = Timer(widget.hold, _leave);
@@ -107,7 +107,7 @@ class _MomentCardState extends State<_MomentCard>
   void initState() {
     super.initState();
     _in.forward();
-    HapticFeedback.lightImpact();
+    Haptics.lightImpact();
     _timer = Timer(widget.hold, _leave);
   }
 

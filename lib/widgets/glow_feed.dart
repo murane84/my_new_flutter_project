@@ -1,7 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData, HapticFeedback;
+import 'package:flutter/services.dart'
+    show Clipboard, ClipboardData;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/glow_cards.dart';
@@ -12,6 +13,7 @@ import 'heart_burst.dart';
 import 'section_switch.dart';
 import '../screens/api_service.dart';
 import '../screens/stories/quick_status_sheet.dart';
+import '../services/haptics.dart';
 
 int _glowDaySeed() {
   final d = DateTime.now();
@@ -147,7 +149,7 @@ class _GlowFeedState extends State<GlowFeed> {
   }
 
   Future<void> _toggleSave(GlowCard c) async {
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     if (!_saved.contains(c.id)) HeartBurst.fromTap(context);
     setState(() {
       if (!_saved.remove(c.id)) _saved.add(c.id);
@@ -165,7 +167,7 @@ class _GlowFeedState extends State<GlowFeed> {
   /// circle gets the words that moved me today. One tap; "Your story" shows
   /// Posting… → Posted ✓ like every post.
   Future<void> _shareAsStatus(GlowCard c) async {
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     final pick = await pickStatusColours(context,
         kind: QuickStatusKind.text, text: _shareText(c));
     if (pick == null || !mounted) return;
@@ -296,7 +298,7 @@ class _GlowFeedState extends State<GlowFeed> {
 
   void _pickFilter(_Filter f) {
     if (f == _filter) return;
-    HapticFeedback.selectionClick();
+    Haptics.tab();
     // The tapped tab's centre along the track: equal tabs when roomy; on a
     // phone the chosen tab is wider (flex 7 vs 3) — use the NEW layout.
     final vals = _Filter.values;

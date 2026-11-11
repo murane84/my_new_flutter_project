@@ -1189,7 +1189,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
         // Hold a song to send it to friends — same share sheet (multi-friend
         // picker) as the playlist's long-press.
         onLongPress: () {
-          HapticFeedback.mediumImpact();
+          Haptics.mediumImpact();
           _shareSong(path);
         },
         child: Padding(

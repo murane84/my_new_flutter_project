@@ -718,7 +718,7 @@ Widget _musicPickChip(
     child: InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: () {
-        HapticFeedback.selectionClick();
+        Haptics.selectionClick();
         onTap();
       },
       child: AnimatedContainer(

@@ -1060,7 +1060,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
         .map((e) => e.toString())
         .toSet();
     final has = mineR.any(HeartBurst.isHeart);
-    HapticFeedback.lightImpact();
+    Haptics.lightImpact();
     if (!has) HeartBurst.react(context, '❤️');
     react();
   }

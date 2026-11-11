@@ -167,7 +167,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 onTap: job == null
                     ? null
                     : () {
-                        HapticFeedback.selectionClick();
+                        Haptics.selectionClick();
                         DownloadManager.instance.cancel(url);
                       },
                 child: Padding(

@@ -18,7 +18,7 @@ extension _ChatMorning on _ChatPageState {
   /// Long-press on Send: the send options sheet.
   void _showSendOptions() {
     if (!_canHoldForMorning || _ctrl.text.trim().isEmpty) return;
-    HapticFeedback.mediumImpact();
+    Haptics.mediumImpact();
     final scheme = Theme.of(context).colorScheme;
     final first = _peerFirst;
     showModalBottomSheet<void>(

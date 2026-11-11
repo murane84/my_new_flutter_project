@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
+import '../services/haptics.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -1548,6 +1549,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         children: [
           if (kbOpen) _miniNowPlaying(scheme) else _mobilePlayerTop(theme, scheme),
           TabBar(
+            onTap: (_) => Haptics.tab(),
             labelColor: scheme.primary,
             unselectedLabelColor: scheme.onSurfaceVariant,
             indicatorColor: scheme.primary,

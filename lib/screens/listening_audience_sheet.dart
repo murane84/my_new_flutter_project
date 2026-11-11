@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../services/now_playing_presence.dart';
 import 'api_service.dart';
@@ -7,6 +6,7 @@ import '../utils/bounce_tap.dart';
 import '../services/contact_names.dart';
 import '../widgets/person_avatar.dart';
 import '../widgets/pill_search.dart';
+import '../services/haptics.dart';
 
 /// The music-player toggle for broadcasting "listening now" to friends.
 /// Tap flips sharing on/off; long-press opens the audience sheet (who can see).
@@ -249,7 +249,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
             child: InkWell(
               borderRadius: BorderRadius.circular(16),
               onTap: () {
-                HapticFeedback.selectionClick();
+                Haptics.selectionClick();
                 _presence.setShareEnabled(!on);
               },
               child: Padding(
@@ -282,7 +282,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
                     Switch(
                       value: on,
                       onChanged: (v) {
-                        HapticFeedback.selectionClick();
+                        Haptics.selectionClick();
                         _presence.setShareEnabled(v);
                       },
                     ),
@@ -440,7 +440,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () {
-          HapticFeedback.selectionClick();
+          Haptics.selectionClick();
           _presence.setAudience(value, _selected);
         },
         child: AnimatedContainer(
@@ -517,7 +517,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: () {
-          HapticFeedback.selectionClick();
+          Haptics.selectionClick();
           final next = Set<int>.from(_selected);
           checked ? next.remove(id) : next.add(id);
           _setSelected(next);

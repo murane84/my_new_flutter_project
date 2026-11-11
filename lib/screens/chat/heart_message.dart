@@ -1,6 +1,5 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../widgets/heart_burst.dart';
 
@@ -15,6 +14,7 @@ import '../../services/heart_lock.dart';
 import '../../widgets/glossy_heart.dart';
 import '../../widgets/jump_rings.dart';
 import '../../utils/readable.dart';
+import '../../services/haptics.dart';
 
 // ─── Secret hearts — the signature love note ────────────────────────────────
 // A "secret heart" (message_type 'heart') arrives covered, beating softly. It
@@ -534,7 +534,7 @@ class _HeartBubbleState extends State<HeartBubble>
     HeartLock.instance.relockEpoch.addListener(_onRelockAll);
     if (widget.justSent) {
       _seal.forward();
-      HapticFeedback.lightImpact();
+      Haptics.lightImpact();
     } else {
       _seal.value = 1;
     }
@@ -776,7 +776,7 @@ class _HeartBubbleState extends State<HeartBubble>
     if (_reduceMotion || _downAt == null) return;
     const steps = [0.0, 0.35, 0.6, 0.8, 0.93];
     while (_hapticStep < steps.length && _hold.value >= steps[_hapticStep]) {
-      HapticFeedback.selectionClick();
+      Haptics.selectionClick();
       _hapticStep++;
     }
   }
@@ -842,7 +842,7 @@ class _HeartBubbleState extends State<HeartBubble>
       return;
     }
     if (widget.locked) {
-      HapticFeedback.lightImpact();
+      Haptics.lightImpact();
       widget.onLocked?.call();
       return;
     }
@@ -872,7 +872,7 @@ class _HeartBubbleState extends State<HeartBubble>
         widget.onSealedPeek != null &&
         !_opening) {
       _opening = true;
-      HapticFeedback.selectionClick();
+      Haptics.selectionClick();
       unawaited(widget.onSealedPeek!().then((ok) {
         _opening = false;
         if (!ok || !mounted) return;
@@ -885,7 +885,7 @@ class _HeartBubbleState extends State<HeartBubble>
       return;
     }
     if (_sealedByTime || _awaitingNote) {
-      HapticFeedback.selectionClick();
+      Haptics.selectionClick();
       _hintTimer?.cancel();
       setState(() => _hint = true);
       _hintTimer = Timer(const Duration(milliseconds: 2200), () {
@@ -920,13 +920,13 @@ class _HeartBubbleState extends State<HeartBubble>
   /// A soft "lub-dub" you feel. No-op without a vibrator (desktop).
   Future<void> _heartbeatHaptic() async {
     if (_reduceMotion) return;
-    HapticFeedback.mediumImpact();
+    Haptics.mediumImpact();
     await Future.delayed(const Duration(milliseconds: 150));
-    HapticFeedback.lightImpact();
+    Haptics.lightImpact();
   }
 
   void _loveBack() {
-    HapticFeedback.mediumImpact();
+    Haptics.mediumImpact();
     final box = _heartKey.currentContext?.findRenderObject() as RenderBox?;
     if (box != null && box.hasSize) {
       _showLoveBurst(
@@ -1886,7 +1886,7 @@ class _HeartGenieState extends State<_HeartGenie>
   // Act right away (don't wait on the fold-back animation — if it never
   // completes, the action would never run), then fold the card away.
   Future<void> _after(VoidCallback fn) async {
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     fn();
     await _close();
   }

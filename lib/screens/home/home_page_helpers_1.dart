@@ -1746,7 +1746,7 @@ extension _HomePageHelpers1 on HomePageState {
   /// Tune in / send a ❤️ for the song / open the chat.
   void _showPhotoPeek(Map<String, dynamic> f, String name, bool isOnline) {
     final id = (f['id'] as num?)?.toInt() ?? -1;
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     showDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.35),

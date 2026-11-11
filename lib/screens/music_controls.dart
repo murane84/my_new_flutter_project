@@ -65,6 +65,7 @@ import '../utils/avatar_widget.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import '../services/account_prefs.dart';
 import '../widgets/pill_search.dart';
+import '../services/haptics.dart';
 
 part 'music/music_control_widgets.dart'; // _CtrlBtn, _CtrlChip, _SpeedPanel
 part 'music/music_playlist_overlay.dart'; // _PlaylistOverlay + state
@@ -760,7 +761,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     if (cur == null) return;
     final total = _plainLyricLines().length;
     if (cur.length >= total) return;
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     final next = [...cur, _player.position];
     _tapSync.value = next;
     if (next.length >= total) _tapSyncDone();
@@ -1029,7 +1030,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     final path = _playlist[_currentIndex];
     final scheme = Theme.of(context).colorScheme;
     final hasPartner = _partnerId != null;
-    HapticFeedback.mediumImpact();
+    Haptics.mediumImpact();
     final pick = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: scheme.surface,
@@ -1527,7 +1528,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _shuffleTick++;
       _shuffleAt = DateTime.now();
     });
-    HapticFeedback.mediumImpact();
+    Haptics.mediumImpact();
     _publishPlaylist();
     setFull(() {});
     _snack('Up next shuffled');

@@ -8,7 +8,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'
-    show HapticFeedback, HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey;
+    show HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey;
 import 'package:flutter/foundation.dart'
     show kIsWeb, kReleaseMode, defaultTargetPlatform, TargetPlatform, ValueListenable;
 import 'package:flutter_contacts/flutter_contacts.dart';
@@ -142,6 +142,7 @@ import '../services/account_prefs.dart';
 import '../services/gallery_autosave.dart';
 import '../widgets/week_in_music_sheet.dart';
 import '../widgets/pill_search.dart';
+import '../services/haptics.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -293,7 +294,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           type: ToastType.info);
       return;
     }
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     setState(() {
       _pinnedChats = was
           ? (_pinnedChats.where((e) => e != k).toList())
@@ -408,6 +409,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _layerForward = forward ??
         (_kLayers.indexOf(layer) > _kLayers.indexOf(_friendLayer));
     _layerRippleFrom = rippleFrom;
+    Haptics.tab(); // the same tab tick as every tab bar
     // Drop any active search focus first, so switching layers never carries the
     // keyboard/focus onto the other layer's (separate) search box.
     FocusManager.instance.primaryFocus?.unfocus();
@@ -492,7 +494,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
         .toList();
     final si = segs.indexOf(next);
     _CircleFlip.rippleFrom = si < 0 ? null : (si + 0.5) / segs.length;
-    HapticFeedback.selectionClick();
+    // The same tab tick as every tab bar (not for the automatic landing).
+    if (remember) Haptics.tab();
     setState(() {
       _circleView = next;
       // (Maximising Status shows its own full grid; the shared view's strip
@@ -1828,9 +1831,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
   }
 
   Future<void> _lubDub() async {
-    HapticFeedback.heavyImpact();
+    Haptics.heavyImpact();
     await Future.delayed(const Duration(milliseconds: 170));
-    HapticFeedback.mediumImpact();
+    Haptics.mediumImpact();
   }
 
   /// Double-tap a bonded partner's avatar → a wordless "thinking of you".
@@ -3544,7 +3547,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final name = _contactDisplayName(f['phone']?.toString(),
         (f['username'] ?? d['username'] ?? 'Your friend').toString());
     final first = name.trim().split(RegExp(r'\s+')).first;
-    HapticFeedback.lightImpact();
+    Haptics.lightImpact();
     _lastMomentAt = DateTime.now();
     // Waited so we could listen together → that's the first button.
     final forListen = d['purpose'] == 'listen' ||
@@ -3651,7 +3654,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           : (t['artist'] ?? mine.artist).toString().trim();
       final bonded = _bondWith(fid) != null;
       _lastMomentAt = DateTime.now();
-      HapticFeedback.lightImpact();
+      Haptics.lightImpact();
       showMomentCard(
         context,
         title: sameSong
@@ -4006,7 +4009,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   /// Tapped the layer pill that's already lit → that list back to the top.
   void _scrollLayerToTop(String layer) {
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     switch (layer) {
       case 'circle':
         // Status / Listening maximised → that full view glides up instead.
@@ -4817,7 +4820,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                                     lead.length + mid.length +
                                         shared.title.length);
                                 onTap = () {
-                                  HapticFeedback.selectionClick();
+                                  Haptics.selectionClick();
                                   chatJamRequest.value++;
                                 };
                               } else if (who.isNotEmpty) {
@@ -4828,7 +4831,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                                         : '${who[0]}, ${who[1]} +${who.length - 2} are';
                                 text = '🎧 $names listening now · Start a jam';
                                 onTap = () {
-                                  HapticFeedback.selectionClick();
+                                  Haptics.selectionClick();
                                   chatJamRequest.value++;
                                 };
                               } else {
@@ -6604,7 +6607,7 @@ class _WebQueueSheetState extends State<_WebQueueSheet> {
                         onLongPress: playbackBus.webShareAt == null
                             ? null
                             : () {
-                                HapticFeedback.mediumImpact();
+                                Haptics.mediumImpact();
                                 playbackBus.webShareAt?.call(i);
                               },
                         trailing: GeniePopupMenuButton<String>(

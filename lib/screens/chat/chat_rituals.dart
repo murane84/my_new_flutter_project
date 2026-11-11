@@ -130,7 +130,7 @@ extension _ChatRituals on _ChatPageState {
   }
 
   void _startGoodNight() {
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     const note = 'Good night, sleep sweet 🌙';
     rebuildWith(() {
       _gnDoneToday = true;

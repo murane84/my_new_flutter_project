@@ -1101,7 +1101,7 @@ class _CirclePeek {
 
   static void show(BuildContext context, Widget content, String title) {
     hide();
-    HapticFeedback.selectionClick();
+    Haptics.selectionClick();
     final overlay = Overlay.of(context);
     final scheme = Theme.of(context).colorScheme;
     final size = MediaQuery.sizeOf(context);
@@ -1289,7 +1289,7 @@ class _SwipePathState extends State<_SwipePath>
     run.whenComplete(() {
       if (!mounted) return;
       if (go) {
-        HapticFeedback.selectionClick();
+        // (The tab tick comes from the switch itself — once, as on a tap.)
         // The page already arrived under the finger: the switch that
         // follows the state change must not play it again.
         SectionSwitch.skipUntil =

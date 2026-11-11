@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../services/haptics.dart';
 
 import '../../utils/net_image.dart' show authNetworkImageProvider;
 import '../../utils/readable.dart' show accentInk;
@@ -193,6 +194,7 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
   TabBar _tabBar(ColorScheme scheme, {bool inline = false, bool fit = false}) =>
       TabBar(
         controller: _tabs,
+        onTap: (_) => Haptics.tab(),
         labelColor: scheme.primary,
         unselectedLabelColor: scheme.onSurfaceVariant,
         indicatorColor: scheme.primary,
@@ -395,6 +397,7 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
         title: Text(widget.title, overflow: TextOverflow.ellipsis),
         bottom: TabBar(
           controller: _tabs,
+          onTap: (_) => Haptics.tab(),
           labelColor: scheme.primary,
           indicatorColor: scheme.primary,
           isScrollable: true,

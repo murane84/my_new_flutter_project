@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../services/haptics.dart';
 
 /// Samsung-style swipe actions on a list tile.
 ///
@@ -75,7 +75,7 @@ class _SwipeActionTileState extends State<SwipeActionTile>
     final armed = next.abs() >= _w * widget.threshold;
     if (armed != _armed) {
       _armed = armed;
-      if (armed) HapticFeedback.selectionClick();
+      if (armed) Haptics.selectionClick();
     }
     setState(() => _dx = next);
   }
@@ -91,7 +91,7 @@ class _SwipeActionTileState extends State<SwipeActionTile>
     }
     _busy = true;
     final right = _right;
-    HapticFeedback.mediumImpact();
+    Haptics.mediumImpact();
     // Carry across: the colour floods the whole tile.
     await _animateTo(right ? _w : -_w, const Duration(milliseconds: 220),
         Curves.easeOutCubic);

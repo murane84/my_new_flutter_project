@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'widgets/splash_particles.dart';
 import 'widgets/busy_overlay.dart';
@@ -46,6 +45,7 @@ import 'state/playback_state.dart' show providerContainer;
 import 'services/web_update_checker.dart';
 import 'utils/readable.dart';
 import 'utils/chat_background.dart' show loadChatBackground;
+import 'services/haptics.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool _spaceFullHooked = false;
@@ -119,6 +119,8 @@ void main() async {
   // (SplashScreen lifts it), with a safety net so it can never get stuck.
   FlutterNativeSplash.preserve(widgetsBinding: binding);
   Future.delayed(const Duration(seconds: 4), _liftNativeSplash);
+  // My Vibration choice, read before the first tap can buzz.
+  unawaited(Haptics.init());
   // Paint the app (its splash) AS SOON AS POSSIBLE. Only Sentry wraps runApp, so
   // it still installs capture of BOTH uncaught Flutter framework errors and
   // async (PlatformDispatcher / zone) errors. Everything heavy — the audio
@@ -832,7 +834,7 @@ class SplashScreenState extends State<SplashScreen>
         _entrance.forward();
         // Feel the heartbeat on phones.
         Future.delayed(const Duration(milliseconds: 90), () {
-          if (mounted) HapticFeedback.lightImpact();
+          if (mounted) Haptics.lightImpact();
         });
       }
     });

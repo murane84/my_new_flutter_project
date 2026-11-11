@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../services/contact_names.dart';
 import '../../services/status_privacy.dart';
 import '../../utils/readable.dart' show accentInk;
 import '../api_service.dart';
 import '../../widgets/pill_search.dart';
+import '../../services/haptics.dart';
 
 /// "Who can see my status": My circle / Bonds only, plus friends to hide it
 /// from either way. Saved to the account; the server applies it.
@@ -109,7 +109,7 @@ class _StatusAudienceSheetState extends State<_StatusAudienceSheet> {
                     ],
                     selected: {_mode},
                     onSelectionChanged: (s) {
-                      HapticFeedback.selectionClick();
+                      Haptics.selectionClick();
                       setState(() => _mode = s.first);
                       _sp.setMode(_mode);
                     },

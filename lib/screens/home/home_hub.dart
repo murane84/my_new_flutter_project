@@ -341,7 +341,8 @@ extension _HomeHub on HomePageState {
   /// on a raised, lit "key" that SLIDES between segments (springy), each
   /// other segment showing what's waiting there (and breathing once when it
   /// grows). Tap → switch; tap the lit one or All → back to all; hold →
-  /// peek; a compact ⤡ at the end minimises too. Narrow → icons + counts.
+  /// peek. All is the one way back (no separate minimise button).
+  /// Narrow → icons + counts.
   Widget _circleSwitcher(
       ColorScheme scheme,
       int storiesUnseen,
@@ -362,10 +363,11 @@ extension _HomeHub on HomePageState {
     ];
     final sel = segs.indexWhere((s) => s.$1 == view).clamp(0, segs.length - 1);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 4, 0, 8),
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
       child: LayoutBuilder(builder: (context, cons) {
-        const minW = 34.0;
-        final trackW = cons.maxWidth - minW - 4;
+        // The track takes the whole row: All is the way back (no separate
+        // minimise button doing the same thing).
+        final trackW = cons.maxWidth;
         final segW = trackW / segs.length;
         final labelled = segW >= 74;
         final wideKeys = cons.maxWidth >= 560;
@@ -458,19 +460,6 @@ extension _HomeHub on HomePageState {
                     ),
                 ]),
               ]),
-            ),
-          ),
-          const SizedBox(width: 4),
-          // ⤡ — minimise, for those who learned it (All does the same).
-          SizedBox(
-            width: minW,
-            child: IconButton(
-              tooltip: 'Minimise',
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              icon: Icon(Icons.close_fullscreen_rounded,
-                  size: 17, color: accentInk(scheme)),
-              onPressed: () => _goCircleView('all'),
             ),
           ),
         ]);
@@ -636,7 +625,7 @@ extension _HomeHub on HomePageState {
         Center(
           child: TextButton.icon(
             onPressed: () => _setCircleView('listening'),
-            icon: const Icon(Icons.close_fullscreen_rounded, size: 16),
+            icon: const Icon(Icons.dashboard_rounded, size: 16),
             label: const Text('Back to all'),
           ),
         ),

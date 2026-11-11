@@ -303,9 +303,18 @@ class _MomentCardState extends State<_MomentCard>
                           ),
                           if (widget.actions.isNotEmpty) ...[
                             const SizedBox(height: 8),
-                            Wrap(
+                            // Balanced: two actions sit at the two edges
+                            // (primary left, the other right) with the space
+                            // in the middle; a lone one is centred.
+                            SizedBox(
+                              // Full width, so the actions can reach both edges.
+                              width: double.infinity,
+                              child: Wrap(
                               spacing: 8,
                               runSpacing: 6,
+                              alignment: widget.actions.length == 1
+                                  ? WrapAlignment.center
+                                  : WrapAlignment.spaceBetween,
                               children: [
                                 for (final a in widget.actions)
                                   a.primary
@@ -344,6 +353,7 @@ class _MomentCardState extends State<_MomentCard>
                                               shape: const StadiumBorder()),
                                         ),
                               ],
+                            ),
                             ),
                           ],
                         ],

@@ -1004,7 +1004,8 @@ extension _HomeHub on HomePageState {
   /// updates as presence changes, and reads 0 when nobody in your spaces is
   /// playing. (Live Rooms will add to this once C1 wires them up.)
   int _harmonyBadge() {
-    final presence = NowPlayingPresence.instance;
+    // Steady: no badge popping on a pause or a song change.
+    final presence = SteadyListening.instance;
     final seen = <int>{};
     for (final s in _spaces) {
       final members = (s['members'] as List?) ?? const [];

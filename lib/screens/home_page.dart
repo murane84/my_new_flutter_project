@@ -108,6 +108,7 @@ import 'spinning_vinyl_ring.dart';
 import '../widgets/presence_ring_avatar.dart';
 import '../services/connected_contacts_service.dart';
 import '../services/now_playing_presence.dart';
+import '../services/steady_listening.dart';
 import '../services/online_watch.dart';
 import '../services/heartbeat_log.dart';
 import '../services/last_seen_privacy.dart';
@@ -844,6 +845,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Live "Listening now": repaint tiles when a friend's playback changes, and
     // seed the current snapshot of who's playing right now.
     NowPlayingPresence.instance.addListener(_onPresenceChanged);
+    // The steady reading (hero line, badge, Listening zone) changes on its
+    // own timers — repaint for it too.
+    SteadyListening.instance.addListener(_onPresenceChanged);
     // Keep the "Listening now" zone fresh. On web, poll the snapshot as a
     // safety net — live friend_now_playing events can be missed there, which
     // left friends' listening status never appearing.
@@ -936,6 +940,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     ContactNames.instance.revision.removeListener(_onContactsChanged);
     playlistDrawerBus.isOpen.removeListener(_onPlaylistDrawerToggled);
     NowPlayingPresence.instance.removeListener(_onPresenceChanged);
+    SteadyListening.instance.removeListener(_onPresenceChanged);
     QuickStatus.instance.removeListener(_onPresenceChanged);
     AccountPrefs.offRestore(_loadPinnedChats);
     AccountPrefs.offRestore(_reloadCirclePrefs);
@@ -3726,7 +3731,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void _onBlockList() {
     for (final p in BlockList.instance.people) {
       final id = (p['id'] as num?)?.toInt();
-      if (id != null) NowPlayingPresence.instance.forget(id);
+      if (id != null) {
+        NowPlayingPresence.instance.forget(id);
+        SteadyListening.instance.forget(id); // no "paused" grace for a block
+      }
     }
     if (BlockList.instance.version != _blockVersion) {
       _blockVersion = BlockList.instance.version;

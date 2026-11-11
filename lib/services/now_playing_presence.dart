@@ -162,6 +162,9 @@ class NowPlayingPresence extends ChangeNotifier {
     return (dur * (1 - pr)).round();
   }
 
+  /// Everyone I have a playing / paused track for (raw, live).
+  Iterable<int> get ids => _friends.keys;
+
   bool get anyListening => _friends.values.any((t) => t['paused'] != true);
   int get listeningCount =>
       _friends.values.where((t) => t['paused'] != true).length;

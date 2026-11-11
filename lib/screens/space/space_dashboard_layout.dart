@@ -349,13 +349,16 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
           ),
         );
 
-    final pulse = AnimatedOpacity(
+    // [spread]: on its own row (phones) the two chips sit at the two edges,
+    // balanced like the banner buttons, instead of both leaning left.
+    Widget pulseOf({bool spread = false}) => AnimatedOpacity(
       opacity: hasStats ? 1 : 0,
       duration: const Duration(milliseconds: 340),
       curve: Curves.easeOut,
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
+        alignment: spread ? WrapAlignment.spaceBetween : WrapAlignment.start,
         children: [
           chip('🔥', '$streak', 'day streak'),
           chip('🎧', '$days', days == 1 ? 'day in a song' : 'days in a song'),
@@ -415,7 +418,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
               Expanded(child: identity),
               if (hasPartner) ...[
                 const SizedBox(width: 12),
-                pulse,
+                pulseOf(),
                 const SizedBox(width: 14),
                 thinking(round: false),
               ],
@@ -438,7 +441,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
               ),
               if (hasPartner) ...[
                 const SizedBox(height: 10),
-                pulse,
+                SizedBox(width: double.infinity, child: pulseOf(spread: true)),
               ],
             ],
           );

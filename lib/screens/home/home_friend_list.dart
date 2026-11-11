@@ -64,12 +64,15 @@ extension _HomeFriendListView on HomePageState {
     // "Listening now" zone: friends currently playing music rise to the top,
     // everyone else drops to "Your circle" (presence over recency — the seed of
     // Concept 05). When nobody's listening, this collapses to the plain list.
-    final presence = NowPlayingPresence.instance;
+    // Read steadily: a friend joins the zone once their song holds, and
+    // stays through a quick pause / the next song — rows don't hop
+    // between zones on every flicker.
+    final steady = SteadyListening.instance;
     final listening = <Map<String, dynamic>>[];
     final rest = <Map<String, dynamic>>[];
     for (final m in combined) {
       final id = m['is_group'] != true ? (m['id'] as num?)?.toInt() : null;
-      if (id != null && presence.trackFor(id) != null) {
+      if (id != null && steady.trackFor(id) != null) {
         listening.add(m);
       } else {
         rest.add(m);
@@ -669,17 +672,36 @@ extension _HomeFriendListView on HomePageState {
         others.isNotEmpty ? _avatarFull(others.first['avatar_url']) : null;
     final together = _isTogether;
     final momentCount = (space['moment_count'] as num?)?.toInt() ?? 0;
-    // Live: the actual track a member is playing right now (not just a flag).
-    final presence = NowPlayingPresence.instance;
+    // Live: the song a member is playing — read STEADILY (a start shows
+    // once it holds, a stop lingers as "paused" for a little while), so the
+    // card never flickers on a song change or a quick pause.
+    final steady = SteadyListening.instance;
     Map<String, dynamic>? liveTrack;
+    int? liveId;
     for (final m in others) {
-      final t = presence.trackFor((m['id'] as num?)?.toInt() ?? -1);
+      final id = (m['id'] as num?)?.toInt() ?? -1;
+      final t = steady.trackFor(id);
       if (t != null) {
         liveTrack = t;
+        liveId = id;
         break;
       }
     }
-    final someoneListening = liveTrack != null;
+    final livePaused = liveId != null && steady.isPaused(liveId);
+    final someoneListening = liveTrack != null && !livePaused;
+    // When nobody's playing, the same line says something about the two
+    // of you — so the card keeps ONE height and nothing below it moves.
+    final stats = (space['stats'] as Map?) ?? const {};
+    final ys = stats['your_song'];
+    final yourSong = ys is Map
+        ? (ys['title'] ?? '').toString().trim()
+        : (ys ?? '').toString().trim();
+    final streak = (stats['listen_streak'] as num?)?.toInt() ?? 0;
+    final calmLine = yourSong.isNotEmpty
+        ? 'Your song · $yourSong'
+        : streak > 0
+            ? '$streak day${streak == 1 ? '' : 's'} in tune'
+            : 'Your little world, always here';
     String? liveLine;
     if (liveTrack != null) {
       final t = (liveTrack['title'] ?? '').toString().trim();
@@ -815,42 +837,50 @@ extension _HomeFriendListView on HomePageState {
                           ),
                         ),
                       ],
-                      // The "listening now" line eases in/out (height + fade)
-                      // instead of popping, so the card doesn't jolt when a
-                      // partner starts or stops playing.
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 320),
-                        curve: Curves.easeOutCubic,
-                        alignment: Alignment.topLeft,
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 280),
-                          switchInCurve: Curves.easeOut,
-                          switchOutCurve: Curves.easeIn,
-                          child: !someoneListening
-                              ? const SizedBox(
-                                  key: ValueKey('hero-live-off'),
-                                  width: double.infinity)
-                              : Padding(
-                                  key: const ValueKey('hero-live-on'),
-                                  padding: const EdgeInsets.only(top: 4),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.graphic_eq_rounded,
-                                          size: 13, color: Colors.white),
-                                      const SizedBox(width: 5),
-                                      Expanded(
-                                        child: _scrollingText(
-                                          liveLine ?? 'listening now',
-                                          const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 11.5,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                      // ONE line that's always there: the song they're
+                      // playing (bars), "Paused · song" for a short grace,
+                      // or something about the two of you. Only its words
+                      // cross-fade — the card never changes height, so
+                      // nothing below it jumps.
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: SizedBox(
+                          height: 22,
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 320),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeIn,
+                            layoutBuilder: (cur, prev) => Stack(
+                                alignment: Alignment.centerLeft,
+                                children: [...prev, ?cur]),
+                            transitionBuilder: (c, a) => FadeTransition(
+                              opacity: a,
+                              child: SlideTransition(
+                                position: Tween(
+                                        begin: const Offset(0, 0.35),
+                                        end: Offset.zero)
+                                    .animate(a),
+                                child: c,
+                              ),
+                            ),
+                            child: _heroLine(
+                              key: ValueKey(liveTrack == null
+                                  ? 'calm'
+                                  : '${livePaused ? 'p' : 'l'}-$liveLine'),
+                              playing: someoneListening,
+                              paused: livePaused,
+                              text: liveTrack == null
+                                  ? calmLine
+                                  : livePaused
+                                      ? 'Paused · ${liveLine ?? 'their song'}'
+                                      : (liveLine ?? 'listening now'),
+                              // A soft breath the moment they start, and a
+                              // one-tap Tune in right on the card.
+                              onTuneIn: someoneListening && liveId != null
+                                  ? () => _tuneInto(liveId!, otherName)
+                                  : null,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -870,6 +900,73 @@ extension _HomeFriendListView on HomePageState {
             }),
           ),
         ),
+      ),
+    );
+  }
+
+  /// The hero's one always-there line (see the card): bars + the song while
+  /// they play (breathing once as it starts, with Tune in), "Paused · …"
+  /// during the grace, or the calm line about the two of you.
+  Widget _heroLine({
+    required Key key,
+    required bool playing,
+    required bool paused,
+    required String text,
+    VoidCallback? onTuneIn,
+  }) {
+    const style = TextStyle(
+      color: Colors.white,
+      fontSize: 11.5,
+      fontWeight: FontWeight.w600,
+    );
+    final row = Row(children: [
+      Icon(
+          playing
+              ? Icons.graphic_eq_rounded
+              : paused
+                  ? Icons.pause_rounded
+                  : Icons.favorite_rounded,
+          size: 13,
+          color: Colors.white.withValues(alpha: playing ? 1 : 0.8)),
+      const SizedBox(width: 5),
+      Expanded(
+        child: playing
+            ? _scrollingText(text, style)
+            : Text(text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: style.copyWith(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontWeight: FontWeight.w500)),
+      ),
+      if (onTuneIn != null) ...[
+        const SizedBox(width: 6),
+        Material(
+          color: Colors.white.withValues(alpha: 0.22),
+          shape: const StadiumBorder(),
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            onTap: onTuneIn,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+              child: Text('Tune in',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800)),
+            ),
+          ),
+        ),
+      ],
+    ]);
+    return KeyedSubtree(
+      key: key,
+      // Breathes once (white) when they start — noticed, nothing jumps.
+      child: BreathGlow(
+        active: playing,
+        color: Colors.white,
+        radius: 11,
+        child: row,
       ),
     );
   }

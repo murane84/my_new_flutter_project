@@ -51,8 +51,17 @@ class SectionSwitch extends StatelessWidget {
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 150),
           layoutBuilder: _layout,
+          // Same hand-over rule as every style: the leaving page is gone
+          // by 40 %, the arriving one starts at 15 %, so they never print
+          // over each other.
           transitionBuilder: (c, a) => KeyedSubtree(
-              key: c.key, child: FadeTransition(opacity: a, child: c)),
+              key: c.key,
+              child: FadeTransition(
+                  opacity: a.drive(CurveTween(
+                      curve: c.key == child.key
+                          ? const Interval(0.15, 1)
+                          : const Interval(0.6, 1))),
+                  child: c)),
           child: child,
         ),
       );

@@ -124,7 +124,7 @@ def _member_dicts(db: Session, space: RelationshipSpace) -> list:
             "id": u.id,
             "username": u.username,
             "avatar_url": u.avatar_url,
-            "is_online": bool(u.is_online),
+            "is_online": crud.looks_online(u),
             # So each phone shows ITS saved name for the partner.
             "phone": u.phone,
         })

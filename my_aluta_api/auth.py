@@ -394,7 +394,7 @@ def get_user_status(friend_id: int, db: Session = Depends(get_db), current_user:
     return {
         "user_id": friend.id,
         # Presence: mutual friends (no block) only.
-        "is_online": bool(friend.is_online
+        "is_online": bool(_crud.looks_online(friend)
                           and _crud.are_mutual(db, friend.id, current_user.id)),
         "last_seen": (str(friend.last_seen)
                       if (seen and friend.last_seen) else None)

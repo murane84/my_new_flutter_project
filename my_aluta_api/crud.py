@@ -27,6 +27,15 @@ def is_recently_active(last_seen) -> bool:
     return (datetime.now(timezone.utc) - last_seen).total_seconds() <= PRESENCE_ONLINE_SECONDS
 
 
+def looks_online(user) -> bool:
+    """The ONE presence reading every endpoint shows: the is_online flag AND
+    recent activity. The flag alone can be stale: an app killed without a
+    clean disconnect leaves it True for days, which made group members
+    who'd been gone since last week show as "Online"."""
+    return bool(user is not None and user.is_online
+                and is_recently_active(user.last_seen))
+
+
 # ------------------ User Status ------------------
 def update_user_status(db: Session, user_id: int, is_online: bool):
     user = db.query(User).filter(User.id == user_id).first()
@@ -413,26 +422,24 @@ def get_online_friends(db: Session, user_id: int):
     friend_ids = _get_friend_ids(db, user_id)
     if not friend_ids:
         return []
-    return db.query(User).filter(
-        User.id.in_(friend_ids), User.is_online == True).all()
+    return [u for u in db.query(User).filter(User.id.in_(friend_ids)).all()
+            if looks_online(u)]
 
 
 def get_offline_friends(db: Session, user_id: int):
     friend_ids = _get_friend_ids(db, user_id)
     if not friend_ids:
         return []
-    return db.query(User).filter(
-        User.id.in_(friend_ids), User.is_online == False).all()
+    return [u for u in db.query(User).filter(User.id.in_(friend_ids)).all()
+            if not looks_online(u)]
 
 
 def get_online_friends_count(db: Session, user_id: int) -> int:
-    friend_ids = _get_friend_ids(db, user_id)
-    return db.query(User).filter(User.id.in_(friend_ids), User.is_online == True).count()
+    return len(get_online_friends(db, user_id))
 
 
 def get_offline_friends_count(db: Session, user_id: int) -> int:
-    friend_ids = _get_friend_ids(db, user_id)
-    return db.query(User).filter(User.id.in_(friend_ids), User.is_online == False).count()
+    return len(get_offline_friends(db, user_id))
 
 
 # ── Contacts vs friends ──────────────────────────────────────────────────────

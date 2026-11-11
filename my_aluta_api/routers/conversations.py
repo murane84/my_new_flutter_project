@@ -55,7 +55,8 @@ def _conversation_out(db: Session, conv: Conversation, me: int) -> schemas.Conve
         u = db.query(User).filter(User.id == m.user_id).first()
         if u is None:
             continue
-        shown_online = bool(u.is_online and (u.id == me or u.id in _friends))
+        shown_online = bool(crud.looks_online(u)
+                            and (u.id == me or u.id in _friends))
         member_outs.append(
             schemas.ConversationMemberOut(
                 user_id=u.id,

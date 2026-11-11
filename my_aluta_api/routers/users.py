@@ -423,7 +423,7 @@ def lookup_user(
             "id": user.id,
             "username": user.username,
             "avatar_url": user.avatar_url,
-            "is_online": bool(user.is_online) if friend else False,
+            "is_online": crud.looks_online(user) if friend else False,
             "phone": user.phone if (friend or by_phone) else None,
         },
         # "Message" once I've added them; mutual = full friends.

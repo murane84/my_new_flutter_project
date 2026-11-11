@@ -389,6 +389,9 @@ class _CtrlChip extends StatelessWidget {
   final Color activeColor;
   final VoidCallback onTap;
   final String tooltip;
+  // On, but resting (shuffle under Repeat One): an accent outline and
+  // accent icon on the idle key — clearly "still yours", not playing.
+  final bool resting;
 
   const _CtrlChip({
     required this.icon,
@@ -396,6 +399,7 @@ class _CtrlChip extends StatelessWidget {
     required this.activeColor,
     required this.onTap,
     required this.tooltip,
+    this.resting = false,
   });
 
   @override
@@ -430,8 +434,10 @@ class _CtrlChip extends StatelessWidget {
             border: Border.all(
               color: active
                   ? activeColor.withValues(alpha: 0.85)
-                  : _keyEdge(scheme),
-              width: active ? 1.6 : 1,
+                  : resting
+                      ? activeColor.withValues(alpha: 0.75)
+                      : _keyEdge(scheme),
+              width: active || resting ? 1.6 : 1,
             ),
             boxShadow: _glassLift(
                 scheme, active ? activeColor : scheme.primary,
@@ -443,7 +449,9 @@ class _CtrlChip extends StatelessWidget {
             // Full-strength icons: crisp on any background.
             color: active
                 ? onAccent(activeColor)
-                : Color.alphaBlend(
+                : resting
+                    ? activeColor
+                    : Color.alphaBlend(
                     scheme.primary.withValues(alpha: 0.18),
                     scheme.onSurface.withValues(alpha: 0.95),
                   ),

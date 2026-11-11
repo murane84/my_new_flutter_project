@@ -450,12 +450,18 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  // Same accent as Repeat (one family of mode keys).
                   _CtrlChip(
                     icon: Icons.shuffle_rounded,
                     active: _effShuffle,
-                    activeColor: Colors.green,
+                    resting: _shuffleResting,
+                    activeColor: accent,
                     onTap: _toggleShuffle,
-                    tooltip: _liveActive ? 'Shuffle · session' : 'Shuffle',
+                    tooltip: _liveActive
+                        ? 'Shuffle · session'
+                        : _shuffleResting
+                            ? 'Shuffle · resting while Repeat One plays — tap to resume'
+                            : 'Shuffle',
                   ),
                   const SizedBox(width: 14),
                   _CtrlBtn(

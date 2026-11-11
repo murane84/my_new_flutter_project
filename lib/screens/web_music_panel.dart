@@ -549,8 +549,18 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     _queueRev.value++;
   }
 
+  // Same rules as the app player: shuffle and Repeat All play together;
+  // Repeat One rests shuffle (it comes back when One ends); tapping shuffle
+  // while it rests resumes it and Repeat goes back to All.
   void _toggleShuffle() {
-    setState(() => _shuffle = !_shuffle);
+    setState(() {
+      if (_shuffle && _repeat == _repeatOne) {
+        _repeat = _repeatAll;
+      } else {
+        _shuffle = !_shuffle;
+        if (_shuffle && _repeat == _repeatOne) _repeat = _repeatAll;
+      }
+    });
     _queueRev.value++;
   }
 
@@ -1369,9 +1379,11 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                 theme,
                 icon: Icons.shuffle_rounded,
                 size: 18,
-                tooltip: 'Shuffle',
+                tooltip: _shuffle && _repeat == _repeatOne
+                    ? 'Shuffle · resting while Repeat One plays — tap to resume'
+                    : 'Shuffle',
                 onTap: _queue.length > 1 ? _toggleShuffle : null,
-                active: _shuffle,
+                active: _shuffle && _repeat != _repeatOne,
               ),
               const SizedBox(width: 8),
               _discBtn(

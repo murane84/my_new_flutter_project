@@ -636,12 +636,15 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                               _CtrlChip(
                                 icon: Icons.shuffle_rounded,
                                 active: _effShuffle,
-                                activeColor: Colors.green,
+                                resting: _shuffleResting,
+                                activeColor: accent,
                                 onTap: () {
                                   _toggleShuffle();
                                   setFull(() {});
                                 },
-                                tooltip: 'Shuffle',
+                                tooltip: _shuffleResting
+                                    ? 'Shuffle · resting while Repeat One plays — tap to resume'
+                                    : 'Shuffle',
                               ),
                               _CtrlBtn(
                                 icon: Icons.skip_previous_rounded,

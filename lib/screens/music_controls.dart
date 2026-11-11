@@ -313,7 +313,23 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   bool _repeatAll = false;
   bool _repeatOne = false;
+  // Shuffle is what the listener ASKED for; Repeat One only rests it (one
+  // song can't be shuffled) and it comes back when Repeat One ends. Only
+  // the shuffle key itself turns shuffle off — and only the repeat key
+  // turns repeat off.
   bool _shuffle = false;
+  // What Repeat was before Repeat One (so turning shuffle back on can put
+  // it back: All stays All, Off stays Off).
+  bool _repeatAllBeforeOne = false;
+  // Shuffle without repeats: every song once before any comes round again.
+  final List<int> _shuffleBag = [];
+
+  /// Shuffle actually steering playback right now.
+  bool get _shuffleActive => _shuffle && !_repeatOne;
+
+  /// Shuffle is on but resting while Repeat One plays.
+  bool get _shuffleResting =>
+      !(_liveActive && _live != null) && _shuffle && _repeatOne;
   double _volume = 1.0;
   bool _muted = false;
   // Soft transitions: a short fade-in at the start of a track and fade-out
@@ -1661,7 +1677,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     // Navigate within the current scope (active queue, or whole library).
     final scope = _scopeIndices();
     if (scope.isEmpty) return;
-    if (_shuffle) {
+    if (_shuffleActive) {
       _play(_peekNextIndex() ?? scope.first);
       return;
     }
@@ -1706,7 +1722,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     if (_playlist.isEmpty) return;
     final scope = _scopeIndices();
     if (scope.isEmpty) return;
-    if (_shuffle) {
+    if (_shuffleActive) {
       _play(_peekNextIndex() ?? scope.first);
       return;
     }
@@ -1726,15 +1742,19 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     if (_playlist.isEmpty || _currentIndex < 0) return null;
     final scope = _scopeIndices();
     if (scope.isEmpty) return null;
-    if (_shuffle) {
+    if (_shuffleActive) {
       if (scope.length < 2) return null;
       final s = _shuffleNext;
       if (s == null || s == _currentIndex || !scope.contains(s)) {
-        var pick = scope[_rng.nextInt(scope.length)];
-        if (pick == _currentIndex) {
-          pick = scope[(scope.indexOf(pick) + 1) % scope.length];
+        // A shuffled deck: draw until every song has played once, then
+        // reshuffle — no song comes back before the others had their turn.
+        _shuffleBag.removeWhere((i) => !scope.contains(i) || i == _currentIndex);
+        if (_shuffleBag.isEmpty) {
+          _shuffleBag
+            ..addAll(scope.where((i) => i != _currentIndex))
+            ..shuffle(_rng);
         }
-        _shuffleNext = pick;
+        _shuffleNext = _shuffleBag.removeLast();
       }
       return _shuffleNext;
     }
@@ -1874,7 +1894,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   }
 
   bool get _effShuffle =>
-      (_liveActive && _live != null) ? _live!.shuffle : _shuffle;
+      (_liveActive && _live != null) ? _live!.shuffle : _shuffleActive;
 
   void _cycleRepeat() {
     // In a live session, cycle the SHARED repeat mode (host or listener — the
@@ -1892,21 +1912,25 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       setState(() {});
       return;
     }
+    // Off → All → One → Off. Shuffle is never switched off from here:
+    // All and shuffle play together (the whole list, shuffled, on and on);
+    // One rests shuffle, and it comes back as soon as One ends.
     setState(() {
       if (!_repeatAll && !_repeatOne) {
         _repeatAll = true;
-        _repeatOne = false;
-        _shuffle = false;
-        _snack('Repeat All');
+        _snack(_shuffle ? 'Repeat All · shuffled' : 'Repeat All');
       } else if (_repeatAll) {
+        _repeatAllBeforeOne = true;
         _repeatAll = false;
         _repeatOne = true;
-        _shuffle = false;
-        _snack('Repeat One');
+        _snack(_shuffle
+            ? 'Repeat One · shuffle rests until it ends'
+            : 'Repeat One');
       } else {
         _repeatAll = false;
         _repeatOne = false;
-        _snack('Repeat Off');
+        _shuffleNext = null;
+        _snack(_shuffle ? 'Repeat Off · shuffle is back' : 'Repeat Off');
       }
     });
     _savePlayModes();
@@ -1923,12 +1947,24 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       return;
     }
     setState(() {
-      _shuffle = !_shuffle;
-      if (_shuffle) {
-        _repeatAll = false;
+      _shuffleNext = null;
+      if (_shuffle && _repeatOne) {
+        // Resting under Repeat One → bring shuffle back: Repeat returns to
+        // what it was before One (All stays All, Off stays Off).
         _repeatOne = false;
+        _repeatAll = _repeatAllBeforeOne;
+        _snack(_repeatAll ? 'Shuffle On · Repeat All' : 'Shuffle On');
+      } else {
+        _shuffle = !_shuffle;
+        if (_shuffle && _repeatOne) {
+          _repeatOne = false;
+          _repeatAll = _repeatAllBeforeOne;
+        }
+        if (_shuffle) _shuffleBag.clear(); // a fresh deck
+        _snack(_shuffle
+            ? (_repeatAll ? 'Shuffle On · Repeat All' : 'Shuffle On')
+            : 'Shuffle Off');
       }
-      _snack(_shuffle ? 'Shuffle On' : 'Shuffle Off');
     });
     _savePlayModes();
   }
@@ -1965,7 +2001,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       setState(() {
         _repeatOne = mode == 'one';
         _repeatAll = mode == 'all';
-        _shuffle = shuffle && mode == 'off';
+        _shuffle = shuffle; // kept as asked (Repeat One only rests it)
       });
     } catch (_) {}
   }
@@ -2494,6 +2530,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       // The mini player's ⋮ reads these live each time it opens.
       playModes: () => (
             shuffle: _effShuffle,
+            shuffleResting: _shuffleResting,
             repeat: _effRepeatMode,
             ab: _abB != null ? 2 : (_abA != null ? 1 : 0),
             abText: _abA == null

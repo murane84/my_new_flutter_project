@@ -40,7 +40,14 @@ class _PlaylistOverlay extends StatefulWidget {
   // Play modes for the mini player's ⋮ (read live each time it opens):
   // shuffle on/off, repeat 'off' | 'all' | 'one', A-B step 0 off · 1 A set ·
   // 2 looping. In a live session these are the room's shared modes.
-  final ({bool shuffle, String repeat, int ab, String abText, bool live})
+  final ({
+    bool shuffle,
+    bool shuffleResting,
+    String repeat,
+    int ab,
+    String abText,
+    bool live
+  })
           Function()?
       playModes;
   final VoidCallback? onShuffle;
@@ -2607,7 +2614,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                         icon: Builder(builder: (_) {
                           final m = widget.playModes?.call();
                           final on = m != null &&
-                              (m.shuffle || m.repeat != 'off' || m.ab > 0);
+                              (m.shuffle ||
+                                  m.shuffleResting ||
+                                  m.repeat != 'off' ||
+                                  m.ab > 0);
                           return Badge(
                             isLabelVisible: on,
                             smallSize: 6,
@@ -2641,7 +2651,11 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                                   m.shuffle
                                       ? Icons.shuffle_on_rounded
                                       : Icons.shuffle_rounded,
-                                  m.shuffle ? 'Shuffle · on' : 'Shuffle · off',
+                                  m.shuffle
+                                      ? 'Shuffle · on'
+                                      : m.shuffleResting
+                                          ? 'Shuffle · resting (Repeat one)'
+                                          : 'Shuffle · off',
                                   scheme),
                             ),
                             PopupMenuItem<String>(

@@ -482,7 +482,21 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// circle (never while typing).
   bool _onCircleKey(KeyEvent e) {
     if (e is! KeyDownEvent) return false;
-    if (!HardwareKeyboard.instance.isAltPressed) return false;
+    final kb = HardwareKeyboard.instance;
+    // Ctrl+Shift+F (⌘⇧F on a Mac): the chat panel full screen ↔ back —
+    // the same as its ⤢ button (desktop / wide web only, Home in front).
+    if ((kb.isControlPressed || kb.isMetaPressed) &&
+        kb.isShiftPressed &&
+        e.logicalKey == LogicalKeyboardKey.keyF) {
+      if (!mounted ||
+          MediaQuery.sizeOf(context).width < 640 ||
+          ModalRoute.of(context)?.isCurrent != true) {
+        return false;
+      }
+      _toggleChatFullScreen();
+      return true;
+    }
+    if (!kb.isAltPressed) return false;
     final i = [
       LogicalKeyboardKey.digit1,
       LogicalKeyboardKey.digit2,
@@ -4320,6 +4334,22 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   // ── Music panel ───────────────────────────────────────────────────────────
 
+  /// The chat panel full screen ↔ back to the split (the ⤢ button and
+  /// Ctrl+Shift+F). Remembered across launches.
+  void _toggleChatFullScreen() {
+    setState(() {
+      if (!_isChatFullScreen) {
+        _prevMusicWidth = _musicPanelWidth;
+        _isChatFullScreen = true;
+        _isMusicFullScreen = false;
+      } else {
+        _musicPanelWidth = _prevMusicWidth;
+        _isChatFullScreen = false;
+      }
+    });
+    _saveLayoutState();
+  }
+
   Widget _buildMusicHeader(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Row(
@@ -5194,19 +5224,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
         ] else ...[
           _PanelToggleBtn(
             isFullScreen: _isChatFullScreen,
-            onTap: () {
-              setState(() {
-                if (!_isChatFullScreen) {
-                  _prevMusicWidth = _musicPanelWidth;
-                  _isChatFullScreen = true;
-                  _isMusicFullScreen = false;
-                } else {
-                  _musicPanelWidth = _prevMusicWidth;
-                  _isChatFullScreen = false;
-                }
-              });
-              _saveLayoutState();
-            },
+            tooltip: _isChatFullScreen
+                ? 'Exit full screen  (Ctrl+Shift+F)'
+                : 'Full screen  (Ctrl+Shift+F)',
+            onTap: _toggleChatFullScreen,
           ),
           const SizedBox(width: 10),
           // Brand mark leads the desktop header; the HARMONY / CIRCLE column

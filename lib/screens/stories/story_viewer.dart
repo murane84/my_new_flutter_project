@@ -51,6 +51,10 @@ class StoryHooks {
   static bool Function(String title)? playOnMine;
 }
 
+/// The shared-element tag of an author's story photo (tray bubble ⇄ the
+/// viewer's header).
+String storyHeroTag(int authorId) => 'story-avatar-$authorId';
+
 class StoryViewerScreen extends StatefulWidget {
   final List<StoryGroup> groups;
   final int startGroup;
@@ -1243,7 +1247,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       padding: const EdgeInsets.fromLTRB(12, 6, 8, 0),
       child: Row(
         children: [
-          CircleAvatar(
+          // Same photo as the status bubble I tapped: it flies here on open
+          // and back to the bubble of whoever I'm on when I close.
+          Hero(
+            tag: storyHeroTag(_group.authorId),
+            child: CircleAvatar(
             radius: 18,
             backgroundColor: Colors.white24,
             backgroundImage: avatar != null
@@ -1256,6 +1264,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                         : '?',
                     style: const TextStyle(color: Colors.white))
                 : null,
+          ),
           ),
           const SizedBox(width: 10),
           Expanded(

@@ -391,7 +391,10 @@ class _StoriesTrayState extends State<StoriesTray> {
                 color: readableOn(Theme.of(context).colorScheme.primary), size: badgeSize * 0.68),
           ),
         ),
-        child: _avatarCircle(avatar, widget.myName, avatarRadius),
+        child: Hero(
+          tag: storyHeroTag(widget.myUserId ?? -1),
+          child: _avatarCircle(avatar, widget.myName, avatarRadius),
+        ),
       ),
     );
   }
@@ -421,7 +424,11 @@ class _StoriesTrayState extends State<StoriesTray> {
         badge: partner
             ? Text('💞', style: TextStyle(fontSize: badgeSize * 0.7))
             : null,
-        child: _avatarCircle(avatar, _nameFor(g), avatarRadius),
+        // The photo flies into the viewer's header (and back to here).
+        child: Hero(
+          tag: storyHeroTag(g.authorId),
+          child: _avatarCircle(avatar, _nameFor(g), avatarRadius),
+        ),
       ),
     );
     return muted ? Opacity(opacity: 0.5, child: tile) : tile;

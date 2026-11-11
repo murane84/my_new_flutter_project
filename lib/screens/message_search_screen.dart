@@ -12,6 +12,8 @@ import '../utils/time_utils.dart' show parseServerTime;
 import '../utils/prefs_now.dart';
 import '../widgets/genie_menu.dart';
 import '../widgets/edge_scroll_row.dart';
+import '../widgets/slide_track.dart';
+import '../services/haptics.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 
 /// Global search across my chats: the PEOPLE and GROUPS whose names match
@@ -461,7 +463,50 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
     return l.isEmpty ? c : '$l · $c';
   }
 
-  /// The chips under the bar: what kind, from whom, which chat, when.
+  /// Short names for the kind track (the browse list keeps the long ones).
+  static String _kindShort(String k) => switch (k) {
+        'media' => 'Photos',
+        'link' => 'Links',
+        'voice' => 'Voice',
+        'song' => 'Songs',
+        _ => 'Files',
+      };
+
+  static const _kinds = ['media', 'link', 'voice', 'song', 'file'];
+
+  /// What kind — one at a time — on Aluta's one sliding bar (the same as
+  /// Circle's sections and Glow's categories), All first.
+  Widget _kindTrack() {
+    final sel = _kind == null ? 0 : _kinds.indexOf(_kind!) + 1;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: SlideTrack(
+        count: _kinds.length + 1,
+        selected: sel < 0 ? 0 : sel,
+        fold: true,
+        segment: (context, i, selected, labelled, onKey) {
+          final k = i == 0 ? null : _kinds[i - 1];
+          return SlideTrackSegment(
+            icon: k == null ? Icons.all_inclusive_rounded : _kindIcon(k),
+            label: k == null ? 'All' : _kindShort(k),
+            tooltip: labelled ? '' : (k == null ? 'All' : _kindLabel(k)),
+            selected: selected,
+            labelled: labelled,
+            onKey: onKey,
+            onTap: () {
+              if (_kind == k) return;
+              Haptics.tab();
+              _setFilter(() => _kind = k);
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  /// Under the kind track, quieter: from whom, which chat, when — these
+  /// combine, so they're dropdown chips (outlined; accent once set), never
+  /// a second lit control.
   Widget _filterBar(ColorScheme scheme) {
     // Every chip first glides fully into view (its neighbours peek in, so
     // the row reveals the rest by itself), then acts — a menu chip opens
@@ -471,14 +516,13 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
         Builder(builder: (c) => Padding(
           padding: const EdgeInsets.only(right: 6),
           child: Material(
-            color: on
-                ? scheme.primary.withValues(alpha: 0.16)
-                : scheme.surfaceContainerHighest,
+            color: Colors.transparent,
             shape: StadiumBorder(
                 side: BorderSide(
+                    width: on ? 1.4 : 1,
                     color: on
-                        ? scheme.primary.withValues(alpha: 0.6)
-                        : scheme.outlineVariant.withValues(alpha: 0.45))),
+                        ? scheme.primary.withValues(alpha: 0.75)
+                        : scheme.outlineVariant.withValues(alpha: 0.6))),
             child: InkWell(
               customBorder: const StadiumBorder(),
               onTap: () async {
@@ -525,10 +569,6 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           children: [
-            for (final k in const ['media', 'link', 'voice', 'song', 'file'])
-              chip(_kindLabel(k), _kind == k,
-                  (_) => _setFilter(() => _kind = _kind == k ? null : k),
-                  icon: _kindIcon(k)),
             chip(
                 from,
                 _sender != null,
@@ -1018,8 +1058,10 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
           child: _glassBar(scheme, isDark),
         ),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(42),
+          preferredSize: const Size.fromHeight(86),
           child: Column(children: [
+            _kindTrack(),
+            const SizedBox(height: 8),
             _filterBar(scheme),
             const SizedBox(height: 8),
             _loading

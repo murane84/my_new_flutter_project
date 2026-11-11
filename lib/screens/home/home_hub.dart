@@ -326,98 +326,26 @@ extension _HomeHub on HomePageState {
         // The track takes the row; the 🔍 action sits at its end (All is
         // the way back — no separate minimise button).
         final trackW = cons.maxWidth - 38 - 6;
-        final segW = trackW / segs.length;
-        final labelled = segW >= 74;
         final wideKeys = cons.maxWidth >= 560;
-        final thumbTop = Color.lerp(scheme.primary, Colors.white, 0.22)!;
-        final thumbBot = Color.lerp(scheme.primary, Colors.black, 0.22)!;
-        final onThumb = readableOn(scheme.primary);
         return Row(children: [
+          // Aluta's one sliding bar (Glow and search use the same).
           SizedBox(
             width: trackW,
-            height: 38,
-            child: DecoratedBox(
-              // The sunken track: darker at the top (an inset shadow).
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(19),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: isDark
-                      ? [
-                          Color.lerp(scheme.surface, Colors.black, 0.45)!,
-                          scheme.surfaceContainerHigh,
-                        ]
-                      : [
-                          Color.lerp(scheme.surfaceContainerHighest,
-                              Colors.black, 0.10)!,
-                          scheme.surfaceContainerHighest,
-                        ],
-                ),
-                border: Border.all(
-                    color: scheme.outlineVariant.withValues(alpha: 0.45)),
+            child: SlideTrack(
+              count: segs.length,
+              selected: sel,
+              segment: (context, i, selected, labelled, onKey) => _switchSeg(
+                scheme,
+                segs[i],
+                selected: selected,
+                labelled: labelled,
+                onThumb: onKey,
+                tip: wideKeys
+                    ? '   Alt+${HomePageState.kCircleViews.indexOf(segs[i].$1) + 1}'
+                    : '',
+                peek: () => _peekContent(
+                    segs[i].$1, listening, circle, scheme, textColor),
               ),
-              child: Stack(children: [
-                // The raised, lit key — slides (with a little spring).
-                AnimatedPositioned(
-                  duration: const Duration(milliseconds: 360),
-                  curve: Curves.easeOutBack,
-                  left: sel * segW + 3,
-                  top: 3,
-                  bottom: 3,
-                  width: segW - 6,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [thumbTop, scheme.primary, thumbBot],
-                        stops: const [0.0, 0.55, 1.0],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: scheme.primary.withValues(alpha: 0.45),
-                          blurRadius: 10,
-                          offset: const Offset(0, 3),
-                        ),
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.30),
-                          blurRadius: 3,
-                          offset: const Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                    // A glassy highlight along its top edge.
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: Container(
-                        height: 1.2,
-                        margin: const EdgeInsets.symmetric(horizontal: 10),
-                        color: Colors.white.withValues(alpha: 0.35),
-                      ),
-                    ),
-                  ),
-                ),
-                Row(children: [
-                  for (var i = 0; i < segs.length; i++)
-                    SizedBox(
-                      width: segW,
-                      child: _switchSeg(
-                        scheme,
-                        segs[i],
-                        selected: i == sel,
-                        labelled: labelled,
-                        onThumb: onThumb,
-                        tip: wideKeys
-                            ? '   Alt+${HomePageState.kCircleViews.indexOf(segs[i].$1) + 1}'
-                            : '',
-                        peek: () => _peekContent(
-                            segs[i].$1, listening, circle, scheme, textColor),
-                      ),
-                    ),
-                ]),
-              ]),
             ),
           ),
           const SizedBox(width: 6),

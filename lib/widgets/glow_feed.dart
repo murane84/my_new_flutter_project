@@ -14,6 +14,7 @@ import 'section_switch.dart';
 import '../screens/api_service.dart';
 import '../screens/stories/quick_status_sheet.dart';
 import '../services/haptics.dart';
+import 'slide_track.dart';
 
 int _glowDaySeed() {
   final d = DateTime.now();
@@ -321,10 +322,10 @@ class _GlowFeedState extends State<GlowFeed> {
     });
   }
 
-  /// The categories as a SEGMENTED TRACK, not another row of pills: one soft
-  /// rounded track holding icon + label tabs, the chosen one lifting out as a
-  /// white "thumb" with an accent icon. A clear second level under the
-  /// Harmony / Circle / Glow pills (which navigate), instead of pills on pills.
+  /// The categories on Aluta's one sliding bar (the same as Circle's All ·
+  /// Status · Listening · Circle): a sunken track, the chosen category a lit
+  /// key sliding to it. On a narrow track the chosen one opens to icon +
+  /// label and the others fold to icons — all six fit, no sideways scroll.
   Widget _filters(ColorScheme scheme) {
     const tabs = {
       _Filter.all: (Icons.auto_awesome_rounded, 'For you'),
@@ -334,154 +335,24 @@ class _GlowFeedState extends State<GlowFeed> {
       _Filter.healthy: (Icons.shield_rounded, 'Healthy love'),
       _Filter.saved: (Icons.bookmark_rounded, 'Saved'),
     };
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final track = isDark
-        ? scheme.surfaceContainerHighest.withValues(alpha: 0.6)
-        : Color.alphaBlend(scheme.primary.withValues(alpha: 0.06),
-            scheme.surfaceContainerHighest.withValues(alpha: 0.7));
-    // Balanced at every width — the tabs always span the whole track:
-    //  • roomy (desktop / tablet): six equal tabs, icon + label each;
-    //  • compact (phone): the chosen tab opens to icon + label, the others
-    //    fold to icons (with a tooltip) — all six fit, no sideways scroll.
-    // Same height and pill shape as Circle's switcher / Harmony's search
-    // (38 px, fully round), so the first row never jumps between layers.
-    return Container(
-      height: 38,
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: track,
-        borderRadius: BorderRadius.circular(19),
-        border: Border.all(
-            color: scheme.outlineVariant.withValues(alpha: isDark ? 0.4 : 0.6)),
-      ),
-      child: LayoutBuilder(builder: (context, box) {
-        final compact = box.maxWidth < 560;
-        _compactTabs = compact;
-        final n = _Filter.values.length;
-        final row = Row(
-          children: [
-            for (final f in _Filter.values)
-              Expanded(
-                flex: compact ? (_filter == f ? 7 : 3) : 1,
-                child: _segment(
-                    scheme,
-                    isDark,
-                    tabs[f]!.$1,
-                    tabs[f]!.$2,
-                    _filter == f,
-                    () => _pickFilter(f),
-                    showLabel: !compact || _filter == f,
-                    // Roomy: the white thumb is ONE piece sliding under
-                    // the tabs (like Circle's switcher), not each tab
-                    // fading its own background in and out.
-                    ownThumb: compact),
-              ),
-          ],
-        );
-        if (compact) return row;
-        return Stack(children: [
-          AnimatedAlign(
-            duration: const Duration(milliseconds: 320),
-            curve: Curves.easeOutBack,
-            alignment:
-                Alignment(-1 + 2 * _filter.index / (n - 1), 0),
-            child: FractionallySizedBox(
-              widthFactor: 1 / n,
-              heightFactor: 1,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 1),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: isDark ? scheme.surface : Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                        color: scheme.primary.withValues(alpha: 0.28)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black
-                            .withValues(alpha: isDark ? 0.35 : 0.10),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          row,
-        ]);
-      }),
-    );
-  }
-
-  Widget _segment(ColorScheme scheme, bool isDark, IconData icon, String label,
-      bool on, VoidCallback onTap,
-      {bool showLabel = true, bool ownThumb = true}) {
-    final fg = on ? scheme.primary : scheme.onSurfaceVariant;
-    final thumb = on && ownThumb;
-    return Tooltip(
-      message: showLabel ? '' : label,
-      child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 1),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: thumb
-                  ? (isDark ? scheme.surface : Colors.white)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
-              border: thumb
-                  ? Border.all(
-                      color: scheme.primary.withValues(alpha: 0.28))
-                  : null,
-              boxShadow: thumb
-                  ? [
-                      BoxShadow(
-                        color: Colors.black
-                            .withValues(alpha: isDark ? 0.35 : 0.10),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ]
-                  : null,
-            ),
-            // Never wraps or clips: the label scales down a touch if the
-            // tab is tight (e.g. "Healthy love" on a narrow panel).
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: showLabel ? 16 : 18, color: fg),
-                  if (showLabel) ...[
-                    const SizedBox(width: 6),
-                    Text(label,
-                        maxLines: 1,
-                        softWrap: false,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: on ? FontWeight.w800 : FontWeight.w600,
-                          color:
-                              on ? scheme.onSurface : scheme.onSurfaceVariant,
-                        )),
-                  ],
-                ],
-              ),
-            ),
-          ),
+    final vals = _Filter.values;
+    return LayoutBuilder(builder: (context, box) {
+      // Where the ripple starts (see _pickFilter) follows the same fold.
+      _compactTabs = box.maxWidth / vals.length < SlideTrack.labelWidth;
+      return SlideTrack(
+        count: vals.length,
+        selected: _filter.index,
+        fold: true,
+        segment: (context, i, selected, labelled, onKey) => SlideTrackSegment(
+          icon: tabs[vals[i]]!.$1,
+          label: tabs[vals[i]]!.$2,
+          selected: selected,
+          labelled: labelled,
+          onKey: onKey,
+          onTap: () => _pickFilter(vals[i]),
         ),
-      ),
-      ),
-    );
+      );
+    });
   }
 
   ({IconData icon, String label}) _kindOf(GlowKind k) => switch (k) {

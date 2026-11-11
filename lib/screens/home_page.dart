@@ -143,6 +143,7 @@ import '../services/gallery_autosave.dart';
 import '../widgets/week_in_music_sheet.dart';
 import '../widgets/pill_search.dart';
 import '../services/haptics.dart';
+import '../widgets/slide_track.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog

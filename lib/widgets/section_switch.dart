@@ -163,7 +163,8 @@ class SectionSwitch extends StatelessWidget {
   /// The revealed area of a revealing style at reveal progress [r] (0..1);
   /// null for styles that don't reveal.
   static CustomClipper<Path>? _revealClip(
-      SectionTransitionStyle s, double r, double dir, double? rippleFrom) {
+      SectionTransitionStyle s, double r, double dir, double? rippleFrom,
+      {bool finger = false}) {
     switch (s) {
       case SectionTransitionStyle.ripple:
         return _RippleClipper(Curves.easeInOutCubic.transform(r),
@@ -172,7 +173,9 @@ class SectionSwitch extends StatelessWidget {
         // The sweep starts on the side the new page COMES FROM (forward =
         // from the right, like the slide and a finger dragging left) —
         // the clippers count their own way, hence -dir.
-        return _WaveClipper(waveCurve.transform(r), -dir);
+        // Under a finger the edge stays right under it (no curve); on a
+        // tap it travels on the soft wave curve.
+        return _WaveClipper(finger ? r : waveCurve.transform(r), -dir);
       case SectionTransitionStyle.equaliser:
         return _BarsClipper(r, -dir);
       default:
@@ -184,7 +187,7 @@ class SectionSwitch extends StatelessWidget {
   /// leaving) — also driven by a finger in the chat screen's swipe path.
   static Widget frame(SectionTransitionStyle s, Widget w, double t,
       bool incoming, double dir, Color accent,
-      {double? rippleFrom}) {
+      {double? rippleFrom, bool finger = false}) {
     final e = _ease(t);
     switch (s) {
       case SectionTransitionStyle.slide:
@@ -235,16 +238,20 @@ class SectionSwitch extends StatelessWidget {
         // (its reveal is at 1 - t).
         if (!incoming) {
           return ClipPath(
-            clipper: _Outside(_revealClip(s, 1 - t, dir, rippleFrom)!),
+            clipper: _Outside(
+                _revealClip(s, 1 - t, dir, rippleFrom, finger: finger)!),
             child: w,
           );
         }
         final revealed =
-            ClipPath(clipper: _revealClip(s, t, dir, rippleFrom), child: w);
+            ClipPath(
+                clipper: _revealClip(s, t, dir, rippleFrom, finger: finger),
+                child: w);
         if (s != SectionTransitionStyle.wave) return revealed;
         return Stack(fit: StackFit.expand, children: [
           revealed,
-          _WaveLine(t: t, dir: -dir, color: accent, opacity: 1),
+          _WaveLine(
+              t: t, dir: -dir, color: accent, opacity: 1, finger: finger),
         ]);
       case SectionTransitionStyle.cube:
         // A real cube: the two pages are neighbouring faces sharing ONE
@@ -336,7 +343,7 @@ class SectionSwitch extends StatelessWidget {
         // Stays put; only what isn't revealed yet shows (below).
         break;
     }
-    final reveal = _revealClip(s, p, dir, null);
+    final reveal = _revealClip(s, p, dir, null, finger: true);
     return Opacity(
       opacity: o.clamp(0.0, 1.0),
       child: Transform(
@@ -434,14 +441,17 @@ class _WaveLine extends StatelessWidget {
       {required this.t,
       required this.dir,
       required this.color,
-      required this.opacity});
+      required this.opacity,
+      this.finger = false});
   final double t, dir, opacity;
   final Color color;
+  final bool finger;
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
         child: CustomPaint(
-          painter: _WavePainter(SectionSwitch.waveCurve.transform(t), dir,
+          painter: _WavePainter(
+              finger ? t : SectionSwitch.waveCurve.transform(t), dir,
               color.withValues(alpha: opacity * math.sin(math.pi * t))),
         ),
       );

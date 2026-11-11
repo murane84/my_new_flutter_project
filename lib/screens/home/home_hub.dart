@@ -1284,7 +1284,7 @@ class _SwipePathState extends State<_SwipePath>
                   if (next != null && p > 0)
                     IgnorePointer(
                       child: SectionSwitch.frame(
-                          st, next, p, true, dir, accent),
+                          st, next, p, true, dir, accent, finger: true),
                     ),
                 ]),
               );

@@ -12,7 +12,8 @@ enum SectionTransitionStyle {
   wave,
   fade,
   equaliser,
-  slideWave,
+  // (Replaced "slide + wave": anyone who had it lands on the default.)
+  heartbeat,
   cube,
 }
 
@@ -24,7 +25,7 @@ extension SectionTransitionInfo on SectionTransitionStyle {
         SectionTransitionStyle.wave => 'Waveform wipe',
         SectionTransitionStyle.fade => 'Fade-through',
         SectionTransitionStyle.equaliser => 'Equaliser bars',
-        SectionTransitionStyle.slideWave => 'Slide + wave',
+        SectionTransitionStyle.heartbeat => 'Heartbeat',
         SectionTransitionStyle.cube => '3D turn',
       };
 
@@ -36,8 +37,8 @@ extension SectionTransitionInfo on SectionTransitionStyle {
           'A sound-wave edge sweeps it in — Aluta default',
         SectionTransitionStyle.fade => 'Simplest — a soft fade',
         SectionTransitionStyle.equaliser => 'Rises in like equaliser bars',
-        SectionTransitionStyle.slideWave =>
-          'The slide, with a faint wave passing',
+        SectionTransitionStyle.heartbeat =>
+          'The new page beats in once, like a pulse',
         SectionTransitionStyle.cube => 'Turns like a cube face',
       };
 }

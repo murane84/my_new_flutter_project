@@ -105,6 +105,19 @@ class SectionSwitch extends StatelessWidget {
 
   static double _ease(double t) => Curves.easeOutCubic.transform(t);
 
+  /// One heartbeat for the arriving page, k 0 → 1: from 0.92 up past full
+  /// size (1.025, the "lub"), a small give (0.995, the "dub"), then home.
+  static double _beat(double k) {
+    if (k < 0.55) {
+      return 0.92 + (1.025 - 0.92) * Curves.easeOutCubic.transform(k / 0.55);
+    }
+    if (k < 0.78) {
+      return 1.025 -
+          (1.025 - 0.995) * Curves.easeInOut.transform((k - 0.55) / 0.23);
+    }
+    return 0.995 + 0.005 * Curves.easeOut.transform((k - 0.78) / 0.22);
+  }
+
   static Widget _layout(Widget? cur, List<Widget> prev) {
     final ck = cur == null ? null : _innerKey(cur);
     return Stack(fit: StackFit.expand, children: [
@@ -161,13 +174,24 @@ class SectionSwitch extends StatelessWidget {
     switch (s) {
       case SectionTransitionStyle.slide:
         return _slide(w, t, incoming, dir);
-      case SectionTransitionStyle.slideWave:
-        return incoming
-            ? Stack(fit: StackFit.expand, children: [
-                _slide(w, t, incoming, dir),
-                _WaveLine(t: t, dir: -dir, color: accent, opacity: 0.45),
-              ])
-            : _slide(w, t, incoming, dir);
+      case SectionTransitionStyle.heartbeat:
+        // Lub-dub: the leaving page settles back and is gone by 40 %; the
+        // arriving one (from 15 %) beats in — a little past full size, then
+        // home — drifting a touch from its side so swipes still read.
+        if (!incoming) {
+          return Opacity(
+            opacity: _outFade(t),
+            child: Transform.scale(scale: 0.96 + 0.04 * t, child: w),
+          );
+        }
+        final k = ((t - 0.15) / 0.85).clamp(0.0, 1.0);
+        return Opacity(
+          opacity: _inFade(t),
+          child: Transform.translate(
+            offset: Offset((1 - _ease(k)) * 14 * dir, 0),
+            child: Transform.scale(scale: _beat(k), child: w),
+          ),
+        );
       case SectionTransitionStyle.depth:
         return Opacity(
           opacity: incoming ? _inFade(t) : _outFade(t),
@@ -275,9 +299,11 @@ class SectionSwitch extends StatelessWidget {
     final out = _outFade(1 - p);
     switch (s) {
       case SectionTransitionStyle.slide:
-      case SectionTransitionStyle.slideWave:
         o = out;
         m = Matrix4.translationValues(-30 * dir * _ease(p), 0, 0);
+      case SectionTransitionStyle.heartbeat:
+        o = out;
+        m = Matrix4.diagonal3Values(1 - 0.04 * p, 1 - 0.04 * p, 1);
       case SectionTransitionStyle.depth:
         o = out;
         m = Matrix4.diagonal3Values(1 - 0.07 * p, 1 - 0.07 * p, 1);

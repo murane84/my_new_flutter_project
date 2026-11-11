@@ -88,6 +88,8 @@ Future<void> showUserProfile(
   String? netGrade,
   // DM friends: count the secret hearts between you.
   bool showHearts = false,
+  // Opened from a group: "Message" goes straight to my DM with them.
+  VoidCallback? onMessage,
 }) async {
   // Load the bond first so the card opens with streak + hearts + status
   // already in place. Seen before → open instantly from the cache and
@@ -128,6 +130,7 @@ Future<void> showUserProfile(
       onOpenSpace: onOpenSpace,
       onTuneIn: onTuneIn,
       showHearts: showHearts,
+      onMessage: onMessage,
       initial: initial,
       fresh: fresh,
     ),
@@ -148,6 +151,7 @@ class _UserProfileSheet extends StatefulWidget {
   final VoidCallback? onOpenSpace;
   final VoidCallback? onTuneIn;
   final bool showHearts;
+  final VoidCallback? onMessage;
   final _Bond? initial;
   final Future<_Bond>? fresh;
 
@@ -165,6 +169,7 @@ class _UserProfileSheet extends StatefulWidget {
     this.onOpenSpace,
     this.onTuneIn,
     this.showHearts = false,
+    this.onMessage,
     this.initial,
     this.fresh,
   });
@@ -650,6 +655,23 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
                     child: const Text('Close'),
                   ),
                 ),
+                // From a group: straight into my DM with them (hidden while
+                // either side blocks — the server refuses that DM anyway).
+                if (widget.onMessage != null &&
+                    !(widget.userId != null &&
+                        BlockList.instance.isBlocked(widget.userId!))) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.maybePop(context);
+                        widget.onMessage!();
+                      },
+                      icon: const Icon(Icons.chat_bubble_rounded, size: 18),
+                      label: const Text('Message'),
+                    ),
+                  ),
+                ],
                 if (widget.onCall != null) ...[
                   const SizedBox(width: 10),
                   Expanded(

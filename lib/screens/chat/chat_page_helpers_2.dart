@@ -18,13 +18,38 @@ extension _ChatPageHelpers2 on _ChatPageState {
 
   /// Ask whether to call over the internet (Aluta) or via the device dialer.
   /// Open a group member's profile card (tapped from their message header).
-  void _openMemberProfile(String name, String phone, String avatarRel) {
+  /// "Message" on it goes straight to my DM with them: the group as a
+  /// back door, no trip through the Circle list or a bubble to reply to.
+  void _openMemberProfile(
+      String name, String phone, String avatarRel, int? userId) {
+    final me = int.tryParse(_myId ?? '');
     showUserProfile(
       context,
       username: name,
+      userId: userId,
       phone: phone,
       avatarUrl: avatarRel.isNotEmpty ? fullMediaUrl(avatarRel) : null,
+      onMessage: (userId == null || userId == me)
+          ? null
+          : () => _openDmWith(userId, name, phone, avatarRel),
     );
+  }
+
+  /// My one-on-one chat with [userId], titled by the name I saved for them
+  /// (else their username) — the same as Reply privately, minus the quote.
+  void _openDmWith(int userId, String name, String phone, String avatarRel,
+      {Map<String, dynamic>? replyTo}) {
+    final saved =
+        phone.isNotEmpty ? ContactNames.instance.nameFor(phone) : null;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => ChatPage(
+        friendId: userId,
+        friendName: (saved != null && saved.isNotEmpty) ? saved : name,
+        friendAvatar: avatarRel,
+        textColor: Theme.of(context).colorScheme.onSurface,
+        initialReplyTo: replyTo,
+      ),
+    ));
   }
 
   /// Start an in-app WebRTC voice call. If we're offline, fall back to the

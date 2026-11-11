@@ -16,6 +16,7 @@ import '../widgets/genie_menu.dart';
 import 'user_profile_sheet.dart';
 import '../utils/readable.dart';
 import '../services/contact_names.dart';
+import 'chat_page.dart' show ChatPage;
 import '../widgets/person_avatar.dart';
 import '../utils/avatar_widget.dart' show OnlineDot, OnlineDotBadge, onlineDotFor;
 import '../services/now_playing_presence.dart';
@@ -1326,6 +1327,17 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
         onTuneIn: (track != null && tuneIn != null)
             ? () => tuneIn(context, uid, shown, song)
             : null,
+        // Straight to my DM with them (never with myself).
+        onMessage: isSelf
+            ? null
+            : () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => ChatPage(
+                    friendId: uid,
+                    friendName: shown,
+                    friendAvatar: (m['avatar_url'] ?? '').toString(),
+                    textColor: scheme.onSurface,
+                  ),
+                )),
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(

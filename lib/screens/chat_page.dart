@@ -3558,21 +3558,9 @@ class _ChatPageState extends State<ChatPage>
     final sm = (msg['sender'] as Map?) ?? const {};
     final sid = int.tryParse(msg['sender_id']?.toString() ?? '');
     if (sid == null) return;
-    final phone = (sm['phone'] ?? '').toString();
-    final saved =
-        phone.isNotEmpty ? ContactNames.instance.nameFor(phone) : null;
-    final name = (saved != null && saved.isNotEmpty)
-        ? saved
-        : (sm['username'] ?? 'Friend').toString();
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => ChatPage(
-        friendId: sid,
-        friendName: name,
-        friendAvatar: (sm['avatar_url'] ?? '').toString(),
-        textColor: Theme.of(context).colorScheme.onSurface,
-        initialReplyTo: Map<String, dynamic>.from(msg),
-      ),
-    ));
+    _openDmWith(sid, (sm['username'] ?? 'Friend').toString(),
+        (sm['phone'] ?? '').toString(), (sm['avatar_url'] ?? '').toString(),
+        replyTo: Map<String, dynamic>.from(msg));
   }
 
   void _showMessageMenu(BuildContext context, Map<String, dynamic> msg,
@@ -5862,7 +5850,11 @@ class _ChatPageState extends State<ChatPage>
                           GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTap: () => _openMemberProfile(
-                                rxName, rxPhone, senderAvatar),
+                                rxName,
+                                rxPhone,
+                                senderAvatar,
+                                int.tryParse(
+                                    msg['sender_id']?.toString() ?? '')),
                             child: Padding(
                               padding:
                                   const EdgeInsets.only(bottom: 6, right: 6),

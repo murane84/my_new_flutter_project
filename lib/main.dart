@@ -251,7 +251,17 @@ class MyApp extends StatelessWidget {
         TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
       }),
       appBarTheme: AppBarTheme(
-        backgroundColor: scheme.surface,
+        // Clear at rest; once content scrolls under it the bar takes a soft
+        // frosted tone (no shadow, no tint shift) — headers stop looking
+        // like solid blocks, and you can tell the list is scrolled.
+        backgroundColor: WidgetStateColor.resolveWith((states) =>
+            states.contains(WidgetState.scrolledUnder)
+                ? Color.alphaBlend(
+                    scheme.primary.withValues(alpha: 0.035),
+                    scheme.surfaceContainer)
+                : scheme.surface),
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
         foregroundColor: scheme.onSurface,
         elevation: 0,
         centerTitle: false,

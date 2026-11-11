@@ -16,6 +16,7 @@ import '../widgets/genie_menu.dart';
 import 'user_profile_sheet.dart';
 import '../utils/readable.dart';
 import '../services/contact_names.dart';
+import '../utils/prefs_now.dart';
 import 'chat_page.dart' show ChatPage;
 import 'home_page.dart' show HomePage;
 import '../widgets/person_avatar.dart';
@@ -450,6 +451,11 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
   @override
   void initState() {
     super.initState();
+    // Who "me" is from the last session, BEFORE the first paint — otherwise
+    // the cached member list painted me as someone else (my own saved
+    // contact name, "Online", counted in "N online") until the profile call
+    // came back.
+    _myUid = int.tryParse(prefsNow?.getString('my_user_id') ?? '');
     AppConfig.baseUrl.then((b) {
       if (mounted) setState(() => _apiBase = b);
     });
@@ -1365,7 +1371,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
               children: [
                 Row(children: [
                   Flexible(
-                    child: Text(isSelf ? '$name (You)' : shown,
+                    child: Text(isSelf ? 'Me' : shown,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(

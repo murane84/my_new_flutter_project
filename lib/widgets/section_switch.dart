@@ -71,7 +71,8 @@ class SectionSwitch extends StatelessWidget {
         ? Duration.zero
         : s == SectionTransitionStyle.wave ||
                 s == SectionTransitionStyle.ripple ||
-                s == SectionTransitionStyle.equaliser
+                s == SectionTransitionStyle.equaliser ||
+                s == SectionTransitionStyle.heartbeat
             ? duration + const Duration(milliseconds: 120)
             : duration;
     return ClipRect(
@@ -105,17 +106,15 @@ class SectionSwitch extends StatelessWidget {
 
   static double _ease(double t) => Curves.easeOutCubic.transform(t);
 
-  /// One heartbeat for the arriving page, k 0 → 1: from 0.92 up past full
-  /// size (1.025, the "lub"), a small give (0.995, the "dub"), then home.
+  /// The arriving page's heartbeat, k 0 → 1: 0.84 → 1.06 ("lub") → 0.97
+  /// → 1.03 ("dub") → home at 1.0.
   static double _beat(double k) {
-    if (k < 0.55) {
-      return 0.92 + (1.025 - 0.92) * Curves.easeOutCubic.transform(k / 0.55);
-    }
-    if (k < 0.78) {
-      return 1.025 -
-          (1.025 - 0.995) * Curves.easeInOut.transform((k - 0.55) / 0.23);
-    }
-    return 0.995 + 0.005 * Curves.easeOut.transform((k - 0.78) / 0.22);
+    double seg(double a, double b, double from, double to, Curve c) =>
+        from + (to - from) * c.transform(((k - a) / (b - a)).clamp(0.0, 1.0));
+    if (k < 0.32) return seg(0, 0.32, 0.84, 1.06, Curves.easeOutCubic);
+    if (k < 0.47) return seg(0.32, 0.47, 1.06, 0.97, Curves.easeInOut);
+    if (k < 0.62) return seg(0.47, 0.62, 0.97, 1.03, Curves.easeOut);
+    return seg(0.62, 1, 1.03, 1.0, Curves.easeInOutCubic);
   }
 
   static Widget _layout(Widget? cur, List<Widget> prev) {
@@ -178,20 +177,29 @@ class SectionSwitch extends StatelessWidget {
         // Lub-dub: the leaving page settles back and is gone by 40 %; the
         // arriving one (from 15 %) beats in — a little past full size, then
         // home — drifting a touch from its side so swipes still read.
+        // The leaving page contracts away (gone by 40 %).
         if (!incoming) {
           return Opacity(
             opacity: _outFade(t),
-            child: Transform.scale(scale: 0.96 + 0.04 * t, child: w),
+            child: Transform.scale(scale: 0.88 + 0.12 * t, child: w),
           );
         }
+        // The arriving page is solid early (so it reads as a BEAT, not a
+        // fade) and beats twice — a big "lub", a smaller "dub" — while an
+        // accent pulse ring goes out from the centre on the first beat.
         final k = ((t - 0.15) / 0.85).clamp(0.0, 1.0);
-        return Opacity(
-          opacity: _inFade(t),
-          child: Transform.translate(
-            offset: Offset((1 - _ease(k)) * 14 * dir, 0),
-            child: Transform.scale(scale: _beat(k), child: w),
+        return Stack(fit: StackFit.expand, children: [
+          Opacity(
+            opacity: (k / 0.3).clamp(0.0, 1.0),
+            child: Transform.translate(
+              offset: Offset((1 - _ease(k)) * 12 * dir, 0),
+              child: Transform.scale(scale: _beat(k), child: w),
+            ),
           ),
-        );
+          IgnorePointer(
+            child: CustomPaint(painter: _PulseRingPainter(k, accent)),
+          ),
+        ]);
       case SectionTransitionStyle.depth:
         return Opacity(
           opacity: incoming ? _inFade(t) : _outFade(t),
@@ -303,7 +311,7 @@ class SectionSwitch extends StatelessWidget {
         m = Matrix4.translationValues(-30 * dir * _ease(p), 0, 0);
       case SectionTransitionStyle.heartbeat:
         o = out;
-        m = Matrix4.diagonal3Values(1 - 0.04 * p, 1 - 0.04 * p, 1);
+        m = Matrix4.diagonal3Values(1 - 0.12 * p, 1 - 0.12 * p, 1);
       case SectionTransitionStyle.depth:
         o = out;
         m = Matrix4.diagonal3Values(1 - 0.07 * p, 1 - 0.07 * p, 1);
@@ -407,6 +415,32 @@ class _WaveClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(_WaveClipper o) => o.t != t || o.dir != dir;
+}
+
+/// Heartbeat's pulse: one accent ring going out from the centre on the
+/// first beat, fading as it spreads.
+class _PulseRingPainter extends CustomPainter {
+  _PulseRingPainter(this.k, this.color);
+  final double k;
+  final Color color;
+  @override
+  void paint(Canvas canvas, Size s) {
+    final r = ((k - 0.05) / 0.6).clamp(0.0, 1.0);
+    if (r <= 0 || r >= 1) return;
+    final c = Offset(s.width / 2, s.height * 0.4);
+    final maxR = math.sqrt(s.width * s.width + s.height * s.height) * 0.55;
+    canvas.drawCircle(
+      c,
+      maxR * Curves.easeOutCubic.transform(r),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3 + 6 * (1 - r)
+        ..color = color.withValues(alpha: 0.35 * (1 - r)),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_PulseRingPainter o) => o.k != k || o.color != color;
 }
 
 /// The accent sound-wave line riding the edge (fades in and out).

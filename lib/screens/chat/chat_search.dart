@@ -159,18 +159,18 @@ extension _ChatSearch on _ChatPageState {
             _searchStep(false),
       },
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.circular(19),
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            height: 48,
+            height: 38, // compact, like every search pill
             padding: const EdgeInsets.only(left: 6, right: 4),
             decoration: BoxDecoration(
               color: isDark
                   ? Colors.black.withValues(alpha: 0.42)
                   : Colors.white.withValues(alpha: 0.72),
-              borderRadius: BorderRadius.circular(26),
+              borderRadius: BorderRadius.circular(19),
               border: Border.all(
                 color: none
                     ? scheme.error.withValues(alpha: 0.45)
@@ -188,8 +188,8 @@ extension _ChatSearch on _ChatPageState {
               children: [
                 // Aluta signature: the logo disc leads the pill.
                 Container(
-                  width: 32,
-                  height: 32,
+                  width: 28,
+                  height: 28,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: LinearGradient(colors: [
@@ -198,7 +198,7 @@ extension _ChatSearch on _ChatPageState {
                     ]),
                   ),
                   child: const Icon(Icons.search_rounded,
-                      size: 18, color: Colors.white),
+                      size: 16, color: Colors.white),
                 ),
                 const SizedBox(width: 8),
                 Expanded(

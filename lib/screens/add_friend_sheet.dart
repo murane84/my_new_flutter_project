@@ -4,6 +4,7 @@ import 'api_service.dart';
 import '../utils/readable.dart';
 import '../services/contact_names.dart';
 import '../widgets/person_avatar.dart';
+import '../widgets/pill_search.dart';
 
 /// Manual "Add friend" — the discovery path for desktop/web users with no
 /// phone-book to scan (and a quick add on mobile too). You look someone up by
@@ -130,8 +131,22 @@ class _AddFriendSheetState extends State<_AddFriendSheet> {
             textInputAction: TextInputAction.search,
             onSubmitted: (_) => _search(),
             decoration: InputDecoration(
+              // Same compact pill as every search box.
+              border: pillSearchBorder(scheme),
+              enabledBorder: pillSearchBorder(scheme),
+              focusedBorder: pillSearchBorder(scheme, focused: true),
+              isDense: true,
+              filled: true,
+              fillColor: scheme.surfaceContainerHighest,
+              constraints: const BoxConstraints(minHeight: 38, maxHeight: 38),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              prefixIconConstraints: const BoxConstraints(
+                  minWidth: 40, minHeight: 38, maxHeight: 38),
+              suffixIconConstraints: const BoxConstraints(
+                  minWidth: 38, minHeight: 38, maxHeight: 38),
               hintText: 'username or +255…',
-              prefixIcon: const Icon(Icons.alternate_email_rounded),
+              prefixIcon: const Icon(Icons.alternate_email_rounded, size: 20),
               suffixIcon: IconButton(
                 icon: const Icon(Icons.search_rounded),
                 tooltip: 'Search',

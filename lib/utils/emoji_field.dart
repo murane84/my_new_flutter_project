@@ -77,10 +77,12 @@ Future<T?> showFloatingCard<T>(
   final below = screen.height - at.bottom - 8 >= h;
   final onRight = at.center.dx > screen.width / 2;
   final left = (onRight ? at.right - w : at.left)
-      .clamp(8.0, math.max(8.0, screen.width - w - 8));
+      .clamp(8.0, math.max(8.0, screen.width - w - 8))
+      .toDouble();
   final top = (below ? at.bottom + 6 : at.top - h - 6)
-      .clamp(8.0, math.max(8.0, screen.height - h - 8));
-  final grow = Alignment(onRight ? 1 : -1, below ? -1 : 1);
+      .clamp(8.0, math.max(8.0, screen.height - h - 8))
+      .toDouble();
+  final grow = Alignment(onRight ? 1.0 : -1.0, below ? -1.0 : 1.0);
   return showGeneralDialog<T>(
     context: context,
     barrierDismissible: true,

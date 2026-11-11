@@ -1005,8 +1005,10 @@ class _ChatPageState extends State<ChatPage>
         btnBox.size;
     final screen = ovBox.size;
     final w = math.min(screen.width >= 1200 ? 420.0 : 380.0, screen.width - 16);
-    final h = math.min(440.0, btn.top - 16).clamp(260.0, 440.0);
-    final left = (btn.left - 6).clamp(8.0, math.max(8.0, screen.width - w - 8));
+    final h = math.min(440.0, btn.top - 16).clamp(260.0, 440.0).toDouble();
+    final left = (btn.left - 6)
+        .clamp(8.0, math.max(8.0, screen.width - w - 8))
+        .toDouble();
     final bottom = screen.height - btn.top + 8;
     _emojiCard = OverlayEntry(builder: (ctx) {
       final scheme = Theme.of(context).colorScheme;

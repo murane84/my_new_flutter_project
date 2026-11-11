@@ -32,7 +32,7 @@ class _KeyboardSwapPanelState extends State<KeyboardSwapPanel>
   Timer? _giveWay;
 
   double get _full =>
-      (prefsNow?.getDouble('kb_height_v1') ?? 300).clamp(260.0, 420.0);
+      (prefsNow?.getDouble('kb_height_v1') ?? 300.0).clamp(260.0, 420.0).toDouble();
 
   double _inset() {
     final v = View.of(context);
@@ -85,7 +85,7 @@ class _KeyboardSwapPanelState extends State<KeyboardSwapPanel>
     final showing = widget.open || _closing;
     final full = _full;
     final inset = _inset();
-    final h = showing ? (full - inset).clamp(0.0, full) : 0.0;
+    final h = showing ? (full - inset).clamp(0.0, full).toDouble() : 0.0;
     return AnimatedContainer(
       duration: inset > 0 ? Duration.zero : Motion.standard,
       curve: Motion.enter,

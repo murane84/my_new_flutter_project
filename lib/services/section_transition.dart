@@ -56,12 +56,18 @@ class SectionTransition {
   static const SectionTransitionStyle defaultStyle =
       SectionTransitionStyle.wave;
 
-  /// The picker's order: the default first, the rest as listed.
-  static List<SectionTransitionStyle> get pickerOrder => [
-        defaultStyle,
-        for (final s in SectionTransitionStyle.values)
-          if (s != defaultStyle) s,
-      ];
+  /// The picker's order: most Aluta (music · love · connection) first,
+  /// plainest last. The default leads.
+  static const List<SectionTransitionStyle> pickerOrder = [
+    SectionTransitionStyle.wave, // music — the default
+    SectionTransitionStyle.heartbeat, // love
+    SectionTransitionStyle.equaliser, // music
+    SectionTransitionStyle.ripple, // touch → connection
+    SectionTransitionStyle.slide,
+    SectionTransitionStyle.depth,
+    SectionTransitionStyle.cube,
+    SectionTransitionStyle.fade,
+  ];
 
   final ValueNotifier<SectionTransitionStyle> style =
       ValueNotifier<SectionTransitionStyle>(defaultStyle);

@@ -127,7 +127,8 @@ import '../widgets/slide_track.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../widgets/skeleton.dart';
-import '../utils/emoji_field.dart' show emojiFloats;
+import '../utils/emoji_field.dart'
+    show emojiFloats, toggleComposerEmoji;
 import '../utils/adaptive_sheet.dart';
 import '../utils/depth.dart';
 

@@ -15,7 +15,8 @@ import '../../widgets/aluta_composer_field.dart';
 import '../../utils/readable.dart';
 import '../../utils/typing_guard.dart';
 import '../../utils/anim_art.dart';
-import '../../utils/emoji_field.dart' show inlineEmojiPicker;
+import '../../utils/emoji_field.dart'
+    show inlineEmojiPicker, emojiFloats, showFloatingCard;
 import '../gif_picker.dart';
 import '../../services/haptics.dart';
 import '../../utils/motion.dart';
@@ -158,12 +159,29 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   }
 
   void _toggleReplyEmoji() {
-    setState(() => _replyEmoji = !_replyEmoji);
-    if (_replyEmoji) {
+    // Desktop: the same floating emoji card as everywhere else.
+    if (emojiFloats(context)) {
+      _pause();
+      showFloatingCard<void>(context,
+              width: 380,
+              height: 300,
+              builder: (c) => inlineEmojiPicker(c, _replyCtrl))
+          .then((_) {
+        if (mounted && _replyCtrl.text.trim().isEmpty && !_replyFocus.hasFocus) {
+          _resume();
+        }
+      });
+      return;
+    }
+    final opening = !_replyEmoji;
+    setState(() => _replyEmoji = opening);
+    if (opening) {
       _replyFocus.unfocus();
       _pause();
-    } else if (_replyCtrl.text.trim().isEmpty) {
-      _resume();
+    } else {
+      // ⌨: straight back to typing the reply (one tap, as in the chat).
+      _replyFocus.requestFocus();
+      SystemChannels.textInput.invokeMethod<void>('TextInput.show');
     }
   }
 

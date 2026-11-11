@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/gestures.dart' show GestureBinding, PointerDownEvent;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemChannels;
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'radii.dart';
 import 'motion.dart';
@@ -178,13 +179,14 @@ Future<void> showEmojiPickerSheet(
 /// stays visible above it and updates live as emojis are tapped. The caller
 /// sizes it (e.g. wrap in a SizedBox ~300 high) and places it below the field.
 Widget inlineEmojiPicker(
-    BuildContext context, TextEditingController controller) {
+    BuildContext context, TextEditingController controller,
+    {double height = 300}) {
   final scheme = Theme.of(context).colorScheme;
   return EmojiPicker(
     onEmojiSelected: (_, _) {},
     textEditingController: controller,
     config: Config(
-      height: 300,
+      height: height,
       emojiViewConfig: EmojiViewConfig(
         emojiSizeMax: 26,
         columns: 8,
@@ -238,3 +240,26 @@ Future<void> _showEmojiCard(
         width: 380,
         height: 300, // the inline picker's own height
         builder: (ctx) => inlineEmojiPicker(ctx, controller));
+
+/// Every composer's 😊 / ⌨ (status, story reply, notes…) — the same rules as the chat composer:
+/// desktop → the floating emoji card by the button; phone → the panel
+/// trades places with the keyboard, and ⌨ goes straight back to typing.
+/// Returns the new open state of the inline panel.
+bool toggleComposerEmoji({
+  required BuildContext button,
+  required TextEditingController controller,
+  required FocusNode focus,
+  required bool open,
+}) {
+  if (emojiFloats(button)) {
+    showEmojiPickerSheet(button, controller);
+    return false;
+  }
+  if (!open) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    return true;
+  }
+  focus.requestFocus();
+  SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+  return false;
+}

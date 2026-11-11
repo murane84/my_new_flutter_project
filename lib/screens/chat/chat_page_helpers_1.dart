@@ -482,6 +482,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
       builder: (bctx) {
         final scheme = Theme.of(bctx).colorScheme;
         bool showEmoji = false;
+        final noteFocus = FocusNode();
         Widget preview;
         if (type == 'image' && rel.isNotEmpty) {
           final url = fullMediaUrl(rel);
@@ -584,6 +585,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
                     const SizedBox(height: 14),
                     TextField(
                       controller: ctrl,
+                      focusNode: noteFocus,
                       autofocus: true,
                       minLines: 1,
                       maxLines: 3,
@@ -596,19 +598,27 @@ extension _ChatPageHelpers1 on _ChatPageState {
                         filled: true,
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(Radii.lg)),
-                        suffixIcon: IconButton(
-                          tooltip: showEmoji ? 'Keyboard' : 'Emoji',
-                          icon: Icon(
-                              showEmoji
-                                  ? Icons.keyboard_rounded
-                                  : Icons.emoji_emotions_outlined,
-                              color: accentInk(scheme)),
-                          onPressed: () {
-                            if (!showEmoji) {
-                              FocusManager.instance.primaryFocus?.unfocus();
-                            }
-                            setSheet(() => showEmoji = !showEmoji);
-                          },
+                        // The same 😊 / ⌨ as every composer (floating card
+                        // on desktop; ⌨ straight back to typing).
+                        suffixIcon: Builder(
+                          builder: (btn) => IconButton(
+                            tooltip: showEmoji ? 'Keyboard' : 'Emoji',
+                            icon: Icon(
+                                showEmoji
+                                    ? Icons.keyboard_rounded
+                                    : Icons.emoji_emotions_outlined,
+                                color: accentInk(scheme)),
+                            onPressed: () {
+                              final open = toggleComposerEmoji(
+                                  button: btn,
+                                  controller: ctrl,
+                                  focus: noteFocus,
+                                  open: showEmoji);
+                              if (open != showEmoji) {
+                                setSheet(() => showEmoji = open);
+                              }
+                            },
+                          ),
                         ),
                       ),
                     ),

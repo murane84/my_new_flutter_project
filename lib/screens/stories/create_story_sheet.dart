@@ -20,6 +20,9 @@ import '../../utils/motion.dart';
 import '../../utils/radii.dart';
 import '../../utils/adaptive_sheet.dart';
 import '../../utils/depth.dart';
+import '../../widgets/keyboard_swap_panel.dart';
+
+
 
 /// Entry point: a bottom sheet offering the four ways to post a story
 /// (photo from gallery, camera photo, a short video clip, or a "now playing"
@@ -421,10 +424,15 @@ class _MediaComposePageState extends State<_MediaComposePage> {
   VideoPlayerController? _video;
   bool _videoFailed = false; // no playback backend here (e.g. Windows / web)
   bool _showEmoji = false; // inline emoji panel (caption stays visible above)
+  final FocusNode _captionFocus = FocusNode();
 
-  void _toggleEmoji() {
-    setState(() => _showEmoji = !_showEmoji);
-    if (_showEmoji) FocusManager.instance.primaryFocus?.unfocus();
+  void _toggleEmoji(BuildContext button) {
+    final open = toggleComposerEmoji(
+        button: button,
+        controller: _caption,
+        focus: _captionFocus,
+        open: _showEmoji);
+    if (open != _showEmoji) setState(() => _showEmoji = open);
   }
 
   @override
@@ -467,6 +475,7 @@ class _MediaComposePageState extends State<_MediaComposePage> {
   @override
   void dispose() {
     _caption.dispose();
+    _captionFocus.dispose();
     _video?.dispose();
     super.dispose();
   }
@@ -541,6 +550,7 @@ class _MediaComposePageState extends State<_MediaComposePage> {
                   // Same pill (and keystroke ticks) as the chat composer.
                   child: AlutaComposerField(
                     controller: _caption,
+                    focusNode: _captionFocus,
                     hint: 'Add a caption…',
                     maxLines: 3,
                     dark: true,
@@ -549,12 +559,14 @@ class _MediaComposePageState extends State<_MediaComposePage> {
                     onTap: () {
                       if (_showEmoji) setState(() => _showEmoji = false);
                     },
-                    leading: IconButton(
-                      icon: Icon(_showEmoji
-                          ? Icons.keyboard_rounded
-                          : Icons.emoji_emotions_outlined),
-                      tooltip: _showEmoji ? 'Keyboard' : 'Add emoji',
-                      onPressed: _toggleEmoji,
+                    leading: Builder(
+                      builder: (btn) => IconButton(
+                        icon: Icon(_showEmoji
+                            ? Icons.keyboard_rounded
+                            : Icons.emoji_emotions_outlined),
+                        tooltip: _showEmoji ? 'Keyboard' : 'Add emoji',
+                        onPressed: () => _toggleEmoji(btn),
+                      ),
                     ),
                   ),
                 ),
@@ -581,11 +593,10 @@ class _MediaComposePageState extends State<_MediaComposePage> {
           ),
           // Inline emoji panel: the caption bar stays visible directly above and
           // updates live as emojis are tapped (no covering modal sheet).
-          if (_showEmoji)
-            SizedBox(
-              height: 300,
-              child: inlineEmojiPicker(context, _caption),
-            ),
+          KeyboardSwapPanel(
+            open: _showEmoji,
+            builder: (h) => inlineEmojiPicker(context, _caption, height: h),
+          ),
         ],
       ),
     );
@@ -709,14 +720,18 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
   bool _posting = false;
   bool _showEmoji = false; // inline emoji panel (field stays visible above it)
   final ScrollController _scroll = ScrollController();
+  final FocusNode _captionFocus = FocusNode();
 
-  void _toggleEmoji() {
-    final opening = !_showEmoji;
-    setState(() => _showEmoji = opening);
+  void _toggleEmoji(BuildContext button) {
+    final opening = toggleComposerEmoji(
+        button: button,
+        controller: _caption,
+        focus: _captionFocus,
+        open: _showEmoji);
+    if (opening != _showEmoji) setState(() => _showEmoji = opening);
     if (opening) {
-      // Hide the keyboard, then scroll the caption field (bottom of the form)
-      // into view just above the panel so you can see what you're typing.
-      FocusManager.instance.primaryFocus?.unfocus();
+      // Scroll the caption field (bottom of the form) into view just above
+      // the panel so you can see what you're typing.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scroll.hasClients) {
           _scroll.animateTo(
@@ -749,6 +764,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
     _title.dispose();
     _artist.dispose();
     _caption.dispose();
+    _captionFocus.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -951,7 +967,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                         _field(_artist, 'Artist (optional)', ink),
                         const SizedBox(height: 12),
                         _field(_caption, 'Say something (optional)', ink,
-                            onEmoji: _toggleEmoji),
+                            onEmoji: _toggleEmoji, focus: _captionFocus),
                         const SizedBox(height: 12),
                       ],
                     ),
@@ -983,11 +999,11 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                 ),
                 // Inline emoji panel: the caption stays visible above and
                 // updates live as emojis are tapped (no covering modal).
-                if (_showEmoji)
-                  SizedBox(
-                    height: 300,
-                    child: inlineEmojiPicker(context, _caption),
-                  ),
+                KeyboardSwapPanel(
+                  open: _showEmoji,
+                  builder: (h) =>
+                      inlineEmojiPicker(context, _caption, height: h),
+                ),
               ],
             ),
           ),
@@ -1063,9 +1079,10 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
   }
 
   Widget _field(TextEditingController c, String hint, Color ink,
-      {VoidCallback? onEmoji}) {
+      {void Function(BuildContext button)? onEmoji, FocusNode? focus}) {
     return TextField(
       controller: c,
+      focusNode: focus,
       style: TextStyle(color: ink),
       onTap: () {
         if (_showEmoji) setState(() => _showEmoji = false);
@@ -1081,14 +1098,16 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
         ),
         suffixIcon: onEmoji == null
             ? null
-            : IconButton(
-                icon: Icon(
-                    _showEmoji
-                        ? Icons.keyboard_rounded
-                        : Icons.emoji_emotions_outlined,
-                    color: ink.withValues(alpha: 0.75)),
-                tooltip: _showEmoji ? 'Keyboard' : 'Add emoji',
-                onPressed: onEmoji,
+            : Builder(
+                builder: (btn) => IconButton(
+                  icon: Icon(
+                      _showEmoji
+                          ? Icons.keyboard_rounded
+                          : Icons.emoji_emotions_outlined,
+                      color: ink.withValues(alpha: 0.75)),
+                  tooltip: _showEmoji ? 'Keyboard' : 'Add emoji',
+                  onPressed: () => onEmoji(btn),
+                ),
               ),
       ),
     );
@@ -1117,6 +1136,7 @@ class _TextStoryPageState extends State<_TextStoryPage> {
   List<Color> get _cur => _custom ?? _bgs[_bg];
   bool _posting = false;
   bool _showEmoji = false; // inline emoji panel (text stays visible above it)
+  final FocusNode _textFocus = FocusNode();
 
   @override
   void initState() {
@@ -1131,6 +1151,7 @@ class _TextStoryPageState extends State<_TextStoryPage> {
   void dispose() {
     _text.removeListener(_onChanged);
     _text.dispose();
+    _textFocus.dispose();
     super.dispose();
   }
 
@@ -1253,18 +1274,24 @@ class _TextStoryPageState extends State<_TextStoryPage> {
                       color: ink,
                       onPressed: _addSticker,
                     ),
-                    IconButton(
-                      tooltip: _showEmoji ? 'Keyboard' : 'Add emoji',
-                      icon: Icon(_showEmoji
-                          ? Icons.keyboard_rounded
-                          : Icons.emoji_emotions_outlined),
-                      color: ink,
-                      onPressed: () {
-                        setState(() => _showEmoji = !_showEmoji);
-                        if (_showEmoji) {
-                          FocusManager.instance.primaryFocus?.unfocus();
-                        }
-                      },
+                    Builder(
+                      builder: (btn) => IconButton(
+                        tooltip: _showEmoji ? 'Keyboard' : 'Add emoji',
+                        icon: Icon(_showEmoji
+                            ? Icons.keyboard_rounded
+                            : Icons.emoji_emotions_outlined),
+                        color: ink,
+                        onPressed: () {
+                          final open = toggleComposerEmoji(
+                              button: btn,
+                              controller: _text,
+                              focus: _textFocus,
+                              open: _showEmoji);
+                          if (open != _showEmoji) {
+                            setState(() => _showEmoji = open);
+                          }
+                        },
+                      ),
                     ),
                   ],
                 ),
@@ -1277,6 +1304,7 @@ class _TextStoryPageState extends State<_TextStoryPage> {
                     child: SingleChildScrollView(
                       child: TextField(
                         controller: _text,
+                        focusNode: _textFocus,
                         autofocus: true,
                         onTap: () {
                           if (_showEmoji) setState(() => _showEmoji = false);
@@ -1330,11 +1358,10 @@ class _TextStoryPageState extends State<_TextStoryPage> {
               ),
               // Inline emoji panel (consistent with photo/music composers):
               // the centred text shrinks up and stays visible above it.
-              if (_showEmoji)
-                SizedBox(
-                  height: 300,
-                  child: inlineEmojiPicker(context, _text),
-                ),
+              KeyboardSwapPanel(
+                open: _showEmoji,
+                builder: (h) => inlineEmojiPicker(context, _text, height: h),
+              ),
             ],
           ),
         ),

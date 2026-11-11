@@ -9,6 +9,7 @@ import '../../widgets/edge_scroll_row.dart';
 import '../../utils/motion.dart';
 import '../../utils/radii.dart';
 import '../../utils/adaptive_sheet.dart';
+import '../../utils/emoji_field.dart' show emojiFloats, emojiSuffixButton;
 
 /// What a one-tap share will look like, and in which colours.
 enum QuickStatusKind { text, music, sticker }
@@ -312,6 +313,11 @@ class _QuickStatusSheetState extends State<_QuickStatusSheet> {
                   ? 'Your status'
                   : 'Add a few words (optional)',
               prefixIcon: const Icon(Icons.edit_note_rounded, size: 20),
+              // Desktop: no emoji key — the floating emoji card, as
+              // everywhere (phones have it on the keyboard).
+              suffixIcon: emojiFloats(context)
+                  ? emojiSuffixButton(context, _words)
+                  : null,
               filled: true,
               fillColor: scheme.surfaceContainerHighest,
               border: OutlineInputBorder(

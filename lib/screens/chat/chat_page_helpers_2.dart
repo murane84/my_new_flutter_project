@@ -39,6 +39,18 @@ extension _ChatPageHelpers2 on _ChatPageState {
   /// (else their username) — the same as Reply privately, minus the quote.
   void _openDmWith(int userId, String name, String phone, String avatarRel,
       {Map<String, dynamic>? replyTo}) {
+    // Same as tapping them in the Circle list: the chat panel (beside the
+    // music on desktop), not a separate full-screen page.
+    final openDm = HomePage.openDm;
+    if (openDm != null) {
+      openDm({
+        'id': userId,
+        'username': name,
+        'phone': phone,
+        'avatar_url': avatarRel,
+      }, replyTo: replyTo);
+      return;
+    }
     final saved =
         phone.isNotEmpty ? ContactNames.instance.nameFor(phone) : null;
     Navigator.of(context).push(MaterialPageRoute(

@@ -182,6 +182,12 @@ class HomePage extends rp.ConsumerStatefulWidget {
   static HomePageState? of(BuildContext context) =>
       context.findAncestorStateOfType<HomePageState>();
 
+  /// Open a one-on-one chat the way the Circle list does (in the chat panel,
+  /// beside the music on desktop) — reachable from screens outside the home
+  /// tree too (Group info is a popup). Null when no home is mounted.
+  static void Function(Map<String, dynamic> friend,
+      {Map<String, dynamic>? replyTo})? openDm;
+
   @override
   rp.ConsumerState<HomePage> createState() => HomePageState();
 }
@@ -306,6 +312,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // scroll to + highlight once the thread loads (null for normal opens). Passed
   // to ChatPage; cleared to null on every ordinary open so it fires once.
   String? _pendingJumpMessageId;
+  // "Reply privately" from a group: the DM opens with that message quoted.
+  Map<String, dynamic>? _pendingReplyTo;
   List<Map<String, dynamic>> _filteredGroups = [];
   final TextEditingController _searchCtrl = TextEditingController();
   // A SEPARATE controller for the Harmony (spaces) search, so the two layers'
@@ -576,6 +584,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    HomePage.openDm = _openDmHook;
     // App open: incoming chat messages show Aluta's reply banner.
     ReplyBanner.onIncoming = _showReplyBanner;
     LiveRoomsRegistry.instance.joinRoom = _dropIntoRoom;
@@ -800,6 +809,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   @override
   void dispose() {
+    if (HomePage.openDm == _openDmHook) HomePage.openDm = null;
     BlockList.instance.removeListener(_onBlockList);
     HardwareKeyboard.instance.removeHandler(_onCircleKey);
     StoryPosting.instance.removeListener(_onStoryPosting);
@@ -4003,14 +4013,30 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
   }
 
-  void openChat(Map<String, dynamic> friend, {String? jumpToMessageId}) {
+  // A real method so the static hook can be compared on dispose.
+  // A friend I already have in my list opens with everything the list
+  // knows (online, last seen…), exactly like tapping their row.
+  void _openDmHook(Map<String, dynamic> friend,
+      {Map<String, dynamic>? replyTo}) {
+    final id = friend['id']?.toString();
+    final known = _allFriends.firstWhere((e) => e['id']?.toString() == id,
+        orElse: () => <String, dynamic>{});
+    openChat(known.isNotEmpty ? Map<String, dynamic>.from(known) : friend,
+        replyTo: replyTo);
+  }
+
+  void openChat(Map<String, dynamic> friend,
+      {String? jumpToMessageId, Map<String, dynamic>? replyTo}) {
     var leftFull = false;
     if (_searchQuery.isNotEmpty) _searchBeforeChat = _searchQuery;
     _openedKey = 's${friend['id']}';
     _newWhileAway.remove(_openedKey);
     setState(() {
       _pendingJumpMessageId = jumpToMessageId;
+      _pendingReplyTo = replyTo;
       _clearSearchState();
+      // From a group (Message / Reply privately): the DM takes the panel.
+      _activeGroup = null;
       _activeFriendId = friend['id'].toString();
       _activeFriendName = friend['username'] ?? 'Friend';
       _activeFriendOnline = friend['is_online'] ?? false;
@@ -5392,6 +5418,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       initialSharePaths: _shareToSend,
                       onShareConsumed: () => _shareToSend = null,
                       initialJumpMessageId: _pendingJumpMessageId,
+                      initialReplyTo: _pendingReplyTo,
                     ))
                   : _buildFriendList(context),
                 ),

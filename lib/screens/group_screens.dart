@@ -17,6 +17,7 @@ import 'user_profile_sheet.dart';
 import '../utils/readable.dart';
 import '../services/contact_names.dart';
 import 'chat_page.dart' show ChatPage;
+import 'home_page.dart' show HomePage;
 import '../widgets/person_avatar.dart';
 import '../utils/avatar_widget.dart' show OnlineDot, OnlineDotBadge, onlineDotFor;
 import '../services/now_playing_presence.dart';
@@ -1327,10 +1328,21 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
         onTuneIn: (track != null && tuneIn != null)
             ? () => tuneIn(context, uid, shown, song)
             : null,
-        // Straight to my DM with them (never with myself).
+        // Straight to my DM with them (never with myself) — in the chat
+        // panel like any DM: close Group info, open it there.
         onMessage: isSelf
             ? null
-            : () => Navigator.of(context).push(MaterialPageRoute(
+            : HomePage.openDm != null
+                ? () {
+                    Navigator.of(context).maybePop();
+                    HomePage.openDm!({
+                      'id': uid,
+                      'username': name,
+                      'phone': phone,
+                      'avatar_url': (m['avatar_url'] ?? '').toString(),
+                    });
+                  }
+                : () => Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => ChatPage(
                     friendId: uid,
                     friendName: shown,

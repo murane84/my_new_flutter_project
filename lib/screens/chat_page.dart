@@ -70,7 +70,8 @@ import '../widgets/chat_wallpaper_sheet.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'user_profile_sheet.dart';
-import 'home_page.dart' show playlistNotifier, playbackBus, WebSongDrag;
+import 'home_page.dart'
+    show playlistNotifier, playbackBus, WebSongDrag, HomePage;
 import '../state/playback_state.dart' show providerContainer, nowPlayingProvider;
 import 'relationship_space_page.dart' show spaceEventBus;
 import 'dart:io';

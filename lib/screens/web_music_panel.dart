@@ -957,14 +957,18 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                     // Pill, like every search box (theme borders are 12 px boxes).
                     border: pillSearchBorder(scheme),
                     enabledBorder: pillSearchBorder(scheme),
-                    focusedBorder: pillSearchBorder(scheme, focused: true),
+                    focusedBorder: pillSearchBorder(scheme, focused: true),
+                    // One compact height for every search pill (38 px, like Circle's).
                     isDense: true,
+                    constraints: const BoxConstraints(minHeight: 38, maxHeight: 38),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 38, maxHeight: 38),
+                    suffixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 38, maxHeight: 38),
                     hintText: 'Search the queue',
                     prefixIcon: const Icon(Icons.search_rounded, size: 18),
                     filled: true,
                     fillColor: scheme.surfaceContainerHighest
-                        .withValues(alpha: isDark ? 0.5 : 0.7),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                        .withValues(alpha: isDark ? 0.5 : 0.7),
                   ),
                 ),
               ),

@@ -741,8 +741,13 @@ extension _ChatPollsAdmin on _ChatPageState {
                         // Pill, like every search box (theme borders are 12 px boxes).
                         border: pillSearchBorder(scheme),
                         enabledBorder: pillSearchBorder(scheme),
-                        focusedBorder: pillSearchBorder(scheme, focused: true),
+                        focusedBorder: pillSearchBorder(scheme, focused: true),
+                        // One compact height for every search pill (38 px, like Circle's).
                         isDense: true,
+                        constraints: const BoxConstraints(minHeight: 38, maxHeight: 38),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 38, maxHeight: 38),
+                        suffixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 38, maxHeight: 38),
                         hintText: 'Search your songs',
                         prefixIcon: const Icon(Icons.search_rounded, size: 20),
                         filled: true,

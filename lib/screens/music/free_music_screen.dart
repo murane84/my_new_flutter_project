@@ -328,11 +328,14 @@ class _FreeMusicPanelState extends State<FreeMusicPanel> {
               border: pillSearchBorder(scheme),
               enabledBorder: pillSearchBorder(scheme),
               focusedBorder: pillSearchBorder(scheme, focused: true),
+              // One compact height for every search pill (38 px, like Circle's).
+              isDense: true,
+              constraints: const BoxConstraints(minHeight: 38, maxHeight: 38),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 38, maxHeight: 38),
+              suffixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 38, maxHeight: 38),
               hintText: 'Search free songs, artists, genres…',
               prefixIcon: const Icon(Icons.search, size: 18),
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               filled: true,
               fillColor: scheme.surfaceContainerHighest,
             ),

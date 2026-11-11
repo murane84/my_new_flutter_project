@@ -1426,11 +1426,14 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                         border: pillSearchBorder(scheme),
                         enabledBorder: pillSearchBorder(scheme),
                         focusedBorder: pillSearchBorder(scheme, focused: true),
-                        hintText: 'Search tracks…',
-                        prefixIcon: const Icon(Icons.search, size: 18),
+                        // One compact height for every search pill (38 px, like Circle's).
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
+                        constraints: const BoxConstraints(minHeight: 38, maxHeight: 38),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 38, maxHeight: 38),
+                        suffixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 38, maxHeight: 38),
+                        hintText: 'Search tracks…',
+                        prefixIcon: const Icon(Icons.search, size: 18),
                         filled: true,
                         fillColor: scheme.surfaceContainerHighest,
                       ),

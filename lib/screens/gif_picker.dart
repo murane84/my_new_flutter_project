@@ -271,13 +271,17 @@ class _GifPickerState extends State<GifPicker> {
                       border: pillSearchBorder(scheme),
                       enabledBorder: pillSearchBorder(scheme),
                       focusedBorder: pillSearchBorder(scheme, focused: true),
+                      // One compact height for every search pill (38 px, like Circle's).
                       isDense: true,
+                      constraints: const BoxConstraints(minHeight: 38, maxHeight: 38),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 38, maxHeight: 38),
+                      suffixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 38, maxHeight: 38),
                       prefixIcon: const Icon(Icons.search_rounded, size: 20),
                       hintText: _stickers ? 'Search stickers' : 'Search GIFs',
                       hintStyle: TextStyle(color: scheme.onSurfaceVariant),
                       filled: true,
                       fillColor: scheme.surfaceContainerHighest,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
                       suffixIcon: _searchCtrl.text.isEmpty
                           ? null
                           : IconButton(

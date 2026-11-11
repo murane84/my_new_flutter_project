@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'admin_api.dart';
 import 'admin_widgets.dart';
+import '../widgets/edge_scroll_row.dart';
 
 /// Feedback from the app's "Send feedback" page: read, triage (Seen /
 /// Planned / Done / Not planned) and reply — the person sees the status and
@@ -199,7 +200,7 @@ class _AdminFeedbackPageState extends State<AdminFeedbackPage> {
               ),
               SizedBox(
                 height: 46,
-                child: ListView(
+                child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView(controller: edgeCtrl, 
                   scrollDirection: Axis.horizontal,
                   children: [
                     for (final s in _statuses)
@@ -208,7 +209,7 @@ class _AdminFeedbackPageState extends State<AdminFeedbackPage> {
                         child: _filterPill(p, s),
                       ),
                   ],
-                ),
+                )),
               ),
             ],
           ),

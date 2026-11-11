@@ -122,6 +122,7 @@ import '../widgets/pixel_snap.dart';
 import '../utils/readable.dart';
 import '../widgets/pill_search.dart';
 import '../services/haptics.dart';
+import '../widgets/edge_scroll_row.dart';
 
 // Split out for maintainability (Dart parts — same library, shared
 // imports & privacy, zero behaviour change):

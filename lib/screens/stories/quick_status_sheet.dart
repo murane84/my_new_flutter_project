@@ -5,6 +5,7 @@ import '../../services/status_privacy.dart';
 import '../../utils/prefs_now.dart';
 import 'create_story_sheet.dart' show kStatusBgs, StatusPaletteButton;
 import 'status_audience_sheet.dart';
+import '../../widgets/edge_scroll_row.dart';
 
 /// What a one-tap share will look like, and in which colours.
 enum QuickStatusKind { text, music, sticker }
@@ -242,7 +243,7 @@ class _QuickStatusSheetState extends State<_QuickStatusSheet> {
           const SizedBox(height: 12),
           SizedBox(
             height: 46,
-            child: ListView.separated(
+            child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView.separated(controller: edgeCtrl, 
               scrollDirection: Axis.horizontal,
               itemCount: kStatusBgs.length + 1,
               separatorBuilder: (_, _) => const SizedBox(width: 10),
@@ -291,7 +292,7 @@ class _QuickStatusSheetState extends State<_QuickStatusSheet> {
                   ),
                 );
               },
-            ),
+            )),
           ),
           const SizedBox(height: 10),
           // The words: edit a text status, or add a line to a song / GIF.

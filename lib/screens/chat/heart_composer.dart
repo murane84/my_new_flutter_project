@@ -936,7 +936,7 @@ extension _ChatHeartComposer on _ChatPageState {
           ),
           const SizedBox(height: 4),
           // Moods.
-          SingleChildScrollView(
+          EdgeScrollRow(builder: (_, edgeCtrl) => SingleChildScrollView(controller: edgeCtrl, 
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
@@ -953,10 +953,10 @@ extension _ChatHeartComposer on _ChatPageState {
                   ),
               ],
             ),
-          ),
+          )),
           const SizedBox(height: 6),
           // When it opens + note starters.
-          SingleChildScrollView(
+          EdgeScrollRow(builder: (_, edgeCtrl) => SingleChildScrollView(controller: edgeCtrl, 
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
@@ -1008,7 +1008,7 @@ extension _ChatHeartComposer on _ChatPageState {
                     ),
               ],
             ),
-          ),
+          )),
         ],
       ),
     );

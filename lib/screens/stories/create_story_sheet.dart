@@ -15,6 +15,7 @@ import '../gif_picker.dart';
 import 'camera_capture.dart';
 import 'status_audience_sheet.dart';
 import '../../services/status_privacy.dart';
+import '../../widgets/edge_scroll_row.dart';
 
 /// Entry point: a bottom sheet offering the four ways to post a story
 /// (photo from gallery, camera photo, a short video clip, or a "now playing"
@@ -996,7 +997,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: SizedBox(
         height: 44,
-        child: ListView.separated(
+        child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView.separated(controller: edgeCtrl, 
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           itemCount: _palettes.length + 1,
@@ -1052,7 +1053,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
               ),
             );
           },
-        ),
+        )),
       ),
     );
   }
@@ -1340,7 +1341,7 @@ class _TextStoryPageState extends State<_TextStoryPage> {
   Widget _swatchStrip(Color ink) {
     return SizedBox(
       height: 48,
-      child: ListView.separated(
+      child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView.separated(controller: edgeCtrl, 
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: _bgs.length + 1,
@@ -1395,7 +1396,7 @@ class _TextStoryPageState extends State<_TextStoryPage> {
             ),
           );
         },
-      ),
+      )),
     );
   }
 }
@@ -1533,7 +1534,7 @@ class _StickerComposePageState extends State<_StickerComposePage> {
   Widget _swatchStrip(Color ink) {
     return SizedBox(
       height: 48,
-      child: ListView.separated(
+      child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView.separated(controller: edgeCtrl, 
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: kStatusBgs.length + 1,
@@ -1588,7 +1589,7 @@ class _StickerComposePageState extends State<_StickerComposePage> {
             ),
           );
         },
-      ),
+      )),
     );
   }
 }

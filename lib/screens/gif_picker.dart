@@ -8,6 +8,7 @@ import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import '../widgets/pill_search.dart';
+import '../widgets/edge_scroll_row.dart';
 
 /// GIPHY API key.
 ///
@@ -360,7 +361,7 @@ class _GifPickerState extends State<GifPicker> {
   Widget _categoryChips(ColorScheme scheme) {
     return SizedBox(
       height: 34,
-      child: ListView.separated(
+      child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView.separated(controller: edgeCtrl, 
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.fromLTRB(10, 0, 10, 4),
         itemCount: _stickerCategories.length,
@@ -400,7 +401,7 @@ class _GifPickerState extends State<GifPicker> {
             ),
           );
         },
-      ),
+      )),
     );
   }
 
@@ -425,7 +426,7 @@ class _GifPickerState extends State<GifPicker> {
         ),
         SizedBox(
           height: 62,
-          child: ListView.separated(
+          child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView.separated(controller: edgeCtrl, 
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 10),
             itemCount: _recent.length,
@@ -450,7 +451,7 @@ class _GifPickerState extends State<GifPicker> {
                 ),
               );
             },
-          ),
+          )),
         ),
         const SizedBox(height: 4),
       ],

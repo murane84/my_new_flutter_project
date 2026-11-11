@@ -9,6 +9,7 @@ import 'story_viewer.dart';
 import '../../utils/readable.dart';
 import '../../services/story_mute.dart';
 import '../../services/story_posting.dart';
+import '../../widgets/edge_scroll_row.dart';
 
 /// Horizontal "stories" strip shown at the top of the Messages list. Owns its
 /// own data: it fetches the friends-only feed and reloads after posting or
@@ -169,7 +170,7 @@ class _StoriesTrayState extends State<StoriesTray> {
     return Container(
       height: trayHeight,
       margin: const EdgeInsets.only(bottom: 4),
-      child: ListView.separated(
+      child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView.separated(controller: edgeCtrl, 
         // Keeps the strip where I'd scrolled it when a section is maximised
         // and minimised again (or I come back from a chat).
         key: const PageStorageKey<String>('stories-strip'),
@@ -187,7 +188,7 @@ class _StoriesTrayState extends State<StoriesTray> {
           return _friendTile(g, () => _openViewer(friends, idx), ringSize,
               avatarRadius, tileWidth, labelSize, badgeSize);
         },
-      ),
+      )),
     );
   }
 

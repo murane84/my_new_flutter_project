@@ -151,12 +151,12 @@ class _MixtapeScreenState extends State<_MixtapeScreen> {
                     const SizedBox(height: 10),
                     SizedBox(
                       height: 120,
-                      child: ListView.separated(
+                      child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView.separated(controller: edgeCtrl, 
                         scrollDirection: Axis.horizontal,
                         itemCount: photos.length,
                         separatorBuilder: (_, _) => const SizedBox(width: 10),
                         itemBuilder: (_, i) => _filmFrame(scheme, photos[i]),
-                      ),
+                      )),
                     ),
                   ],
                   if (songs.isEmpty && photos.isEmpty)

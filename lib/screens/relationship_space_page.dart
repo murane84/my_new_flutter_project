@@ -56,6 +56,7 @@ import '../widgets/keepsake_photo.dart';
 import '../widgets/heart_burst.dart';
 import '../utils/prefs_now.dart';
 import '../services/haptics.dart';
+import '../widgets/edge_scroll_row.dart';
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
 part 'space/space_edit_sheet.dart'; // edit-space sheet + wallpaper picker

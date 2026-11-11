@@ -494,7 +494,7 @@ class _MomentComposerState extends State<_MomentComposer> {
         ),
         SizedBox(
           height: 84,
-          child: ListView.separated(
+          child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView.separated(controller: edgeCtrl, 
             scrollDirection: Axis.horizontal,
             itemCount: _photos.length + 1,
             separatorBuilder: (_, _) => const SizedBox(width: 8),
@@ -553,7 +553,7 @@ class _MomentComposerState extends State<_MomentComposer> {
                 ],
               );
             },
-          ),
+          )),
         ),
       ],
     );

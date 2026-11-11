@@ -4,6 +4,7 @@ import '../services/aluta_mood.dart' show AlutaMoment;
 import '../services/song_insights.dart';
 import '../utils/readable.dart' show accentInk;
 import '../services/haptics.dart';
+import 'edge_scroll_row.dart';
 
 const _momentLabel = {
   AlutaMoment.dawn: ('🌄', 'Dawn'),
@@ -319,7 +320,7 @@ Future<void> showWeekInMusic(
                 if (dayTops.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
-                    child: SingleChildScrollView(
+                    child: EdgeScrollRow(builder: (_, edgeCtrl) => SingleChildScrollView(controller: edgeCtrl, 
                       scrollDirection: Axis.horizontal,
                       child: Row(children: [
                         for (final (mo, t) in dayTops)
@@ -353,7 +354,7 @@ Future<void> showWeekInMusic(
                             ),
                           ),
                       ]),
-                    ),
+                    )),
                   ),
                 if (top10Ours > 0)
                   Padding(

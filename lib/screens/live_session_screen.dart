@@ -38,6 +38,7 @@ import '../services/contact_names.dart';
 import '../widgets/concert_stage.dart';
 import '../widgets/playing_bars.dart';
 import '../services/online_watch.dart';
+import '../widgets/edge_scroll_row.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
 /// Presented with `showDialog(...)` so it floats over the chat instead of
@@ -1980,13 +1981,13 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                               style: TextStyle(
                                   fontSize: 12,
                                   color: scheme.onSurfaceVariant)))
-                      : ListView.separated(
+                      : EdgeScrollRow(builder: (_, edgeCtrl) => ListView.separated(controller: edgeCtrl, 
                           scrollDirection: Axis.horizontal,
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           itemCount: people.length,
                           separatorBuilder: (_, _) => const SizedBox(width: 10),
                           itemBuilder: (_, i) => _personChip(scheme, people[i]),
-                        ),
+                        )),
                 ),
         ),
         // ── GROUP room: who hasn't joined yet (dimmed) ──
@@ -2012,7 +2013,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
           ),
           SizedBox(
             height: 70,
-            child: ListView.separated(
+            child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView.separated(controller: edgeCtrl, 
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               itemCount: _waiting.length,
@@ -2021,7 +2022,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                 opacity: 0.45,
                 child: _personChip(scheme, _waiting[i]),
               ),
-            ),
+            )),
           ),
         ],
         Divider(height: 12, color: scheme.outlineVariant.withAlpha(80)),

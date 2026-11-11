@@ -489,7 +489,7 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
             Container(
               height: 52,
               color: Colors.black,
-              child: ListView.separated(
+              child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView.separated(controller: edgeCtrl, 
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 itemCount: _emojiTray.length,
@@ -501,7 +501,7 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
                         style: const TextStyle(fontSize: 26)),
                   ),
                 ),
-              ),
+              )),
             ),
           // ── Tool + colour bar ───────────────────────────────────────────
           Container(

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../../utils/readable.dart' show accentInk;
+import '../../widgets/edge_scroll_row.dart';
 
 /// The chat "attach" bottom sheet — a compact, content-hugging sheet with a
 /// vibrant grid of share options and, on Android/iOS, a horizontally-scrolling
@@ -368,13 +369,13 @@ class _AttachSheetState extends State<AttachSheet> {
   Widget _photoStrip(ColorScheme scheme) {
     return SizedBox(
       height: 96,
-      child: ListView.separated(
+      child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView.separated(controller: edgeCtrl, 
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: _recent.length,
         separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, i) => _photoThumb(scheme, _recent[i]),
-      ),
+      )),
     );
   }
 
@@ -405,7 +406,7 @@ class _AttachSheetState extends State<AttachSheet> {
   Widget _shimmerStrip(ColorScheme scheme) {
     return SizedBox(
       height: 96,
-      child: ListView.separated(
+      child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView.separated(controller: edgeCtrl, 
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         physics: const NeverScrollableScrollPhysics(),
@@ -419,7 +420,7 @@ class _AttachSheetState extends State<AttachSheet> {
             borderRadius: BorderRadius.circular(14),
           ),
         ),
-      ),
+      )),
     );
   }
 

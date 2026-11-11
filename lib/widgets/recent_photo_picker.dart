@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../utils/readable.dart' show accentInk;
+import 'edge_scroll_row.dart';
 
 /// What the person chose in [showRecentPhotoPicker].
 class PhotoPick {
@@ -181,13 +182,13 @@ class _RecentPhotoSheetState extends State<_RecentPhotoSheet> {
       ),
       SizedBox(
         height: 40,
-        child: ListView.separated(
+        child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView.separated(controller: edgeCtrl, 
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           itemCount: chips.length,
           separatorBuilder: (_, _) => const SizedBox(width: 8),
           itemBuilder: (_, i) => chips[i],
-        ),
+        )),
       ),
       const SizedBox(height: 10),
     ]);

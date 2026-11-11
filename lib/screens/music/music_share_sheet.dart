@@ -370,7 +370,7 @@ class _ShareSheetState extends State<_ShareSheet> {
                 // Songs being shared.
                 SizedBox(
                   height: 44,
-                  child: ListView(
+                  child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView(controller: edgeCtrl, 
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     children: [
@@ -404,7 +404,7 @@ class _ShareSheetState extends State<_ShareSheet> {
                         ),
                       ),
                     ],
-                  ),
+                  )),
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),

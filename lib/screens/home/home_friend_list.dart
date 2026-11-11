@@ -1147,7 +1147,7 @@ extension _HomeFriendListView on HomePageState {
           ),
           SizedBox(
             height: 72,
-            child: ListView(
+            child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView(controller: edgeCtrl, 
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -1155,7 +1155,7 @@ extension _HomeFriendListView on HomePageState {
                 for (final s in others) _spaceChip(s, scheme),
                 _newSpaceChip(scheme),
               ],
-            ),
+            )),
           ),
         ],
       ),

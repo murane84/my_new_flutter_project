@@ -10,6 +10,7 @@ import '../utils/toast_helper.dart';
 import '../services/wallpapers_service.dart';
 import '../screens/api_service.dart';
 import 'wallpaper_gallery.dart';
+import 'edge_scroll_row.dart';
 
 String _mimeForExt(String ext) {
   switch (ext.toLowerCase()) {
@@ -297,7 +298,7 @@ Future<void> showChatWallpaperSheet(
                           const SizedBox(height: 8),
                           SizedBox(
                             height: 96,
-                            child: ListView.separated(
+                            child: EdgeScrollRow(builder: (_, edgeCtrl) => ListView.separated(controller: edgeCtrl, 
                               scrollDirection: Axis.horizontal,
                               itemCount: reusable.length,
                               separatorBuilder: (_, _) =>
@@ -337,7 +338,7 @@ Future<void> showChatWallpaperSheet(
                                   ]),
                                 );
                               },
-                            ),
+                            )),
                           ),
                         ],
                       ],

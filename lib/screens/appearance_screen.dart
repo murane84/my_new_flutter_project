@@ -1258,8 +1258,9 @@ class _SectionTransitionsSection extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
                     child: Text(
-                        'How Circle switches between All · Status · Listening · '
-                        'Circle. Each one is playing below.',
+                        'How Aluta moves between Harmony · Circle · Glow, '
+                        'Circle\u2019s All · Status · Listening · Circle and '
+                        'Glow\u2019s categories. Each one is playing below.',
                         style: TextStyle(
                             fontSize: 12, color: scheme.onSurfaceVariant)),
                   ),

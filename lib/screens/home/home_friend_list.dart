@@ -262,10 +262,16 @@ extension _HomeFriendListView on HomePageState {
       ColorScheme scheme,
       Color textColor,
       bool wide) {
+    // The layer is fixed NOW, when this page is made — not read again when
+    // it rebuilds. While a transition runs the leaving page keeps rebuilding;
+    // reading the live layer there turned the leaving Circle into Glow too,
+    // so the wave wiped Glow over Glow (Circle's sections already worked
+    // this way: their body takes its view up front).
+    final layer = _friendLayer;
     return Builder(
                     builder: (context) {
                       // Glow (third layer) fills the panel on any width.
-                      if (_friendLayer == 'glow') {
+                      if (layer == 'glow') {
                         final feed = Center(
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 720),
@@ -286,7 +292,8 @@ extension _HomeFriendListView on HomePageState {
                       // contextual search; the Harmony/Circle switch pills live
                       // in the header. See home_hub.dart.
                       return _friendHubMobile(
-                          harmonyEntries, circleEntries, scheme, textColor);
+                          harmonyEntries, circleEntries, scheme, textColor,
+                          layer: layer);
                     },
     );
   }

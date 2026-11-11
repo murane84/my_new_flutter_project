@@ -9,6 +9,7 @@ import '../services/aluta_mood.dart';
 import '../services/song_insights.dart';
 import '../services/account_prefs.dart';
 import 'heart_burst.dart';
+import 'section_switch.dart';
 import '../screens/api_service.dart';
 import '../screens/stories/quick_status_sheet.dart';
 
@@ -235,11 +236,17 @@ class _GlowFeedState extends State<GlowFeed> {
       children: [
         _filters(scheme),
         const SizedBox(height: 10),
+        // Changing category moves like Circle's sections: the user's chosen
+        // section transition, coming from the side the new tab sits on.
         Expanded(
-          child: ListView(
+          child: SectionSwitch(
+            forward: _filterForward,
+            child: KeyedSubtree(
+              key: ValueKey('glow-${_filter.name}'),
+              child: ListView(
       // Like the Circle / Harmony lists: back from a chat (or another
-      // layer) lands where I'd scrolled.
-      key: const PageStorageKey<String>('glow-list'),
+      // layer) lands where I'd scrolled — each category its own spot.
+      key: PageStorageKey<String>('glow-list-${_filter.name}'),
       controller: _scroll,
       padding: const EdgeInsets.fromLTRB(2, 0, 2, 20),
       children: [
@@ -270,10 +277,25 @@ class _GlowFeedState extends State<GlowFeed> {
         const SizedBox(height: 8),
         _footer(scheme),
       ],
+              ),
+            ),
           ),
         ),
       ],
     );
+  }
+
+  /// Which way the last category change went (→ the new tab is further
+  /// right), for the transition's direction.
+  bool _filterForward = true;
+
+  void _pickFilter(_Filter f) {
+    if (f == _filter) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      _filterForward = f.index > _filter.index;
+      _filter = f;
+    });
   }
 
   /// The categories as a SEGMENTED TRACK, not another row of pills: one soft
@@ -309,7 +331,8 @@ class _GlowFeedState extends State<GlowFeed> {
       ),
       child: LayoutBuilder(builder: (context, box) {
         final compact = box.maxWidth < 560;
-        return Row(
+        final n = _Filter.values.length;
+        final row = Row(
           children: [
             for (final f in _Filter.values)
               Expanded(
@@ -320,18 +343,57 @@ class _GlowFeedState extends State<GlowFeed> {
                     tabs[f]!.$1,
                     tabs[f]!.$2,
                     _filter == f,
-                    () => setState(() => _filter = f),
-                    showLabel: !compact || _filter == f),
+                    () => _pickFilter(f),
+                    showLabel: !compact || _filter == f,
+                    // Roomy: the white thumb is ONE piece sliding under
+                    // the tabs (like Circle's switcher), not each tab
+                    // fading its own background in and out.
+                    ownThumb: compact),
               ),
           ],
         );
+        if (compact) return row;
+        return Stack(children: [
+          AnimatedAlign(
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOutBack,
+            alignment:
+                Alignment(-1 + 2 * _filter.index / (n - 1), 0),
+            child: FractionallySizedBox(
+              widthFactor: 1 / n,
+              heightFactor: 1,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: isDark ? scheme.surface : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: scheme.primary.withValues(alpha: 0.28)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black
+                            .withValues(alpha: isDark ? 0.35 : 0.10),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          row,
+        ]);
       }),
     );
   }
 
   Widget _segment(ColorScheme scheme, bool isDark, IconData icon, String label,
-      bool on, VoidCallback onTap, {bool showLabel = true}) {
+      bool on, VoidCallback onTap,
+      {bool showLabel = true, bool ownThumb = true}) {
     final fg = on ? scheme.primary : scheme.onSurfaceVariant;
+    final thumb = on && ownThumb;
     return Tooltip(
       message: showLabel ? '' : label,
       child: Padding(
@@ -347,15 +409,15 @@ class _GlowFeedState extends State<GlowFeed> {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: on
+              color: thumb
                   ? (isDark ? scheme.surface : Colors.white)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
-              border: on
+              border: thumb
                   ? Border.all(
                       color: scheme.primary.withValues(alpha: 0.28))
                   : null,
-              boxShadow: on
+              boxShadow: thumb
                   ? [
                       BoxShadow(
                         color: Colors.black

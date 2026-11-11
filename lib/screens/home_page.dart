@@ -370,11 +370,37 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   // Which way the Harmony · Circle · Glow switch moves (for the transition).
   bool _layerForward = true;
+  // Where a ripple starts across the top (0..1) for the last layer change;
+  // null = the side it comes from.
+  double? _layerRippleFrom;
+  // The box the layers switch in (to place the desktop toggle's ripple).
+  final GlobalKey _layerBoxKey = GlobalKey(debugLabel: 'layerBox');
+
+  /// Desktop Glow toggle: in AND out from the button itself — the ripple
+  /// starts under it and the wave / slide come from its side (it sits on
+  /// the left), instead of leaving toward the far right.
+  void _toggleGlowFrom(BuildContext button) {
+    double? fx;
+    final b = button.findRenderObject() as RenderBox?;
+    final box = _layerBoxKey.currentContext?.findRenderObject() as RenderBox?;
+    if (b != null && box != null && b.hasSize && box.hasSize) {
+      final c = b.localToGlobal(b.size.center(Offset.zero));
+      final o = box.localToGlobal(Offset.zero);
+      fx = ((c.dx - o.dx) / box.size.width).clamp(0.0, 1.0);
+    }
+    final toLeft = (fx ?? 0) < 0.5;
+    _setFriendLayer(_friendLayer == 'glow' ? 'circle' : 'glow',
+        forward: toLeft, rippleFrom: fx);
+  }
   static const List<String> _kLayers = ['harmony', 'circle', 'glow'];
 
-  void _setFriendLayer(String layer) {
+  /// [forward] / [rippleFrom] override where the change seems to come from
+  /// (the desktop Glow toggle: always from the button, both ways).
+  void _setFriendLayer(String layer, {bool? forward, double? rippleFrom}) {
     if (_friendLayer == layer) return;
-    _layerForward = _kLayers.indexOf(layer) > _kLayers.indexOf(_friendLayer);
+    _layerForward = forward ??
+        (_kLayers.indexOf(layer) > _kLayers.indexOf(_friendLayer));
+    _layerRippleFrom = rippleFrom;
     // Drop any active search focus first, so switching layers never carries the
     // keyboard/focus onto the other layer's (separate) search box.
     FocusManager.instance.primaryFocus?.unfocus();
@@ -5337,9 +5363,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
           ),
           const SizedBox(width: 12),
           // Desktop: Glow takes over the panel; tap again to return.
-          _layerTab(scheme, 'glow', 'Glow', Icons.auto_awesome_rounded, 0,
-              onTap: () =>
-                  _setFriendLayer(_friendLayer == 'glow' ? 'circle' : 'glow')),
+          Builder(
+            builder: (bctx) => _layerTab(
+                scheme, 'glow', 'Glow', Icons.auto_awesome_rounded, 0,
+                onTap: () => _toggleGlowFrom(bctx)),
+          ),
           const Spacer(),
         ],
         // Right side status: when online, a green "N online" chip (moved up

@@ -175,7 +175,9 @@ extension _HomeFriendListView on HomePageState {
                           ? 'glow'
                           : (wide ? 'columns' : _friendLayer);
                       final switched = SectionSwitch(
+                        key: _layerBoxKey,
                         forward: _layerForward,
+                        rippleFrom: _layerRippleFrom,
                         child: KeyedSubtree(
                           key: ValueKey('layer-$layerKey'),
                           child: _layerBody(harmonyEntries, circleEntries,

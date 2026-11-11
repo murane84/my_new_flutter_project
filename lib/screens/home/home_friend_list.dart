@@ -1175,8 +1175,8 @@ extension _HomeFriendListView on HomePageState {
         others.isNotEmpty ? _avatarFull(others.first['avatar_url']) : null;
     final otherId =
         others.isNotEmpty ? (others.first['id'] as num?)?.toInt() : null;
-    final listening = otherId != null &&
-        NowPlayingPresence.instance.trackFor(otherId) != null;
+    final listening =
+        otherId != null && SteadyListening.instance.isPlaying(otherId);
     final online =
         otherId != null && ref.watch(presenceProvider).isOnline(otherId);
 

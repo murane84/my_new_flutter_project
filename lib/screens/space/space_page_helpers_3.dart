@@ -370,10 +370,32 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
   // the rich live card; otherwise a gentle invite to start listening together,
   // so the hero is ALWAYS present (never a blank gap) and always points back at
   // the one thing only Aluta can do.
+  // Read steadily (like Harmony's hero): a start shows once it holds, a
+  // stop lingers as "paused" for a little while — and the switch between
+  // the live card and the invite eases (size + fade) instead of snapping.
   Widget _presenceHero(ColorScheme scheme) {
     final pid = _partnerId;
+    final track = pid == null ? null : SteadyListening.instance.trackFor(pid);
+    final active =
+        track != null && (track['title'] ?? '').toString().trim().isNotEmpty;
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        child: KeyedSubtree(
+          key: ValueKey(active ? 'tune-in' : 'invite'),
+          child: _presenceHeroInner(scheme),
+        ),
+      ),
+    );
+  }
+
+  Widget _presenceHeroInner(ColorScheme scheme) {
+    final pid = _partnerId;
     if (pid == null) return const SizedBox.shrink();
-    final track = NowPlayingPresence.instance.trackFor(pid);
+    final track = SteadyListening.instance.trackFor(pid);
     final active =
         track != null && (track['title'] ?? '').toString().trim().isNotEmpty;
     if (active) return _tuneInCard(scheme);
@@ -450,8 +472,9 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
   Widget _tuneInCard(ColorScheme scheme) {
     final pid = _partnerId;
     if (pid == null) return const SizedBox.shrink();
-    final track = NowPlayingPresence.instance.trackFor(pid);
+    final track = SteadyListening.instance.trackFor(pid);
     if (track == null) return const SizedBox.shrink();
+    final paused = SteadyListening.instance.isPaused(pid);
     final t = (track['title'] ?? '').toString().trim();
     final a = (track['artist'] ?? '').toString().trim();
     if (t.isEmpty) return const SizedBox.shrink();
@@ -495,7 +518,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('$name is listening now',
+                  Text(paused ? '$name paused' : '$name is listening now',
                       style: TextStyle(
                           fontSize: 11.5, color: scheme.onSurfaceVariant)),
                   const SizedBox(height: 2),
@@ -510,7 +533,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
             ),
             const SizedBox(width: 10),
             FilledButton(
-              onPressed: _listenTogether,
+              onPressed: paused ? null : _listenTogether,
               style: FilledButton.styleFrom(
                 backgroundColor: _accent,
                 foregroundColor: readableOn(_accent),

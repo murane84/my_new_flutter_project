@@ -21,6 +21,7 @@ import 'home_page.dart'
 import 'live_session_screen.dart';
 import 'token_helper.dart' show getToken, mediaAuthHeaders;
 import '../services/now_playing_presence.dart';
+import '../services/steady_listening.dart';
 import '../utils/toast_helper.dart';
 import '../utils/time_utils.dart' show parseServerTime;
 import '../services/heart_lock.dart';
@@ -722,6 +723,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     // Repaint when the partner starts/stops/changes what they're playing, so the
     // "tune in together" card appears and clears live.
     NowPlayingPresence.instance.addListener(_onPresence);
+    SteadyListening.instance.addListener(_onPresence);
     // Reload when a bond action lands over the socket, so an action one partner
     // takes shows up on the other's open page without a manual refresh.
     spaceEventBus.addListener(_onSpaceEvent);
@@ -745,6 +747,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   @override
   void dispose() {
     NowPlayingPresence.instance.removeListener(_onPresence);
+    SteadyListening.instance.removeListener(_onPresence);
     spaceEventBus.removeListener(_onSpaceEvent);
     _diaryPageCtrl.dispose();
     _qAnswerCtrl.dispose();

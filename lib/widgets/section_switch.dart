@@ -74,8 +74,10 @@ class SectionSwitch extends StatelessWidget {
         // Heartbeat gets room to settle (a spring hurried reads as a snap).
         : s == SectionTransitionStyle.heartbeat
             ? duration + const Duration(milliseconds: 300)
-            : s == SectionTransitionStyle.wave ||
-                    s == SectionTransitionStyle.ripple ||
+            // The wave gets room to glide (a hurried wipe reads as a snap).
+            : s == SectionTransitionStyle.wave
+                ? duration + const Duration(milliseconds: 260)
+            : s == SectionTransitionStyle.ripple ||
                     s == SectionTransitionStyle.equaliser
                 ? duration + const Duration(milliseconds: 120)
                 : duration;
@@ -109,6 +111,11 @@ class SectionSwitch extends StatelessWidget {
   }
 
   static double _ease(double t) => Curves.easeOutCubic.transform(t);
+
+  /// The waveform wipe's travel: a SOFT start (a heavy first frame — a
+  /// whole area drawn at once — barely moves it, so nothing jumps), a
+  /// steady glide, and a long, gentle settle.
+  static const Curve waveCurve = Cubic(0.45, 0.05, 0.25, 1.0);
 
   /// The arriving page's heartbeat, k 0 → 1: ONE continuous damped spring
   /// (no stitched segments, so the speed never jumps and nothing snaps).
@@ -165,7 +172,7 @@ class SectionSwitch extends StatelessWidget {
         // The sweep starts on the side the new page COMES FROM (forward =
         // from the right, like the slide and a finger dragging left) —
         // the clippers count their own way, hence -dir.
-        return _WaveClipper(_ease(r), -dir);
+        return _WaveClipper(waveCurve.transform(r), -dir);
       case SectionTransitionStyle.equaliser:
         return _BarsClipper(r, -dir);
       default:
@@ -396,7 +403,7 @@ double _waveX(double t, double w, double dir) =>
 /// The wave's swing: none at the very start and end, so a finished change
 /// leaves no sliver of the old page along the edge (and an unstarted one
 /// cuts nothing off the current page).
-double _waveAmp(double t) => 7 * math.sin(math.pi * t.clamp(0.0, 1.0));
+double _waveAmp(double t) => 6 * math.sin(math.pi * t.clamp(0.0, 1.0));
 
 /// Everything behind a sound-wave edge sweeping across.
 class _WaveClipper extends CustomClipper<Path> {
@@ -434,7 +441,7 @@ class _WaveLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) => IgnorePointer(
         child: CustomPaint(
-          painter: _WavePainter(SectionSwitch._ease(t), dir,
+          painter: _WavePainter(SectionSwitch.waveCurve.transform(t), dir,
               color.withValues(alpha: opacity * math.sin(math.pi * t))),
         ),
       );

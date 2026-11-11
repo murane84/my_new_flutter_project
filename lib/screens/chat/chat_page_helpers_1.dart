@@ -475,14 +475,14 @@ extension _ChatPageHelpers1 on _ChatPageState {
       'never forget this',
       'my favourite',
     ];
-    return showAdaptiveSheet<String>(
+    final noteFocus = FocusNode();
+    final sheet = showAdaptiveSheet<String>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (bctx) {
         final scheme = Theme.of(bctx).colorScheme;
         bool showEmoji = false;
-        final noteFocus = FocusNode();
         Widget preview;
         if (type == 'image' && rel.isNotEmpty) {
           final url = fullMediaUrl(rel);
@@ -667,6 +667,10 @@ extension _ChatPageHelpers1 on _ChatPageState {
         );
       },
     );
+    // Freed once the sheet has finished sliding away.
+    sheet.whenComplete(() =>
+        Future.delayed(const Duration(seconds: 1), noteFocus.dispose));
+    return sheet;
   }
 
   /// Append a quick note suggestion / emoji to the keepsake note field.

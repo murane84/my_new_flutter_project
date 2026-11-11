@@ -69,12 +69,14 @@ class SectionSwitch extends StatelessWidget {
     final skip = skipUntil != null && DateTime.now().isBefore(skipUntil!);
     final ms = skip
         ? Duration.zero
-        : s == SectionTransitionStyle.wave ||
-                s == SectionTransitionStyle.ripple ||
-                s == SectionTransitionStyle.equaliser ||
-                s == SectionTransitionStyle.heartbeat
-            ? duration + const Duration(milliseconds: 120)
-            : duration;
+        // Heartbeat gets room to settle (a spring hurried reads as a snap).
+        : s == SectionTransitionStyle.heartbeat
+            ? duration + const Duration(milliseconds: 300)
+            : s == SectionTransitionStyle.wave ||
+                    s == SectionTransitionStyle.ripple ||
+                    s == SectionTransitionStyle.equaliser
+                ? duration + const Duration(milliseconds: 120)
+                : duration;
     return ClipRect(
       child: AnimatedSwitcher(
         duration: ms,
@@ -106,15 +108,18 @@ class SectionSwitch extends StatelessWidget {
 
   static double _ease(double t) => Curves.easeOutCubic.transform(t);
 
-  /// The arriving page's heartbeat, k 0 → 1: 0.84 → 1.06 ("lub") → 0.97
-  /// → 1.03 ("dub") → home at 1.0.
+  /// The arriving page's heartbeat, k 0 → 1: ONE continuous damped spring
+  /// (no stitched segments, so the speed never jumps and nothing snaps).
+  /// From 0.86 at rest it swells past full size (≈1.04, the "lub"), gives a
+  /// little (≈0.99, the "dub") and settles — landing on exactly 1.0.
   static double _beat(double k) {
-    double seg(double a, double b, double from, double to, Curve c) =>
-        from + (to - from) * c.transform(((k - a) / (b - a)).clamp(0.0, 1.0));
-    if (k < 0.32) return seg(0, 0.32, 0.84, 1.06, Curves.easeOutCubic);
-    if (k < 0.47) return seg(0.32, 0.47, 1.06, 0.97, Curves.easeInOut);
-    if (k < 0.62) return seg(0.47, 0.62, 0.97, 1.03, Curves.easeOut);
-    return seg(0.62, 1, 1.03, 1.0, Curves.easeInOutCubic);
+    const s0 = 0.86, w = 10.0, d = 4.2;
+    final env = math.exp(-d * k);
+    final spring = env * (math.cos(w * k) + (d / w) * math.sin(w * k));
+    // The spring's last ~0.2 % is folded away smoothly so the page ends at
+    // exactly full size (it would otherwise rest a hair small).
+    final fold = 1 - math.pow(k, 6);
+    return 1 - (1 - s0) * spring * fold;
   }
 
   static Widget _layout(Widget? cur, List<Widget> prev) {
@@ -177,11 +182,12 @@ class SectionSwitch extends StatelessWidget {
         // Lub-dub: the leaving page settles back and is gone by 40 %; the
         // arriving one (from 15 %) beats in — a little past full size, then
         // home — drifting a touch from its side so swipes still read.
-        // The leaving page contracts away (gone by 40 %).
+        // The leaving page contracts away, easing in (gone by 40 %).
         if (!incoming) {
           return Opacity(
             opacity: _outFade(t),
-            child: Transform.scale(scale: 0.88 + 0.12 * t, child: w),
+            child: Transform.scale(
+                scale: 0.9 + 0.1 * Curves.easeOut.transform(t), child: w),
           );
         }
         // The arriving page is solid early (so it reads as a BEAT, not a
@@ -190,7 +196,7 @@ class SectionSwitch extends StatelessWidget {
         final k = ((t - 0.15) / 0.85).clamp(0.0, 1.0);
         return Stack(fit: StackFit.expand, children: [
           Opacity(
-            opacity: (k / 0.3).clamp(0.0, 1.0),
+            opacity: Curves.easeOutCubic.transform((k / 0.35).clamp(0.0, 1.0)),
             child: Transform.translate(
               offset: Offset((1 - _ease(k)) * 12 * dir, 0),
               child: Transform.scale(scale: _beat(k), child: w),

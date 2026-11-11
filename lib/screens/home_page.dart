@@ -3874,7 +3874,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// LAYS OUT 36 px tall — the rim overhangs into the header's padding — so
   /// the header is the same height with or without a ring.
   Widget _headerPhotoSlot(Widget ring) => AvatarFlightTarget(
-        // The photo tapped in the list lands here (AvatarFlight).
+        // The photo tapped in the list lands here (PanelFlight).
         child: SizedBox(
           width: 42,
           height: 36,
@@ -3904,7 +3904,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         center: from.center,
         width: min(from.width, 44),
         height: min(from.height, 44));
-    AvatarFlight.fly(
+    PanelFlight.fly(
         context,
         face,
         InitialsAvatar(

@@ -1,4 +1,5 @@
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+import 'package:flutter/foundation.dart' show mergeSort;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -43,14 +44,14 @@ class EmojiColonSuggestState extends State<EmojiColonSuggest> {
   }
 
   @override
-  void didUpdateWidget(covariant EmojiColonSuggest old) {
-    super.didUpdateWidget(old);
-    if (old.controller != widget.controller) {
-      old.controller.removeListener(_onText);
+  void didUpdateWidget(covariant EmojiColonSuggest oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onText);
       widget.controller.addListener(_onText);
     }
-    if (old.focus != widget.focus) {
-      old.focus.removeListener(_onFocus);
+    if (oldWidget.focus != widget.focus) {
+      oldWidget.focus.removeListener(_onFocus);
       widget.focus.addListener(_onFocus);
     }
   }

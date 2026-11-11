@@ -995,9 +995,19 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
     ];
     if (_cursor >= _flat.length) _cursor = _flat.length - 1;
 
+    // Desktop opens this as a panel that slides away to the RIGHT: its close
+    // arrow points that way too (a phone page keeps the usual ← back).
+    final sidePanel = ModalRoute.of(context) is! PageRoute;
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
+        leading: sidePanel
+            ? IconButton(
+                tooltip: 'Close search',
+                icon: const Icon(Icons.arrow_forward_rounded),
+                onPressed: () => Navigator.maybePop(context),
+              )
+            : null,
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: Colors.transparent,

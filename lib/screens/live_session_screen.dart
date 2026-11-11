@@ -1267,6 +1267,21 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       _snack('The host said not now for “$title”');
       return;
     }
+    // One save at a time (the answer arriving + a tap on "Save it").
+    if (_songSaving.contains(hash)) return;
+    setState(() => _songSaving.add(hash));
+    try {
+      await _keepSong(hash, title);
+    } finally {
+      _songSaving.remove(hash);
+      if (mounted) setState(() {});
+    }
+  }
+
+  // Songs being fetched / saved right now (by hash) → "Saving…".
+  final Set<String> _songSaving = {};
+
+  Future<void> _keepSong(String hash, String title) async {
     _snack('Getting “$title”…');
     final bytes = await _c.takeSharedSong(hash);
     if (!mounted) return;
@@ -2749,8 +2764,12 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
             // One action that follows this song through the session:
             // ask → waiting → save it → yours to keep (say thanks) → done.
             Builder(builder: (_) {
-              final st = _askState;
+              final h = _c.currentHash;
+              final st = (h != null && _songSaving.contains(h))
+                  ? 'saving'
+                  : _askState;
               final (IconData icon, String label, bool live) = switch (st) {
+                'saving' => (Icons.downloading_rounded, 'Saving…', false),
                 'asked' => (Icons.hourglass_top_rounded,
                     'Asked the host…', false),
                 'yes' => (Icons.download_done_rounded,

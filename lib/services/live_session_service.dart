@@ -2145,6 +2145,15 @@ class LiveSessionController {
       }
     }
     if (type == 'song_share' && role == LiveRole.listener) {
+      final h = (msg['hash'] ?? '').toString();
+      if (h.isNotEmpty) {
+        if (msg['ok'] == true) {
+          songAsks[h] = 'yes';
+          songYes[h] = Map<String, dynamic>.from(msg);
+        } else {
+          songAsks[h] = 'later';
+        }
+      }
       final unseen = onEvent == null ||
           WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed;
       if (unseen) {
@@ -2458,6 +2467,16 @@ class LiveSessionController {
   // keeps the copy it already received (or the host sends it over the same
   // private peer channel). Nothing goes through the server or to anyone else.
 
+  /// LISTENER, this session: where each song (by hash) stands with "Ask for
+  /// this song" — 'asked' (waiting on the host), 'later' (host said not
+  /// now; may ask again), 'yes' (host said yes, not saved yet), 'kept'
+  /// (saved), 'thanked'. Lives on the controller so minimising the jam
+  /// screen never forgets it.
+  final Map<String, String> songAsks = {};
+
+  /// A yes I haven't saved yet (save dialog cancelled) → "Save it" retries.
+  final Map<String, Map<String, dynamic>> songYes = {};
+
   /// Listener: the song playing now (from the host's offer).
   String? currentHash;
   String currentMime = 'audio/mpeg';
@@ -2469,6 +2488,7 @@ class LiveSessionController {
     final host = _lHostId;
     final h = currentHash;
     if (host == null || h == null || h.isEmpty) return false;
+    songAsks[h] = 'asked';
     _sendControl({
       'type': 'song_request',
       'to': host,

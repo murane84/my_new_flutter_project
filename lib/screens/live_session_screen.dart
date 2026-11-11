@@ -1180,20 +1180,52 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   }
 
   // ── Ask the host for the song playing now ───────────────────────────────
-  String? _songAsked; // title I asked for (waiting on the host)
+  // Where the song playing now stands (per song, for the whole session —
+  // kept on the controller): null · asked · later · yes · kept · thanked.
+  String? get _askState {
+    final h = _c.currentHash;
+    return (h == null || h.isEmpty) ? null : _c.songAsks[h];
+  }
 
   void _askForSong() {
     final title = _title;
+    final h = _c.currentHash;
     if (!_c.requestSongFile()) {
       _snack('The song isn’t ready yet — try in a moment');
       return;
     }
-    setState(() => _songAsked = title);
+    setState(() {});
     _snack('Asked the host for “$title” 🎵');
     // No answer in a while → let them ask again.
     Future<void>.delayed(const Duration(seconds: 60), () {
-      if (mounted && _songAsked == title) setState(() => _songAsked = null);
+      if (h != null && _c.songAsks[h] == 'asked') {
+        _c.songAsks.remove(h);
+        if (mounted) setState(() {});
+      }
     });
+  }
+
+  /// The one action under the controls, by where this song stands.
+  void _onSongAction() {
+    final h = _c.currentHash;
+    switch (_askState) {
+      case 'yes':
+        final e = h == null ? null : _c.songYes[h];
+        if (e != null) _onSongShare(e);
+      case 'kept':
+        // Aluta: a song given is a little gift — say thanks in the room.
+        final line = '💞 Thank you ${widget.peerName} for “$_title”';
+        _c.sendComment(line);
+        _logComment(line, widget.myUserId, mine: true);
+        _spawnReaction('💞', mine: true);
+        if (h != null) _c.songAsks[h] = 'thanked';
+        setState(() {});
+      case 'asked':
+      case 'thanked':
+        break;
+      default:
+        _askForSong();
+    }
   }
 
   /// HOST: a listener asked for the song — the host decides.
@@ -1228,17 +1260,18 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
 
   /// LISTENER: the host answered.
   Future<void> _onSongShare(Map<String, dynamic> e) async {
-    final title = (e['title'] ?? _songAsked ?? 'the song').toString();
-    if (mounted) setState(() => _songAsked = null);
+    final title = (e['title'] ?? 'the song').toString();
+    final hash = (e['hash'] ?? '').toString();
+    if (mounted) setState(() {}); // the controller already noted the answer
     if (e['ok'] != true) {
       _snack('The host said not now for “$title”');
       return;
     }
-    final hash = (e['hash'] ?? '').toString();
     _snack('Getting “$title”…');
     final bytes = await _c.takeSharedSong(hash);
     if (!mounted) return;
     if (bytes == null || bytes.isEmpty) {
+      // Still a yes — "Save it" tries again.
       _snack('Couldn’t get the song — try again', type: ToastType.error);
       return;
     }
@@ -1263,8 +1296,12 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       );
       if (!mounted) return;
       if (saved != null || kIsWeb) {
+        _c.songAsks[hash] = 'kept';
+        _c.songYes.remove(hash);
+        setState(() {});
         _snack('Saved “$title” 🎶', type: ToastType.success);
       }
+      // Cancelled the save → it stays a yes: "Save it" asks again.
     } catch (_) {
       _snack('Couldn’t save the song', type: ToastType.error);
     }
@@ -2709,17 +2746,27 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                   fontSize: 10.5, color: scheme.onSurfaceVariant),
             ),
             // Loved it? Ask the host for this song to keep.
-            TextButton.icon(
-              onPressed: (!_ready || _songAsked != null) ? null : _askForSong,
-              icon: Icon(
-                  _songAsked != null
-                      ? Icons.hourglass_top_rounded
-                      : Icons.download_rounded,
-                  size: 16),
-              label: Text(
-                  _songAsked != null
-                      ? 'Asked the host…'
-                      : 'Ask for this song',
+            // One action that follows this song through the session:
+            // ask → waiting → save it → yours to keep (say thanks) → done.
+            Builder(builder: (_) {
+              final st = _askState;
+              final (IconData icon, String label, bool live) = switch (st) {
+                'asked' => (Icons.hourglass_top_rounded,
+                    'Asked the host…', false),
+                'yes' => (Icons.download_done_rounded,
+                    'The host said yes · Save it', true),
+                'kept' => (Icons.favorite_rounded,
+                    'Yours to keep · Say thanks 💞', true),
+                'thanked' => (Icons.favorite_rounded,
+                    'Yours to keep 💞', false),
+                'later' => (Icons.download_rounded,
+                    'Not now, said the host · Ask again', true),
+                _ => (Icons.download_rounded, 'Ask for this song', true),
+              };
+              return TextButton.icon(
+              onPressed: (!_ready || !live) ? null : _onSongAction,
+              icon: Icon(icon, size: 16),
+              label: Text(label,
                   style: const TextStyle(
                       fontSize: 12, fontWeight: FontWeight.w700)),
               style: TextButton.styleFrom(
@@ -2727,7 +2774,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                 minimumSize: const Size(0, 32),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-            ),
+            );
+            }),
           ],
         );
       },

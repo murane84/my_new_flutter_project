@@ -398,11 +398,8 @@ extension _HomeFriendListView on HomePageState {
                   'your people & chats', _circleBadge(),
                   onRefresh: _onPullToRefresh,
                   onTitleTap: () => _scrollLayerToTop('circle')),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
-                child: _friendSearchField(scheme, _searchCtrl,
-                    _circleSearchHint, _filterFriends),
-              ),
+              // (Search lives in the switcher row: 🔍 → the row becomes the
+              // search box for the open section.)
               // Status & Stories · Listening now · Your circle — sharing the
               // column, or one maximised to the full column height.
               ..._circleSections(wideListening, wideCircle, scheme, textColor,

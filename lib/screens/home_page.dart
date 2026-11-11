@@ -316,6 +316,37 @@ class HomePageState extends rp.ConsumerState<HomePage>
   Map<String, dynamic>? _pendingReplyTo;
   List<Map<String, dynamic>> _filteredGroups = [];
   final TextEditingController _searchCtrl = TextEditingController();
+  // Circle search: the switcher row turned into the search box.
+  bool _circleSearching = false;
+  late final FocusNode _circleSearchFocus = FocusNode()
+    ..addListener(_onCircleSearchFocus);
+
+  void _openCircleSearch() {
+    setState(() => _circleSearching = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _circleSearchFocus.requestFocus();
+    });
+  }
+
+  /// × / Esc / Back: clear the search and give the row back to the pills.
+  void _closeCircleSearch() {
+    _circleSearchFocus.unfocus();
+    if (_searchCtrl.text.isNotEmpty) {
+      _searchCtrl.clear();
+      _filterFriends('');
+    }
+    setState(() => _circleSearching = false);
+  }
+
+  /// Leaving an EMPTY search box (tapping elsewhere) folds it away too.
+  void _onCircleSearchFocus() {
+    if (!_circleSearchFocus.hasFocus &&
+        _searchCtrl.text.isEmpty &&
+        _circleSearching &&
+        mounted) {
+      setState(() => _circleSearching = false);
+    }
+  }
   // A SEPARATE controller for the Harmony (spaces) search, so the two layers'
   // search boxes are independent — required on desktop where both columns show
   // their own search at once, and nice on mobile so switching keeps each query.
@@ -498,6 +529,24 @@ class HomePageState extends rp.ConsumerState<HomePage>
         return false;
       }
       _toggleChatFullScreen();
+      return true;
+    }
+    // Ctrl+F (⌘F on a Mac): search the open Circle section (wide layouts,
+    // Home in front — a chat's own search keeps its place inside the chat).
+    final cmd = defaultTargetPlatform == TargetPlatform.macOS
+        ? kb.isMetaPressed
+        : kb.isControlPressed;
+    if (cmd &&
+        !kb.isShiftPressed &&
+        !kb.isAltPressed &&
+        e.logicalKey == LogicalKeyboardKey.keyF) {
+      if (!mounted ||
+          MediaQuery.sizeOf(context).width < 640 ||
+          _friendLayer == 'glow' ||
+          ModalRoute.of(context)?.isCurrent != true) {
+        return false;
+      }
+      _openCircleSearch();
       return true;
     }
     if (!kb.isAltPressed) return false;
@@ -872,6 +921,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     }
     _playlistDrawerCtrl.dispose();
     _searchCtrl.dispose();
+    _circleSearchFocus.dispose();
     _spaceSearchCtrl.dispose();
     _refreshTimer?.cancel();
     _heartbeatTimer?.cancel();
@@ -5970,7 +6020,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
         !_playerExpanded &&
         !_isMusicFullScreen &&
         !circleMax;
+    // An open Circle search (nothing else open): Back closes it first.
+    final circleSearch = (_circleSearching || _searchQuery.isNotEmpty) &&
+        _activeGroup == null &&
+        _activeFriendId == null &&
+        !_playerExpanded &&
+        !_isMusicFullScreen;
     final canLeave = !(_isMusicFullScreen ||
+        circleSearch ||
         _isChatFullScreen ||
         _playerExpanded ||
         circleMax ||
@@ -5984,6 +6041,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
       canPop: canLeave,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
+        if (circleSearch) {
+          _closeCircleSearch();
+          return;
+        }
         if (circleMax) {
           _setCircleView(_circleView); // same key again → back to all
           return;

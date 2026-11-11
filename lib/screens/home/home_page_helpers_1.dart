@@ -1455,6 +1455,7 @@ extension _HomePageHelpers1 on HomePageState {
   void _clearSearchState() {
     _searchQuery = '';
     _searchCtrl.clear();
+    _circleSearching = false; // the switcher row comes back
     _filteredFriends = _allFriends;
     _filteredGroups = _groups;
   }

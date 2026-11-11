@@ -97,17 +97,11 @@ extension _HomeHub on HomePageState {
       (zone == 'listening' ? listening : circle).add(e);
     }
 
-    final shown = view ?? _circleView;
     return Builder(
       builder: (context) => Column(
         children: [
-          _friendSearchField(
-            scheme,
-            _searchCtrl,
-            _circleSearchHintFor(shown),
-            _filterFriends,
-          ),
-          const SizedBox(height: 10),
+          // (Search lives in the switcher row now: 🔍 → the row becomes
+          // the search box for the open section.)
           ..._circleSections(listening, circle, scheme, textColor,
               wide: false, viewOverride: view),
         ],
@@ -148,7 +142,8 @@ extension _HomeHub on HomePageState {
       // place, to move between them. The sections below have no buttons of
       // their own.
       _circleSwitcher(
-          scheme, storiesUnseen, listening, circle, textColor, view),
+          scheme, storiesUnseen, listening, circle, textColor, view,
+          neighbour: viewOverride != null),
       // Every change of section turns like a cube face (← forward, → back).
       Expanded(
         child: _CircleFlip(
@@ -294,7 +289,6 @@ extension _HomeHub on HomePageState {
 
   /// The Circle search hint follows the maximised section, so the box says
   /// what it will filter.
-  String get _circleSearchHint => _circleSearchHintFor(_circleView);
   String _circleSearchHintFor(String view) => switch (view) {
         'stories' => 'Search statuses…',
         'listening' => 'Search who\'s listening…',
@@ -314,7 +308,8 @@ extension _HomeHub on HomePageState {
       List<Map<String, dynamic>> listening,
       List<Map<String, dynamic>> circle,
       Color textColor,
-      String view) {
+      String view,
+      {bool neighbour = false}) {
     final unread = _circleBadge();
     final isDark = scheme.brightness == Brightness.dark;
     final segs = <(String, IconData, String, int, String)>[
@@ -327,12 +322,10 @@ extension _HomeHub on HomePageState {
       ('chats', Icons.forum_rounded, 'Circle', unread, 'unread'),
     ];
     final sel = segs.indexWhere((s) => s.$1 == view).clamp(0, segs.length - 1);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
-      child: LayoutBuilder(builder: (context, cons) {
-        // The track takes the whole row: All is the way back (no separate
-        // minimise button doing the same thing).
-        final trackW = cons.maxWidth;
+    final pills = LayoutBuilder(builder: (context, cons) {
+        // The track takes the row; the 🔍 action sits at its end (All is
+        // the way back — no separate minimise button).
+        final trackW = cons.maxWidth - 38 - 6;
         final segW = trackW / segs.length;
         final labelled = segW >= 74;
         final wideKeys = cons.maxWidth >= 560;
@@ -427,8 +420,171 @@ extension _HomeHub on HomePageState {
               ]),
             ),
           ),
+          const SizedBox(width: 6),
+          _circleSearchButton(scheme, view, wideKeys),
         ]);
-      }),
+      });
+    // Search: the row itself turns into the search box (like the message
+    // composer reclaiming its row) — and back. Both stay mounted and
+    // cross-fade, so nothing jumps and the box keeps its text.
+    final searching = _circleSearching || _searchCtrl.text.isNotEmpty;
+    const dur = Duration(milliseconds: 240);
+    const curve = Curves.easeOutCubic;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+      child: SizedBox(
+        height: 38,
+        child: Stack(children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: searching,
+              child: AnimatedOpacity(
+                opacity: searching ? 0 : 1,
+                duration: dur,
+                curve: curve,
+                child: AnimatedSlide(
+                  offset: searching ? const Offset(-0.06, 0) : Offset.zero,
+                  duration: dur,
+                  curve: curve,
+                  child: pills,
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: !searching,
+              child: AnimatedOpacity(
+                opacity: searching ? 1 : 0,
+                duration: dur,
+                curve: curve,
+                child: AnimatedSlide(
+                  offset: searching ? Offset.zero : const Offset(0.12, 0),
+                  duration: dur,
+                  curve: curve,
+                  child: neighbour
+                      ? _circleSearchReplica(scheme, view)
+                      : _circleSearchBar(scheme, view, isDark),
+                ),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  /// The 🔍 at the end of the switcher: searches the section that's open.
+  Widget _circleSearchButton(ColorScheme scheme, String view, bool keys) {
+    final what = switch (view) {
+      'stories' => 'Search statuses',
+      'listening' => "Search who's listening",
+      'chats' => 'Search your circle',
+      _ => 'Search chats & people',
+    };
+    final isDark = scheme.brightness == Brightness.dark;
+    return Tooltip(
+      message: keys ? '$what  (${_kMacKeys ? '⌘F' : 'Ctrl+F'})' : what,
+      child: Material(
+        color: isDark
+            ? scheme.surfaceContainerHigh
+            : scheme.surfaceContainerHighest,
+        shape: CircleBorder(
+            side: BorderSide(
+                color: scheme.outlineVariant.withValues(alpha: 0.45))),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: _openCircleSearch,
+          child: SizedBox(
+            width: 38,
+            height: 38,
+            child: Icon(Icons.search_rounded,
+                size: 20, color: accentInk(scheme)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static bool get _kMacKeys => defaultTargetPlatform == TargetPlatform.macOS;
+
+  /// The search box the row becomes: the open section's icon (so it's clear
+  /// WHAT is being searched), the field, and × to close.
+  Widget _circleSearchBar(ColorScheme scheme, String view, bool isDark) {
+    final icon = switch (view) {
+      'stories' => Icons.auto_stories_rounded,
+      'listening' => Icons.headphones_rounded,
+      'chats' => Icons.forum_rounded,
+      _ => Icons.search_rounded,
+    };
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(19),
+        color: isDark
+            ? scheme.surfaceContainerHigh
+            : scheme.surfaceContainerHighest,
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.55)),
+      ),
+      child: Row(children: [
+        const SizedBox(width: 12),
+        Icon(icon, size: 18, color: accentInk(scheme)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: CallbackShortcuts(
+            bindings: {
+              const SingleActivator(LogicalKeyboardKey.escape):
+                  _closeCircleSearch,
+            },
+            child: TextField(
+              controller: _searchCtrl,
+              focusNode: _circleSearchFocus,
+              onChanged: _filterFriends,
+              textInputAction: TextInputAction.search,
+              style: TextStyle(fontSize: 14, color: scheme.onSurface),
+              decoration: InputDecoration.collapsed(
+                hintText: _circleSearchHintFor(view),
+                hintStyle: TextStyle(
+                    fontSize: 14, color: scheme.onSurfaceVariant),
+              ),
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Close search',
+          visualDensity: VisualDensity.compact,
+          icon: Icon(Icons.close_rounded,
+              size: 18, color: scheme.onSurfaceVariant),
+          onPressed: _closeCircleSearch,
+        ),
+      ]),
+    );
+  }
+
+  /// The same box on a page sliding in under a swipe: a picture only (no
+  /// second text field on the same controller / focus).
+  Widget _circleSearchReplica(ColorScheme scheme, String view) {
+    final q = _searchCtrl.text;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(19),
+        color: scheme.surfaceContainerHigh,
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.55)),
+      ),
+      child: Row(children: [
+        const SizedBox(width: 12),
+        Icon(Icons.search_rounded, size: 18, color: accentInk(scheme)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(q.isEmpty ? _circleSearchHintFor(view) : q,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 14,
+                  color: q.isEmpty
+                      ? scheme.onSurfaceVariant
+                      : scheme.onSurface)),
+        ),
+      ]),
     );
   }
 

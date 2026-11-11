@@ -669,7 +669,7 @@ class _GenieMenuListState extends State<_GenieMenuList> {
               alignment: Alignment.topCenter,
               child: AnimatedSwitcher(
                 duration: Motion.standard,
-                reverseDuration: const Duration(milliseconds: 160),
+                reverseDuration: Motion.quick,
                 switchInCurve: Curves.easeOutCubic,
                 switchOutCurve: Curves.easeInCubic,
                 layoutBuilder: (cur, prev) => Stack(

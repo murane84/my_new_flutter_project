@@ -22,6 +22,7 @@ import '../utils/snackbar_helper.dart';
 import '../utils/brand_theme.dart';
 import '../utils/readable.dart';
 import '../utils/radii.dart';
+import '../utils/motion.dart';
 
 class LoginPage extends StatefulWidget {
   static const String routeName = '/login';
@@ -111,7 +112,7 @@ class LoginPageState extends State<LoginPage> {
           pageBuilder: (ctx, anim, sanim) => const HomePage(),
           transitionsBuilder: (ctx, anim, sanim, child) =>
               FadeTransition(opacity: anim, child: child),
-          transitionDuration: const Duration(milliseconds: 300),
+          transitionDuration: Motion.emphasized,
         ),
       );
     }
@@ -144,7 +145,7 @@ class LoginPageState extends State<LoginPage> {
           pageBuilder: (ctx, anim, sanim) => const HomePage(),
           transitionsBuilder: (ctx, anim, sanim, child) =>
               FadeTransition(opacity: anim, child: child),
-          transitionDuration: const Duration(milliseconds: 300),
+          transitionDuration: Motion.emphasized,
         ),
       );
     }
@@ -204,7 +205,7 @@ class LoginPageState extends State<LoginPage> {
           pageBuilder: (ctx, anim, sanim) => const HomePage(),
           transitionsBuilder: (ctx, anim, sanim, child) =>
               FadeTransition(opacity: anim, child: child),
-          transitionDuration: const Duration(milliseconds: 300),
+          transitionDuration: Motion.emphasized,
         ),
       );
     } else {
@@ -376,7 +377,7 @@ class LoginPageState extends State<LoginPage> {
           pageBuilder: (ctx, anim, sanim) => const HomePage(),
           transitionsBuilder: (ctx, anim, sanim, child) =>
               FadeTransition(opacity: anim, child: child),
-          transitionDuration: const Duration(milliseconds: 300),
+          transitionDuration: Motion.emphasized,
         ),
       );
     } else {
@@ -824,7 +825,7 @@ class LoginPageState extends State<LoginPage> {
                                           FadeTransition(
                                               opacity: anim, child: child),
                                   transitionDuration:
-                                      const Duration(milliseconds: 300),
+                                      Motion.emphasized,
                                 ),
                               ),
                               child: Text(

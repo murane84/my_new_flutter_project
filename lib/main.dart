@@ -548,7 +548,7 @@ class MyApp extends StatelessWidget {
     pageBuilder: (ctx, anim, sanim) => page,
     transitionsBuilder: (ctx, anim, sanim, child) =>
         FadeTransition(opacity: anim, child: child),
-    transitionDuration: const Duration(milliseconds: 250),
+    transitionDuration: Motion.standard,
   );
 
   PageRoute _slide(Widget page) => PageRouteBuilder(
@@ -560,7 +560,7 @@ class MyApp extends StatelessWidget {
       ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
       child: child,
     ),
-    transitionDuration: const Duration(milliseconds: 300),
+    transitionDuration: Motion.emphasized,
   );
 }
 

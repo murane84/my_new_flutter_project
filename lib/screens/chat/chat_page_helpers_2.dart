@@ -415,7 +415,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
       barrierDismissible: true,
       barrierLabel: label,
       barrierColor: Colors.transparent,
-      transitionDuration: const Duration(milliseconds: 260),
+      transitionDuration: Motion.standard,
       pageBuilder: (ctx, a1, a2) {
         return Material(
           type: MaterialType.transparency,

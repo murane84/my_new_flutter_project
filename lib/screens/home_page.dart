@@ -763,7 +763,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _playlistDrawerCtrl = AnimationController(
       vsync: this,
       duration: Motion.emphasized,
-      reverseDuration: const Duration(milliseconds: 260),
+      reverseDuration: Motion.standard,
     );
     playlistDrawerBus.isOpen.addListener(_onPlaylistDrawerToggled);
     AppConfig.baseUrl.then((b) {
@@ -2489,8 +2489,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
         .push(PageRouteBuilder(
           opaque: true,
           barrierColor: Colors.black,
-          transitionDuration: const Duration(milliseconds: 240),
-          reverseTransitionDuration: const Duration(milliseconds: 320),
+          transitionDuration: Motion.standard,
+          reverseTransitionDuration: Motion.emphasized,
           pageBuilder: (_, _, _) => const GroupCallScreen(),
           transitionsBuilder: (_, anim, _, child) => FadeTransition(
             opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
@@ -2519,8 +2519,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
         .push(PageRouteBuilder(
           opaque: true,
           barrierColor: Colors.black,
-          transitionDuration: const Duration(milliseconds: 240),
-          reverseTransitionDuration: const Duration(milliseconds: 320),
+          transitionDuration: Motion.standard,
+          reverseTransitionDuration: Motion.emphasized,
           pageBuilder: (_, _, _) => const CallScreen(),
           transitionsBuilder: (_, anim, _, child) => FadeTransition(
             opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
@@ -4491,7 +4491,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       barrierDismissible: true,
       barrierLabel: 'Close search',
       barrierColor: Colors.black.withValues(alpha: 0.25),
-      transitionDuration: const Duration(milliseconds: 260),
+      transitionDuration: Motion.standard,
       pageBuilder: (ctx, _, _) => Align(
         alignment: Alignment.centerRight,
         child: Padding(

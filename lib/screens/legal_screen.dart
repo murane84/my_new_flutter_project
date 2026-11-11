@@ -53,7 +53,7 @@ void _showLegalHub(BuildContext ctx, int initialIndex) {
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
     barrierColor: Colors.black.withAlpha(90),
-    transitionDuration: const Duration(milliseconds: 300),
+    transitionDuration: Motion.emphasized,
     pageBuilder: (_, _, _) => _LegalHub(initialIndex: initialIndex),
     transitionBuilder: (dctx, anim, _, child) {
       final curved = CurvedAnimation(

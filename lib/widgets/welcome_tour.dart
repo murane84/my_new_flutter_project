@@ -41,7 +41,7 @@ class WelcomeTour {
       context: context,
       barrierDismissible: false,
       barrierColor: Colors.black.withValues(alpha: 0.62),
-      transitionDuration: const Duration(milliseconds: 320),
+      transitionDuration: Motion.emphasized,
       pageBuilder: (_, _, _) => const _TourPages(),
       transitionBuilder: (_, a, _, child) => FadeTransition(
         opacity: a,

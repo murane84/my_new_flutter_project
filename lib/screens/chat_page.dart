@@ -2979,7 +2979,7 @@ class _ChatPageState extends State<ChatPage>
   late final AnimationController _browserAnim = AnimationController(
       vsync: this,
       duration: Motion.emphasized,
-      reverseDuration: const Duration(milliseconds: 240));
+      reverseDuration: Motion.standard);
   late final Animation<double> _browserIn = CurvedAnimation(
       parent: _browserAnim,
       curve: Curves.easeOutCubic,

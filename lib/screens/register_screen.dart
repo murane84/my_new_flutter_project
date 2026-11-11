@@ -10,6 +10,7 @@ import '../utils/snackbar_helper.dart';
 import '../utils/brand_theme.dart';
 import '../utils/readable.dart';
 import '../utils/radii.dart';
+import '../utils/motion.dart';
 
 class RegisterPage extends StatefulWidget {
   static const String routeName = '/register';
@@ -113,7 +114,7 @@ class RegisterPageState extends State<RegisterPage> {
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 400),
+          transitionDuration: Motion.slow,
           pageBuilder: (ctx, anim, sanim) => const LoginPage(),
           settings: RouteSettings(
             arguments: {
@@ -494,7 +495,7 @@ class RegisterPageState extends State<RegisterPage> {
                                           FadeTransition(
                                               opacity: anim, child: child),
                                   transitionDuration:
-                                      const Duration(milliseconds: 300),
+                                      Motion.emphasized,
                                 ),
                               ),
                               child: Text(

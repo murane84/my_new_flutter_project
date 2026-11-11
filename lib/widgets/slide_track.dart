@@ -62,7 +62,7 @@ class SlideTrack extends StatelessWidget {
       for (var i = 0; i < sel; i++) {
         left += widths[i];
       }
-      const dur = Duration(milliseconds: 360);
+      const dur = Motion.emphasized;
       return SizedBox(
         height: height,
         child: DecoratedBox(

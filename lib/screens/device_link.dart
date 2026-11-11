@@ -15,6 +15,7 @@ import '../utils/toast_helper.dart';
 import '../utils/popup_shell.dart';
 import '../utils/readable.dart' show accentInk;
 import '../utils/radii.dart';
+import '../utils/motion.dart';
 
 /// A friendly label + platform tag for THIS device (used when it links itself).
 ({String label, String platform}) _describeThisDevice() {
@@ -111,7 +112,7 @@ class _DesktopQrLoginScreenState extends State<DesktopQrLoginScreen> {
         pageBuilder: (ctx, anim, sanim) => const HomePage(),
         transitionsBuilder: (ctx, anim, sanim, child) =>
             FadeTransition(opacity: anim, child: child),
-        transitionDuration: const Duration(milliseconds: 300),
+        transitionDuration: Motion.emphasized,
       ),
       (route) => false,
     );

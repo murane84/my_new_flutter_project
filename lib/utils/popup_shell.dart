@@ -214,7 +214,7 @@ Future<T?> showGeniePopup<T>(
     barrierDismissible: barrierDismissible,
     barrierLabel: barrierLabel,
     barrierColor: barrierColor ?? Colors.black.withAlpha(120),
-    transitionDuration: const Duration(milliseconds: 300),
+    transitionDuration: Motion.emphasized,
     pageBuilder: (dctx, _, _) => builder(dctx),
     transitionBuilder: (dctx, anim, _, child) {
       final curved = CurvedAnimation(

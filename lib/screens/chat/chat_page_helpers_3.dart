@@ -801,7 +801,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
       barrierDismissible: true,
       barrierLabel: 'Message actions',
       barrierColor: Colors.transparent,
-      transitionDuration: const Duration(milliseconds: 140),
+      transitionDuration: Motion.instant,
       pageBuilder: (ctx, a1, a2) {
         final media = MediaQuery.of(ctx);
         final sw = media.size.width;
@@ -885,7 +885,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
       barrierDismissible: true,
       barrierLabel: 'Message actions',
       barrierColor: Colors.transparent,
-      transitionDuration: const Duration(milliseconds: 220),
+      transitionDuration: Motion.standard,
       pageBuilder: (ctx, a1, a2) {
         final media = MediaQuery.of(ctx);
         final sw = media.size.width;
@@ -1081,7 +1081,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
       constraints: const BoxConstraints(maxWidth: 560),
       sheetAnimationStyle: const AnimationStyle(
         duration: Motion.slow,
-        reverseDuration: Duration(milliseconds: 280),
+        reverseDuration: Motion.standard,
       ),
       builder: (ctx) => DraggableScrollableSheet(
         initialChildSize: 0.6,

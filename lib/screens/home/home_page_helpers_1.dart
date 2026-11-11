@@ -742,7 +742,7 @@ extension _HomePageHelpers1 on HomePageState {
       barrierDismissible: true,
       barrierLabel: 'Dismiss',
       barrierColor: Colors.black.withAlpha(120),
-      transitionDuration: const Duration(milliseconds: 260),
+      transitionDuration: Motion.standard,
       pageBuilder: (_, _, _) => _LiveInviteDialog(
         hostName: hostName,
         hostAvatar: _allFriends
@@ -1067,7 +1067,7 @@ extension _HomePageHelpers1 on HomePageState {
       barrierDismissible: true,
       barrierLabel: 'Dismiss',
       barrierColor: Colors.black.withAlpha(120),
-      transitionDuration: const Duration(milliseconds: 260),
+      transitionDuration: Motion.standard,
       pageBuilder: (_, _, _) => _TuneInPromptGate(
         from: from,
         child: _LiveInviteDialog(

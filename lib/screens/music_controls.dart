@@ -1414,8 +1414,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         // full-screen disc is stuck mid-rotation. The full player's own Scaffold
         // background is opaque, so nothing shows through once it's in.
         opaque: false,
-        transitionDuration: const Duration(milliseconds: 300),
-        reverseTransitionDuration: const Duration(milliseconds: 240),
+        transitionDuration: Motion.emphasized,
+        reverseTransitionDuration: Motion.standard,
         pageBuilder: (ctx, a, b) => _fullPlayerBody(),
         transitionsBuilder: (ctx, anim, sec, child) => FadeTransition(
           opacity: anim,

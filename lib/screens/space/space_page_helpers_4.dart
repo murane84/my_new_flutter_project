@@ -1605,7 +1605,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
       barrierDismissible: true,
       barrierLabel: 'Minimize',
       barrierColor: Colors.black.withValues(alpha: 0.45),
-      transitionDuration: const Duration(milliseconds: 260),
+      transitionDuration: Motion.standard,
       pageBuilder: (dctx, _, _) => builder(dctx),
       transitionBuilder: (dctx, anim, _, child) {
         final curved = CurvedAnimation(

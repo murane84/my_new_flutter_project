@@ -5,6 +5,7 @@ import 'login_screen.dart';
 import 'register_screen.dart';
 import '../utils/brand_theme.dart';
 import '../utils/radii.dart';
+import '../utils/motion.dart';
 
 class AuthPage extends StatelessWidget {
   static const String routeName = '/auth';
@@ -212,7 +213,7 @@ class AuthPage extends StatelessWidget {
   }
 
   PageRouteBuilder _fadeRoute(Widget page) => PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 400),
+        transitionDuration: Motion.slow,
         pageBuilder: (ctx, anim, sanim) => page,
         transitionsBuilder: (ctx, anim, sanim, child) =>
             FadeTransition(opacity: anim, child: child),

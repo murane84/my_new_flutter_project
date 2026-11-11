@@ -358,7 +358,7 @@ extension _HomeHub on HomePageState {
     // composer reclaiming its row) — and back. Both stay mounted and
     // cross-fade, so nothing jumps and the box keeps its text.
     final searching = _circleSearching || _searchCtrl.text.isNotEmpty;
-    const dur = Duration(milliseconds: 240);
+    const dur = Motion.standard;
     const curve = Curves.easeOutCubic;
     return Padding(
       // Exactly Harmony's search-pill spacing on each layout, so swiping

@@ -21,8 +21,8 @@ Future<void> showPhotoViewer(
   return Navigator.of(context).push(PageRouteBuilder<void>(
     opaque: false,
     barrierColor: Colors.transparent,
-    transitionDuration: const Duration(milliseconds: 220),
-    reverseTransitionDuration: const Duration(milliseconds: 180),
+    transitionDuration: Motion.standard,
+    reverseTransitionDuration: Motion.quick,
     pageBuilder: (_, _, _) => _PhotoViewer(
       images: images,
       captions: caps,

@@ -9,6 +9,7 @@ import '../utils/toast_helper.dart';
 import '../utils/brand_theme.dart';
 import '../utils/readable.dart';
 import '../utils/radii.dart';
+import '../utils/motion.dart';
 
 /// Shown right after sign-in when an operator reset the account's password
 /// (must_change_password). The user must set their own password before using
@@ -68,7 +69,7 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
           pageBuilder: (ctx, anim, sanim) => const HomePage(),
           transitionsBuilder: (ctx, anim, sanim, child) =>
               FadeTransition(opacity: anim, child: child),
-          transitionDuration: const Duration(milliseconds: 300),
+          transitionDuration: Motion.emphasized,
         ),
       );
     } else {

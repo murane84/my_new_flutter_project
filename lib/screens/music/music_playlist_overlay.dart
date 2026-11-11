@@ -40,7 +40,8 @@ class _PlaylistOverlay extends StatefulWidget {
   // Play modes for the mini player's ⋮ (read live each time it opens):
   // shuffle on/off, repeat 'off' | 'all' | 'one', A-B step 0 off · 1 A set ·
   // 2 looping. In a live session these are the room's shared modes.
-  final ({bool shuffle, String repeat, int ab, bool live}) Function()?
+  final ({bool shuffle, String repeat, int ab, String abText, bool live})
+          Function()?
       playModes;
   final VoidCallback? onShuffle;
   final VoidCallback? onRepeat;
@@ -2659,13 +2660,14 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                             if (!m.live && path != null)
                               PopupMenuItem<String>(
                                 value: 'ab',
+                                // Same words + times as Now Playing's A-B key.
                                 child: _miniMenuRow(
-                                    Icons.repeat_one_rounded,
+                                    Icons.linear_scale_rounded,
                                     m.ab == 0
-                                        ? 'Repeat a part · set A'
+                                        ? 'Repeat a part (A-B) · set A'
                                         : m.ab == 1
-                                            ? 'Repeat a part · set B'
-                                            : 'Stop repeating the part',
+                                            ? '${m.abText} · set B here'
+                                            : '${m.abText} · stop',
                                     scheme),
                               ),
                             const PopupMenuDivider(),

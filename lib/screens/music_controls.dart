@@ -2492,6 +2492,11 @@ class _MusicControlsState extends ConsumerState<MusicControls>
             shuffle: _effShuffle,
             repeat: _effRepeatMode,
             ab: _abB != null ? 2 : (_abA != null ? 1 : 0),
+            abText: _abA == null
+                ? ''
+                : _abB == null
+                    ? 'A ${_fmt(_abA!)}'
+                    : '${_fmt(_abA!)}–${_fmt(_abB!)}',
             live: _liveActive,
           ),
       onShuffle: _toggleShuffle,

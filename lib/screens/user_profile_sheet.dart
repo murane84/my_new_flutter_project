@@ -655,8 +655,8 @@ class _UserProfileSheetState extends State<_UserProfileSheet> {
                     child: const Text('Close'),
                   ),
                 ),
-                // From a group: straight into my DM with them (hidden while
-                // either side blocks — the server refuses that DM anyway).
+                // From a group: straight into my DM with them (hidden while I
+                // block them; if they block me the server refuses that DM).
                 if (widget.onMessage != null &&
                     !(widget.userId != null &&
                         BlockList.instance.isBlocked(widget.userId!))) ...[

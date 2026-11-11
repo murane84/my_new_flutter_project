@@ -1487,25 +1487,11 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       // outgoing one SETTLES — so opening/closing a section eases in and out
       // instead of snapping, without the tile-anchored zoom (which read as too
       // busy for an in-body switch).
-      builder: (context, isWide) => AnimatedSwitcher(
-        duration: Motion.emphasized,
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (child, anim) {
-          final entering = child.key == const ValueKey('section');
-          // The section rises up as it emerges; the dashboard settles back down
-          // — so the two feel like one turning to the other, not a hard cut.
-          final begin =
-              entering ? const Offset(0, 0.05) : const Offset(0, -0.03);
-          return FadeTransition(
-            opacity: anim,
-            child: SlideTransition(
-              position:
-                  Tween<Offset>(begin: begin, end: Offset.zero).animate(anim),
-              child: child,
-            ),
-          );
-        },
+      // Overview, the sections and Settings are one row of places (the
+      // rail's order), so every move between them — not only section to
+      // section — plays Aluta's chosen transition from the right side.
+      builder: (context, isWide) => SectionSwitch(
+        forward: _placeForward(),
         child: _section == null
             ? RefreshIndicator(
                 key: const ValueKey('dashboard'),
@@ -1587,6 +1573,24 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   // The place of the section I came from (which side the next one enters).
   int _sectionFrom = -1;
+
+  // Overview (-1) · sections (0…) · Settings (last): which way the page
+  // last moved. Updated only when the place changes, so rebuilds during a
+  // transition never flip its direction halfway.
+  int _shownPlace = -1;
+  bool _shownForward = true;
+  bool _placeForward() {
+    final place = _settingsOpen
+        ? 999
+        : _section == null
+            ? -1
+            : _visibleSections().map((s) => s.$1).toList().indexOf(_section!);
+    if (place != _shownPlace) {
+      _shownForward = place > _shownPlace;
+      _shownPlace = place;
+    }
+    return _shownForward;
+  }
 
   void _goSection(String key) {
     if (key != _section) Haptics.tab();

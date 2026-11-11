@@ -493,10 +493,12 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
             selected: selected,
             labelled: labelled,
             onKey: onKey,
+            // Like Circle: the lit one again → back to All.
             onTap: () {
-              if (_kind == k) return;
+              final next = _kind == k ? null : k;
+              if (next == _kind) return;
               Haptics.tab();
-              _setFilter(() => _kind = k);
+              _setFilter(() => _kind = next);
             },
           );
         },
@@ -1058,7 +1060,8 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
           child: _glassBar(scheme, isDark),
         ),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(86),
+          // track 38 + 8 + chips 32 + 8 + progress 2
+          preferredSize: const Size.fromHeight(88),
           child: Column(children: [
             _kindTrack(),
             const SizedBox(height: 8),

@@ -298,7 +298,11 @@ class _GlowFeedState extends State<GlowFeed> {
   bool _compactTabs = false;
 
   void _pickFilter(_Filter f) {
-    if (f == _filter) return;
+    // Like Circle: the lit category again → back to For you.
+    if (f == _filter) {
+      if (f == _Filter.all) return;
+      f = _Filter.all;
+    }
     Haptics.tab();
     // The tapped tab's centre along the track: equal tabs when roomy; on a
     // phone the chosen tab is wider (flex 7 vs 3) — use the NEW layout.

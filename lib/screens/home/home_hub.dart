@@ -334,6 +334,7 @@ extension _HomeHub on HomePageState {
             child: SlideTrack(
               count: segs.length,
               selected: sel,
+              fold: true, // a very narrow phone: like Glow and search
               segment: (context, i, selected, labelled, onKey) => _switchSeg(
                 scheme,
                 segs[i],

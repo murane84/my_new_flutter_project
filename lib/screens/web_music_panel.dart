@@ -72,6 +72,12 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   bool _loading = false;
   int _repeat = _repeatOff;
   bool _shuffle = false;
+  // Same deck as the app player: every song once before any comes back;
+  // Previous walks back through what actually played.
+  final List<_WebTrack> _shuffleBag = [];
+  final List<_WebTrack> _shuffleBack = [];
+  bool get _shuffleActive =>
+      _shuffle && _repeat != _repeatOne && _queue.length > 1;
   double _volume = 1.0;
   double _lastVolume = 1.0; // restored when un-muting
   double _speed = 1.0;
@@ -148,7 +154,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       }
     };
     playbackBus.webDurationMs = () => _player.duration?.inMilliseconds ?? 0;
-    playbackBus.webShuffle = () => _shuffle;
+    playbackBus.webShuffle = () => _shuffleActive;
     playbackBus.webRepeat = () => _repeat;
     playbackBus.onToggleShuffle = _toggleShuffle;
     playbackBus.onToggleRepeat = _toggleRepeat;
@@ -481,11 +487,18 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
 
   int _randomOther() {
     if (_queue.length <= 1) return _index;
-    int j;
-    do {
-      j = _rand.nextInt(_queue.length);
-    } while (j == _index);
-    return j;
+    final cur = (_index >= 0 && _index < _queue.length) ? _queue[_index] : null;
+    _shuffleBag.removeWhere((t) => t == cur || !_queue.contains(t));
+    if (_shuffleBag.isEmpty) {
+      _shuffleBag
+        ..addAll(_queue.where((t) => t != cur))
+        ..shuffle(_rand);
+    }
+    if (cur != null) {
+      _shuffleBack.add(cur);
+      if (_shuffleBack.length > 100) _shuffleBack.removeAt(0);
+    }
+    return _queue.indexOf(_shuffleBag.removeLast());
   }
 
   void _onComplete() {
@@ -494,7 +507,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       _playAt(_index);
       return;
     }
-    if (_shuffle && _queue.length > 1) {
+    if (_shuffleActive) {
       _playAt(_randomOther());
       return;
     }
@@ -508,7 +521,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
 
   void _next() {
     if (_queue.isEmpty) return;
-    if (_shuffle && _queue.length > 1) {
+    if (_shuffleActive) {
       _playAt(_randomOther());
       return;
     }
@@ -519,6 +532,22 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     if (_queue.isEmpty) return;
     // Past 3s → restart the current track; otherwise go to the previous one.
     if (_player.position.inSeconds > 3) {
+      _player.seek(Duration.zero);
+      return;
+    }
+    if (_shuffleActive) {
+      // Back through what actually played, not the list order.
+      while (_shuffleBack.isNotEmpty) {
+        final t = _shuffleBack.removeLast();
+        final i = _queue.indexOf(t);
+        if (i >= 0 && i != _index) {
+          if (_index >= 0 && _index < _queue.length) {
+            _shuffleBag.add(_queue[_index]); // Next returns here again
+          }
+          _playAt(i);
+          return;
+        }
+      }
       _player.seek(Duration.zero);
       return;
     }
@@ -559,6 +588,10 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       } else {
         _shuffle = !_shuffle;
         if (_shuffle && _repeat == _repeatOne) _repeat = _repeatAll;
+        if (_shuffle) {
+          _shuffleBag.clear(); // a fresh deck
+          _shuffleBack.clear();
+        }
       }
     });
     _queueRev.value++;
@@ -1384,6 +1417,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                     : 'Shuffle',
                 onTap: _queue.length > 1 ? _toggleShuffle : null,
                 active: _shuffle && _repeat != _repeatOne,
+                resting: _shuffle && _repeat == _repeatOne,
               ),
               const SizedBox(width: 8),
               _discBtn(
@@ -1450,6 +1484,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     required String tooltip,
     VoidCallback? onTap,
     bool active = false,
+    bool resting = false, // on, but paused by another mode (accent outline)
     Color? activeColor,
   }) {
     final scheme = theme.colorScheme;
@@ -1460,7 +1495,9 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
         ? scheme.onSurface.withValues(alpha: 0.30)
         : active
             ? onAccent(tint)
-            : scheme.onSurface;
+            : resting
+                ? tint
+                : scheme.onSurface;
     return Tactile(
       enabled: enabled,
       child: Tooltip(
@@ -1494,10 +1531,12 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                   ? null
                   : scheme.surfaceContainerHighest.withValues(alpha: 0.30),
               border: Border.all(
-                color: enabled
-                    ? tint.withValues(alpha: isDark ? 0.32 : 0.22)
-                    : scheme.outlineVariant.withValues(alpha: 0.30),
-                width: 1,
+                color: !enabled
+                    ? scheme.outlineVariant.withValues(alpha: 0.30)
+                    : resting
+                        ? tint.withValues(alpha: 0.75)
+                        : tint.withValues(alpha: isDark ? 0.32 : 0.22),
+                width: resting && enabled ? 1.6 : 1,
               ),
               boxShadow: enabled
                   ? [

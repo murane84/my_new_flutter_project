@@ -320,9 +320,11 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   bool _shuffle = false;
   // What Repeat was before Repeat One (so turning shuffle back on can put
   // it back: All stays All, Off stays Off).
-  bool _repeatAllBeforeOne = false;
   // Shuffle without repeats: every song once before any comes round again.
-  final List<int> _shuffleBag = [];
+  // Kept by song path, not list position, so reordering or removing songs
+  // never makes the deck (or the way back) point at the wrong song.
+  final List<String> _shuffleBag = [];
+  final List<String> _shuffleBack = []; // songs shuffle already played
 
   /// Shuffle actually steering playback right now.
   bool get _shuffleActive => _shuffle && !_repeatOne;
@@ -1678,7 +1680,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     final scope = _scopeIndices();
     if (scope.isEmpty) return;
     if (_shuffleActive) {
-      _play(_peekNextIndex() ?? scope.first);
+      _shuffleAdvance(scope);
       return;
     }
     final pos = scope.indexOf(_currentIndex);
@@ -1723,7 +1725,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     final scope = _scopeIndices();
     if (scope.isEmpty) return;
     if (_shuffleActive) {
-      _play(_peekNextIndex() ?? scope.first);
+      _shuffleAdvance(scope);
       return;
     }
     final pos = scope.indexOf(_currentIndex);
@@ -1736,6 +1738,27 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     }
   }
 
+  /// Shuffle forward: remember where we were (so Previous can walk back
+  /// through what actually played), then draw the next card.
+  void _shuffleAdvance(List<int> scope) {
+    final next = _peekNextIndex() ?? scope.first;
+    if (_currentIndex >= 0 && _currentIndex < _playlist.length) {
+      _shuffleBack.add(_playlist[_currentIndex]);
+      if (_shuffleBack.length > 100) _shuffleBack.removeAt(0);
+    }
+    _play(next);
+  }
+
+  /// Shuffle back: the song that played before this one (null = none yet).
+  int? _shuffleBackIndex() {
+    final scope = _scopeIndices().toSet();
+    for (var k = _shuffleBack.length - 1; k >= 0; k--) {
+      final i = _playlist.indexOf(_shuffleBack[k]);
+      if (i >= 0 && i != _currentIndex && scope.contains(i)) return i;
+    }
+    return null;
+  }
+
   /// The song a skip forward will play (null = none: end of the list with
   /// repeat off). Under shuffle it is picked once, ahead of time, and kept.
   int? _peekNextIndex() {
@@ -1743,18 +1766,20 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     final scope = _scopeIndices();
     if (scope.isEmpty) return null;
     if (_shuffleActive) {
-      if (scope.length < 2) return null;
+      if (scope.length < 2 || _currentIndex >= _playlist.length) return null;
       final s = _shuffleNext;
       if (s == null || s == _currentIndex || !scope.contains(s)) {
         // A shuffled deck: draw until every song has played once, then
         // reshuffle — no song comes back before the others had their turn.
-        _shuffleBag.removeWhere((i) => !scope.contains(i) || i == _currentIndex);
+        final cur = _playlist[_currentIndex];
+        final inScope = {for (final i in scope) _playlist[i]};
+        _shuffleBag.removeWhere((p) => p == cur || !inScope.contains(p));
         if (_shuffleBag.isEmpty) {
           _shuffleBag
-            ..addAll(scope.where((i) => i != _currentIndex))
+            ..addAll(inScope.where((p) => p != cur))
             ..shuffle(_rng);
         }
-        _shuffleNext = _shuffleBag.removeLast();
+        _shuffleNext = _playlist.indexOf(_shuffleBag.removeLast());
       }
       return _shuffleNext;
     }
@@ -1767,6 +1792,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   /// The song before this one in the list (null at the start, repeat off).
   int? _peekPrevIndex() {
     if (_playlist.isEmpty || _currentIndex < 0) return null;
+    if (_shuffleActive) return _shuffleBackIndex();
     final scope = _scopeIndices();
     final pos = scope.indexOf(_currentIndex);
     if (pos > 0) return scope[pos - 1];
@@ -1778,6 +1804,22 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     if (_playlist.isEmpty) return;
     if (_player.position.inSeconds > 3) {
       _player.seek(Duration.zero);
+      return;
+    }
+    if (_shuffleActive &&
+        _currentIndex >= 0 &&
+        _currentIndex < _playlist.length) {
+      // Shuffle goes back through what actually played, not the list order.
+      final back = _shuffleBackIndex();
+      if (back == null) {
+        _player.seek(Duration.zero);
+        return;
+      }
+      final cur = _playlist[_currentIndex];
+      final k = _shuffleBack.lastIndexOf(_playlist[back]);
+      if (k >= 0) _shuffleBack.removeRange(k, _shuffleBack.length);
+      _shuffleBag.add(cur); // Next returns to this song again
+      _play(back);
       return;
     }
     final scope = _scopeIndices();
@@ -1920,7 +1962,6 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         _repeatAll = true;
         _snack(_shuffle ? 'Repeat All · shuffled' : 'Repeat All');
       } else if (_repeatAll) {
-        _repeatAllBeforeOne = true;
         _repeatAll = false;
         _repeatOne = true;
         _snack(_shuffle
@@ -1949,18 +1990,21 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     setState(() {
       _shuffleNext = null;
       if (_shuffle && _repeatOne) {
-        // Resting under Repeat One → bring shuffle back: Repeat returns to
-        // what it was before One (All stays All, Off stays Off).
+        // Resting under Repeat One → bring shuffle back; Repeat steps back
+        // to All (One is only reached through All).
         _repeatOne = false;
-        _repeatAll = _repeatAllBeforeOne;
-        _snack(_repeatAll ? 'Shuffle On · Repeat All' : 'Shuffle On');
+        _repeatAll = true;
+        _snack('Shuffle On · Repeat All');
       } else {
         _shuffle = !_shuffle;
         if (_shuffle && _repeatOne) {
           _repeatOne = false;
-          _repeatAll = _repeatAllBeforeOne;
+          _repeatAll = true;
         }
-        if (_shuffle) _shuffleBag.clear(); // a fresh deck
+        if (_shuffle) {
+          _shuffleBag.clear(); // a fresh deck
+          _shuffleBack.clear();
+        }
         _snack(_shuffle
             ? (_repeatAll ? 'Shuffle On · Repeat All' : 'Shuffle On')
             : 'Shuffle Off');

@@ -2023,8 +2023,11 @@ class LiveSessionController {
   Future<void> _openSocket(String sessionId, int myUserId, String token) async {
     _myUserId = myUserId;
     final wsBase = await AppConfig.wsBaseUrl; // wss://aluta.ozilane.com (release)
-    final uri = Uri.parse('$wsBase/live/ws/$sessionId?token=$token&user_id=$myUserId');
+    // The token goes as the FIRST message, never in the address (addresses
+    // land in server / proxy logs).
+    final uri = Uri.parse('$wsBase/live/ws/$sessionId?user_id=$myUserId');
     final ch = WebSocketChannel.connect(uri);
+    ch.sink.add(jsonEncode({'type': 'auth', 'token': token}));
     // WebSocketChannel.connect is LAZY: it returns immediately and connects in
     // the background. Without awaiting readiness, callers (startHost /
     // joinAsListener / the reconnect paths) proceed as if connected, so a

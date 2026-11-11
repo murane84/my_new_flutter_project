@@ -75,12 +75,14 @@ class WebSocketManager {
       }
 
       final wsBase = await AppConfig.wsBaseUrl;
-      final uri = Uri.parse(
-        '$wsBase/ws/$userId',
-      ).replace(queryParameters: {'token': token});
+      // No token in the address: addresses land in server / proxy logs.
+      // It goes as the socket's FIRST message instead (the server waits for
+      // it before anything else).
+      final uri = Uri.parse('$wsBase/ws/$userId');
 
       _logger.i('Connecting to WebSocket: $uri');
       _channel = WebSocketChannel.connect(uri);
+      _channel!.sink.add(jsonEncode({'type': 'auth', 'token': token}));
 
       _channel!.stream.listen(
         (rawMessage) {

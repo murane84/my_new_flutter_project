@@ -31,6 +31,31 @@ from routers import plan as plan_router
 from routers import wallpapers as wallpapers_router
 from routers import ozilane as ozilane_router
 import admin_panel
+
+# 🔒 Never write a login token into the logs. Addresses can still carry one
+# (apps not yet updated open /ws/…?token=, and web images must use ?token=
+# because a browser <img> can't send a header) — uvicorn prints those
+# addresses in full, so the token is masked before any line is written.
+import logging as _logging
+import re as _re
+
+_TOKEN_IN_URL = _re.compile(r"((?:^|[?&])(?:token|access_token)=)[^&\s\"']+")
+
+
+class _RedactTokens(_logging.Filter):
+    def filter(self, record: _logging.LogRecord) -> bool:
+        try:
+            msg = record.getMessage()
+            clean = _TOKEN_IN_URL.sub(r"\1***", msg)
+            if clean != msg:
+                record.msg, record.args = clean, ()
+        except Exception:
+            pass
+        return True
+
+
+for _name in ("uvicorn.access", "uvicorn.error", "uvicorn"):
+    _logging.getLogger(_name).addFilter(_RedactTokens())
 from routers import feedback as feedback_router
 from routers import free_music as free_music_router
 from websocket_routes import router as websocket_router

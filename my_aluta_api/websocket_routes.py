@@ -319,8 +319,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
 
     # 🔒 This socket used to trust the {user_id} in the path blindly, so anyone
     # could subscribe as anyone. Require a valid JWT (passed as ?token=<jwt>)
-    # whose user matches {user_id}, exactly like /live/ws.
-    caller = _authenticate_ws(token, user_id)
+    # whose user matches {user_id}, exactly like /live/ws. The token comes in
+    # the FIRST message (never the URL, which lands in access logs).
+    from ws_auth import ws_token
+    caller = _authenticate_ws(await ws_token(websocket, token), user_id)
     if caller is None:
         await websocket.close(code=4401)  # unauthorized
         return

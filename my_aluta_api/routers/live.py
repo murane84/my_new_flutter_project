@@ -440,7 +440,10 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
     """
     await websocket.accept()
 
-    user = _authenticate_ws(token, user_id)
+    # The token arrives as the first message (not in the URL — URLs land in
+    # access logs); ?token= still works for apps not yet updated.
+    from ws_auth import ws_token
+    user = _authenticate_ws(await ws_token(websocket, token), user_id)
     if user is None:
         await websocket.close(code=4401)  # unauthorized
         return

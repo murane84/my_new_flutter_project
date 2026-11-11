@@ -2487,6 +2487,16 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       onTogglePlay: _togglePlayPause,
       onNext: _next,
       onPrev: _previous,
+      // The mini player's ⋮ reads these live each time it opens.
+      playModes: () => (
+            shuffle: _effShuffle,
+            repeat: _effRepeatMode,
+            ab: _abB != null ? 2 : (_abA != null ? 1 : 0),
+            live: _liveActive,
+          ),
+      onShuffle: _toggleShuffle,
+      onRepeat: _cycleRepeat,
+      onAB: _cycleAB,
       onSeekFraction: (f) {
         final d = _player.duration;
         if (d != null && d > Duration.zero) {

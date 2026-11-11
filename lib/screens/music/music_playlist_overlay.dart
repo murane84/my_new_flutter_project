@@ -37,6 +37,15 @@ class _PlaylistOverlay extends StatefulWidget {
   final VoidCallback onPrev;
   final void Function(double fraction) onSeekFraction;
 
+  // Play modes for the mini player's ⋮ (read live each time it opens):
+  // shuffle on/off, repeat 'off' | 'all' | 'one', A-B step 0 off · 1 A set ·
+  // 2 looping. In a live session these are the room's shared modes.
+  final ({bool shuffle, String repeat, int ab, bool live}) Function()?
+      playModes;
+  final VoidCallback? onShuffle;
+  final VoidCallback? onRepeat;
+  final VoidCallback? onAB;
+
   // List ops.
   final void Function(int) onRemove;
   final void Function(String) onFavorite;
@@ -110,6 +119,10 @@ class _PlaylistOverlay extends StatefulWidget {
     required this.onNext,
     required this.onPrev,
     required this.onSeekFraction,
+    this.playModes,
+    this.onShuffle,
+    this.onRepeat,
+    this.onAB,
     required this.onRemove,
     required this.onFavorite,
     required this.onShare,
@@ -2585,10 +2598,25 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                       // screen and never sits on top of the controls.
                       GeniePopupMenuButton<String>(
                         tooltip: 'More',
-                        icon: Icon(Icons.more_vert_rounded,
-                            size: 20, color: scheme.onSurfaceVariant),
+                        // A small accent dot while a play mode is on, so
+                        // shuffle / repeat / A-B are never a hidden surprise.
+                        icon: Builder(builder: (_) {
+                          final m = widget.playModes?.call();
+                          final on = m != null &&
+                              (m.shuffle || m.repeat != 'off' || m.ab > 0);
+                          return Badge(
+                            isLabelVisible: on,
+                            smallSize: 6,
+                            backgroundColor: a,
+                            child: Icon(Icons.more_vert_rounded,
+                                size: 20, color: scheme.onSurfaceVariant),
+                          );
+                        }),
                         padding: EdgeInsets.zero,
                         onSelected: (v) {
+                          if (v == 'shuffle') widget.onShuffle?.call();
+                          if (v == 'repeat') widget.onRepeat?.call();
+                          if (v == 'ab') widget.onAB?.call();
                           if (v == 'find') _locateNow();
                           if (v == 'status' && path != null) {
                             _shareAsStatus(path);
@@ -2597,7 +2625,51 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                             widget.onFavorite(path);
                           }
                         },
-                        itemBuilder: (_) => [
+                        itemBuilder: (_) {
+                          final m = widget.playModes?.call();
+                          return [
+                          // How it plays: the three modes of Now Playing,
+                          // each row saying what it is now (tap = next).
+                          if (m != null) ...[
+                            PopupMenuItem<String>(
+                              value: 'shuffle',
+                              child: _miniMenuRow(
+                                  m.shuffle
+                                      ? Icons.shuffle_on_rounded
+                                      : Icons.shuffle_rounded,
+                                  m.shuffle ? 'Shuffle · on' : 'Shuffle · off',
+                                  scheme),
+                            ),
+                            PopupMenuItem<String>(
+                              value: 'repeat',
+                              child: _miniMenuRow(
+                                  m.repeat == 'one'
+                                      ? Icons.repeat_one_on_rounded
+                                      : m.repeat == 'all'
+                                          ? Icons.repeat_on_rounded
+                                          : Icons.repeat_rounded,
+                                  m.repeat == 'one'
+                                      ? 'Repeat · one'
+                                      : m.repeat == 'all'
+                                          ? 'Repeat · all'
+                                          : 'Repeat · off',
+                                  scheme),
+                            ),
+                            // A-B isn't shared in a live session.
+                            if (!m.live && path != null)
+                              PopupMenuItem<String>(
+                                value: 'ab',
+                                child: _miniMenuRow(
+                                    Icons.repeat_one_rounded,
+                                    m.ab == 0
+                                        ? 'Repeat a part · set A'
+                                        : m.ab == 1
+                                            ? 'Repeat a part · set B'
+                                            : 'Stop repeating the part',
+                                    scheme),
+                              ),
+                            const PopupMenuDivider(),
+                          ],
                           PopupMenuItem<String>(
                             value: 'find',
                             child: _miniMenuRow(Icons.my_location_rounded,
@@ -2619,7 +2691,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                                   fav ? 'Unlike' : 'Like',
                                   scheme),
                             ),
-                        ],
+                          ];
+                        },
                       ),
                     ],
                   ),

@@ -3037,28 +3037,31 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     final count = _isHost ? _c.queue.length : _c.remoteQueueTitles.length;
     final idx = _isHost ? _c.currentIndex : _c.remoteIndex;
     if (count == 0 || idx < 0 || !_queueCtrl.hasClients) return;
-    final pos = _queueCtrl.position;
-    final per = (pos.maxScrollExtent + pos.viewportDimension) / count;
-    final target = (per * idx - pos.viewportDimension / 2 + per / 2)
-        .clamp(0.0, pos.maxScrollExtent);
     if (!animate) {
-      _queueCtrl.jumpTo(target);
+      // Quiet follow-along (a new song started): just keep it near the middle.
+      final pos = _queueCtrl.position;
+      final per = (pos.maxScrollExtent + pos.viewportDimension) / count;
+      _queueCtrl.jumpTo((per * idx - pos.viewportDimension / 2 + per / 2)
+          .clamp(0.0, pos.maxScrollExtent));
       return;
     }
-    // ⌖ with the song already on screen → a small nudge, else the full glow.
-    final soft = (target - pos.pixels).abs() < per * 2;
-    _queueCtrl
-        .animateTo(target,
-            duration: const Duration(milliseconds: 420),
-            curve: Curves.easeOutCubic)
-        .then((_) {
-      if (glow && mounted) _queueGlow.ping(soft: soft);
-    });
+    // ⌖ — the one routine every song list shares.
+    locatePlayingRow(
+      controller: _queueCtrl,
+      rowKey: _queueNowKey,
+      index: idx,
+      count: count,
+      glow: glow ? _queueGlow : null,
+    );
   }
 
   /// The playing row answers ⌖ by breathing once (see NowGlow).
-  Widget _glowIf(bool current, Widget tile) =>
-      current ? NowGlow(controller: _queueGlow, radius: 10, child: tile) : tile;
+  Widget _glowIf(bool current, Widget tile) => current
+      ? KeyedSubtree(
+          key: _queueNowKey,
+          child: NowGlow(controller: _queueGlow, radius: 10, child: tile))
+      : tile;
+  final GlobalKey _queueNowKey = GlobalKey();
 
   /// My own drag / wheel on the queue: follow-along pauses for a few seconds.
   Widget _queueTouchWatch(Widget list) =>

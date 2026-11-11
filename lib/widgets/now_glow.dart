@@ -307,3 +307,56 @@ class _RimHeartsPainter extends CustomPainter {
   @override
   bool shouldRepaint(_RimHeartsPainter o) => o.t != t || o.radius != radius;
 }
+
+/// ⌖ Find the playing song — ONE routine for every song list (player
+/// queue, playlist, Listen Together, web queue), so it lands the same way:
+///  1. the row is already built (on screen or just off) → centre it;
+///  2. otherwise jump near it, using the row height MEASURED from the list
+///     (its length ÷ its rows — never a fixed guess), and aim again until
+///     the row exists;
+///  3. centre it precisely on [rowKey] (the first / last rows as close to
+///     the middle as the list's ends allow), then [glow] breathes once —
+///     softly when it was already in view.
+void locatePlayingRow({
+  required ScrollController controller,
+  required GlobalKey rowKey,
+  required int index,
+  required int count,
+  NowGlowController? glow,
+  int tries = 0,
+}) {
+  if (index < 0 || count <= 0 || !controller.hasClients) return;
+  final shown = rowKey.currentContext;
+  if (shown != null) {
+    _centreRow(shown, glow, soft: tries == 0);
+    return;
+  }
+  final pos = controller.position;
+  final row = (pos.maxScrollExtent + pos.viewportDimension) / count;
+  controller.jumpTo((index * row + row / 2 - pos.viewportDimension / 2)
+      .clamp(0.0, pos.maxScrollExtent));
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    final ctx = rowKey.currentContext;
+    if (ctx != null) {
+      _centreRow(ctx, glow, soft: false);
+    } else if (tries < 6) {
+      locatePlayingRow(
+          controller: controller,
+          rowKey: rowKey,
+          index: index,
+          count: count,
+          glow: glow,
+          tries: tries + 1);
+    }
+  });
+}
+
+void _centreRow(BuildContext ctx, NowGlowController? glow,
+    {required bool soft}) {
+  Scrollable.ensureVisible(
+    ctx,
+    alignment: 0.5,
+    duration: const Duration(milliseconds: 320),
+    curve: Curves.easeOutCubic,
+  ).then((_) => glow?.ping(soft: soft));
+}

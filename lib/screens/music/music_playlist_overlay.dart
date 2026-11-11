@@ -1867,23 +1867,15 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       ));
       return;
     }
-    if (!_listCtrl.hasClients) return;
-    final pos = _listCtrl.position;
-    final total = pos.maxScrollExtent + pos.viewportDimension;
-    final per = d.isEmpty ? 0.0 : total / d.length;
-    final target = (per * i - pos.viewportDimension / 2 + per / 2)
-        .clamp(0.0, pos.maxScrollExtent);
-    // Already on screen → just a small nudge; otherwise the full breath.
-    final soft = (target - pos.pixels).abs() < per * 2;
-    _listCtrl
-        .animateTo(target,
-            duration: const Duration(milliseconds: 420),
-            curve: Curves.easeOutCubic)
-        .then((_) {
-      // …then the row breathes once (and a ♪ floats off it) so the eye
-      // lands on it — gently, never a flashing blink.
-      if (mounted) _nowGlow.ping(soft: soft);
-    });
+    // The one ⌖ routine every song list shares: lands on the row itself,
+    // centred, then it breathes once (a ♪ floats off it).
+    locatePlayingRow(
+      controller: _listCtrl,
+      rowKey: _nowKey,
+      index: i,
+      count: d.length,
+      glow: _nowGlow,
+    );
   }
 
   Widget _selectionBar(ColorScheme scheme) {

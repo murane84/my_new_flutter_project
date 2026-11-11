@@ -35,6 +35,7 @@ import '../utils/typing_guard.dart';
 import '../utils/on_accent.dart';
 import '../widgets/pill_search.dart';
 import '../services/haptics.dart';
+import '../widgets/now_glow.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
 ///
@@ -334,6 +335,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   @override
   void dispose() {
     _sheetScroll.dispose();
+    _sheetGlow.dispose();
     _psSub?.cancel();
     _sleepTimer?.cancel();
     _volumeHideTimer?.cancel();
@@ -937,7 +939,14 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                           iconSize: 19,
                           color: accent,
                           onPressed: q.isEmpty
-                              ? () => _sheetToCurrent(animate: true)
+                              // The one ⌖ routine every song list shares.
+                              ? () => locatePlayingRow(
+                                    controller: _sheetScroll,
+                                    rowKey: _sheetNowKey,
+                                    index: _index,
+                                    count: _queue.length,
+                                    glow: _sheetGlow,
+                                  )
                               : null,
                           icon: const Icon(Icons.my_location_rounded),
                         ),
@@ -2341,7 +2350,8 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     return Padding(
       key: ValueKey(_queue[i]),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-      child: Material(
+      // The playing row: found by ⌖ and breathes once (as in the app).
+      child: _nowWrap(current, Material(
         color: current
             ? accent.withValues(alpha: isDark ? 0.10 : 0.07)
             : Colors.transparent,
@@ -2423,9 +2433,18 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
             ),
           ),
         ),
-      ),
+      )),
     );
   }
+
+  final GlobalKey _sheetNowKey = GlobalKey();
+  final NowGlowController _sheetGlow = NowGlowController();
+
+  Widget _nowWrap(bool current, Widget row) => current
+      ? KeyedSubtree(
+          key: _sheetNowKey,
+          child: NowGlow(controller: _sheetGlow, radius: 14, child: row))
+      : row;
 
   // The circular track avatar. Current row → a glossy accent disc (white-lit
   // top-left → accent → darker) with a glow and a live mini-equalizer; other

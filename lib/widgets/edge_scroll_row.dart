@@ -1,5 +1,5 @@
 import 'package:flutter/gestures.dart'
-    show PointerDeviceKind, PointerScrollEvent;
+    show PointerDeviceKind, PointerScrollEvent, kPrimaryButton;
 import 'package:flutter/material.dart';
 
 /// A sideways row of chips / avatars that never makes you hunt for what's
@@ -52,6 +52,7 @@ class _EdgeScrollRowState extends State<EdgeScrollRow> {
   }
 
   Offset? _down;
+  DateTime _downAt = DateTime(0);
 
   // A tap (not a drag) within the edge zone, with more waiting that way →
   // glide about half a row on.
@@ -60,6 +61,11 @@ class _EdgeScrollRowState extends State<EdgeScrollRow> {
     _down = null;
     if (!widget.edgeNudge || down == null || !_c.hasClients) return;
     if ((up - down).distance > 8) return; // that was a drag
+    // A hold (long-press: peek, menu) is not a tap — leave the row be.
+    if (DateTime.now().difference(_downAt) >
+        const Duration(milliseconds: 350)) {
+      return;
+    }
     final w = context.size?.width ?? 0;
     if (w <= 0) return;
     final p = _c.position;
@@ -112,7 +118,12 @@ class _EdgeScrollRowState extends State<EdgeScrollRow> {
       onPointerSignal: (e) {
         if (e is PointerScrollEvent) _wheel(e);
       },
-      onPointerDown: (e) => _down = e.localPosition,
+      onPointerDown: (e) {
+        // Primary button / finger only (a right-click opens menus).
+        if (e.buttons != kPrimaryButton) return;
+        _down = e.localPosition;
+        _downAt = DateTime.now();
+      },
       onPointerUp: (e) => _maybeNudge(e.localPosition),
       onPointerCancel: (_) => _down = null,
       child: AnimatedBuilder(

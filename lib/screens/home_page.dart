@@ -5326,7 +5326,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
                           onTap: () => _tuneInto(fid, who),
                           onLongPress: f.isEmpty
                               ? null
-                              : () => _showPhotoPeek(f, who, !offline),
+                              : () =>
+                                  _showPhotoPeek(f, who, !offline, held: true),
                           child: line,
                         );
                       }

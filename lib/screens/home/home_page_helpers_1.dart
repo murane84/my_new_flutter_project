@@ -1744,9 +1744,11 @@ extension _HomePageHelpers1 on HomePageState {
   /// The quick peek from long-pressing a friend's photo in the Circle list:
   /// their photo + ring, what they're playing (live progress), and one-tap
   /// Tune in / send a ❤️ for the song / open the chat.
-  void _showPhotoPeek(Map<String, dynamic> f, String name, bool isOnline) {
+  void _showPhotoPeek(Map<String, dynamic> f, String name, bool isOnline,
+      {bool held = false}) {
     final id = (f['id'] as num?)?.toInt() ?? -1;
-    Haptics.hold(); // opened by a long-press on the photo
+    // A long-press always answers; a tap opening it follows the setting.
+    held ? Haptics.hold() : Haptics.selectionClick();
     showDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.35),
@@ -2025,7 +2027,9 @@ extension _HomePageHelpers1 on HomePageState {
       behavior: HitTestBehavior.opaque,
       // Long-press the photo → a quick peek (song, progress, Tune in, ❤️)
       // without leaving the list.
-      onLongPress: _isSharing ? null : () => _showPhotoPeek(f, name, isOnline),
+      onLongPress: _isSharing
+          ? null
+          : () => _showPhotoPeek(f, name, isOnline, held: true),
       onTap: () {
         // Music on their photo → the tap goes where the motion points: the
         // quick peek with Tune in.

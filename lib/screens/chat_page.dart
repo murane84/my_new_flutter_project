@@ -3569,7 +3569,6 @@ class _ChatPageState extends State<ChatPage>
 
   void _showMessageMenu(BuildContext context, Map<String, dynamic> msg,
       {Offset? anchor}) {
-    Haptics.hold(); // the long-press landed (no-op on desktop)
     final isMe = msg['sender_id'].toString() == _myId;
     final content = msg['content'] as String? ?? '';
     final scheme = Theme.of(context).colorScheme;
@@ -5297,8 +5296,11 @@ class _ChatPageState extends State<ChatPage>
                   // Stays true for the stamp's 1.2s (removed by a timer, not
                   // here, so a rebuild mid-animation doesn't cut it short).
                   justSent: _freshHearts.contains(msgId),
-                  onMenu: (pos) =>
-                      _showMessageMenu(context, msg, anchor: pos),
+                  // Only ever a long-press on the heart → the hold buzz.
+                  onMenu: (pos) {
+                    Haptics.hold();
+                    _showMessageMenu(context, msg, anchor: pos);
+                  },
                   showStatus: false, // merged into the pill below
                   // Respond from the letter card (long notes open there).
                   onReply: () {
@@ -5724,6 +5726,7 @@ class _ChatPageState extends State<ChatPage>
               // down and SLIDE onto an emoji, let go → reacted. Let go
               // elsewhere → the menu simply stays open.
               onLongPressStart: (d) {
+                Haptics.hold(); // the long-press landed
                 _ReactSlide.begin();
                 _showMessageMenu(context, msg, anchor: d.globalPosition);
               },

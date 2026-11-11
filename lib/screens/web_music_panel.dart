@@ -525,7 +525,14 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       _playAt(_randomOther());
       return;
     }
-    _playAt(_index < _queue.length - 1 ? _index + 1 : 0);
+    // Same as the app player: wrap only under Repeat All.
+    if (_index < _queue.length - 1) {
+      _playAt(_index + 1);
+    } else if (_repeat == _repeatAll) {
+      _playAt(0);
+    } else {
+      showToast(context, 'End of playlist', type: ToastType.info);
+    }
   }
 
   void _prev() {
@@ -551,7 +558,13 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       _player.seek(Duration.zero);
       return;
     }
-    _playAt(_index > 0 ? _index - 1 : _queue.length - 1);
+    if (_index > 0) {
+      _playAt(_index - 1);
+    } else if (_repeat == _repeatAll) {
+      _playAt(_queue.length - 1);
+    } else {
+      _player.seek(Duration.zero);
+    }
   }
 
   void _removeAt(int i) {
@@ -576,6 +589,17 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   void _toggleRepeat() {
     setState(() => _repeat = (_repeat + 1) % 3);
     _queueRev.value++;
+    // Same words as the app player.
+    showToast(
+        context,
+        _repeat == _repeatAll
+            ? (_shuffle ? 'Repeat All · shuffled' : 'Repeat All')
+            : _repeat == _repeatOne
+                ? (_shuffle
+                    ? 'Repeat One · shuffle rests until it ends'
+                    : 'Repeat One')
+                : (_shuffle ? 'Repeat Off · shuffle is back' : 'Repeat Off'),
+        type: ToastType.info);
   }
 
   // Same rules as the app player: shuffle and Repeat All play together;
@@ -595,6 +619,12 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
       }
     });
     _queueRev.value++;
+    showToast(
+        context,
+        !_shuffle
+            ? 'Shuffle Off'
+            : (_repeat == _repeatAll ? 'Shuffle On · Repeat All' : 'Shuffle On'),
+        type: ToastType.info);
   }
 
   void _cycleSpeed() {

@@ -12,9 +12,13 @@ import '../utils/radii.dart';
 /// a click picks any. The composer forwards its keys through [handleKey].
 class EmojiColonSuggest extends StatefulWidget {
   const EmojiColonSuggest(
-      {super.key, required this.controller, required this.focus});
+      {super.key,
+      required this.controller,
+      required this.focus,
+      this.dark = false});
   final TextEditingController controller;
   final FocusNode focus;
+  final bool dark; // on the black story / photo screens
 
   @override
   State<EmojiColonSuggest> createState() => EmojiColonSuggestState();
@@ -169,7 +173,8 @@ class EmojiColonSuggestState extends State<EmojiColonSuggest> {
                       waitDuration: const Duration(milliseconds: 500),
                       child: Material(
                         color: i == _sel
-                            ? scheme.primary.withValues(alpha: 0.14)
+                            ? scheme.primary
+                                .withValues(alpha: widget.dark ? 0.30 : 0.14)
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(Radii.md),
                         child: InkWell(
@@ -191,7 +196,10 @@ class EmojiColonSuggestState extends State<EmojiColonSuggest> {
                 const Spacer(),
                 Text('Tab ↵',
                     style: TextStyle(
-                        fontSize: 11, color: scheme.onSurfaceVariant)),
+                        fontSize: 11,
+                        color: widget.dark
+                            ? Colors.white60
+                            : scheme.onSurfaceVariant)),
               ]),
             ),
     );

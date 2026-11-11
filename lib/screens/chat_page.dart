@@ -134,6 +134,7 @@ import '../utils/emoji_field.dart'
         emojiStartTab,
         emojiStartTabRefresh;
 import '../widgets/emoji_colon_suggest.dart';
+import '../widgets/keyboard_swap_panel.dart';
 import '../utils/adaptive_sheet.dart';
 import '../utils/depth.dart';
 

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/keystroke_sounds.dart';
+import '../utils/emoji_field.dart' show emojiFloats;
+import 'emoji_colon_suggest.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../utils/depth.dart';
@@ -54,6 +56,8 @@ class _AlutaComposerFieldState extends State<AlutaComposerField> {
   FocusNode get _focus => widget.focusNode ?? (_own ??= FocusNode());
   int _lastLen = 0;
   bool _focused = false;
+  // Desktop ":hea" quick emoji, the same strip as the chat box.
+  final _colonKey = GlobalKey<EmojiColonSuggestState>();
 
   @override
   void initState() {
@@ -148,10 +152,17 @@ class _AlutaComposerFieldState extends State<AlutaComposerField> {
             const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
       ),
     );
-    if (widget.onSubmit != null) {
+    final quick = emojiFloats(context);
+    if (widget.onSubmit != null || quick) {
       field = Focus(
         onKeyEvent: (node, event) {
-          if (event is KeyDownEvent &&
+          // ":hea" strip open: Tab / Enter / ↑ ↓ / Esc belong to it first.
+          if (_colonKey.currentState?.handleKey(event) ==
+              KeyEventResult.handled) {
+            return KeyEventResult.handled;
+          }
+          if (widget.onSubmit != null &&
+              event is KeyDownEvent &&
               event.logicalKey == LogicalKeyboardKey.enter &&
               !HardwareKeyboard.instance.isShiftPressed &&
               !HardwareKeyboard.instance.isControlPressed) {
@@ -197,18 +208,30 @@ class _AlutaComposerFieldState extends State<AlutaComposerField> {
       child: IconTheme.merge(
         data: IconThemeData(
             color: isDark ? Colors.white70 : scheme.onSurfaceVariant),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (widget.leading != null)
-              widget.leading!
-            else
-              const SizedBox(width: 14),
-            Expanded(child: field),
-            if (widget.trailing != null)
-              widget.trailing!
-            else
-              const SizedBox(width: 14),
+            if (quick)
+              EmojiColonSuggest(
+                  key: _colonKey,
+                  controller: widget.controller,
+                  focus: _focus,
+                  dark: isDark),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (widget.leading != null)
+                  widget.leading!
+                else
+                  const SizedBox(width: 14),
+                Expanded(child: field),
+                if (widget.trailing != null)
+                  widget.trailing!
+                else
+                  const SizedBox(width: 14),
+              ],
+            ),
           ],
         ),
       ),

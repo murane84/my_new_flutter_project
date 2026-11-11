@@ -636,13 +636,11 @@ extension _ChatPageHelpers1 on _ChatPageState {
                           ),
                       ],
                     ),
-                    if (showEmoji) ...[
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        height: 250,
-                        child: _emojiPickerFor(scheme, ctrl, height: 250),
-                      ),
-                    ],
+                    // Trades places with the keyboard, like every composer.
+                    KeyboardSwapPanel(
+                      open: showEmoji,
+                      builder: (h) => _emojiPickerFor(scheme, ctrl, height: h),
+                    ),
                     const SizedBox(height: 14),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,

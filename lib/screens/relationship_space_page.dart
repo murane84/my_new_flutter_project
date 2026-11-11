@@ -1314,6 +1314,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   /// The header's settings button: settings open in place under the pinned
   /// hero (the dashboard's cards make way); tapping it again closes them.
   Future<void> _editSpace() async {
+    Haptics.tab();
     setState(() {
       _settingsOpen = !_settingsOpen;
       _section = null;
@@ -1323,6 +1324,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   /// From the drawer / rail: open settings (never toggles closed).
   void _openSettings() => setState(() {
+        if (!_settingsOpen) Haptics.tab();
         _settingsOpen = true;
         _section = null;
         _navDrawerOpen = false;
@@ -1331,6 +1333,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
 
   /// Back to the dashboard cards.
   void _goOverview() => setState(() {
+        if (_section != null || _settingsOpen) Haptics.tab();
         _markSeen(_section);
         _settingsOpen = false;
         _section = null;
@@ -1543,6 +1546,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   void _jumpToMoment(int momentId) {
     final order = _visibleSections().map((s) => s.$1).toList();
     _sectionFrom = _section == null ? -1 : order.indexOf(_section!);
+    if (_section != 'moments') Haptics.tab();
     setState(() {
       _section = 'moments';
       _navDrawerOpen = false;
@@ -2107,8 +2111,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                   height: 22,
                   color: _accent.withValues(alpha: 0.22)),
             ],
-            seg(Icons.arrow_back_rounded, 'Back',
-                () => setState(() => _section = null)),
+            // Same exit as the rail's Overview: marks the section seen.
+            seg(Icons.arrow_back_rounded, 'Back', _goOverview),
           ],
         ),
       ),

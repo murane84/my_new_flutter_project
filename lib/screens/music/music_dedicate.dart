@@ -593,7 +593,7 @@ class _DedicateFriendPickerState extends State<_DedicateFriendPicker> {
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.14),
-                    blurRadius: 24,
+                    blurRadius: Depth.lg,
                     offset: const Offset(0, 10),
                   ),
                 ],

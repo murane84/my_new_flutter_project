@@ -3,6 +3,7 @@ import '../services/biometric_service.dart';
 import 'preload_screen.dart';
 import 'auth_page.dart';
 import '../utils/bounce_tap.dart';
+import '../utils/depth.dart';
 
 /// Shown on launch when the user is signed in AND has quick-unlock enabled.
 /// Auto-invokes the fingerprint / Face / Windows Hello prompt; on success it
@@ -105,7 +106,7 @@ class _LockScreenState extends State<LockScreen> {
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withAlpha(isDark ? 70 : 40),
-                              blurRadius: 20,
+                              blurRadius: Depth.lg,
                               offset: const Offset(0, 8),
                             ),
                           ],
@@ -200,7 +201,7 @@ class _UnlockButton extends StatelessWidget {
             boxShadow: [
               BoxShadow(
                 color: primary.withAlpha(40),
-                blurRadius: 24,
+                blurRadius: Depth.lg,
                 spreadRadius: -4,
               ),
             ],

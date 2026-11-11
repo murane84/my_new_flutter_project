@@ -42,6 +42,7 @@ import '../widgets/edge_scroll_row.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../utils/adaptive_sheet.dart';
+import '../utils/depth.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
 /// Presented with `showDialog(...)` so it floats over the chat instead of
@@ -1767,14 +1768,14 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                 // A soft ambient lift.
                 BoxShadow(
                   color: Colors.black.withValues(alpha: isDark ? 0.40 : 0.12),
-                  blurRadius: 30,
+                  blurRadius: Depth.xl,
                   spreadRadius: -8,
                   offset: const Offset(0, 14),
                 ),
                 // A faint accent halo so the console feels alive, not flat.
                 BoxShadow(
                   color: scheme.primary.withValues(alpha: isDark ? 0.10 : 0.06),
-                  blurRadius: 24,
+                  blurRadius: Depth.lg,
                   spreadRadius: -10,
                   offset: const Offset(0, 6),
                 ),
@@ -2651,7 +2652,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                     ? [
                         BoxShadow(
                           color: scheme.primary.withValues(alpha: 0.45),
-                          blurRadius: 18,
+                          blurRadius: Depth.lg,
                           spreadRadius: -2,
                         ),
                       ]
@@ -2744,7 +2745,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                         ? [
                             BoxShadow(
                               color: scheme.primary.withValues(alpha: 0.45),
-                              blurRadius: 18,
+                              blurRadius: Depth.lg,
                               spreadRadius: -2,
                             ),
                           ]
@@ -3687,7 +3688,7 @@ class _LiveWaveformSeekBarState extends State<_LiveWaveformSeekBar> {
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.25),
-                            blurRadius: 6,
+                            blurRadius: Depth.sm,
                             offset: const Offset(0, 2),
                           ),
                         ],

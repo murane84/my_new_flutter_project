@@ -7,6 +7,7 @@ import '../../utils/net_image.dart' show authNetworkImageProvider;
 import '../../utils/readable.dart' show accentInk;
 import '../../utils/motion.dart';
 import '../../utils/radii.dart';
+import '../../utils/depth.dart';
 
 /// One shared photo/video in the Media tab.
 class MediaItem {
@@ -301,7 +302,7 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
                           boxShadow: [
                             BoxShadow(
                               color: scheme.primary.withValues(alpha: 0.35),
-                              blurRadius: 6,
+                              blurRadius: Depth.sm,
                               offset: const Offset(0, 2),
                             ),
                           ],

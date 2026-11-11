@@ -23,6 +23,7 @@ import '../utils/brand_theme.dart';
 import '../utils/readable.dart';
 import '../utils/radii.dart';
 import '../utils/motion.dart';
+import '../utils/depth.dart';
 
 class LoginPage extends StatefulWidget {
   static const String routeName = '/login';
@@ -525,7 +526,7 @@ class LoginPageState extends State<LoginPage> {
                                 : [
                                     BoxShadow(
                                       color: Colors.black.withAlpha(20),
-                                      blurRadius: 26,
+                                      blurRadius: Depth.lg,
                                       offset: const Offset(0, 12),
                                     ),
                                   ],
@@ -658,7 +659,7 @@ class LoginPageState extends State<LoginPage> {
                                           borderRadius:
                                               BorderRadius.circular(Radii.xxl),
                                         ),
-                                        elevation: 4,
+                                        elevation: Depth.low,
                                       ),
                                       child: _isLoading
                                           ? SizedBox(

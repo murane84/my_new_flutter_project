@@ -12,6 +12,7 @@ import '../utils/toast_helper.dart';
 import '../services/haptics.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 /// Aluta's own message banner while the app is open: slides down from the
 /// top when a message arrives for a chat that isn't on screen.
@@ -358,7 +359,7 @@ class _ReplyBannerViewState extends State<_ReplyBannerView>
                 BoxShadow(
                   color: (send ? a : Colors.black)
                       .withValues(alpha: send ? 0.40 : (isDark ? 0.45 : 0.16)),
-                  blurRadius: 14,
+                  blurRadius: Depth.md,
                   offset: const Offset(0, 4),
                 ),
               ],
@@ -458,7 +459,7 @@ class _ReplyBannerViewState extends State<_ReplyBannerView>
               },
               child: Material(
                 color: scheme.surface,
-                elevation: 10,
+                elevation: Depth.high,
                 shadowColor: Colors.black54,
                 borderRadius: BorderRadius.circular(Radii.xl),
                 child: Container(

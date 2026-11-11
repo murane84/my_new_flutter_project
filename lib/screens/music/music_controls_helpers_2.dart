@@ -123,7 +123,7 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                   boxShadow: [
                     BoxShadow(
                         color: accent.withValues(alpha: 0.35),
-                        blurRadius: 6,
+                        blurRadius: Depth.sm,
                         offset: const Offset(0, 2)),
                   ],
                 ),
@@ -827,14 +827,14 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
                           BoxShadow(
                             color: Colors.white
                                 .withValues(alpha: isDark ? 0.10 : 0.9),
-                            blurRadius: 3,
+                            blurRadius: Depth.xs,
                             offset: const Offset(-1.2, -1.8),
                           ),
                           // Tight contact shadow grounds the raised pill.
                           BoxShadow(
                             color: Colors.black
                                 .withValues(alpha: isDark ? 0.30 : 0.06),
-                            blurRadius: 4,
+                            blurRadius: Depth.xs,
                             offset: const Offset(0, 1),
                           ),
                         ],
@@ -1529,7 +1529,7 @@ Column(
                           ? [
                               BoxShadow(
                                   color: accent.withAlpha(110),
-                                  blurRadius: 10,
+                                  blurRadius: Depth.sm,
                                   spreadRadius: 1),
                             ]
                           : null,
@@ -1654,13 +1654,13 @@ Column(
           boxShadow: [
             BoxShadow(
               color: Colors.black.withAlpha(dark ? 80 : 22),
-              blurRadius: 26,
+              blurRadius: Depth.lg,
               offset: const Offset(0, 14),
               spreadRadius: -8,
             ),
             BoxShadow(
               color: accent.withAlpha(dark ? 26 : 16),
-              blurRadius: 34,
+              blurRadius: Depth.xl,
               spreadRadius: -10,
               offset: const Offset(0, 8),
             ),
@@ -1719,7 +1719,7 @@ Column(
             accent.withAlpha(0),
           ]),
           boxShadow: [
-            BoxShadow(color: accent.withAlpha(70), blurRadius: 6),
+            BoxShadow(color: accent.withAlpha(70), blurRadius: Depth.sm),
           ],
         ),
       );

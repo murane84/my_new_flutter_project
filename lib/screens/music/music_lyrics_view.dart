@@ -505,7 +505,7 @@ class _LyricsViewState extends State<_LyricsView> {
                           ? [
                               Shadow(
                                   color: scheme.primary.withAlpha(70),
-                                  blurRadius: 12)
+                                  blurRadius: Depth.md)
                             ]
                           : null,
                     ),

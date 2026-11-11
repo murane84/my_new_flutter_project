@@ -5,6 +5,7 @@ import '../utils/popup_shell.dart'
 import '../utils/readable.dart' show accentInk;
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 // Height of the Aluta app header (toolbar). The full-page legal views start
 // just under it, so the "Aluta" title + overflow (⋮) menu stay visible above.
@@ -173,7 +174,7 @@ class _LegalHubState extends State<_LegalHub> {
             boxShadow: [
               BoxShadow(
                 color: Theme.of(context).shadowColor.withAlpha(35),
-                blurRadius: 12,
+                blurRadius: Depth.md,
               ),
             ],
           ),

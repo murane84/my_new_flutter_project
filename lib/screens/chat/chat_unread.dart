@@ -115,7 +115,7 @@ extension _ChatUnread on _ChatPageState {
               boxShadow: [
                 BoxShadow(
                   color: a.withValues(alpha: isDark ? 0.30 : 0.18),
-                  blurRadius: 10,
+                  blurRadius: Depth.sm,
                   offset: const Offset(0, 3),
                 ),
               ],

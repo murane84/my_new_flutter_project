@@ -8,6 +8,7 @@ import '../utils/readable.dart' show accentInk;
 import '../services/haptics.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 // ─── Genie menus ────────────────────────────────────────────────────────────
 // One menu motion for the whole app: a menu GROWS out of the button that
@@ -239,7 +240,7 @@ class _GenieMenuSurfaceState extends State<_GenieMenuSurface> {
     final shadow = [
       BoxShadow(
         color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.16),
-        blurRadius: 24,
+        blurRadius: Depth.lg,
         offset: const Offset(0, 10),
       ),
     ];

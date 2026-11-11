@@ -32,7 +32,7 @@ extension _HomeBanners on HomePageState {
               boxShadow: [
                 BoxShadow(
                     color: scheme.primary.withAlpha(160),
-                    blurRadius: 6,
+                    blurRadius: Depth.sm,
                     spreadRadius: 1),
               ],
             ),
@@ -81,7 +81,7 @@ extension _HomeBanners on HomePageState {
                       boxShadow: [
                         BoxShadow(
                             color: Colors.white.withAlpha(160),
-                            blurRadius: 6,
+                            blurRadius: Depth.sm,
                             spreadRadius: 1),
                       ],
                     ),

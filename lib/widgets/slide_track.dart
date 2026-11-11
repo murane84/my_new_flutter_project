@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../utils/readable.dart' show readableOn;
 import '../utils/motion.dart';
+import '../utils/depth.dart';
 
 /// Aluta's ONE "pick one of these" control: a sunken track with a raised,
 /// lit key that slides (with a little spring) to the chosen segment.
@@ -107,12 +108,12 @@ class SlideTrack extends StatelessWidget {
                   boxShadow: [
                     BoxShadow(
                       color: scheme.primary.withValues(alpha: 0.45),
-                      blurRadius: 10,
+                      blurRadius: Depth.sm,
                       offset: const Offset(0, 3),
                     ),
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.30),
-                      blurRadius: 3,
+                      blurRadius: Depth.xs,
                       offset: const Offset(0, 1),
                     ),
                   ],

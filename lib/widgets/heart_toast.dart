@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'glossy_heart.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 /// The "Neema opened your secret heart" moment — a small glossy pill that
 /// drops in at the TOP of the screen (so an open keyboard never hides it),
@@ -122,7 +123,7 @@ class _HeartToastState extends State<_HeartToast>
                       boxShadow: [
                         BoxShadow(
                           color: accent.withValues(alpha: 0.30),
-                          blurRadius: 22,
+                          blurRadius: Depth.lg,
                           offset: const Offset(0, 8),
                           spreadRadius: -4,
                         ),

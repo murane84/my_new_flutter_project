@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/on_accent.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 /// A short, warm first-run tour: Aluta · Harmony · Circle · Glow · your
 /// music has feelings. Shown once; replay from Moments & nudges.
@@ -178,7 +179,7 @@ class _TourPagesState extends State<_TourPages>
                 boxShadow: [
                   BoxShadow(
                       color: tint.withValues(alpha: 0.30),
-                      blurRadius: 48,
+                      blurRadius: Depth.xl,
                       offset: const Offset(0, 18)),
                 ],
               ),
@@ -361,7 +362,7 @@ class _TourPagesState extends State<_TourPages>
                     boxShadow: [
                       BoxShadow(
                           color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 24,
+                          blurRadius: Depth.lg,
                           offset: const Offset(0, 10)),
                     ],
                   ),

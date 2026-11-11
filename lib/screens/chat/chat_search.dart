@@ -179,7 +179,7 @@ extension _ChatSearch on _ChatPageState {
               boxShadow: [
                 BoxShadow(
                   color: scheme.primary.withValues(alpha: 0.14),
-                  blurRadius: 14,
+                  blurRadius: Depth.md,
                   offset: const Offset(0, 4),
                 ),
               ],

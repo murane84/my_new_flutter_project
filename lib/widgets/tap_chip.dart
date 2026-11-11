@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../utils/on_accent.dart';
 import '../services/haptics.dart';
 import '../utils/motion.dart';
+import '../utils/depth.dart';
 
 /// A tactile header action for the music lists (playlist, Up next queue,
 /// Listen Together): a soft rounded chip that reads as a button at rest,
@@ -81,7 +82,7 @@ class _AlutaTapChipState extends State<AlutaTapChip> {
                       BoxShadow(
                         color: (on ? accent : scheme.primary)
                             .withValues(alpha: isDark ? 0.18 : 0.14),
-                        blurRadius: 8,
+                        blurRadius: Depth.sm,
                         offset: const Offset(0, 3),
                       ),
                     ],

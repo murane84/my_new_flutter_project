@@ -11,6 +11,7 @@ import '../utils/brand_theme.dart';
 import '../utils/readable.dart';
 import '../utils/radii.dart';
 import '../utils/motion.dart';
+import '../utils/depth.dart';
 
 class RegisterPage extends StatefulWidget {
   static const String routeName = '/register';
@@ -262,7 +263,7 @@ class RegisterPageState extends State<RegisterPage> {
                                 : [
                                     BoxShadow(
                                       color: Colors.black.withAlpha(20),
-                                      blurRadius: 26,
+                                      blurRadius: Depth.lg,
                                       offset: const Offset(0, 12),
                                     ),
                                   ],
@@ -447,7 +448,7 @@ class RegisterPageState extends State<RegisterPage> {
                                           borderRadius:
                                               BorderRadius.circular(Radii.xxl),
                                         ),
-                                        elevation: 4,
+                                        elevation: Depth.low,
                                       ),
                                       child: _isLoading
                                           ? SizedBox(

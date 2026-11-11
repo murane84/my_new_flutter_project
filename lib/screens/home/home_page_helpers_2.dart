@@ -63,7 +63,7 @@ extension _HomePageHelpers2 on HomePageState {
             ? [
                 BoxShadow(
                   color: Theme.of(context).shadowColor.withAlpha(30),
-                  blurRadius: 12,
+                  blurRadius: Depth.md,
                 ),
               ]
             : const [],
@@ -126,7 +126,7 @@ extension _HomePageHelpers2 on HomePageState {
         boxShadow: [
           BoxShadow(
             color: theme.shadowColor.withAlpha(35),
-            blurRadius: 12,
+            blurRadius: Depth.md,
             offset: const Offset(0, 0),
           ),
         ],
@@ -220,7 +220,7 @@ extension _HomePageHelpers2 on HomePageState {
                     ? [
                         BoxShadow(
                           color: scheme.primary.withValues(alpha: 0.40),
-                          blurRadius: 5,
+                          blurRadius: Depth.xs,
                           offset: const Offset(0, 2),
                         ),
                       ]
@@ -312,7 +312,7 @@ extension _HomePageHelpers2 on HomePageState {
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.10),
-            blurRadius: 8,
+            blurRadius: Depth.sm,
             offset: const Offset(0, 3),
           ),
         ],
@@ -625,7 +625,7 @@ extension _HomePageHelpers2 on HomePageState {
                         height: double.infinity,
                         child: Material(
                           color: scheme.surface,
-                          elevation: 16,
+                          elevation: Depth.high,
                           shadowColor: Colors.black.withAlpha(120),
                           borderRadius: panelRadius,
                           clipBehavior: Clip.antiAlias,

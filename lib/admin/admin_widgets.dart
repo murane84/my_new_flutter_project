@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 const Color kAdminRed = Color(0xFFD90429); // Aluta brand red
 
@@ -198,7 +199,7 @@ class AdminIconChip extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: color.withValues(alpha: 0.35),
-            blurRadius: 10,
+            blurRadius: Depth.sm,
             offset: const Offset(0, 4),
           ),
         ],

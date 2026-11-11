@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'net.dart' show NetStatus;
 import 'motion.dart';
 import 'radii.dart';
+import 'depth.dart';
 
 // ── Toast types ───────────────────────────────────────────────────────────────
 enum ToastType { info, error, success }
@@ -238,12 +239,12 @@ class _ToastOverlayState extends State<_ToastOverlay>
                   boxShadow: [
                     BoxShadow(
                       color: ambientShadow,
-                      blurRadius: 18,
+                      blurRadius: Depth.lg,
                       offset: const Offset(0, 6),
                     ),
                     BoxShadow(
                       color: _accent.withAlpha(widget.isDark ? 45 : 30),
-                      blurRadius: 14,
+                      blurRadius: Depth.md,
                       spreadRadius: -2,
                     ),
                   ],

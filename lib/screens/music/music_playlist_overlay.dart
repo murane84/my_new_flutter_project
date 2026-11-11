@@ -411,7 +411,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           boxShadow: [
             BoxShadow(
               color: scheme.primary.withValues(alpha: 0.45),
-              blurRadius: 10,
+              blurRadius: Depth.sm,
               spreadRadius: 1,
             ),
           ],
@@ -980,7 +980,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           boxShadow: [
             BoxShadow(
               color: Colors.black.withAlpha(70),
-              blurRadius: 24,
+              blurRadius: Depth.lg,
               offset: const Offset(0, 8),
             ),
           ],
@@ -1370,7 +1370,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             : [
                 BoxShadow(
                   color: Colors.black.withAlpha(50),
-                  blurRadius: 26,
+                  blurRadius: Depth.lg,
                   offset: const Offset(0, 8),
                 ),
               ],
@@ -2101,7 +2101,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           boxShadow: [
             BoxShadow(
               color: Colors.black.withAlpha(70),
-              blurRadius: 24,
+              blurRadius: Depth.lg,
               offset: const Offset(0, 8),
             ),
           ],

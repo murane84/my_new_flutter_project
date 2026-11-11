@@ -6,6 +6,7 @@ import '../utils/readable.dart' show accentInk;
 import '../services/haptics.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 /// One action on a [showMomentCard].
 class MomentAction {
@@ -194,7 +195,7 @@ class _MomentCardState extends State<_MomentCard>
                         boxShadow: [
                           BoxShadow(
                             color: scheme.primary.withValues(alpha: 0.18),
-                            blurRadius: 24,
+                            blurRadius: Depth.lg,
                             offset: const Offset(0, 8),
                           ),
                         ],

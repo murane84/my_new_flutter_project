@@ -496,7 +496,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.10),
-              blurRadius: 10,
+              blurRadius: Depth.sm,
               offset: const Offset(0, 4),
             ),
           ],

@@ -51,6 +51,7 @@ import 'services/haptics.dart';
 import 'utils/motion.dart';
 import 'utils/radii.dart';
 import 'utils/emoji_field.dart' show startPointerTracking;
+import 'utils/depth.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool _spaceFullHooked = false;
@@ -346,7 +347,7 @@ class MyApp extends StatelessWidget {
       dialogTheme: DialogThemeData(
         backgroundColor: scheme.surface,
         surfaceTintColor: Colors.transparent,
-        elevation: 14,
+        elevation: Depth.high,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(Radii.xxl),
           side: BorderSide(color: scheme.primary.withAlpha(130)),
@@ -683,7 +684,7 @@ class SplashScreenState extends State<SplashScreen>
                     boxShadow: [
                       BoxShadow(
                         color: scheme.primary.withValues(alpha: glow * 0.9),
-                        blurRadius: 46 + 20 * (1 - g),
+                        blurRadius: Depth.xl + 20 * (1 - g),
                         spreadRadius: -size * 0.12,
                       ),
                     ],
@@ -749,7 +750,7 @@ class SplashScreenState extends State<SplashScreen>
                           shadows: [
                             Shadow(
                               color: base.withValues(alpha: 0.55),
-                              blurRadius: 18,
+                              blurRadius: Depth.lg,
                             ),
                           ],
                         ),
@@ -799,7 +800,7 @@ class SplashScreenState extends State<SplashScreen>
                     boxShadow: [
                       BoxShadow(
                         color: scheme.primary.withValues(alpha: 0.5),
-                        blurRadius: 6,
+                        blurRadius: Depth.sm,
                       ),
                     ],
                   ),

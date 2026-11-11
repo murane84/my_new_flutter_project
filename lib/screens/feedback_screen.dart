@@ -7,6 +7,7 @@ import '../utils/toast_helper.dart';
 import 'api_service.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 /// "Send feedback" — tell the Aluta team what you love, what's broken and what
 /// you'd like next. Goes straight to the owner's admin panel; replies and
@@ -163,7 +164,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         if (!isDark)
           BoxShadow(
             color: Colors.white.withValues(alpha: 0.9),
-            blurRadius: 2,
+            blurRadius: Depth.xs,
             offset: const Offset(-1, -1.5),
           ),
       ],
@@ -202,7 +203,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                 boxShadow: [
                   BoxShadow(
                     color: scheme.primary.withValues(alpha: 0.35),
-                    blurRadius: 22,
+                    blurRadius: Depth.lg,
                     offset: const Offset(0, 10),
                   ),
                 ],
@@ -294,7 +295,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                   // Inner-shadow look: a dark top lip.
                   BoxShadow(
                     color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
-                    blurRadius: 1,
+                    blurRadius: Depth.xs,
                     offset: const Offset(0, 1),
                   ),
                 ],
@@ -585,7 +586,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
               shape: BoxShape.circle,
               color: i <= at ? c : scheme.outlineVariant,
               boxShadow: i == at
-                  ? [BoxShadow(color: c.withValues(alpha: 0.5), blurRadius: 6)]
+                  ? [BoxShadow(color: c.withValues(alpha: 0.5), blurRadius: Depth.sm)]
                   : null,
             ),
           ),

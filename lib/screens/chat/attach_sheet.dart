@@ -5,6 +5,7 @@ import 'package:photo_manager/photo_manager.dart';
 import '../../utils/readable.dart' show accentInk;
 import '../../widgets/edge_scroll_row.dart';
 import '../../utils/radii.dart';
+import '../../utils/depth.dart';
 
 /// The chat "attach" bottom sheet — a compact, content-hugging sheet with a
 /// vibrant grid of share options and, on Android/iOS, a horizontally-scrolling
@@ -147,7 +148,7 @@ class _AttachSheetState extends State<AttachSheet> {
                   color: Colors.black.withValues(
                       alpha:
                           scheme.brightness == Brightness.dark ? 0.40 : 0.12),
-                  blurRadius: 24,
+                  blurRadius: Depth.lg,
                   offset: const Offset(0, -6),
                 ),
               ],
@@ -277,7 +278,7 @@ class _AttachSheetState extends State<AttachSheet> {
               boxShadow: [
                 BoxShadow(
                   color: o.color.withValues(alpha: 0.38),
-                  blurRadius: 12,
+                  blurRadius: Depth.md,
                   offset: const Offset(0, 5),
                 ),
               ],

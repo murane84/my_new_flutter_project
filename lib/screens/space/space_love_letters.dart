@@ -640,7 +640,7 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.18),
-                      blurRadius: 24,
+                      blurRadius: Depth.lg,
                       offset: const Offset(0, 10),
                     ),
                   ],
@@ -774,7 +774,7 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
                 boxShadow: [
                   BoxShadow(
                       color: tint.withValues(alpha: 0.4),
-                      blurRadius: 12,
+                      blurRadius: Depth.md,
                       offset: const Offset(0, 4)),
                 ],
               ),

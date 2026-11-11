@@ -17,6 +17,7 @@ import '../services/haptics.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 /// Global search across my chats: the PEOPLE and GROUPS whose names match
 /// first ("Chats"), then the MESSAGES grouped by chat (best matches first,
@@ -382,7 +383,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
             boxShadow: [
               BoxShadow(
                 color: scheme.primary.withValues(alpha: 0.14),
-                blurRadius: 14,
+                blurRadius: Depth.md,
                 offset: const Offset(0, 4),
               ),
             ],

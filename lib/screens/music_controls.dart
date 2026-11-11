@@ -70,6 +70,7 @@ import '../widgets/edge_scroll_row.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../utils/adaptive_sheet.dart';
+import '../utils/depth.dart';
 
 part 'music/music_control_widgets.dart'; // _CtrlBtn, _CtrlChip, _SpeedPanel
 part 'music/music_playlist_overlay.dart'; // _PlaylistOverlay + state
@@ -2114,12 +2115,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withAlpha(70),
-                  blurRadius: 28,
+                  blurRadius: Depth.xl,
                   offset: const Offset(0, 10),
                 ),
                 BoxShadow(
                   color: scheme.primary.withAlpha(28),
-                  blurRadius: 20,
+                  blurRadius: Depth.lg,
                   spreadRadius: -4,
                 ),
               ],
@@ -2825,7 +2826,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           boxShadow: [
             BoxShadow(
               color: Colors.black.withAlpha(60),
-              blurRadius: 20,
+              blurRadius: Depth.lg,
               offset: const Offset(0, 6),
             ),
           ],

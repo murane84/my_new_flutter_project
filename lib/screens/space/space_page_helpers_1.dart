@@ -562,12 +562,12 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
-              blurRadius: 12,
+              blurRadius: Depth.md,
               offset: const Offset(0, 6),
             ),
             BoxShadow(
               color: Colors.white.withValues(alpha: isDark ? 0.04 : 0.7),
-              blurRadius: 1,
+              blurRadius: Depth.xs,
               spreadRadius: -1,
               offset: const Offset(0, -1),
             ),
@@ -600,7 +600,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
                     boxShadow: [
                       BoxShadow(
                         color: _accent.withValues(alpha: 0.22),
-                        blurRadius: 8,
+                        blurRadius: Depth.sm,
                         offset: const Offset(0, 4),
                       ),
                     ],
@@ -682,7 +682,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.12),
-              blurRadius: 10,
+              blurRadius: Depth.sm,
               offset: const Offset(0, 4),
             ),
           ],
@@ -760,7 +760,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.42 : 0.14),
-            blurRadius: 18,
+            blurRadius: Depth.lg,
             // Cast the shadow to the RIGHT (over the content) in drawer mode so
             // it never darkens the flush left edge; straight down for the rail.
             offset: drawer ? const Offset(6, 0) : const Offset(0, 8),
@@ -875,7 +875,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
         boxShadow: [
           BoxShadow(
             color: _accent.withValues(alpha: 0.34),
-            blurRadius: 14,
+            blurRadius: Depth.md,
             offset: const Offset(0, 6),
           ),
         ],
@@ -1259,7 +1259,7 @@ class _NewDotState extends State<_NewDot> with SingleTickerProviderStateMixin {
               boxShadow: [
                 BoxShadow(
                     color: a.withValues(alpha: 0.25 + 0.35 * _c.value),
-                    blurRadius: 4 + 4 * _c.value,
+                    blurRadius: Depth.xs + 4 * _c.value,
                     spreadRadius: 1 * _c.value),
               ],
             ),

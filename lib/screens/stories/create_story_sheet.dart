@@ -19,6 +19,7 @@ import '../../widgets/edge_scroll_row.dart';
 import '../../utils/motion.dart';
 import '../../utils/radii.dart';
 import '../../utils/adaptive_sheet.dart';
+import '../../utils/depth.dart';
 
 /// Entry point: a bottom sheet offering the four ways to post a story
 /// (photo from gallery, camera photo, a short video clip, or a "now playing"
@@ -909,7 +910,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                                                 BoxShadow(
                                                   color: Colors.black
                                                       .withValues(alpha: 0.30),
-                                                  blurRadius: 4,
+                                                  blurRadius: Depth.xs,
                                                 ),
                                               ],
                                             ),
@@ -1044,7 +1045,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
                       ? [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.25),
-                            blurRadius: 8,
+                            blurRadius: Depth.sm,
                             offset: const Offset(0, 3),
                           ),
                         ]
@@ -1208,7 +1209,7 @@ class _TextStoryPageState extends State<_TextStoryPage> {
     final shadow = <Shadow>[
       Shadow(
         color: (onDark ? Colors.black : Colors.white).withValues(alpha: 0.26),
-        blurRadius: 12,
+        blurRadius: Depth.md,
       ),
     ];
     return Scaffold(
@@ -1387,7 +1388,7 @@ class _TextStoryPageState extends State<_TextStoryPage> {
                     ? [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 8,
+                          blurRadius: Depth.sm,
                           offset: const Offset(0, 3),
                         ),
                       ]
@@ -1580,7 +1581,7 @@ class _StickerComposePageState extends State<_StickerComposePage> {
                     ? [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 8,
+                          blurRadius: Depth.sm,
                           offset: const Offset(0, 3),
                         ),
                       ]

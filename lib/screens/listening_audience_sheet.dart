@@ -11,6 +11,7 @@ import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../widgets/skeleton.dart';
 import '../utils/adaptive_sheet.dart';
+import '../utils/depth.dart';
 
 /// The music-player toggle for broadcasting "listening now" to friends.
 /// Tap flips sharing on/off; long-press opens the audience sheet (who can see).
@@ -146,7 +147,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.14),
-                    blurRadius: 24,
+                    blurRadius: Depth.lg,
                     offset: const Offset(0, 10),
                   ),
                 ],
@@ -198,7 +199,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
                       ? [
                           BoxShadow(
                               color: scheme.primary.withValues(alpha: 0.35),
-                              blurRadius: 10,
+                              blurRadius: Depth.sm,
                               offset: const Offset(0, 3)),
                         ]
                       : null,
@@ -464,7 +465,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
                 ? [
                     BoxShadow(
                         color: scheme.primary.withValues(alpha: 0.35),
-                        blurRadius: 10,
+                        blurRadius: Depth.sm,
                         offset: const Offset(0, 3)),
                   ]
                 : null,

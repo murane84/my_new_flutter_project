@@ -75,7 +75,7 @@ class _PressPlayCountdownState extends State<_PressPlayCountdown> {
                 boxShadow: [
                   BoxShadow(
                       color: widget.accent.withValues(alpha: 0.5),
-                      blurRadius: 30,
+                      blurRadius: Depth.xl,
                       spreadRadius: 2),
                 ],
               ),

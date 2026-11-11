@@ -330,12 +330,12 @@ class _LiveInviteDialog extends StatelessWidget {
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withAlpha(80),
-                    blurRadius: 34,
+                    blurRadius: Depth.xl,
                     offset: const Offset(0, 14),
                   ),
                   BoxShadow(
                     color: scheme.primary.withAlpha(40),
-                    blurRadius: 26,
+                    blurRadius: Depth.lg,
                     spreadRadius: -6,
                   ),
                 ],

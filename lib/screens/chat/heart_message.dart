@@ -17,6 +17,7 @@ import '../../utils/readable.dart';
 import '../../services/haptics.dart';
 import '../../utils/motion.dart';
 import '../../utils/radii.dart';
+import '../../utils/depth.dart';
 
 // ─── Secret hearts — the signature love note ────────────────────────────────
 // A "secret heart" (message_type 'heart') arrives covered, beating softly. It
@@ -1990,7 +1991,7 @@ class _HeartGenieState extends State<_HeartGenie>
               boxShadow: [
                 BoxShadow(
                   color: a.withValues(alpha: 0.45),
-                  blurRadius: 12,
+                  blurRadius: Depth.md,
                   offset: const Offset(0, 4),
                 ),
               ],
@@ -2093,13 +2094,13 @@ class _HeartGenieState extends State<_HeartGenie>
           boxShadow: [
             BoxShadow(
               color: a.withValues(alpha: 0.34),
-              blurRadius: 44,
+              blurRadius: Depth.xl,
               spreadRadius: -8,
               offset: const Offset(0, 20),
             ),
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.5),
-              blurRadius: 22,
+              blurRadius: Depth.lg,
               offset: const Offset(0, 10),
             ),
           ],

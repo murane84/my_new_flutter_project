@@ -8,6 +8,7 @@ import '../services/contact_names.dart';
 import '../widgets/person_avatar.dart';
 import '../state/group_call_state.dart';
 import '../utils/motion.dart';
+import '../utils/depth.dart';
 
 /// Full-screen UI for the single active Aluta GROUP voice call. Reflects
 /// [GroupCallService] — ringing (incoming) / active — and drives accept /
@@ -216,7 +217,7 @@ class _GroupCallScreenState extends ConsumerState<GroupCallScreen> {
                 ? [
                     BoxShadow(
                       color: green.withAlpha(150),
-                      blurRadius: 16,
+                      blurRadius: Depth.md,
                       spreadRadius: 1,
                     ),
                   ]

@@ -39,6 +39,7 @@ import '../widgets/now_glow.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../utils/adaptive_sheet.dart';
+import '../utils/depth.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
 ///
@@ -248,7 +249,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           boxShadow: [
             BoxShadow(
                 color: accent.withValues(alpha: 0.45),
-                blurRadius: 16,
+                blurRadius: Depth.md,
                 offset: const Offset(0, 6)),
           ],
         ),
@@ -878,7 +879,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.16),
-              blurRadius: 24,
+              blurRadius: Depth.lg,
               offset: const Offset(0, -4),
             ),
           ],
@@ -1277,7 +1278,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.4),
-            blurRadius: 8,
+            blurRadius: Depth.sm,
             offset: const Offset(0, 3),
           ),
         ],
@@ -1290,7 +1291,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
             shape: BoxShape.circle,
             color: accent,
             boxShadow: [
-              BoxShadow(color: accent.withValues(alpha: 0.6), blurRadius: 8),
+              BoxShadow(color: accent.withValues(alpha: 0.6), blurRadius: Depth.sm),
             ],
           ),
           child: Center(
@@ -1585,7 +1586,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                   ? [
                       BoxShadow(
                         color: tint.withValues(alpha: isDark ? 0.22 : 0.14),
-                        blurRadius: 7,
+                        blurRadius: Depth.sm,
                         offset: const Offset(0, 3),
                       ),
                     ]
@@ -1724,7 +1725,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
               boxShadow: [
                 BoxShadow(
                   color: tint.withValues(alpha: isDark ? 0.22 : 0.14),
-                  blurRadius: 7,
+                  blurRadius: Depth.sm,
                   offset: const Offset(0, 3),
                 ),
               ],
@@ -1906,7 +1907,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                         ? [
                             BoxShadow(
                               color: accent.withValues(alpha: 0.28),
-                              blurRadius: 10,
+                              blurRadius: Depth.sm,
                               offset: const Offset(0, 3),
                             ),
                           ]
@@ -2061,7 +2062,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
                     boxShadow: [
                       BoxShadow(
                         color: accent.withValues(alpha: 0.50),
-                        blurRadius: 22,
+                        blurRadius: Depth.lg,
                         spreadRadius: 1,
                       ),
                     ],
@@ -2476,7 +2477,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           boxShadow: [
             BoxShadow(
               color: accent.withValues(alpha: 0.45),
-              blurRadius: 12,
+              blurRadius: Depth.md,
               spreadRadius: 1,
             ),
           ],
@@ -2510,7 +2511,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
         boxShadow: [
           BoxShadow(
             color: accent.withValues(alpha: isDark ? 0.18 : 0.12),
-            blurRadius: 6,
+            blurRadius: Depth.sm,
             offset: const Offset(0, 3),
           ),
         ],
@@ -2675,7 +2676,7 @@ class _WebWaveformSeekBarState extends State<_WebWaveformSeekBar> {
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.25),
-                            blurRadius: 6,
+                            blurRadius: Depth.sm,
                             offset: const Offset(0, 2),
                           ),
                         ],

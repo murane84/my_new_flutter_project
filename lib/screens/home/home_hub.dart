@@ -853,7 +853,7 @@ extension _HomeHub on HomePageState {
                     ? [
                         BoxShadow(
                           color: scheme.primary.withValues(alpha: 0.26),
-                          blurRadius: 10,
+                          blurRadius: Depth.sm,
                           offset: const Offset(0, 3),
                         ),
                       ]
@@ -861,7 +861,7 @@ extension _HomeHub on HomePageState {
                         BoxShadow(
                           color: Colors.black
                               .withValues(alpha: isDark ? 0.30 : 0.08),
-                          blurRadius: 6,
+                          blurRadius: Depth.sm,
                           offset: const Offset(0, 2),
                         ),
                       ],
@@ -1012,7 +1012,7 @@ class _PulseOnRiseState extends State<_PulseOnRise>
               shadows: [
                 BoxShadow(
                     color: widget.color.withValues(alpha: 0.45 * i),
-                    blurRadius: 14,
+                    blurRadius: Depth.md,
                     spreadRadius: 1),
               ],
             ),
@@ -1051,7 +1051,7 @@ class _CirclePeek {
                 ),
                 child: Material(
                   color: scheme.surface,
-                  elevation: 12,
+                  elevation: Depth.high,
                   borderRadius: BorderRadius.circular(Radii.xl),
                   clipBehavior: Clip.antiAlias,
                   child: SizedBox(

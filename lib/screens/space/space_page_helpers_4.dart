@@ -239,7 +239,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
                       ? [
                           BoxShadow(
                               color: _accent.withValues(alpha: 0.3),
-                              blurRadius: 8,
+                              blurRadius: Depth.sm,
                               offset: const Offset(0, 3)),
                         ]
                       : null,
@@ -339,7 +339,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.07),
-                  blurRadius: 8,
+                  blurRadius: Depth.sm,
                   offset: const Offset(0, 3),
                 ),
               ],
@@ -387,7 +387,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
                             boxShadow: [
                               BoxShadow(
                                   color: Colors.black.withValues(alpha: 0.12),
-                                  blurRadius: 3),
+                                  blurRadius: Depth.xs),
                             ],
                           ),
                           child: Icon(srcIcon, size: 11, color: _accent),
@@ -504,7 +504,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
                         boxShadow: [
                           BoxShadow(
                               color: _accent.withValues(alpha: 0.35),
-                              blurRadius: 8,
+                              blurRadius: Depth.sm,
                               offset: const Offset(0, 3)),
                         ],
                       ),
@@ -652,7 +652,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
-              blurRadius: 12,
+              blurRadius: Depth.md,
               offset: const Offset(0, 5),
             ),
           ],
@@ -935,7 +935,7 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
                         shadows: [
                           Shadow(
                               color: Colors.black54,
-                              blurRadius: 6,
+                              blurRadius: Depth.sm,
                               offset: Offset(0, 1)),
                         ],
                       ),

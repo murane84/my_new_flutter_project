@@ -6,6 +6,7 @@ import 'register_screen.dart';
 import '../utils/brand_theme.dart';
 import '../utils/radii.dart';
 import '../utils/motion.dart';
+import '../utils/depth.dart';
 
 class AuthPage extends StatelessWidget {
   static const String routeName = '/auth';
@@ -114,7 +115,7 @@ class AuthPage extends StatelessWidget {
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withAlpha(isDark ? 70 : 40),
-                              blurRadius: 24,
+                              blurRadius: Depth.lg,
                               offset: const Offset(0, 10),
                             ),
                           ],
@@ -160,7 +161,7 @@ class AuthPage extends StatelessWidget {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(Radii.xxl),
                             ),
-                            elevation: 6,
+                            elevation: Depth.mid,
                             shadowColor: Colors.black.withAlpha(120),
                             textStyle: const TextStyle(
                               fontSize: 15.5,

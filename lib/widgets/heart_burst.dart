@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../utils/popup_shell.dart' show gLastTapDownGlobal;
+import '../utils/depth.dart';
 
 /// How an emoji moves in its fountain.
 enum _Motion { rise, bounce, fall, flicker }
@@ -229,7 +230,7 @@ class _FountainState extends State<_Fountain>
                   shadows: const [
                     Shadow(
                         color: Color(0x55000000),
-                        blurRadius: 4,
+                        blurRadius: Depth.xs,
                         offset: Offset(0, 1)),
                   ])
               : Text(widget.glyph!,

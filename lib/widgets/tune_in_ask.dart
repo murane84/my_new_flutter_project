@@ -7,6 +7,7 @@ import 'person_avatar.dart';
 import '../utils/readable.dart' show accentInk;
 import '../utils/radii.dart';
 import '../utils/adaptive_sheet.dart';
+import '../utils/depth.dart';
 
 /// Tap "Tune in" on a friend who's listening: ASK to join their song (they
 /// keep their rhythm; you join right where they are). A small waiting card
@@ -119,7 +120,7 @@ class _TuneInWaitingState extends State<_TuneInWaiting> {
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.14),
-                    blurRadius: 24,
+                    blurRadius: Depth.lg,
                     offset: const Offset(0, 10),
                   ),
                 ],

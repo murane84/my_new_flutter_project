@@ -241,7 +241,7 @@ class _MixtapeScreenState extends State<_MixtapeScreen> {
                       boxShadow: [
                         BoxShadow(
                             color: Colors.black.withValues(alpha: 0.3),
-                            blurRadius: 12,
+                            blurRadius: Depth.md,
                             offset: const Offset(0, 4)),
                       ],
                     ),

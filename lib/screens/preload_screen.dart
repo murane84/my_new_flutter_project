@@ -16,6 +16,7 @@ import '../services/aluta_mood.dart';
 import '../services/song_insights.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 /// The post-unlock warm-up gate.
 ///
@@ -261,7 +262,7 @@ class _PreloadScreenState extends State<PreloadScreen>
                         boxShadow: [
                           BoxShadow(
                             color: accent.withValues(alpha: 0.38),
-                            blurRadius: 50,
+                            blurRadius: Depth.xl,
                             spreadRadius: 6,
                           ),
                         ],

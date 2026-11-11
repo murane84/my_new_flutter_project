@@ -1283,7 +1283,7 @@ class _SwipeToReplyState extends State<_SwipeToReply>
                           ? [
                               BoxShadow(
                                 color: scheme.primary.withValues(alpha: 0.4),
-                                blurRadius: 10,
+                                blurRadius: Depth.sm,
                                 offset: const Offset(0, 3),
                               ),
                             ]

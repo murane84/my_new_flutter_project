@@ -17,6 +17,7 @@ import '../services/haptics.dart';
 import 'slide_track.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 int _glowDaySeed() {
   final d = DateTime.now();
@@ -387,7 +388,7 @@ class _GlowFeedState extends State<GlowFeed> {
         boxShadow: [
           BoxShadow(
             color: a.withValues(alpha: 0.35),
-            blurRadius: 22,
+            blurRadius: Depth.lg,
             offset: const Offset(0, 8),
           ),
         ],
@@ -474,7 +475,7 @@ class _GlowFeedState extends State<GlowFeed> {
         boxShadow: [
           BoxShadow(
               color: a.withValues(alpha: 0.14),
-              blurRadius: 14,
+              blurRadius: Depth.md,
               offset: const Offset(0, 5)),
         ],
       ),
@@ -564,7 +565,7 @@ class _GlowFeedState extends State<GlowFeed> {
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.05),
-            blurRadius: 10,
+            blurRadius: Depth.sm,
             offset: const Offset(0, 3),
           ),
         ],

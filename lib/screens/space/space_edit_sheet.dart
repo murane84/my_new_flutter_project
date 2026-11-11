@@ -207,7 +207,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                         ? [
                             BoxShadow(
                               color: accent.withValues(alpha: 0.22),
-                              blurRadius: 12,
+                              blurRadius: Depth.md,
                               offset: const Offset(0, 4),
                             ),
                           ]
@@ -358,7 +358,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 18,
+            blurRadius: Depth.lg,
             offset: const Offset(0, 6),
           ),
         ],
@@ -849,7 +849,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 18,
+                  blurRadius: Depth.lg,
                   offset: const Offset(0, 6),
                 ),
               ],

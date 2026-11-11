@@ -14,6 +14,7 @@ import 'package:file_picker/file_picker.dart';
 import '../../utils/readable.dart' show accentInk;
 import '../../utils/radii.dart';
 import '../../utils/adaptive_sheet.dart';
+import '../../utils/depth.dart';
 
 /// Shazam-style "what's this song?" flow. The user first picks a SOURCE:
 ///  - "From this phone" — captures the device's own audio output (what another
@@ -531,7 +532,7 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
                   boxShadow: [
                     BoxShadow(
                       color: scheme.primary.withAlpha(90),
-                      blurRadius: 20,
+                      blurRadius: Depth.lg,
                       spreadRadius: 2 * t,
                     ),
                   ],

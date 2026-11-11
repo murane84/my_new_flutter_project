@@ -14,6 +14,7 @@ import 'edge_scroll_row.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../utils/adaptive_sheet.dart';
+import '../utils/depth.dart';
 
 String _mimeForExt(String ext) {
   switch (ext.toLowerCase()) {
@@ -152,12 +153,12 @@ Future<void> showChatWallpaperSheet(
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.07),
-                      blurRadius: 10,
+                      blurRadius: Depth.sm,
                       offset: const Offset(0, 5),
                     ),
                     BoxShadow(
                       color: Colors.white.withValues(alpha: isDark ? 0.04 : 0.6),
-                      blurRadius: 1,
+                      blurRadius: Depth.xs,
                       spreadRadius: -1,
                       offset: const Offset(0, -1),
                     ),

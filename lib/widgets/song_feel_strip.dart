@@ -5,6 +5,7 @@ import '../utils/readable.dart';
 import '../services/haptics.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 /// How this song feels to you — and, from that feeling, who it's for.
 /// 😍 → "Send to Belyner 💞" · Together; 🥹 → a heart; 💪 → share the energy;
@@ -132,7 +133,7 @@ class _SongFeelStripState extends State<SongFeelStrip> {
               ? [
                   BoxShadow(
                       color: a.withValues(alpha: 0.3),
-                      blurRadius: 10,
+                      blurRadius: Depth.sm,
                       offset: const Offset(0, 3))
                 ]
               : null,

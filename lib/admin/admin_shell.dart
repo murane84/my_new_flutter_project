@@ -11,6 +11,7 @@ import 'admin_install.dart';
 import 'admin_overview.dart';
 import 'admin_widgets.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 /// Tab order in the rail / bottom bar / ⋮ menu.
 const int _kOverview = 0,
@@ -107,7 +108,7 @@ class _AdminShellState extends State<AdminShell> {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 8,
+              blurRadius: Depth.sm,
               offset: const Offset(0, 3),
             ),
           ],

@@ -967,7 +967,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
             : [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: isDark ? 0.40 : 0.12),
-                  blurRadius: 18,
+                  blurRadius: Depth.lg,
                   offset: const Offset(0, -4),
                 ),
               ],
@@ -1168,7 +1168,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
             ? [
                 BoxShadow(
                     color: accent.withValues(alpha: 0.45),
-                    blurRadius: 10,
+                    blurRadius: Depth.sm,
                     spreadRadius: 1),
               ]
             : null,

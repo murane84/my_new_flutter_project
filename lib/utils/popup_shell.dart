@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'readable.dart' show accentInk;
 import 'motion.dart';
 import 'radii.dart';
+import 'depth.dart';
 
 /// The global-space position of the most recent pointer-down anywhere in the
 /// app, recorded by [GlobalTapOrigin] near the app root. Every [showAppPopup]
@@ -395,7 +396,7 @@ class AppPopupShell extends StatelessWidget {
               boxShadow: [
                 BoxShadow(
                   color: Theme.of(context).shadowColor.withAlpha(35),
-                  blurRadius: 12,
+                  blurRadius: Depth.md,
                 ),
               ],
             ),
@@ -485,12 +486,12 @@ class AppPopupShell extends StatelessWidget {
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withAlpha(70),
-                    blurRadius: 30,
+                    blurRadius: Depth.xl,
                     offset: const Offset(0, 12),
                   ),
                   BoxShadow(
                     color: scheme.primary.withAlpha(26),
-                    blurRadius: 22,
+                    blurRadius: Depth.lg,
                     spreadRadius: -6,
                   ),
                 ],
@@ -567,19 +568,19 @@ class _HeaderActionButtonState extends State<HeaderActionButton> {
               ? [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
-                    blurRadius: 3,
+                    blurRadius: Depth.xs,
                     offset: const Offset(0, 1),
                   ),
                 ]
               : [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: isDark ? 0.42 : 0.14),
-                    blurRadius: 8,
+                    blurRadius: Depth.sm,
                     offset: const Offset(0, 3),
                   ),
                   BoxShadow(
                     color: Colors.white.withValues(alpha: isDark ? 0.05 : 0.9),
-                    blurRadius: 1,
+                    blurRadius: Depth.xs,
                     spreadRadius: -1,
                     offset: const Offset(0, -1),
                   ),

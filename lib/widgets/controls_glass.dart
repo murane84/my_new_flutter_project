@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 /// The glossy card that holds a music player's controls (waveform, transport,
 /// tools), so they sit contained instead of floating. Same look as the native
@@ -47,13 +48,13 @@ class ControlsGlass extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withAlpha(dark ? 80 : 22),
-              blurRadius: 26,
+              blurRadius: Depth.lg,
               offset: const Offset(0, 14),
               spreadRadius: -8,
             ),
             BoxShadow(
               color: accent.withAlpha(dark ? 26 : 16),
-              blurRadius: 34,
+              blurRadius: Depth.xl,
               spreadRadius: -10,
               offset: const Offset(0, 8),
             ),

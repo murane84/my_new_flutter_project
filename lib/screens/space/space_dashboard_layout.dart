@@ -91,7 +91,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
               scale: 1 + 0.03 * Curves.easeOut.transform(anim.value),
               child: Material(
                 color: Colors.transparent,
-                elevation: 8 * anim.value,
+                elevation: Depth.mid * anim.value,
                 shadowColor: _accent.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(Radii.xl),
                 child: c,
@@ -198,7 +198,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
               boxShadow: [
                 BoxShadow(
                   color: _accent.withValues(alpha: 0.45),
-                  blurRadius: 14,
+                  blurRadius: Depth.md,
                   offset: const Offset(0, 6),
                 ),
               ],
@@ -263,7 +263,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
     final inkIsLight = ink == Colors.white;
     final shadow = Shadow(
         color: inkIsLight ? const Color(0x38000000) : const Color(0x00000000),
-        blurRadius: 4,
+        blurRadius: Depth.xs,
         offset: const Offset(0, 1));
 
     final identity = Column(
@@ -321,7 +321,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.12),
-                blurRadius: 8,
+                blurRadius: Depth.sm,
                 offset: const Offset(0, 4),
               ),
             ],
@@ -372,7 +372,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
           child: Material(
             color: ink,
             shape: round ? const CircleBorder() : const StadiumBorder(),
-            elevation: 3,
+            elevation: Depth.low,
             shadowColor: Colors.black.withValues(alpha: 0.3),
             child: InkWell(
               customBorder:
@@ -460,7 +460,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
         boxShadow: [
           BoxShadow(
             color: _accent.withValues(alpha: 0.30),
-            blurRadius: 20,
+            blurRadius: Depth.lg,
             spreadRadius: -6,
             offset: const Offset(0, 10),
           ),

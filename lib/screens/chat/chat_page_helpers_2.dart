@@ -491,7 +491,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
                         scale: 0.16 + 0.84 * tb,
                         child: Material(
                           color: cardColor,
-                          elevation: 12,
+                          elevation: Depth.high,
                           shadowColor: Colors.black
                               .withValues(alpha: isDark ? 0.6 : 0.22),
                           shape: _MenuBubbleBorder(
@@ -1261,7 +1261,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
                       boxShadow: [
                         BoxShadow(
                             color: Colors.black.withValues(alpha: 0.15),
-                            blurRadius: 18,
+                            blurRadius: Depth.lg,
                             offset: const Offset(0, 6)),
                       ],
                     ),

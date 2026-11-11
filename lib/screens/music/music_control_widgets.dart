@@ -18,13 +18,13 @@ List<BoxShadow> _glassLift(ColorScheme scheme, Color tint,
   return [
     BoxShadow(
       color: Colors.black.withValues(alpha: dark ? 0.55 : 0.16),
-      blurRadius: 3,
+      blurRadius: Depth.xs,
       offset: const Offset(0, 2),
     ),
     if (active)
       BoxShadow(
         color: tint.withValues(alpha: dark ? 0.38 : 0.30),
-        blurRadius: 8,
+        blurRadius: Depth.sm,
         spreadRadius: -1,
         offset: const Offset(0, 2),
       ),
@@ -171,7 +171,7 @@ class _PlayKeyState extends State<PlayKey>
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: dark ? 0.55 : 0.2),
-                    blurRadius: 5,
+                    blurRadius: Depth.xs,
                     offset: const Offset(0, 3),
                   ),
                   BoxShadow(
@@ -203,7 +203,7 @@ class _PlayKeyState extends State<PlayKey>
                         shadows: [
                           Shadow(
                             color: Colors.black.withValues(alpha: 0.25),
-                            blurRadius: 2,
+                            blurRadius: Depth.xs,
                             offset: const Offset(0, 1),
                           ),
                         ],
@@ -521,12 +521,12 @@ class _SpeedPanelState extends State<_SpeedPanel> {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withAlpha(isDark ? 120 : 70),
-              blurRadius: 24,
+              blurRadius: Depth.lg,
               offset: const Offset(0, 8),
             ),
             BoxShadow(
               color: scheme.primary.withAlpha(28),
-              blurRadius: 20,
+              blurRadius: Depth.lg,
               spreadRadius: -6,
             ),
           ],
@@ -752,7 +752,7 @@ Widget _musicPickChip(
               ? [
                   BoxShadow(
                     color: scheme.primary.withValues(alpha: 0.35),
-                    blurRadius: 10,
+                    blurRadius: Depth.sm,
                     offset: const Offset(0, 3),
                   ),
                 ]
@@ -943,7 +943,7 @@ class _WaveformSeekBarState extends State<WaveformSeekBar> {
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.25),
-                            blurRadius: 6,
+                            blurRadius: Depth.sm,
                             offset: const Offset(0, 2),
                           ),
                         ],

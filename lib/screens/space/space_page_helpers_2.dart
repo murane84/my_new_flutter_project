@@ -36,12 +36,12 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
       shadows: [
         BoxShadow(
           color: _accent.withValues(alpha: 0.42),
-          blurRadius: 16,
+          blurRadius: Depth.md,
           offset: const Offset(0, 8),
         ),
         BoxShadow(
           color: Colors.white.withValues(alpha: 0.22),
-          blurRadius: 1,
+          blurRadius: Depth.xs,
           spreadRadius: -1,
           offset: const Offset(0, -1),
         ),
@@ -79,7 +79,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
       shadows: [
         BoxShadow(
           color: Colors.black.withValues(alpha: 0.06),
-          blurRadius: 10,
+          blurRadius: Depth.sm,
           offset: const Offset(0, 4),
         ),
       ],
@@ -143,7 +143,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
                     ? [
                         BoxShadow(
                           color: _accent.withValues(alpha: 0.40),
-                          blurRadius: 5,
+                          blurRadius: Depth.xs,
                           offset: const Offset(0, 2),
                         ),
                       ]
@@ -177,7 +177,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.12),
-            blurRadius: 8,
+            blurRadius: Depth.sm,
             offset: const Offset(0, 3),
           ),
         ],
@@ -270,7 +270,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: isDark ? 0.42 : 0.16),
-                  blurRadius: 18,
+                  blurRadius: Depth.lg,
                   offset: const Offset(0, 8),
                 ),
               ],
@@ -563,12 +563,12 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
       shadows: [
         BoxShadow(
           color: Colors.black.withValues(alpha: isDark ? 0.40 : 0.12),
-          blurRadius: 8,
+          blurRadius: Depth.sm,
           offset: const Offset(0, 3),
         ),
         BoxShadow(
           color: Colors.white.withValues(alpha: isDark ? 0.05 : 0.9),
-          blurRadius: 1,
+          blurRadius: Depth.xs,
           spreadRadius: -1,
           offset: const Offset(0, -1),
         ),
@@ -620,7 +620,7 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
       icon: Icon(Icons.more_horiz_rounded,
           size: 18, color: ink.withValues(alpha: 0.6)),
       color: scheme.surface,
-      elevation: 12,
+      elevation: Depth.high,
       shadowColor: Colors.black.withValues(alpha: 0.28),
       position: PopupMenuPosition.under,
       menuPadding: const EdgeInsets.symmetric(vertical: 6),
@@ -789,14 +789,14 @@ extension _SpacePageHelpers2 on _RelationshipSpacePageState {
             // Cast shadow lifts the avatar off the banner…
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.28),
-              blurRadius: 12,
+              blurRadius: Depth.md,
               spreadRadius: -1,
               offset: const Offset(0, 6),
             ),
             // …and a faint white halo softens the rim into the light.
             BoxShadow(
               color: Colors.white.withValues(alpha: 0.35),
-              blurRadius: 3,
+              blurRadius: Depth.xs,
               spreadRadius: -2,
               offset: const Offset(0, -1),
             ),

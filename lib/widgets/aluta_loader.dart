@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/aluta_mood.dart';
 import 'glossy_heart.dart';
 import '../utils/motion.dart';
+import '../utils/depth.dart';
 
 /// The Aluta logo loader. One look, four moods (see [AlutaMood.loaderStyle]):
 ///  • heartbeat — the mark gives a soft "lub-dub" every beat
@@ -153,7 +154,7 @@ class _AlutaLoaderState extends State<AlutaLoader>
                         color: accent.withValues(
                             alpha: (isDark ? 0.20 : 0.14) +
                                 0.10 * glow.clamp(0.0, 1.0)),
-                        blurRadius: 22,
+                        blurRadius: Depth.lg,
                         spreadRadius: 1,
                       ),
                     ],
@@ -191,7 +192,7 @@ class _AlutaLoaderState extends State<AlutaLoader>
                                   Colors.black, accent,
                                   0.35 * glow.clamp(0.0, 1.0))!
                               .withValues(alpha: isDark ? 0.40 : 0.12),
-                          blurRadius: 6,
+                          blurRadius: Depth.sm,
                           offset: const Offset(0, 1.5),
                         ),
                       ],

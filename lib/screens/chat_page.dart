@@ -129,6 +129,7 @@ import '../utils/radii.dart';
 import '../widgets/skeleton.dart';
 import '../utils/emoji_field.dart' show emojiFloats;
 import '../utils/adaptive_sheet.dart';
+import '../utils/depth.dart';
 
 // Split out for maintainability (Dart parts — same library, shared
 // imports & privacy, zero behaviour change):
@@ -1022,7 +1023,7 @@ class _ChatPageState extends State<ChatPage>
             ),
             child: Material(
               color: scheme.surface,
-              elevation: 10,
+              elevation: Depth.high,
               shadowColor: Colors.black.withValues(alpha: 0.35),
               borderRadius: BorderRadius.circular(Radii.lg),
               clipBehavior: Clip.antiAlias,
@@ -2235,7 +2236,7 @@ class _ChatPageState extends State<ChatPage>
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.10),
-            blurRadius: 22,
+            blurRadius: Depth.lg,
             offset: const Offset(0, 8),
           ),
         ],
@@ -3702,7 +3703,7 @@ class _ChatPageState extends State<ChatPage>
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.3),
-                            blurRadius: 8,
+                            blurRadius: Depth.sm,
                             offset: const Offset(0, 2),
                           ),
                         ],
@@ -3807,7 +3808,7 @@ class _ChatPageState extends State<ChatPage>
     final softShadow = <BoxShadow>[
       BoxShadow(
         color: Colors.black.withValues(alpha: isDark ? 0.55 : 0.20),
-        blurRadius: 30,
+        blurRadius: Depth.xl,
         offset: const Offset(0, 14),
       ),
     ];
@@ -6046,19 +6047,19 @@ class _ChatPageState extends State<ChatPage>
                           ? [
                               BoxShadow(
                                 color: Colors.black.withAlpha(isDark ? 110 : 56),
-                                blurRadius: 14,
+                                blurRadius: Depth.md,
                                 offset: const Offset(0, 4),
                               ),
                               BoxShadow(
                                 color: Colors.black.withAlpha(isDark ? 60 : 24),
-                                blurRadius: 2,
+                                blurRadius: Depth.xs,
                                 offset: const Offset(0, 1),
                               ),
                             ]
                           : [
                               BoxShadow(
                                 color: Colors.black.withAlpha(isDark ? 46 : 20),
-                                blurRadius: 8,
+                                blurRadius: Depth.sm,
                                 offset: const Offset(0, 3),
                               ),
                             ],
@@ -6963,18 +6964,18 @@ class _ChatPageState extends State<ChatPage>
                                 BoxShadow(
                                   color: scheme.primary
                                       .withValues(alpha: isDark ? 0.14 : 0.08),
-                                  blurRadius: 8,
+                                  blurRadius: Depth.sm,
                                 ),
                               BoxShadow(
                                 color: Colors.black
                                     .withValues(alpha: isDark ? 0.45 : 0.16),
-                                blurRadius: 16,
+                                blurRadius: Depth.md,
                                 offset: const Offset(0, 5),
                               ),
                               BoxShadow(
                                 color: Colors.black
                                     .withValues(alpha: isDark ? 0.25 : 0.06),
-                                blurRadius: 3,
+                                blurRadius: Depth.xs,
                                 offset: const Offset(0, 1),
                               ),
                             ],
@@ -7241,7 +7242,7 @@ class _ChatPageState extends State<ChatPage>
                                                 alpha: hasText
                                                     ? 0.40
                                                     : (isDark ? 0.45 : 0.16)),
-                                        blurRadius: 16,
+                                        blurRadius: Depth.md,
                                         offset: const Offset(0, 5),
                                       ),
                                     ],
@@ -7636,7 +7637,7 @@ class _ChatPageState extends State<ChatPage>
                         child: Center(
                           child: Material(
                             color: scheme.surface,
-                            elevation: 4,
+                            elevation: Depth.low,
                             shadowColor: scheme.primary.withAlpha(90),
                             shape: StadiumBorder(
                                 side: BorderSide(
@@ -7698,7 +7699,7 @@ class _ChatPageState extends State<ChatPage>
                                 boxShadow: [
                                   BoxShadow(
                                     color: scheme.primary.withAlpha(80),
-                                    blurRadius: 8,
+                                    blurRadius: Depth.sm,
                                   ),
                                 ],
                               ),
@@ -7748,7 +7749,7 @@ class _ChatPageState extends State<ChatPage>
                                   side: BorderSide(
                                       color: scheme.outlineVariant
                                           .withValues(alpha: 0.6))),
-                              elevation: 4,
+                              elevation: Depth.low,
                               shadowColor: Colors.black38,
                               child: InkWell(
                                 customBorder: const CircleBorder(),
@@ -9069,7 +9070,7 @@ class _HoverChevronState extends State<_HoverChevron> {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.28),
-              blurRadius: 6,
+              blurRadius: Depth.sm,
               offset: const Offset(0, 2),
             ),
           ],
@@ -9090,7 +9091,7 @@ class _HoverChevronState extends State<_HoverChevron> {
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.28),
-                  blurRadius: 8,
+                  blurRadius: Depth.sm,
                   offset: const Offset(0, 2),
                 ),
               ],

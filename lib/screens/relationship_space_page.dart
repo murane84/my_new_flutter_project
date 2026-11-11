@@ -63,6 +63,7 @@ import '../utils/radii.dart';
 import '../utils/emoji_field.dart'
     show emojiFloats, showFloatingCard, emojiSuffixButton;
 import '../utils/adaptive_sheet.dart';
+import '../utils/depth.dart';
 
 part 'space/space_moment_composer.dart'; // moment composer + add-to-playlist sheet
 part 'space/space_edit_sheet.dart'; // edit-space sheet + wallpaper picker
@@ -231,7 +232,7 @@ Widget diaryAuthorBadge({
       boxShadow: [
         BoxShadow(
           color: Colors.black.withValues(alpha: 0.14),
-          blurRadius: 4,
+          blurRadius: Depth.xs,
           offset: const Offset(0, 2),
         ),
       ],
@@ -1005,7 +1006,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           boxShadow: [
             BoxShadow(
                 color: Colors.black.withValues(alpha: 0.28),
-                blurRadius: 24,
+                blurRadius: Depth.lg,
                 offset: const Offset(0, 8)),
           ],
         ),
@@ -1810,7 +1811,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                 boxShadow: [
                   BoxShadow(
                       color: Colors.black.withValues(alpha: 0.28),
-                      blurRadius: 24,
+                      blurRadius: Depth.lg,
                       offset: const Offset(0, 10)),
                 ],
               ),
@@ -2085,7 +2086,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.12),
-            blurRadius: 8,
+            blurRadius: Depth.sm,
             offset: const Offset(0, 3),
           ),
         ],

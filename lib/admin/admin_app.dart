@@ -9,6 +9,7 @@ import 'admin_key.dart';
 import 'admin_shell.dart';
 import 'admin_widgets.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 /// Aluta Admin root: sign-in → (pending approval | recovery wait | first-time
 /// recovery codes) → dashboard. The password is held in memory only while a
@@ -521,7 +522,7 @@ class _AdminRootState extends State<_AdminRoot> {
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withAlpha(70),
-                    blurRadius: 24,
+                    blurRadius: Depth.lg,
                     offset: const Offset(0, 10),
                   ),
                 ],
@@ -638,7 +639,7 @@ class _AdminRootState extends State<_AdminRoot> {
                 disabledBackgroundColor: Colors.white.withAlpha(140),
                 padding: pad,
                 shape: shape,
-                elevation: 6,
+                elevation: Depth.mid,
                 shadowColor: Colors.black.withAlpha(120),
                 textStyle:
                     const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),

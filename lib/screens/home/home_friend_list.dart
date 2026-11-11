@@ -761,13 +761,13 @@ extension _HomeFriendListView on HomePageState {
                 // Coloured glow lifts the card off the page.
                 BoxShadow(
                   color: accent.withValues(alpha: 0.42),
-                  blurRadius: 26,
+                  blurRadius: Depth.lg,
                   offset: const Offset(0, 12),
                 ),
                 // Tight dark contact shadow grounds it (the 3D feel).
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.22),
-                  blurRadius: 8,
+                  blurRadius: Depth.sm,
                   offset: const Offset(0, 3),
                 ),
               ],
@@ -1115,7 +1115,7 @@ extension _HomeFriendListView on HomePageState {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.20),
-              blurRadius: 8,
+              blurRadius: Depth.sm,
               offset: const Offset(0, 3),
             ),
           ],
@@ -1569,12 +1569,12 @@ extension _HomeFriendListView on HomePageState {
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.34),
-            blurRadius: 11,
+            blurRadius: Depth.md,
             offset: const Offset(0, 5),
           ),
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 4,
+            blurRadius: Depth.xs,
             offset: const Offset(0, 1),
           ),
         ],
@@ -1598,12 +1598,12 @@ extension _HomeFriendListView on HomePageState {
       boxShadow: [
         BoxShadow(
           color: Colors.black.withValues(alpha: 0.10),
-          blurRadius: 14,
+          blurRadius: Depth.md,
           offset: const Offset(0, 6),
         ),
         BoxShadow(
           color: Colors.black.withValues(alpha: 0.04),
-          blurRadius: 4,
+          blurRadius: Depth.xs,
           offset: const Offset(0, 1),
         ),
       ],
@@ -2731,12 +2731,12 @@ extension _HomeFriendListView on HomePageState {
         boxShadow: [
           BoxShadow(
             color: scheme.primary.withValues(alpha: dark ? 0.20 : 0.14),
-            blurRadius: 18,
+            blurRadius: Depth.lg,
             offset: const Offset(0, 8),
           ),
           BoxShadow(
             color: Colors.black.withValues(alpha: dark ? 0.30 : 0.06),
-            blurRadius: 6,
+            blurRadius: Depth.sm,
             offset: const Offset(0, 2),
           ),
         ],
@@ -2793,7 +2793,7 @@ extension _HomeFriendListView on HomePageState {
           icon: const Icon(Icons.play_arrow_rounded, size: 18),
           label: const Text('Start a room'),
           style: FilledButton.styleFrom(
-              elevation: 4,
+              elevation: Depth.low,
               shadowColor: scheme.primary.withValues(alpha: 0.5),
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),

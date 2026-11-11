@@ -689,7 +689,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                         boxShadow: [
                           BoxShadow(
                               color: scheme.primary.withValues(alpha: 0.35),
-                              blurRadius: 12,
+                              blurRadius: Depth.md,
                               offset: const Offset(0, 4)),
                         ],
                       ),

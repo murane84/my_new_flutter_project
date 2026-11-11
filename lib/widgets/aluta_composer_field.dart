@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../services/keystroke_sounds.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 /// The chat thread's composer pill, shared by every place you type a message
 /// or caption (photo editor, file caption, new story…) so they all look,
@@ -179,16 +180,16 @@ class _AlutaComposerFieldState extends State<AlutaComposerField> {
           if (_focused)
             BoxShadow(
               color: primary.withValues(alpha: isDark ? 0.14 : 0.08),
-              blurRadius: 8,
+              blurRadius: Depth.sm,
             ),
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.16),
-            blurRadius: 16,
+            blurRadius: Depth.md,
             offset: const Offset(0, 5),
           ),
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.06),
-            blurRadius: 3,
+            blurRadius: Depth.xs,
             offset: const Offset(0, 1),
           ),
         ],

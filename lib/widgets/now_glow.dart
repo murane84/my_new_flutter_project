@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../utils/motion.dart';
+import '../utils/depth.dart';
 
 /// How long one calm "here it is" breath lasts. Every highlight in Aluta
 /// (⌖ Find the playing song, the row you came back from, a message you
@@ -114,7 +115,7 @@ class _NowGlowState extends State<NowGlow> with SingleTickerProviderStateMixin {
                   boxShadow: [
                     BoxShadow(
                       color: c.withValues(alpha: 0.35 * i),
-                      blurRadius: 16,
+                      blurRadius: Depth.md,
                       spreadRadius: 0.5,
                     ),
                   ],
@@ -228,7 +229,7 @@ class _BreathGlowState extends State<BreathGlow>
             boxShadow: [
               BoxShadow(
                   color: c.withValues(alpha: 0.32 * i),
-                  blurRadius: 16,
+                  blurRadius: Depth.md,
                   spreadRadius: 0.5),
             ],
           ),
@@ -293,7 +294,7 @@ class _RimHeartsPainter extends CustomPainter {
               height: 1,
               color: col.withValues(alpha: 0.95 * fade),
               shadows: [
-                Shadow(color: col.withValues(alpha: 0.6 * fade), blurRadius: 6),
+                Shadow(color: col.withValues(alpha: 0.6 * fade), blurRadius: Depth.sm),
               ],
             ),
           ),

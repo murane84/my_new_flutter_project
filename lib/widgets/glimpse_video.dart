@@ -12,6 +12,7 @@ import '../screens/home_page.dart' show playbackBus;
 import '../services/media_store.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import '../utils/depth.dart';
 
 /// A data-friendly video tile that plays from the DEVICE, never by live
 /// streaming. Behaviour:
@@ -656,7 +657,7 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
                                   shadows: [
                                     Shadow(
                                         color: Colors.black54,
-                                        blurRadius: 6,
+                                        blurRadius: Depth.sm,
                                         offset: Offset(0, 1)),
                                   ],
                                 ),

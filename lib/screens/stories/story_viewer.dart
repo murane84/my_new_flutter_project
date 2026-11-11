@@ -21,6 +21,7 @@ import '../../services/haptics.dart';
 import '../../utils/motion.dart';
 import '../../utils/radii.dart';
 import '../../utils/adaptive_sheet.dart';
+import '../../utils/depth.dart';
 
 /// Full-screen, tap-through story viewer (Instagram/WhatsApp style).
 ///
@@ -305,12 +306,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.45),
-                  blurRadius: 20,
+                  blurRadius: Depth.lg,
                   offset: const Offset(0, 8),
                 ),
                 BoxShadow(
                   color: scheme.primary.withValues(alpha: 0.12),
-                  blurRadius: 18,
+                  blurRadius: Depth.lg,
                 ),
               ],
             ),
@@ -1076,7 +1077,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
             Shadow(
               color:
                   (onDark ? Colors.black : Colors.white).withValues(alpha: 0.26),
-              blurRadius: 12,
+              blurRadius: Depth.md,
             ),
           ],
         ),

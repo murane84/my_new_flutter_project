@@ -95,7 +95,7 @@ class _EditBanner extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 10,
+            blurRadius: Depth.sm,
             offset: const Offset(0, 3),
           ),
         ],

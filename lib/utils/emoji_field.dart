@@ -7,6 +7,7 @@ import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'radii.dart';
 import 'motion.dart';
 import 'adaptive_sheet.dart';
+import 'depth.dart';
 
 /// Desktop apps and wide web: emoji pickers float as a card by the button
 /// (like the chat's 😊 card) instead of rising from the bottom.
@@ -73,7 +74,7 @@ Future<T?> showFloatingCard<T>(
       final scheme = Theme.of(ctx).colorScheme;
       final card = Material(
         color: scheme.surface,
-        elevation: 10,
+        elevation: Depth.high,
         shadowColor: Colors.black.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(Radii.lg),
         clipBehavior: Clip.antiAlias,

@@ -1297,13 +1297,13 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 BoxShadow(
                   color:
                       scheme.primary.withValues(alpha: isDark ? 0.20 : 0.10),
-                  blurRadius: 30,
+                  blurRadius: Depth.xl,
                   spreadRadius: -6,
                   offset: const Offset(0, 12),
                 ),
                 BoxShadow(
                   color: Colors.black.withAlpha(isDark ? 110 : 30),
-                  blurRadius: 20,
+                  blurRadius: Depth.lg,
                   offset: const Offset(0, 8),
                 ),
               ],
@@ -2271,7 +2271,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withAlpha(isDark ? 46 : 20),
-                    blurRadius: 8,
+                    blurRadius: Depth.sm,
                     offset: const Offset(0, 3),
                   ),
                 ],

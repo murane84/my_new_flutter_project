@@ -310,7 +310,7 @@ extension _ChatMentions on _ChatPageState {
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.40 : 0.10),
-            blurRadius: 18,
+            blurRadius: Depth.lg,
             offset: const Offset(0, 4),
           ),
         ],

@@ -333,7 +333,7 @@ class _DiaryComposerState extends State<_DiaryComposer> {
                 ? [
                     BoxShadow(
                         color: widget.accent.withValues(alpha: 0.35),
-                        blurRadius: 10,
+                        blurRadius: Depth.sm,
                         offset: const Offset(0, 3))
                   ]
                 : null,

@@ -27,6 +27,7 @@ import '../services/haptics.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../utils/adaptive_sheet.dart';
+import '../utils/depth.dart';
 
 /// The personalization surface (build step 5): whole-app **theme** (System /
 /// Light / Dark) + a curated **accent** preset set. Dark stays the brand's
@@ -356,7 +357,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             color: current.color,
             shape: BoxShape.circle,
             boxShadow: [
-              BoxShadow(color: current.color.withAlpha(130), blurRadius: 6),
+              BoxShadow(color: current.color.withAlpha(130), blurRadius: Depth.sm),
             ],
           ),
         ),
@@ -601,12 +602,12 @@ BoxDecoration _raisedCardDecoration(ColorScheme scheme, bool isDark) =>
       boxShadow: [
         BoxShadow(
           color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
-          blurRadius: 12,
+          blurRadius: Depth.md,
           offset: const Offset(0, 6),
         ),
         BoxShadow(
           color: Colors.white.withValues(alpha: isDark ? 0.04 : 0.7),
-          blurRadius: 1,
+          blurRadius: Depth.xs,
           spreadRadius: -1,
           offset: const Offset(0, -1),
         ),
@@ -630,7 +631,7 @@ Widget _accentIconChip(ColorScheme scheme, IconData icon) => Container(
         boxShadow: [
           BoxShadow(
             color: scheme.primary.withValues(alpha: 0.22),
-            blurRadius: 8,
+            blurRadius: Depth.sm,
             offset: const Offset(0, 4),
           ),
         ],
@@ -856,12 +857,12 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.07),
-              blurRadius: 10,
+              blurRadius: Depth.sm,
               offset: const Offset(0, 5),
             ),
             BoxShadow(
               color: Colors.white.withValues(alpha: isDark ? 0.04 : 0.6),
-              blurRadius: 1,
+              blurRadius: Depth.xs,
               spreadRadius: -1,
               offset: const Offset(0, -1),
             ),
@@ -1979,7 +1980,7 @@ class _BubbleThemeSection extends StatelessWidget {
               ? [
                   BoxShadow(
                     color: c.withValues(alpha: 0.55),
-                    blurRadius: 12,
+                    blurRadius: Depth.md,
                     spreadRadius: 1,
                   ),
                 ]

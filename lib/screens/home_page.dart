@@ -149,6 +149,7 @@ import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../widgets/skeleton.dart';
 import '../utils/adaptive_sheet.dart';
+import '../utils/depth.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -4127,7 +4128,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
               duration: Motion.quick,
               child: Material(
                 color: n > 0 ? scheme.primary : scheme.surfaceContainerHigh,
-                elevation: 3,
+                elevation: Depth.low,
                 shape: const StadiumBorder(),
                 child: InkWell(
                   customBorder: const StadiumBorder(),
@@ -4499,7 +4500,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           padding: const EdgeInsets.fromLTRB(0, 12, 12, 12),
           child: Material(
             color: scheme.surface,
-            elevation: 12,
+            elevation: Depth.high,
             borderRadius: BorderRadius.circular(Radii.xl),
             clipBehavior: Clip.antiAlias,
             child: SizedBox(width: 560, child: screen),
@@ -5030,7 +5031,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       _glowFriendId.toString() == _activeFriendId)
                     BoxShadow(
                       color: scheme.primary.withValues(alpha: 0.65),
-                      blurRadius: 16,
+                      blurRadius: Depth.md,
                       spreadRadius: 3,
                     ),
                 ],
@@ -5921,7 +5922,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           boxShadow: [
             BoxShadow(
               color: Colors.black.withAlpha(28),
-              blurRadius: 14,
+              blurRadius: Depth.md,
               offset: const Offset(0, -3),
             ),
           ],
@@ -6479,7 +6480,7 @@ class _WebQueueSheetState extends State<_WebQueueSheet> {
           boxShadow: [
             BoxShadow(
                 color: accent.withValues(alpha: 0.45),
-                blurRadius: 12,
+                blurRadius: Depth.md,
                 spreadRadius: 1),
           ],
         ),
@@ -6757,7 +6758,7 @@ class _WebQueueSheetState extends State<_WebQueueSheet> {
                         boxShadow: [
                           BoxShadow(
                               color: accent.withValues(alpha: 0.45),
-                              blurRadius: 12,
+                              blurRadius: Depth.md,
                               spreadRadius: 1),
                         ],
                       ),

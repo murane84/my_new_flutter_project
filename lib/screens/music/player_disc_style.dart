@@ -9,6 +9,7 @@ import '../home_page.dart' show playProgressNotifier;
 import '../../utils/motion.dart';
 import '../../utils/radii.dart';
 import '../../utils/adaptive_sheet.dart';
+import '../../utils/depth.dart';
 
 /// The look of the big rotating "now playing" glyph. The user can switch
 /// between these from the player; the choice is remembered across launches.
@@ -285,12 +286,12 @@ class PlayerDisc extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: accent.withValues(alpha: 0.42),
-            blurRadius: 46,
+            blurRadius: Depth.xl,
             spreadRadius: 2,
           ),
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.50 : 0.22),
-            blurRadius: 16,
+            blurRadius: Depth.md,
             offset: const Offset(0, 10),
           ),
         ],
@@ -329,12 +330,12 @@ class PlayerDisc extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: accent.withValues(alpha: isDark ? 0.28 : 0.18),
-            blurRadius: 34,
+            blurRadius: Depth.xl,
             spreadRadius: 1,
           ),
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.20),
-            blurRadius: 16,
+            blurRadius: Depth.md,
             offset: const Offset(0, 10),
           ),
         ],
@@ -354,12 +355,12 @@ class PlayerDisc extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: accent.withValues(alpha: 0.40),
-            blurRadius: 42,
+            blurRadius: Depth.xl,
             spreadRadius: 1,
           ),
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.24),
-            blurRadius: 16,
+            blurRadius: Depth.md,
             offset: const Offset(0, 10),
           ),
         ],
@@ -442,7 +443,7 @@ class PlayerDisc extends StatelessWidget {
               boxShadow: [
                 BoxShadow(
                     color: Colors.black.withValues(alpha: 0.35),
-                    blurRadius: 8,
+                    blurRadius: Depth.sm,
                     spreadRadius: -2),
               ],
             ),
@@ -587,12 +588,12 @@ class PlayerDisc extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: accent.withValues(alpha: 0.38),
-            blurRadius: 40,
+            blurRadius: Depth.xl,
             spreadRadius: 1,
           ),
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.24),
-            blurRadius: 16,
+            blurRadius: Depth.md,
             offset: const Offset(0, 10),
           ),
         ],
@@ -725,12 +726,12 @@ class PlayerDisc extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               color: accent.withValues(alpha: 0.30),
-              blurRadius: 34,
+              blurRadius: Depth.xl,
               spreadRadius: 1,
             ),
             BoxShadow(
               color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.26),
-              blurRadius: 14,
+              blurRadius: Depth.md,
               offset: const Offset(0, 8),
             ),
           ],
@@ -828,7 +829,7 @@ class PlayerDisc extends StatelessWidget {
             boxShadow: [
               BoxShadow(
                   color: accent.withValues(alpha: 0.5),
-                  blurRadius: 26,
+                  blurRadius: Depth.lg,
                   spreadRadius: -6),
             ],
           ),
@@ -845,7 +846,7 @@ class PlayerDisc extends StatelessWidget {
             boxShadow: [
               BoxShadow(
                   color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.18),
-                  blurRadius: 14,
+                  blurRadius: Depth.md,
                   offset: const Offset(0, 8)),
             ],
           ),
@@ -931,12 +932,12 @@ class _ClassicVinylState extends State<_ClassicVinyl>
         boxShadow: [
           BoxShadow(
             color: accent.withValues(alpha: 0.30),
-            blurRadius: 44,
+            blurRadius: Depth.xl,
             spreadRadius: 1,
           ),
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.55 : 0.30),
-            blurRadius: 18,
+            blurRadius: Depth.lg,
             offset: const Offset(0, 10),
           ),
         ],
@@ -1333,7 +1334,7 @@ class _PulseDiscState extends State<_PulseDisc>
               boxShadow: [
                 BoxShadow(
                     color: accent.withValues(alpha: widget.playing ? 0.5 : 0.3),
-                    blurRadius: 30,
+                    blurRadius: Depth.xl,
                     spreadRadius: 1),
               ],
             ),
@@ -1490,7 +1491,7 @@ class _HeartbeatDiscState extends State<_HeartbeatDisc>
                     boxShadow: [
                       BoxShadow(
                           color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 8,
+                          blurRadius: Depth.sm,
                           offset: const Offset(0, 3)),
                     ],
                   ),
@@ -1719,7 +1720,7 @@ class _EqualizerDiscState extends State<_EqualizerDisc>
               boxShadow: [
                 BoxShadow(
                     color: accent.withValues(alpha: widget.playing ? 0.45 : 0.25),
-                    blurRadius: 28,
+                    blurRadius: Depth.xl,
                     spreadRadius: 1),
               ],
             ),
@@ -1923,7 +1924,7 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
               ? [
                   BoxShadow(
                       color: accent.withValues(alpha: 0.3),
-                      blurRadius: 16,
+                      blurRadius: Depth.md,
                       spreadRadius: 1),
                 ]
               : null,

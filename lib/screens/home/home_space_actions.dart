@@ -602,46 +602,26 @@ extension _HomeSpaceActions on HomePageState {
   void _showFriendQuickSheet(Map<String, dynamic> f, String name) {
     final scheme = Theme.of(context).colorScheme;
     final fid = int.tryParse(f['id'].toString()) ?? -1;
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: scheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    final online = fid > 0 &&
+        _isMutual(fid) &&
+        ref.read(presenceProvider).isOnline(fid);
+    _showQuickSheet(
+      header: _quickSheetHeader(
+        scheme,
+        face: InitialsAvatar(
+            name: name,
+            radius: 22,
+            imageUrl: _avatarFull(f['avatar_url'])),
+        title: name,
+        subtitle: online ? 'Online' : null,
       ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: scheme.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-              child: Row(
-                children: [
-                  Text(name,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                          color: scheme.onSurface)),
-                ],
-              ),
-            ),
+      actions: (ctx) => [
             Builder(builder: (_) {
               final pinned = _pinnedChats.contains(_pinKeyOf(f));
               return ListTile(
-                leading: Icon(
-                    pinned
+                leading: _sheetIcon(scheme, pinned
                         ? Icons.push_pin_outlined
-                        : Icons.push_pin_rounded,
-                    color: accentInk(scheme)),
+                        : Icons.push_pin_rounded),
                 title: Text(pinned ? 'Unpin chat' : 'Pin chat to the top'),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -651,7 +631,7 @@ extension _HomeSpaceActions on HomePageState {
             }),
             if (_isMutual(fid))
             ListTile(
-              leading: Icon(Icons.favorite_rounded, color: accentInk(scheme)),
+              leading: _sheetIcon(scheme, Icons.favorite_rounded),
               title: const Text('Pin as Our Space'),
               subtitle: const Text('Send a bond request — they confirm to pin'),
               onTap: () {
@@ -660,8 +640,7 @@ extension _HomeSpaceActions on HomePageState {
               },
             ),
             ListTile(
-              leading:
-                  Icon(Icons.card_giftcard_rounded, color: accentInk(scheme)),
+              leading: _sheetIcon(scheme, Icons.card_giftcard_rounded),
               title: const Text('Send a moment'),
               subtitle: const Text('Dedicate a song or a note to them'),
               onTap: () {
@@ -670,7 +649,7 @@ extension _HomeSpaceActions on HomePageState {
               },
             ),
             ListTile(
-              leading: Icon(Icons.call_rounded, color: accentInk(scheme)),
+              leading: _sheetIcon(scheme, Icons.call_rounded),
               title: const Text('Call'),
               onTap: () {
                 Navigator.pop(ctx);
@@ -683,7 +662,7 @@ extension _HomeSpaceActions on HomePageState {
               },
             ),
             ListTile(
-              leading: Icon(Icons.chat_bubble_rounded, color: accentInk(scheme)),
+              leading: _sheetIcon(scheme, Icons.chat_bubble_rounded),
               title: const Text('Open chat'),
               onTap: () {
                 Navigator.pop(ctx);
@@ -699,11 +678,9 @@ extension _HomeSpaceActions on HomePageState {
                 final first = name.trim().split(RegExp(r'\s+')).first;
                 final on = OnlineWatchList.instance.isWatching(fid);
                 return ListTile(
-                  leading: Icon(
-                      on
+                  leading: _sheetIcon(scheme, on
                           ? Icons.notifications_off_outlined
-                          : Icons.notifications_active_outlined,
-                      color: accentInk(scheme)),
+                          : Icons.notifications_active_outlined),
                   title: Text(on
                       ? 'Stop waiting for $first'
                       : 'Let me know when $first is online'),
@@ -725,9 +702,7 @@ extension _HomeSpaceActions on HomePageState {
                 final first = name.trim().split(RegExp(r'\s+')).first;
                 final on = OnlineWatchList.instance.isWatchingPlay(fid);
                 return ListTile(
-                  leading: Icon(
-                      on ? Icons.music_off_rounded : Icons.music_note_rounded,
-                      color: accentInk(scheme)),
+                  leading: _sheetIcon(scheme, on ? Icons.music_off_rounded : Icons.music_note_rounded),
                   title: Text(on
                       ? "Stop waiting for $first's music"
                       : 'Let me know when $first plays music'),
@@ -740,8 +715,96 @@ extension _HomeSpaceActions on HomePageState {
                   },
                 );
               }),
-            const SizedBox(height: 8),
-          ],
+      ],
+    );
+  }
+
+  // ── Quick sheets (long-press on a friend's / a group's row) ─────────────
+  // One look for both: a header with their face, then actions with the
+  // accent icon in a soft chip; capped in width so it never stretches
+  // across a wide desktop window.
+
+  Widget _sheetIcon(ColorScheme scheme, IconData icon) => Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: scheme.primary.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, size: 19, color: accentInk(scheme)),
+      );
+
+  Widget _quickSheetHeader(ColorScheme scheme,
+      {required Widget face, required String title, String? subtitle}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+      child: Row(children: [
+        SizedBox(width: 44, height: 44, child: Center(child: face)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: scheme.onSurface)),
+              if (subtitle != null && subtitle.isNotEmpty)
+                Text(subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 12.5, color: scheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+      ]),
+    );
+  }
+
+  void _showQuickSheet({
+    required Widget header,
+    required List<Widget> Function(BuildContext ctx) actions,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: scheme.surface,
+      isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 560),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 12),
+              header,
+              Divider(
+                  height: 1,
+                  indent: 20,
+                  endIndent: 20,
+                  color: scheme.outlineVariant.withAlpha(70)),
+              const SizedBox(height: 4),
+              ...actions(ctx),
+              const SizedBox(height: 10),
+            ],
+          ),
         ),
       ),
     );

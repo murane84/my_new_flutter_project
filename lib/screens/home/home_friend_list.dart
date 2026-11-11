@@ -2013,50 +2013,111 @@ extension _HomeFriendListView on HomePageState {
     );
   }
 
-  /// Long-press on a group row: pin / mute.
+  /// Long-press on a group row: its quick sheet (same look as a friend's) —
+  /// open, group call, pin, mute (a live switch), group info.
   void _groupRowMenu(Map<String, dynamic> g, String name) {
+    final scheme = Theme.of(context).colorScheme;
     final gid = (g['id'] as num?)?.toInt() ?? -1;
-    final pinned = _pinnedChats.contains(_pinKeyOf(g));
-    final muted = GroupMeta.instance.isMuted(gid);
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
-            child: Text(name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-          ),
-          ListTile(
-            leading: Icon(
+    final members =
+        ((g['members'] as List?) ?? const []).whereType<Map>().toList();
+    final others = members
+        .where((m) => (m['user_id'] as num?)?.toInt() != _myUserId)
+        .toList();
+    // Online the same way the row counts it: friends only, live presence.
+    final presence = ref.read(presenceProvider);
+    final friendIds = {
+      for (final f in _allFriends) (f['id'] as num?)?.toInt(),
+    };
+    final onlineN = others.where((m) {
+      final id = (m['user_id'] as num?)?.toInt();
+      return id != null && friendIds.contains(id) && presence.isOnline(id);
+    }).length;
+    final avatar = _avatarFull(g['avatar_url']);
+    final face = avatar == null && others.isNotEmpty
+        ? _groupFacePile(others, 44, scheme)
+        : CircleAvatar(
+            radius: 22,
+            backgroundColor: scheme.primaryContainer,
+            backgroundImage: avatar != null
+                ? authNetworkImageProvider(avatar, mediaAuthHeaders(avatar))
+                : null,
+            child: avatar == null
+                ? Icon(Icons.groups_rounded,
+                    color: scheme.onPrimaryContainer, size: 24)
+                : null,
+          );
+    _showQuickSheet(
+      header: _quickSheetHeader(
+        scheme,
+        face: face,
+        title: name,
+        subtitle: [
+          '${members.length} members',
+          if (onlineN > 0) '$onlineN online',
+          if (GroupMeta.instance.isMuted(gid)) 'muted',
+        ].join(' · '),
+      ),
+      actions: (ctx) => [
+        ListTile(
+          leading: _sheetIcon(scheme, Icons.chat_bubble_rounded),
+          title: const Text('Open group'),
+          onTap: () {
+            Navigator.pop(ctx);
+            openGroupInPanel(g);
+          },
+        ),
+        ListTile(
+          leading: _sheetIcon(scheme, Icons.groups_rounded),
+          title: const Text('Group call'),
+          onTap: () {
+            Navigator.pop(ctx);
+            _startGroupCall(g);
+          },
+        ),
+        Builder(builder: (_) {
+          final pinned = _pinnedChats.contains(_pinKeyOf(g));
+          return ListTile(
+            leading: _sheetIcon(scheme,
                 pinned ? Icons.push_pin_outlined : Icons.push_pin_rounded),
-            title: Text(pinned ? 'Unpin' : 'Pin to top'),
+            title: Text(pinned ? 'Unpin group' : 'Pin group to the top'),
             onTap: () {
               Navigator.pop(ctx);
               _togglePinChat(g);
             },
-          ),
-          ListTile(
-            leading: Icon(muted
-                ? Icons.notifications_active_rounded
-                : Icons.notifications_off_rounded),
-            title: Text(muted ? 'Unmute' : 'Mute notifications'),
-            subtitle: muted
-                ? null
-                : const Text('No alerts from this group; it stays in the list'),
-            onTap: () {
-              Navigator.pop(ctx);
+          );
+        }),
+        // Mute: a live switch — the sheet stays open and shows the state.
+        ListenableBuilder(
+          listenable: GroupMeta.instance,
+          builder: (_, _) {
+            final muted = GroupMeta.instance.isMuted(gid);
+            return SwitchListTile(
+              secondary: _sheetIcon(
+                  scheme,
+                  muted
+                      ? Icons.notifications_off_rounded
+                      : Icons.notifications_active_rounded),
+              title: const Text('Mute notifications'),
+              subtitle: Text(muted
+                  ? 'Muted — no alerts; it stays in your list'
+                  : 'No alerts from this group; it stays in the list'),
+              value: muted,
               // Home listens to GroupMeta and repaints the row itself.
-              GroupMeta.instance.toggleMute(gid);
-            },
-          ),
-          const SizedBox(height: 8),
-        ]),
-      ),
+              onChanged: (_) => GroupMeta.instance.toggleMute(gid),
+            );
+          },
+        ),
+        ListTile(
+          leading: _sheetIcon(scheme, Icons.info_outline_rounded),
+          title: const Text('Group info'),
+          subtitle: const Text('Members, photo, name, leave'),
+          onTap: () {
+            Navigator.pop(ctx);
+            openGroupInPanel(g);
+            _openGroupInfo();
+          },
+        ),
+      ],
     );
   }
 

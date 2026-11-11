@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
+from sqlalchemy import func
 import crud, schemas
 from database import get_db
 from models import User, Message
@@ -263,8 +264,19 @@ def cancel_held(held_id: int, db: Session = Depends(get_db),
 # 🔎 SEARCH MESSAGES (across the user's DMs + groups)
 @router.get("/search")
 def search_messages(
-    q: str = Query(..., min_length=2),
+    q: str = Query("", max_length=200),
     limit: int = 40,
+    # Stage 2 filters (all optional):
+    #  kind  — media (photos / videos / GIFs) · link · voice · song · file;
+    #          with a kind the text may be empty (browse that kind).
+    #  sender — "me" | "others"
+    #  conversation_id / friend_id — only that chat
+    #  since_days — only the last N days
+    kind: Optional[str] = None,
+    sender: Optional[str] = None,
+    conversation_id: Optional[int] = None,
+    friend_id: Optional[int] = None,
+    since_days: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -275,8 +287,11 @@ def search_messages(
     from sqlalchemy import or_
     from models import ConversationMember, Conversation
 
+    from datetime import datetime, timedelta, timezone as _tz
+
     term = (q or "").strip()
-    if len(term) < 2:
+    kind = (kind or "").strip().lower() or None
+    if len(term) < 2 and kind is None:
         return []
     me = current_user.id
     conv_ids = [
@@ -287,10 +302,46 @@ def search_messages(
     if conv_ids:
         cond = or_(cond, Message.conversation_id.in_(conv_ids))
 
+    query = db.query(Message).filter(Message.is_deleted == False)  # noqa: E712
+    if len(term) >= 2:
+        # Text matches the words; a media message also by its file name.
+        query = query.filter(or_(
+            Message.content.icontains(term, autoescape=True),
+            Message.media_name.icontains(term, autoescape=True),
+        ))
+    mime = func.coalesce(Message.media_mime, "")
+    mtype = func.coalesce(Message.message_type, "text")
+    if kind == "media":
+        query = query.filter(or_(
+            mtype.in_(["image", "gif", "sticker", "video"]),
+            mime.like("image/%"), mime.like("video/%")))
+    elif kind == "link":
+        query = query.filter(or_(
+            Message.content.icontains("http://"),
+            Message.content.icontains("https://"),
+            Message.content.icontains("www.")))
+    elif kind == "voice":
+        query = query.filter(mtype.in_(["audio", "voice"]))
+    elif kind == "song":
+        query = query.filter(mtype == "song")
+    elif kind == "file":
+        query = query.filter(mtype == "file").filter(
+            ~mime.like("image/%")).filter(~mime.like("video/%"))
+    if sender == "me":
+        query = query.filter(Message.sender_id == me)
+    elif sender == "others":
+        query = query.filter(Message.sender_id != me)
+    if conversation_id is not None:
+        query = query.filter(Message.conversation_id == conversation_id)
+    elif friend_id is not None:
+        query = query.filter(Message.conversation_id.is_(None)).filter(or_(
+            (Message.sender_id == me) & (Message.receiver_id == friend_id),
+            (Message.sender_id == friend_id) & (Message.receiver_id == me)))
+    if since_days:
+        query = query.filter(Message.timestamp >= datetime.now(_tz.utc)
+                             - timedelta(days=max(1, min(since_days, 3650))))
     rows = (
-        db.query(Message)
-        .filter(Message.is_deleted == False)  # noqa: E712
-        .filter(Message.content.icontains(term, autoescape=True))
+        query
         # Only what I can see in the chat (not held back by a block, not
         # "deleted for me").
         .filter(crud_conversations._visible_to(me))
@@ -337,6 +388,8 @@ def search_messages(
             # The client ranks + groups: polls / jam lines go to "Activity",
             # and a group hit reads "Lorraine: …".
             "message_type": m.message_type or "text",
+            "media_name": m.media_name or "",
+            "media_mime": m.media_mime or "",
             "sender_name": _user(m.sender_id)[0],
             "is_group": is_group,
             "conversation_id": m.conversation_id,

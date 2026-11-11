@@ -3206,15 +3206,32 @@ class ApiService {
   /// A page of a conversation's messages (same shape as DM messages).
   /// Search the user's messages (DMs + groups) by content. Returns recent
   /// matches first, each enriched with the thread it belongs to.
+  /// Global search. [kind] (media · link · voice · song · file) may run
+  /// with an empty [q] (browse that kind); [sender] 'me' | 'others';
+  /// [conversationId] / [friendId] = only that chat; [sinceDays].
   Future<List<Map<String, dynamic>>> searchMessages(String q,
-      {int limit = 40}) async {
+      {int limit = 40,
+      String? kind,
+      String? sender,
+      int? conversationId,
+      int? friendId,
+      int? sinceDays}) async {
     final term = q.trim();
-    if (term.length < 2) return [];
+    if (term.length < 2 && kind == null) return [];
     try {
       final token = await _getToken();
       if (token == null) return [];
-      final uri = Uri.parse(
-          '${await _baseUrl}/messages/search?q=${Uri.encodeQueryComponent(term)}&limit=$limit');
+      final params = <String, String>{
+        'q': term,
+        'limit': '$limit',
+        if (kind != null) 'kind': kind,
+        if (sender != null) 'sender': sender,
+        if (conversationId != null) 'conversation_id': '$conversationId',
+        if (friendId != null) 'friend_id': '$friendId',
+        if (sinceDays != null) 'since_days': '$sinceDays',
+      };
+      final uri = Uri.parse('${await _baseUrl}/messages/search')
+          .replace(queryParameters: params);
       final resp = await http.get(uri, headers: _authHeaders(token));
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final body = jsonDecode(resp.body);

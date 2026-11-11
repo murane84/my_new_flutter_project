@@ -9,6 +9,9 @@ import '../services/contact_names.dart';
 import '../utils/avatar_widget.dart';
 import '../utils/readable.dart';
 import '../utils/time_utils.dart' show parseServerTime;
+import '../utils/prefs_now.dart';
+import '../widgets/genie_menu.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 
 /// Global search across my chats: the PEOPLE and GROUPS whose names match
 /// first ("Chats"), then the MESSAGES grouped by chat (best matches first,
@@ -67,6 +70,47 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
   final Set<String> _expanded = {};
   bool _activityOpen = false;
 
+  // ── Stage 2: browse by kind + filters + recent + keys ──
+  String? _kind; // media · link · voice · song · file
+  String? _sender; // 'me' | 'others'
+  Map<String, dynamic>? _inChat; // {'group': bool, 'id': int, 'name': str}
+  int? _sinceDays; // 7 · 30
+  List<String> _recent = const [];
+  static const _kRecent = 'msg_search_recent_v1';
+  // Keyboard: the highlighted hit (↑ ↓ Enter) in what's on screen.
+  int _cursor = -1;
+  String _sig = '';
+  List<Map<String, dynamic>> _flat = const [];
+
+  bool get _filtered =>
+      _kind != null || _sender != null || _inChat != null || _sinceDays != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _recent = prefsNow?.getStringList(_kRecent) ?? const [];
+  }
+
+  void _remember(String term) {
+    final t = term.trim();
+    if (t.length < 2) return;
+    final next = [t, ..._recent.where((e) => e.toLowerCase() != t.toLowerCase())]
+        .take(8)
+        .toList();
+    _recent = next;
+    prefsNow?.setStringList(_kRecent, next);
+  }
+
+  void _clearRecent() {
+    setState(() => _recent = const []);
+    prefsNow?.remove(_kRecent);
+  }
+
+  void _setFilter(VoidCallback change) {
+    setState(change);
+    _run(_ctrl.text);
+  }
+
   @override
   void dispose() {
     _debounce?.cancel();
@@ -81,7 +125,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
 
   Future<void> _run(String term) async {
     final q = term.trim();
-    if (q.length < 2) {
+    if (q.length < 2 && _kind == null) {
       setState(() {
         _results = const [];
         _loading = false;
@@ -97,9 +141,21 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
       _loading = true;
       _lastTerm = q;
     });
-    final res = await ApiService().searchMessages(q, limit: 100);
-    if (!mounted || q != _lastTerm) return;
+    final sig = '$q|$_kind|$_sender|${_inChat?['id']}|$_sinceDays';
+    _sig = sig;
+    final res = await ApiService().searchMessages(q,
+        limit: 100,
+        kind: _kind,
+        sender: _sender,
+        conversationId:
+            _inChat?['group'] == true ? _inChat!['id'] as int : null,
+        friendId: _inChat != null && _inChat!['group'] != true
+            ? _inChat!['id'] as int
+            : null,
+        sinceDays: _sinceDays);
+    if (!mounted || q != _lastTerm || sig != _sig) return;
     setState(() {
+      _cursor = -1;
       _results = res;
       _loading = false;
       _expanded.clear();
@@ -203,6 +259,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
   // ── Opening ─────────────────────────────────────────────────────────────
 
   void _openChat(Map<String, dynamic> c, bool isGroup) {
+    _remember(_ctrl.text);
     FocusScope.of(context).unfocus();
     Navigator.of(context).pop();
     if (isGroup) {
@@ -213,6 +270,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
   }
 
   void _open(Map<String, dynamic> r) {
+    _remember(_ctrl.text);
     if (widget.onOpen != null) {
       FocusScope.of(context).unfocus();
       Navigator.of(context).pop();
@@ -296,7 +354,24 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: TextField(
+                child: CallbackShortcuts(
+                  // Desktop: ↑ ↓ walk the hits, Enter opens, Esc closes.
+                  bindings: {
+                    const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
+                        _moveCursor(1),
+                    const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
+                        _moveCursor(-1),
+                    const SingleActivator(LogicalKeyboardKey.escape): () =>
+                        Navigator.of(context).maybePop(),
+                  },
+                  child: TextField(
+                  onSubmitted: (v) {
+                    if (_cursor >= 0 && _cursor < _flat.length) {
+                      _open(_flat[_cursor]);
+                    } else {
+                      setState(() => _remember(v));
+                    }
+                  },
                   controller: _ctrl,
                   autofocus: true,
                   onChanged: (v) {
@@ -312,9 +387,12 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
-                    hintText: 'Search all your chats',
+                    hintText: _kind != null
+                        ? 'Search in ${_kindLabel(_kind!).toLowerCase()}…'
+                        : 'Search all your chats',
                     hintStyle: TextStyle(color: soft, fontSize: 14),
                   ),
+                ),
                 ),
               ),
               if (_ctrl.text.isNotEmpty)
@@ -333,6 +411,280 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  // ── Stage 2 helpers ─────────────────────────────────────────────────────
+
+  void _moveCursor(int by) {
+    if (_flat.isEmpty) return;
+    setState(() {
+      _cursor = (_cursor + by).clamp(0, _flat.length - 1);
+    });
+  }
+
+  static String _kindLabel(String k) => switch (k) {
+        'media' => 'Photos & videos',
+        'link' => 'Links',
+        'voice' => 'Voice notes',
+        'song' => 'Songs',
+        _ => 'Files',
+      };
+
+  static IconData _kindIcon(String k) => switch (k) {
+        'media' => Icons.photo_library_rounded,
+        'link' => Icons.link_rounded,
+        'voice' => Icons.mic_rounded,
+        'song' => Icons.music_note_rounded,
+        _ => Icons.insert_drive_file_rounded,
+      };
+
+  /// What a hit says: its words, or for media its name / kind.
+  String _rowText(Map<String, dynamic> r) {
+    final c = (r['content'] ?? '').toString().trim();
+    final name = (r['media_name'] ?? '').toString().trim();
+    final t = (r['message_type'] ?? 'text').toString();
+    final mime = (r['media_mime'] ?? '').toString();
+    String label() {
+      if (t == 'song') return '🎵 ${name.isEmpty ? 'Song' : name}';
+      if (t == 'audio' || t == 'voice') return '🎤 Voice note';
+      if (t == 'gif' || t == 'sticker') return '🎞️ GIF';
+      if (mime.startsWith('video/') || t == 'video') return '🎬 Video';
+      if (t == 'image' || mime.startsWith('image/')) return '📷 Photo';
+      if (t == 'file') return '📎 ${name.isEmpty ? 'File' : name}';
+      return '';
+    }
+
+    final l = label();
+    if (c.isEmpty) return l.isEmpty ? name : l;
+    return l.isEmpty ? c : '$l · $c';
+  }
+
+  /// The chips under the bar: what kind, from whom, which chat, when.
+  Widget _filterBar(ColorScheme scheme) {
+    Widget chip(String label, bool on, VoidCallback onTap,
+            {IconData? icon, bool menu = false}) =>
+        Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: Material(
+            color: on
+                ? scheme.primary.withValues(alpha: 0.16)
+                : scheme.surfaceContainerHighest,
+            shape: StadiumBorder(
+                side: BorderSide(
+                    color: on
+                        ? scheme.primary.withValues(alpha: 0.6)
+                        : scheme.outlineVariant.withValues(alpha: 0.45))),
+            child: InkWell(
+              customBorder: const StadiumBorder(),
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 11),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  if (icon != null) ...[
+                    Icon(icon,
+                        size: 15,
+                        color: on ? accentInk(scheme) : scheme.onSurfaceVariant),
+                    const SizedBox(width: 5),
+                  ],
+                  Text(label,
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+                          color: on ? accentInk(scheme) : scheme.onSurface)),
+                  if (menu)
+                    Icon(Icons.arrow_drop_down_rounded,
+                        size: 18, color: scheme.onSurfaceVariant),
+                ]),
+              ),
+            ),
+          ),
+        );
+    final from = switch (_sender) {
+      'me' => 'From me',
+      'others' => 'From others',
+      _ => 'From anyone',
+    };
+    final when = switch (_sinceDays) {
+      7 => 'Last 7 days',
+      30 => 'Last 30 days',
+      _ => 'Any time',
+    };
+    return SizedBox(
+      height: 32,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        children: [
+          for (final k in const ['media', 'link', 'voice', 'song', 'file'])
+            chip(_kindLabel(k), _kind == k,
+                () => _setFilter(() => _kind = _kind == k ? null : k),
+                icon: _kindIcon(k)),
+          Builder(
+            builder: (c) => chip(
+                from,
+                _sender != null,
+                () => _pick<String>(c, [
+                      ('', 'From anyone'),
+                      ('me', 'From me'),
+                      ('others', 'From others'),
+                    ], (v) => _setFilter(() => _sender = v.isEmpty ? null : v)),
+                icon: Icons.person_outline_rounded,
+                menu: true),
+          ),
+          chip(_inChat == null ? 'In any chat' : 'In ${_inChat!['name']}',
+              _inChat != null, _pickChat,
+              icon: Icons.forum_outlined, menu: true),
+          Builder(
+            builder: (c) => chip(
+                when,
+                _sinceDays != null,
+                () => _pick<int>(c, [
+                      (0, 'Any time'),
+                      (7, 'Last 7 days'),
+                      (30, 'Last 30 days'),
+                    ], (v) => _setFilter(() => _sinceDays = v == 0 ? null : v)),
+                icon: Icons.schedule_rounded,
+                menu: true),
+          ),
+          if (_filtered)
+            chip('Clear', false, () => _setFilter(() {
+                  _kind = null;
+                  _sender = null;
+                  _inChat = null;
+                  _sinceDays = null;
+                }), icon: Icons.close_rounded),
+        ],
+      ),
+    );
+  }
+
+  /// A small menu growing out of a chip (Aluta's genie menu).
+  void _pick<T>(BuildContext c, List<(T, String)> options,
+      void Function(T value) onPick) {
+    final box = c.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final rect = box.localToGlobal(Offset.zero) & box.size;
+    showGenieMenu(c, anchor: rect, width: 200, entries: [
+      for (final o in options)
+        GenieMenuEntry(
+            label: o.$2,
+            onTap: () {
+              if (mounted) onPick(o.$1);
+            }),
+    ]);
+  }
+
+  /// "In …": pick one chat (my friends and groups).
+  Future<void> _pickChat() async {
+    final scheme = Theme.of(context).colorScheme;
+    final picked = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 560),
+      builder: (ctx) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(ctx).height * 0.6,
+          child: ListView(children: [
+            ListTile(
+              leading: const Icon(Icons.all_inclusive_rounded),
+              title: const Text('Any chat'),
+              onTap: () => Navigator.pop(ctx, const <String, dynamic>{}),
+            ),
+            for (final g in widget.groups)
+              ListTile(
+                leading: InitialsAvatar(
+                    name: (g['title'] ?? 'Group').toString(),
+                    radius: 16,
+                    imageUrl: widget.avatarOf?.call(g['avatar_url'])),
+                title: Text((g['title'] ?? 'Group').toString()),
+                trailing: Icon(Icons.groups_rounded,
+                    size: 18, color: scheme.onSurfaceVariant),
+                onTap: () => Navigator.pop(ctx, {
+                  'group': true,
+                  'id': (g['id'] as num).toInt(),
+                  'name': (g['title'] ?? 'Group').toString(),
+                }),
+              ),
+            for (final f in widget.people)
+              Builder(builder: (_) {
+                final n = ContactNames.instance.displayName(
+                    of: f, registered: (f['username'] ?? '').toString());
+                return ListTile(
+                  leading: InitialsAvatar(
+                      name: n,
+                      radius: 16,
+                      imageUrl: widget.avatarOf?.call(f['avatar_url'])),
+                  title: Text(n),
+                  onTap: () => Navigator.pop(ctx, {
+                    'group': false,
+                    'id': (f['id'] as num).toInt(),
+                    'name': n,
+                  }),
+                );
+              }),
+          ]),
+        ),
+      ),
+    );
+    if (picked == null) return;
+    _setFilter(() => _inChat = picked.isEmpty ? null : picked);
+  }
+
+  /// Before typing: recent searches and one-tap browsing by kind.
+  Widget _startScreen(ColorScheme scheme) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 24),
+      children: [
+        if (_recent.isNotEmpty) ...[
+          Row(children: [
+            Expanded(child: _sectionLabel(scheme, 'Recent')),
+            TextButton(onPressed: _clearRecent, child: const Text('Clear')),
+            const SizedBox(width: 8),
+          ]),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Wrap(spacing: 6, runSpacing: 6, children: [
+              for (final t in _recent)
+                ActionChip(
+                  avatar: const Icon(Icons.history_rounded, size: 16),
+                  label: Text(t),
+                  shape: const StadiumBorder(),
+                  onPressed: () {
+                    _ctrl.text = t;
+                    _ctrl.selection =
+                        TextSelection.collapsed(offset: t.length);
+                    _run(t);
+                  },
+                ),
+            ]),
+          ),
+        ],
+        _sectionLabel(scheme, 'Browse'),
+        for (final k in const ['media', 'link', 'voice', 'song', 'file'])
+          ListTile(
+            leading: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: 0.12),
+                  shape: BoxShape.circle),
+              child: Icon(_kindIcon(k), size: 19, color: accentInk(scheme)),
+            ),
+            title: Text(_kindLabel(k)),
+            subtitle: Text('Across all your chats',
+                style: TextStyle(
+                    fontSize: 12, color: scheme.onSurfaceVariant)),
+            onTap: () => _setFilter(() => _kind = k),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
+          child: Text(
+              'Or type at least 2 letters to search messages, people and '
+              'groups.',
+              style: TextStyle(color: scheme.onSurfaceVariant)),
+        ),
+      ],
     );
   }
 
@@ -522,9 +874,13 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
             .first;
       }
     }
+    final active = _cursor >= 0 &&
+        _cursor < _flat.length &&
+        identical(_flat[_cursor], r);
     return InkWell(
       onTap: () => _open(r),
-      child: Padding(
+      child: Container(
+        color: active ? scheme.primary.withValues(alpha: 0.10) : null,
         padding: const EdgeInsets.fromLTRB(52, 6, 12, 6),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
@@ -537,7 +893,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
                           fontSize: 13.5,
                           fontWeight: FontWeight.w700,
                           color: scheme.onSurface)),
-                _hlSpan((r['content'] ?? '').toString(), q, scheme),
+                _hlSpan(_rowText(r), q, scheme),
               ]),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -590,10 +946,18 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
       });
     }
     final strip = _chatsStrip(scheme, q);
-    final nothing = q.length >= 2 &&
+    final browsing = q.length >= 2 || _kind != null;
+    final nothing = browsing &&
         !_loading &&
         _results.isEmpty &&
         _chatMatches(q).isEmpty;
+    // What ↑ ↓ walk through: the hits as shown, top to bottom.
+    _flat = [
+      for (final h in ordered)
+        ...(_expanded.contains(h.key) ? h.items : h.items.take(3)),
+      if (_activityOpen) ...activity,
+    ];
+    if (_cursor >= _flat.length) _cursor = _flat.length - 1;
 
     return Scaffold(
       appBar: AppBar(
@@ -608,37 +972,34 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
           child: _glassBar(scheme, isDark),
         ),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(2),
-          child: _loading
-              ? LinearProgressIndicator(
-                  minHeight: 2, color: scheme.primary,
-                  backgroundColor: Colors.transparent)
-              : const SizedBox(height: 2),
+          preferredSize: const Size.fromHeight(42),
+          child: Column(children: [
+            _filterBar(scheme),
+            const SizedBox(height: 8),
+            _loading
+                ? LinearProgressIndicator(
+                    minHeight: 2,
+                    color: scheme.primary,
+                    backgroundColor: Colors.transparent)
+                : const SizedBox(height: 2),
+          ]),
         ),
       ),
-      body: q.length < 2
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(28),
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.manage_search_rounded,
-                      size: 44, color: accentInk(scheme)),
-                  const SizedBox(height: 10),
-                  Text('Search your messages, people and groups',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: scheme.onSurface)),
-                  const SizedBox(height: 4),
-                  Text('Type at least 2 letters',
-                      style: TextStyle(color: scheme.onSurfaceVariant)),
-                ]),
-              ),
-            )
+      body: !browsing
+          ? _startScreen(scheme)
           : nothing
               ? Center(
-                  child: Text('Nothing matches “$q”',
-                      style: TextStyle(color: scheme.onSurfaceVariant)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                        q.length >= 2
+                            ? 'Nothing matches “$q”'
+                                '${_filtered ? ' with these filters' : ''}'
+                            : 'No ${_kindLabel(_kind!).toLowerCase()} found'
+                                '${_filtered ? ' with these filters' : ''}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: scheme.onSurfaceVariant)),
+                  ),
                 )
               : ListView(
                   padding: const EdgeInsets.only(bottom: 24),

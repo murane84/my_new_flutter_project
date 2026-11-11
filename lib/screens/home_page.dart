@@ -4389,6 +4389,42 @@ class HomePageState extends rp.ConsumerState<HomePage>
 
   // ── Music panel ───────────────────────────────────────────────────────────
 
+  /// Chat search: a full page on phones; on a wide screen a panel sliding
+  /// in from the right over the chats, so the music and lists stay in view.
+  void _openMessageSearch(Widget screen) {
+    final wide = MediaQuery.sizeOf(context).width >= 900;
+    if (!wide) {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+      return;
+    }
+    final scheme = Theme.of(context).colorScheme;
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Close search',
+      barrierColor: Colors.black.withValues(alpha: 0.25),
+      transitionDuration: const Duration(milliseconds: 260),
+      pageBuilder: (ctx, _, _) => Align(
+        alignment: Alignment.centerRight,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(0, 12, 12, 12),
+          child: Material(
+            color: scheme.surface,
+            elevation: 12,
+            borderRadius: BorderRadius.circular(22),
+            clipBehavior: Clip.antiAlias,
+            child: SizedBox(width: 560, child: screen),
+          ),
+        ),
+      ),
+      transitionBuilder: (ctx, a, _, child) => SlideTransition(
+        position: Tween(begin: const Offset(0.08, 0), end: Offset.zero)
+            .animate(CurvedAnimation(parent: a, curve: Curves.easeOutCubic)),
+        child: FadeTransition(opacity: a, child: child),
+      ),
+    );
+  }
+
   /// The chat panel full screen ↔ back to the split (the ⤢ button and
   /// Ctrl+Shift+F). Remembered across launches.
   void _toggleChatFullScreen() {
@@ -6119,8 +6155,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
           IconButton(
             tooltip: 'Search messages',
             icon: const Icon(Icons.search_rounded),
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => MessageSearchScreen(
+            onPressed: () => _openMessageSearch(MessageSearchScreen(
                       // Names match → the chat itself, in the chat panel.
                       people: _allFriends,
                       groups: _groups,
@@ -6137,7 +6172,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                         'friend_id': r['friend_id'],
                         'sender_name': r['friend_name'],
                       }),
-                    ))),
+                    )),
           ),
           // Single overflow menu with GROUPED submenus, so adding new actions
           // nests them under a parent instead of making the menu grow taller.

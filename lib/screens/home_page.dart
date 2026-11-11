@@ -150,6 +150,7 @@ import '../utils/radii.dart';
 import '../widgets/skeleton.dart';
 import '../utils/adaptive_sheet.dart';
 import '../utils/depth.dart';
+import '../widgets/avatar_flight.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -3872,17 +3873,43 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// The chat header's photo slot: a 34 px photo in a 42 px ring slot that
   /// LAYS OUT 36 px tall — the rim overhangs into the header's padding — so
   /// the header is the same height with or without a ring.
-  Widget _headerPhotoSlot(Widget ring) => SizedBox(
-        width: 42,
-        height: 36,
-        child: OverflowBox(
-          minWidth: 42,
-          maxWidth: 42,
-          minHeight: 42,
-          maxHeight: 42,
-          child: ring,
+  Widget _headerPhotoSlot(Widget ring) => AvatarFlightTarget(
+        // The photo tapped in the list lands here (AvatarFlight).
+        child: SizedBox(
+          width: 42,
+          height: 36,
+          child: OverflowBox(
+            minWidth: 42,
+            maxWidth: 42,
+            minHeight: 42,
+            maxHeight: 42,
+            child: ring,
+          ),
         ),
       );
+
+  // Where each friend's photo sits in the list right now (for the flight
+  // into the chat header). Plain contexts, not GlobalKeys: a friend can be
+  // built twice (a swipe preview) without clashing.
+  final Map<int, BuildContext> _tileAvatarCtx = {};
+
+  /// The flight from the tapped photo into the chat header.
+  void _flyAvatarFor(int id, String name, String? avatarRel) {
+    final c = _tileAvatarCtx[id];
+    if (c == null || !c.mounted) return;
+    final box = c.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize || !box.attached) return;
+    final from = box.localToGlobal(Offset.zero) & box.size;
+    final face = Rect.fromCenter(
+        center: from.center,
+        width: min(from.width, 44),
+        height: min(from.height, 44));
+    AvatarFlight.fly(
+        context,
+        face,
+        InitialsAvatar(
+            name: name, radius: 22, imageUrl: _avatarFull(avatarRel)));
+  }
 
   /// The story rim on a friend's photo — the SAME language as the status
   /// tray: my Harmony partner's new status glows warm theme → rose → gold,
@@ -4187,6 +4214,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
   void openChat(Map<String, dynamic> friend,
       {String? jumpToMessageId, Map<String, dynamic>? replyTo}) {
     var leftFull = false;
+    final flyId = int.tryParse(friend['id'].toString());
+    if (flyId != null && _activeFriendId != friend['id'].toString()) {
+      _flyAvatarFor(
+          flyId,
+          _contactDisplayName(friend['phone'] as String?,
+              (friend['username'] ?? '').toString()),
+          friend['avatar_url'] as String?);
+    }
     if (_searchQuery.isNotEmpty) _searchBeforeChat = _searchQuery;
     _openedKey = 's${friend['id']}';
     _newWhileAway.remove(_openedKey);

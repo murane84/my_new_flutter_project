@@ -2023,7 +2023,10 @@ extension _HomePageHelpers1 on HomePageState {
         child: avatar,
       );
     }
-    return GestureDetector(
+    return Builder(builder: (photoCtx) {
+      // Remember where this photo is: opening the chat flies it from here.
+      _tileAvatarCtx[id] = photoCtx;
+      return GestureDetector(
       behavior: HitTestBehavior.opaque,
       // Long-press the photo → a quick peek (song, progress, Tune in, ❤️)
       // without leaving the list.
@@ -2067,6 +2070,7 @@ extension _HomePageHelpers1 on HomePageState {
       },
       child: core,
     );
+    });
   }
 
   /// Poll the backend for whether a group call is live in [conv] and seed the

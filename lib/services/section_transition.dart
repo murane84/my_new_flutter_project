@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'account_prefs.dart';
 
 /// How a section change animates (Circle's All · Status · Listening ·
-/// Circle). The user picks it in Appearance; default = slide + wave.
+/// Circle). The user picks it in Appearance; default = the waveform wipe.
 enum SectionTransitionStyle {
   slide,
   depth,
@@ -32,11 +32,12 @@ extension SectionTransitionInfo on SectionTransitionStyle {
         SectionTransitionStyle.slide => 'Calm, slides in from its side',
         SectionTransitionStyle.depth => 'Sinks back, the next rises in front',
         SectionTransitionStyle.ripple => 'Spreads out from the button you tap',
-        SectionTransitionStyle.wave => 'A sound-wave edge sweeps it in',
+        SectionTransitionStyle.wave =>
+          'A sound-wave edge sweeps it in — Aluta default',
         SectionTransitionStyle.fade => 'Simplest — a soft fade',
         SectionTransitionStyle.equaliser => 'Rises in like equaliser bars',
         SectionTransitionStyle.slideWave =>
-          'The slide, with a faint wave passing — Aluta default',
+          'The slide, with a faint wave passing',
         SectionTransitionStyle.cube => 'Turns like a cube face',
       };
 }
@@ -49,8 +50,17 @@ class SectionTransition {
   static final SectionTransition instance = SectionTransition._();
 
   static const _k = 'section_transition_v1';
+  // The waveform wipe: Aluta's music identity, follows the finger on a
+  // swipe, and hands over with no overlap. (A choice someone made stays.)
   static const SectionTransitionStyle defaultStyle =
-      SectionTransitionStyle.slideWave;
+      SectionTransitionStyle.wave;
+
+  /// The picker's order: the default first, the rest as listed.
+  static List<SectionTransitionStyle> get pickerOrder => [
+        defaultStyle,
+        for (final s in SectionTransitionStyle.values)
+          if (s != defaultStyle) s,
+      ];
 
   final ValueNotifier<SectionTransitionStyle> style =
       ValueNotifier<SectionTransitionStyle>(defaultStyle);

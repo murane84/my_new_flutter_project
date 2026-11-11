@@ -1098,7 +1098,7 @@ class _CirclePeek {
 }
 
 /// A Circle section change, in the user's chosen transition (Appearance →
-/// Section transitions; default slide + wave). The new view comes from the
+/// Section transitions; default waveform wipe). The new view comes from the
 /// side it lives on (← forward: All → Status → Listening → Circle; → back).
 /// [forward] is set by HomePageState._goCircleView.
 class _CircleFlip extends StatelessWidget {

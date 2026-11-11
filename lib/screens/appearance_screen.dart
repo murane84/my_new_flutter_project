@@ -1264,7 +1264,7 @@ class _SectionTransitionsSection extends StatelessWidget {
                         style: TextStyle(
                             fontSize: 12, color: scheme.onSurfaceVariant)),
                   ),
-                  for (final s in SectionTransitionStyle.values)
+                  for (final s in SectionTransition.pickerOrder)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: Material(

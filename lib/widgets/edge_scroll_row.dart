@@ -6,10 +6,17 @@ import 'package:flutter/material.dart';
 /// hidden past the edge:
 ///  • a soft fade on the side where more is waiting;
 ///  • the mouse wheel scrolls it sideways, and a mouse can drag it (desktop);
+///  • a tap near a faded edge glides the row on, so what's past the end
+///    comes into view by itself (no hold-and-drag hunting);
 ///  • [EdgeScrollRow.reveal] glides a tapped item fully into view — centred,
 ///    so its neighbours peek in and the rest of the row follows.
 class EdgeScrollRow extends StatefulWidget {
-  const EdgeScrollRow({super.key, required this.builder, this.fade = 28});
+  const EdgeScrollRow(
+      {super.key, required this.builder, this.fade = 28, this.edgeNudge = true});
+
+  /// Tap near a faded edge → the row glides on. Off for rows whose items
+  /// already [reveal] themselves on tap (both would fight).
+  final bool edgeNudge;
 
   /// Build the horizontal scrollable with the row's controller.
   final Widget Function(BuildContext context, ScrollController controller)
@@ -42,6 +49,31 @@ class _EdgeScrollRowState extends State<EdgeScrollRow> {
   void dispose() {
     _c.dispose();
     super.dispose();
+  }
+
+  Offset? _down;
+
+  // A tap (not a drag) within the edge zone, with more waiting that way →
+  // glide about half a row on.
+  void _maybeNudge(Offset up) {
+    final down = _down;
+    _down = null;
+    if (!widget.edgeNudge || down == null || !_c.hasClients) return;
+    if ((up - down).distance > 8) return; // that was a drag
+    final w = context.size?.width ?? 0;
+    if (w <= 0) return;
+    final p = _c.position;
+    final zone = (w * 0.18).clamp(48.0, 96.0);
+    double? to;
+    if (up.dx > w - zone && p.pixels < p.maxScrollExtent - 1) {
+      to = p.pixels + w * 0.45;
+    } else if (up.dx < zone && p.pixels > p.minScrollExtent + 1) {
+      to = p.pixels - w * 0.45;
+    }
+    if (to == null) return;
+    _c.animateTo(to.clamp(p.minScrollExtent, p.maxScrollExtent),
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic);
   }
 
   void _wheel(PointerScrollEvent e) {
@@ -80,6 +112,9 @@ class _EdgeScrollRowState extends State<EdgeScrollRow> {
       onPointerSignal: (e) {
         if (e is PointerScrollEvent) _wheel(e);
       },
+      onPointerDown: (e) => _down = e.localPosition,
+      onPointerUp: (e) => _maybeNudge(e.localPosition),
+      onPointerCancel: (_) => _down = null,
       child: AnimatedBuilder(
         animation: _c,
         child: row,

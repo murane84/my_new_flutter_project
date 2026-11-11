@@ -566,6 +566,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
     return SizedBox(
       height: 32,
       child: EdgeScrollRow(
+        edgeNudge: false, // its chips reveal themselves on tap
         builder: (context, ctrl) => ListView(
           controller: ctrl,
           scrollDirection: Axis.horizontal,

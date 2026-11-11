@@ -66,27 +66,43 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
     }
     if (!attached) return;
     final pos = _queueScrollCtrl.position;
-    // First jump roughly so the playing row is built near the viewport…
-    const estRow = 58.0;
-    final rough =
-        (_currentIndex * estRow + estRow / 2 - pos.viewportDimension / 2)
-            .clamp(0.0, pos.maxScrollExtent);
-    // ⌖ with the song already on screen → a small nudge, not the full glow.
-    final soft = (rough - pos.pixels).abs() < estRow * 2;
+    // Already built (on or near the screen)? Centre it straight away.
+    final shown = _nowQueueRowKey.currentContext;
+    if (shown != null) {
+      _centreQueueRow(shown, glow, soft: true);
+      return;
+    }
+    // Otherwise jump close first so the row gets built. The row height is
+    // MEASURED from the list itself (its whole length / its songs), not a
+    // guess — a fixed guess landed far off in a long queue.
+    final n = _playlist.length;
+    final content = pos.maxScrollExtent + pos.viewportDimension - 20;
+    final row = n > 0 && content > 0 ? content / n : 48.0;
+    final rough = (_currentIndex * row + row / 2 - pos.viewportDimension / 2)
+        .clamp(0.0, pos.maxScrollExtent);
     _queueScrollCtrl.jumpTo(rough);
-    // …then centre it precisely once it's laid out (alignment 0.5 = middle).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctx = _nowQueueRowKey.currentContext;
-      if (ctx == null) return;
-      Scrollable.ensureVisible(
-        ctx,
-        alignment: 0.5,
-        duration: const Duration(milliseconds: 280),
-        curve: Curves.easeOut,
-      ).then((_) {
-        // Asked for (⌖) → the row breathes once so the eye lands on it.
-        if (glow) _queueGlow.ping(soft: soft);
-      });
+      if (ctx != null) {
+        _centreQueueRow(ctx, glow, soft: false);
+      } else if (tries < 32) {
+        // The list's length estimate sharpened as rows got built: aim again.
+        _scrollQueueToCurrent(tries + 4, glow);
+      }
+    });
+  }
+
+  /// Centre the playing row (alignment 0.5 = middle; the first / last songs
+  /// sit as close to the middle as the list's ends allow), then — when asked
+  /// for (⌖) — let it breathe once so the eye lands on it.
+  void _centreQueueRow(BuildContext ctx, bool glow, {required bool soft}) {
+    Scrollable.ensureVisible(
+      ctx,
+      alignment: 0.5,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOut,
+    ).then((_) {
+      if (glow) _queueGlow.ping(soft: soft);
     });
   }
 

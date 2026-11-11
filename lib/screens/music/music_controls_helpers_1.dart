@@ -1013,9 +1013,13 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                         fontWeight: FontWeight.w800,
                         color: scheme.onSurface)),
                 const SizedBox(width: 8),
-                if (total > 0)
-                  Flexible(
-                    child: Builder(builder: (_) {
+                // Expanded (not Flexible + Spacer, which split the room in
+                // half): the buttons stay pinned to the right edge whether
+                // the count line is long or short ("97 / 97").
+                Expanded(
+                  child: total == 0
+                      ? const SizedBox.shrink()
+                      : Builder(builder: (_) {
                       _loadQueueDurations(setFull);
                       final left = _queueTimeLeft();
                       return Text(
@@ -1027,8 +1031,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                               fontWeight: FontWeight.w600,
                               color: scheme.onSurfaceVariant));
                     }),
-                  ),
-                const Spacer(),
+                ),
                 // Same tactile chips as the playlist header.
                 AlutaTapChip(
                   icon: Icons.my_location_rounded,

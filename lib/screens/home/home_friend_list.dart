@@ -645,7 +645,7 @@ extension _HomeFriendListView on HomePageState {
             child: Container(
                 height: 1, color: scheme.outlineVariant.withAlpha(70)),
           ),
-          // Circle sections: maximise to full height / minimise back.
+          // Circle sections: open this one at full height.
           if (maxKey != null) ...[
             const SizedBox(width: 4),
             _maxControl(scheme, maxKey),

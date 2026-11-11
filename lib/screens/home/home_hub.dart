@@ -78,8 +78,8 @@ extension _HomeHub on HomePageState {
     //    couple of rows — so many listeners can never shove the circle down.
     //  • "YOUR CIRCLE": a FIXED header above the scrolling chat list, so it is
     //    always pinned in view no matter what sits above it.
-    //  • Any of the three can be maximised to the whole screen and minimised
-    //    back (see _circleSections).
+    //  • Any of the three can open at full height; All on the switcher
+    //    brings the shared view back (see _circleSections).
     final listening = <Map<String, dynamic>>[];
     final circle = <Map<String, dynamic>>[];
     var zone = '';
@@ -119,7 +119,7 @@ extension _HomeHub on HomePageState {
   /// desktop column. By default ('all') Status & Stories, Listening now and
   /// Your circle share the height. Each header carries a full-height control:
   /// that section then takes the whole column / screen (Status as a grid,
-  /// Listening / chats as full lists) and the same control minimises it back.
+  /// Listening / chats as full lists); All on the switcher brings it back.
   List<Widget> _circleSections(
       List<Map<String, dynamic>> listening,
       List<Map<String, dynamic>> circle,
@@ -200,6 +200,7 @@ extension _HomeHub on HomePageState {
           grid: true,
           searching: q.isNotEmpty,
           controller: _circleMaxScroll,
+          onBackToAll: () => _goCircleView('all'),
         ),
       );
     }
@@ -300,37 +301,19 @@ extension _HomeHub on HomePageState {
         _ => 'Search chats & people…',
       };
 
-  /// Full-height control on a Circle section header: maximise this section,
-  /// or (when it's the one maximised) minimise back to the shared view.
+  /// Full-height control on a section header in the All view: opens that
+  /// section on its own. (The way back is All on the switcher. There is no
+  /// separate minimise anywhere.)
   Widget _maxControl(ColorScheme scheme, String key) {
-    final on = _circleView == key;
     return Tooltip(
-      message: on ? 'Minimise' : 'Full height',
+      message: 'Full height',
       child: InkWell(
-        onTap: () => _setCircleView(key),
+        onTap: () => _goCircleView(key),
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            if (on) ...[
-              Text(
-                'Minimise',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  color: accentInk(scheme),
-                ),
-              ),
-              const SizedBox(width: 3),
-            ],
-            Icon(
-              on
-                  ? Icons.close_fullscreen_rounded
-                  : Icons.open_in_full_rounded,
-              size: 15,
-              color: accentInk(scheme),
-            ),
-          ]),
+          child: Icon(Icons.open_in_full_rounded,
+              size: 15, color: accentInk(scheme)),
         ),
       ),
     );
@@ -624,7 +607,7 @@ extension _HomeHub on HomePageState {
         const SizedBox(height: 14),
         Center(
           child: TextButton.icon(
-            onPressed: () => _setCircleView('listening'),
+            onPressed: () => _goCircleView('all'),
             icon: const Icon(Icons.dashboard_rounded, size: 16),
             label: const Text('Back to all'),
           ),

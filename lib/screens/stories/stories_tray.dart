@@ -33,6 +33,8 @@ class StoriesTray extends StatefulWidget {
   final bool searching;
   // Grid only: lets the host glide it back to the top.
   final ScrollController? controller;
+  // Grid only: the empty state offers "Back to all" (like Listening's).
+  final VoidCallback? onBackToAll;
 
   const StoriesTray({
     super.key,
@@ -46,6 +48,7 @@ class StoriesTray extends StatefulWidget {
     this.grid = false,
     this.searching = false,
     this.controller,
+    this.onBackToAll,
   });
 
   @override
@@ -302,6 +305,14 @@ class _StoriesTrayState extends State<StoriesTray> {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                           fontSize: 12.5, color: scheme.onSurfaceVariant)),
+                if (widget.onBackToAll != null) ...[
+                  const SizedBox(height: 14),
+                  TextButton.icon(
+                    onPressed: widget.onBackToAll,
+                    icon: const Icon(Icons.dashboard_rounded, size: 16),
+                    label: const Text('Back to all'),
+                  ),
+                ],
               ]),
             ),
           ),

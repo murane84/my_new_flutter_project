@@ -334,6 +334,10 @@ def search_messages(
             "content": m.content or "",
             "timestamp": m.timestamp.isoformat() if m.timestamp else None,
             "sender_id": m.sender_id,
+            # The client ranks + groups: polls / jam lines go to "Activity",
+            # and a group hit reads "Lorraine: …".
+            "message_type": m.message_type or "text",
+            "sender_name": _user(m.sender_id)[0],
             "is_group": is_group,
             "conversation_id": m.conversation_id,
         }

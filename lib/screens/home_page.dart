@@ -6121,6 +6121,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
             icon: const Icon(Icons.search_rounded),
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(
                 builder: (_) => MessageSearchScreen(
+                      // Names match → the chat itself, in the chat panel.
+                      people: _allFriends,
+                      groups: _groups,
+                      onOpenChat: (f) => openChat(f),
+                      onOpenGroup: (g) => openGroupInPanel(g),
+                      avatarOf: _avatarFull,
+                      myUserId: _myUserId,
                       // Open in the normal chat panel + land with the rings.
                       onOpen: (r) => _handleMessageTap({
                         'message_id': r['id'],

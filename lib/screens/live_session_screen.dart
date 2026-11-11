@@ -1551,9 +1551,20 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
             labelColor: scheme.primary,
             unselectedLabelColor: scheme.onSurfaceVariant,
             indicatorColor: scheme.primary,
-            tabs: const [
-              Tab(height: 40, child: Text('Queue')),
-              Tab(height: 40, child: Text('People')),
+            tabs: [
+              // Songs the host said yes to that I haven't saved yet sit on
+              // top of Queue ("Ready to keep") — a count here so they're
+              // found on a phone too.
+              Tab(
+                  height: 40,
+                  child: Badge(
+                    isLabelVisible: !_isHost && _c.songYes.isNotEmpty,
+                    label: Text('${_c.songYes.length}'),
+                    backgroundColor: scheme.primary,
+                    offset: const Offset(14, -6),
+                    child: const Text('Queue'),
+                  )),
+              const Tab(height: 40, child: Text('People')),
             ],
           ),
           Expanded(

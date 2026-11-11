@@ -177,9 +177,27 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
             ? null
             : _day(_range!.end).add(const Duration(days: 1)));
     if (!mounted || q != _lastTerm || sig != _sig) return;
+    // The same filters checked here too, so they hold even against a server
+    // that doesn't know them yet: only group / direct chats, and the period.
+    final from = _range == null ? null : _day(_range!.start);
+    final to = _range == null
+        ? null
+        : _day(_range!.end).add(const Duration(days: 1));
+    final kept = res.where((r) {
+      final isGroup = r['is_group'] == true || r['conversation_id'] != null;
+      if (_inChat == null && _chatKind == 'group' && !isGroup) return false;
+      if (_inChat == null && _chatKind == 'dm' && isGroup) return false;
+      if (from != null) {
+        final raw = r['timestamp']?.toString();
+        if (raw == null || raw.isEmpty) return false;
+        final t = parseServerTime(raw).toLocal();
+        if (t.isBefore(from) || !t.isBefore(to!)) return false;
+      }
+      return true;
+    }).toList();
     setState(() {
       _cursor = -1;
-      _results = res;
+      _results = kept;
       _loading = false;
       _expanded.clear();
       _activityOpen = false;
@@ -230,7 +248,14 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
   List<(Map<String, dynamic>, String, bool)> _chatMatches(String q) {
     if (q.length < 2) return const [];
     final out = <(Map<String, dynamic>, String, bool, int)>[];
-    for (final f in widget.people) {
+    // "In group chats" / "In direct chats" / one chat narrow these too.
+    final people = _inChat != null || _chatKind == 'group'
+        ? const <Map<String, dynamic>>[]
+        : widget.people;
+    final groups = _inChat != null || _chatKind == 'dm'
+        ? const <Map<String, dynamic>>[]
+        : widget.groups;
+    for (final f in people) {
       final reg = (f['username'] ?? '').toString();
       final shown = ContactNames.instance.displayName(of: f, registered: reg);
       final sc = _score(shown, q) > _score(reg, q)
@@ -238,7 +263,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
           : _score(reg, q);
       if (sc > 0) out.add((f, shown, false, sc));
     }
-    for (final g in widget.groups) {
+    for (final g in groups) {
       final t = (g['title'] ?? '').toString();
       final sc = _score(t, q);
       if (sc > 0) out.add((g, t, true, sc));

@@ -2109,6 +2109,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
       );
     }
     if (msg['is_read'] == true) {
+      // My bonded person saw it: a tiny heartbeat instead of the ticks.
+      if (_bondedHere) {
+        return _HeartbeatTick(id: '${msg['id']}', color: read);
+      }
       return Icon(Icons.done_all, size: 13, color: read);
     }
     if (msg['delivered'] == true) {
@@ -2147,37 +2151,72 @@ extension _ChatPageHelpers3 on _ChatPageState {
     return tc.difference(tp).inSeconds < 30;
   }
 
-  Widget _buildDateSeparator(String label) {
+  /// [song]: the song we listened to together that day — "Yesterday ·
+  /// ♪ Mgambo", tap the song to play it.
+  Widget _buildDateSeparator(String label, {String? song}) {
     final scheme = Theme.of(context).colorScheme;
     final lineColor = scheme.onSurface.withAlpha(35);
+    final labelStyle = TextStyle(
+      color: scheme.onSurfaceVariant,
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.3,
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-      child: Row(
+      child: LayoutBuilder(builder: (context, c) {
+        final maxChip = c.maxWidth * 0.74;
+        return Row(
         children: [
           Expanded(child: Divider(height: 1, color: lineColor)),
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 10),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-            decoration: BoxDecoration(
-              // Solid, so no wallpaper can wash the date out.
-              color: scheme.surface,
-              borderRadius: BorderRadius.circular(Radii.lg),
-              border: Border.all(color: lineColor),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                color: scheme.onSurfaceVariant,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.3,
+          ConstrainedBox(
+            // A long song name ellipsizes; the lines keep some length.
+            constraints: BoxConstraints(maxWidth: maxChip),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                // Solid, so no wallpaper can wash the date out.
+                color: scheme.surface,
+                borderRadius: BorderRadius.circular(Radii.lg),
+                border: Border.all(color: lineColor),
               ),
+              child: song == null
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 5),
+                      child: Text(label, style: labelStyle),
+                    )
+                  : Material(
+                      type: MaterialType.transparency,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(Radii.lg),
+                        onTap: () => _playSongAgain(song),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 5),
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(text: label),
+                              TextSpan(
+                                text: '  ·  ♪ $song',
+                                style: TextStyle(
+                                    color: accentInk(scheme),
+                                    fontWeight: FontWeight.w700),
+                              ),
+                            ]),
+                            style: labelStyle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                    ),
             ),
           ),
           Expanded(child: Divider(height: 1, color: lineColor)),
         ],
-      ),
+      );
+      }),
     );
   }
 

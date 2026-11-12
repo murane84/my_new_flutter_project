@@ -513,6 +513,7 @@ def delete_single_message(message_id: int, delete_for_all: bool = Query(False), 
         message.media_mime = None
         message.media_size = None
         message.media_duration = None
+        message.meta = None
         message.reactions = None
         db.commit()
         _fanout_others(db, message, current_user.id, {

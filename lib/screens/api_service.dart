@@ -1369,6 +1369,7 @@ class ApiService {
     int? heartFor, // group heart meant for ONE member (only they can open)
     bool? heartSave, // sender lets the receiver save the heart's media
     String? poll, // group poll spec JSON {q, options, multi}
+    String? meta, // JSON extras, e.g. {"bed": {title, url, clip}}
   }) async {
     lastSendRefusal = null;
     try {
@@ -1395,6 +1396,7 @@ class ApiService {
         'heart_for': ?heartFor,
         'heart_save': ?heartSave,
         'poll': ?poll,
+        'meta': ?meta,
       };
       if (conversationId == null) payload['receiver_id'] = receiverId;
 
@@ -1875,6 +1877,31 @@ class ApiService {
       return [];
     } catch (e) {
       _logger.w('listSpaces failed: $e');
+      return [];
+    }
+  }
+
+  /// Our Playlist (the bond's shared crate), newest first. [] on failure.
+  Future<List<Map<String, dynamic>>> getPlaylist(int spaceId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return [];
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/playlist'),
+        headers: _authHeaders(token),
+      ).timeout(const Duration(seconds: 15));
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final data = jsonDecode(resp.body);
+        if (data is Map && data['tracks'] is List) {
+          return (data['tracks'] as List)
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      _logger.w('getPlaylist failed: $e');
       return [];
     }
   }

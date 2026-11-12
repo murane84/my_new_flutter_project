@@ -71,7 +71,13 @@ import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'user_profile_sheet.dart';
 import 'home_page.dart'
-    show playlistNotifier, playbackBus, WebSongDrag, HomePage;
+    show
+        playlistNotifier,
+        playbackBus,
+        WebSongDrag,
+        HomePage,
+        playLoadedSongByTitle,
+        loadedPathForTitle;
 import '../state/playback_state.dart' show providerContainer, nowPlayingProvider;
 import 'relationship_space_page.dart' show spaceEventBus;
 import 'dart:io';
@@ -157,6 +163,7 @@ part 'chat/chat_rituals.dart';        // good night + on this day
 part 'chat/chat_morning.dart';
 part 'chat/chat_voice_hello.dart';    // 5-second voice hello 🎙️        // deliver at their morning 🌅
 part 'chat/chat_music_moments.dart';  // song reactions, dedications, voice-over-music
+part 'chat/chat_song_memories.dart';  // day songs, keepsakes, song beds, heartbeat seen
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
 
@@ -597,6 +604,12 @@ class _ChatPageState extends State<ChatPage>
   bool _bondRitualsRan = false;
   // Song playing when the current voice note started (its caption).
   String? _recordSong;
+  // A song from Our Playlist going under the next voice note / inside the
+  // good-night heart as a lullaby (chat_song_memories.dart).
+  Map<String, dynamic>? _pendingBed;
+  Map<String, String>? _songDaysMemo;
+  int _songDaysSig = -1;
+  final Set<String> _songChipsDone = {};
   bool _amAdmin = false;
   final Set<String> _mentionCleared = {};
   List<Map<String, dynamic>>? _mentionCacheOf;
@@ -698,6 +711,7 @@ class _ChatPageState extends State<ChatPage>
   @override
   void initState() {
     super.initState();
+    _SongBed.fullUrl = fullMediaUrl;
     HardwareKeyboard.instance.addHandler(_emojiShortcut);
     // 🎤 Voice reply asked for this thread (notification / reply banner) →
     // start recording once the chat is up.
@@ -843,6 +857,7 @@ class _ChatPageState extends State<ChatPage>
 
   @override
   void dispose() {
+    unawaited(_SongBed.stop(fadeMs: 300)); // a song bed never outlives the chat
     pendingVoiceReply.removeListener(_onPendingVoice);
     pendingListenTogether.removeListener(_onPendingListen);
     _emojiPanelFocus.dispose();
@@ -1738,7 +1753,9 @@ class _ChatPageState extends State<ChatPage>
   /// HOST: start a live session with this friend, choosing a song from the
   /// music player's already-loaded playlist (falling back to the file browser
   /// only when nothing is loaded yet).
-  Future<void> _startListenTogether() async {
+  /// [presetTitle]: start with that song when it's loaded here (a
+  /// "listen again" / "play our song" tap) instead of asking which.
+  Future<void> _startListenTogether({String? presetTitle}) async {
     // A member's jam room is already live in this group → JOIN it rather
     // than opening a second room.
     if (_isGroup) {
@@ -1767,12 +1784,12 @@ class _ChatPageState extends State<ChatPage>
       final go = await listenTogetherGate(context,
           friendId: widget.friendId,
           name: _livePeerLabel,
-          retry: _startListenTogether);
+          retry: () => _startListenTogether(presetTitle: presetTitle));
       if (!go || !mounted) return;
     } else if (!await ensureListenTogetherNet(context,
         host: true,
         peerName: _livePeerLabel,
-        retry: _startListenTogether,
+        retry: () => _startListenTogether(presetTitle: presetTitle),
         sendInstead: playbackBus.onShareToChat)) {
       return;
     }
@@ -1784,8 +1801,15 @@ class _ChatPageState extends State<ChatPage>
       return;
     }
 
-    // Choose from the songs already loaded in the music player.
-    final chosenPath = await _pickFromLoadedPlaylist(loaded);
+    // The asked-for song if it's loaded; otherwise choose from the songs
+    // already loaded in the music player.
+    final preset =
+        presetTitle == null ? null : loadedPathForTitle(presetTitle);
+    if (presetTitle != null && preset == null && mounted) {
+      showToast(context, '“$presetTitle” isn’t loaded here — pick a song',
+          type: ToastType.info);
+    }
+    final chosenPath = preset ?? await _pickFromLoadedPlaylist(loaded);
     if (chosenPath == null || !mounted) return;
 
     Uint8List bytes;
@@ -2120,6 +2144,10 @@ class _ChatPageState extends State<ChatPage>
     final heartFor = (heart && _isGroup) ? _heartFor : null;
     final heartForName = heartFor == null ? null : _heartForName;
     final heartSave = (heart && attach != null && _heartSave) ? true : null;
+    // A good-night lullaby rides inside the heart.
+    final bedMeta = (heart && _pendingBed?['kind'] == 'lullaby')
+        ? _bedMeta(_pendingBed)
+        : null;
     _markActivity();
     _ctrl.clear();
     setState(() {
@@ -2131,6 +2159,7 @@ class _ChatPageState extends State<ChatPage>
       _heartFor = null;
       _heartForName = null;
       _heartSave = false;
+      if (bedMeta != null) _pendingBed = null;
     });
     _saveDraft(); // text now empty → clears the stored draft
     if (_isGroup) setState(_closeMentionPicker);
@@ -2155,6 +2184,7 @@ class _ChatPageState extends State<ChatPage>
         optimistic['unlock_at'] = unlockAt.toUtc().toIso8601String();
         optimistic['content'] = '';
       }
+      if (bedMeta != null) optimistic['meta'] = bedMeta;
     }
     _insertOptimistic(optimistic);
 
@@ -2197,7 +2227,8 @@ class _ChatPageState extends State<ChatPage>
             mediaName: up == null ? null : (up!['name'] ?? attach?.name) as String?,
             mediaMime: up == null ? null : (up!['mime'] ?? attach?.mime) as String?,
             mediaSize: (up?['size'] as num?)?.toInt(),
-            mediaDuration: attach?.durationMs));
+            mediaDuration: attach?.durationMs,
+            meta: bedMeta));
         if (heart && sent != null) {
           // A server that doesn't (yet) store heart fields echoes the message
           // without them — keep what I chose so my bubble doesn't snap back to
@@ -3039,6 +3070,7 @@ class _ChatPageState extends State<ChatPage>
         _isRecording = false;
         _recordMs = 0;
         _helloMode = false;
+        if (_pendingBed?['kind'] == 'voice') _pendingBed = null;
       });
     }
   }
@@ -3077,13 +3109,23 @@ class _ChatPageState extends State<ChatPage>
         _recordSong = null;
         return;
       }
+      // A song from Our Playlist going softly under it (missed-call note).
+      final bed = (!hello && _pendingBed?['kind'] == 'voice')
+          ? _pendingBed
+          : null;
+      if (bed != null) rebuildWith(() => _pendingBed = null);
       await _uploadAndSend(
         bytes: bytes,
         filename: 'voice_$durationMs.m4a',
         mime: 'audio/mp4',
         type: 'audio',
         durationMs: durationMs,
-        caption: hello ? _kVoiceHello : _voiceMusicCaption(),
+        caption: hello
+            ? _kVoiceHello
+            : bed != null
+                ? '🎵 with “${_clip('${bed['title']}', 48)}”'
+                : _voiceMusicCaption(),
+        meta: _bedMeta(bed),
       );
       _recordSong = null;
     } catch (_) {
@@ -5378,7 +5420,7 @@ class _ChatPageState extends State<ChatPage>
       default:
         label = 'Listen together ended';
     }
-    return Row(
+    final row = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 16, color: color),
@@ -5389,6 +5431,35 @@ class _ChatPageState extends State<ChatPage>
               color: color, fontSize: 14, fontWeight: FontWeight.w500),
         ),
       ],
+    );
+    if (outcome != 'listened') return row;
+    // A keepsake: the song we shared under it, and a tap opens what to do
+    // with the memory (play again · listen again · Our Playlist · keep).
+    final song = (msg['media_name'] as String?)?.trim() ?? '';
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _listenedSheet(msg),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          row,
+          if (song.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 22, top: 2),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 220),
+                child: Text('♪ $song',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: color.withValues(alpha: 0.8),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600)),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -5558,6 +5629,8 @@ class _ChatPageState extends State<ChatPage>
                   onKeep: _canHarmony ? () => _keepsakeMessage(msg) : null,
                   onSendBack: () => _startHeartBack(msg),
                   onFirstOpen: () => _reportHeartOpened(msg),
+                  // A good-night lullaby plays softly as it opens.
+                  onOpen: _bedOf(msg) == null ? null : () => _playLullaby(msg),
                   onUnsealDue: () => _unsealHeart(msg),
                   onSealedPeek: isMe ? () => _peekSealedHeart(msg) : null,
                   // Bonded-space gesture: double-tap to love back (❤ reaction).
@@ -7613,7 +7686,9 @@ class _ChatPageState extends State<ChatPage>
                           return Column(
                             children: [
                               if (showDate)
-                                _buildDateSeparator(dateLabel),
+                                _buildDateSeparator(dateLabel,
+                                    song: _songOnDay(
+                                        (msg['timestamp'] ?? '').toString())),
                               if (_unreadAnchorId != null &&
                                   msg['id'].toString() == _unreadAnchorId)
                                 _buildUnreadDivider(scheme, isDark),

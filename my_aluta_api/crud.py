@@ -9,6 +9,7 @@ from schemas import MessageCreate, FriendWithUnread
 import crud_conversations
 import net_grades
 from hearts import heart_kwargs, seal_media as hearts_seal_media
+from message_meta import clean_meta
 
 
 # Presence window: a user is shown "online" only if the server heard from them
@@ -67,6 +68,7 @@ def create_message(db: Session, sender_id: int, message: MessageCreate) -> Messa
         media_mime=message.media_mime,
         media_size=message.media_size,
         media_duration=message.media_duration,
+        meta=clean_meta(getattr(message, "meta", None)),
         timestamp=datetime.now(timezone.utc),
         is_read=False,
         delivered=False,

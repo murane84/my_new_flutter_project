@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from hearts import heart_kwargs, clean_target
+from message_meta import clean_meta
 
 from models import Conversation, ConversationMember, Message, User
 
@@ -154,6 +155,7 @@ def add_message(db: Session, conversation_id: int, sender_id: int, payload) -> M
         media_mime=getattr(payload, "media_mime", None),
         media_size=getattr(payload, "media_size", None),
         media_duration=getattr(payload, "media_duration", None),
+        meta=clean_meta(getattr(payload, "meta", None)),
         timestamp=_now(),
         is_read=False,
         delivered=False,

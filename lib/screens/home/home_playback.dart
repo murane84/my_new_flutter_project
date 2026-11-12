@@ -83,9 +83,16 @@ final playbackBus = PlaybackBus();
 /// player can't play by file — web). Used by "your song", a friend's music
 /// status, and Our Space's song of the week.
 bool playLoadedSongByTitle(String title) {
+  final path = loadedPathForTitle(title);
+  return path != null && (playbackBus.playPath?.call(path) ?? false);
+}
+
+/// The file path of one of MY loaded songs matching [title] (same loose
+/// match as [playLoadedSongByTitle]), or null.
+String? loadedPathForTitle(String title) {
   String norm(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
   final want = norm(title);
-  if (want.isEmpty) return false;
+  if (want.isEmpty) return null;
   String? exact, starts, contains;
   for (final p in playlistNotifier.value) {
     var name = p.split(RegExp(r'[\\/]')).last;
@@ -95,8 +102,7 @@ bool playLoadedSongByTitle(String title) {
     if (want.length >= 4 && n.startsWith(want)) starts ??= p;
     if (want.length >= 4 && n.contains(want)) contains ??= p;
   }
-  final path = exact ?? starts ?? contains;
-  return path != null && (playbackBus.playPath?.call(path) ?? false);
+  return exact ?? starts ?? contains;
 }
 
 // Command channel for the app-wide PLAYLIST DRAWER. The playlist UI lives in

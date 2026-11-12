@@ -694,6 +694,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
     String caption = '',
     bool hd = false,
     bool ephemeral = false,
+    String? meta, // e.g. a song bed under a voice note
   }) async {
     // Show the bubble immediately with a spinner in the tick slot; the upload +
     // send run in the background so the composer never blocks. The original
@@ -706,6 +707,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
     optimistic['media_mime'] = mime;
     optimistic['media_size'] = bytes.length;
     optimistic['media_duration'] = durationMs;
+    if (meta != null) optimistic['meta'] = meta;
     optimistic['__upProgress'] = 0.0;
     if (type == 'image') {
       // A local preview so the sent photo shows while it uploads.
@@ -792,6 +794,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
               mediaSize: (up['size'] as num?)?.toInt(),
               mediaDuration: durationMs,
               conversationId: widget.conversationId,
+              meta: meta,
             ));
         if (sent != null) {
           // Truly done now (uploaded AND the message was created). Fill the
@@ -979,6 +982,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
           durationMs: (msg['media_duration'] as num?)?.toInt() ?? 0,
           accent: scheme.primary,
           onColor: textColor,
+          bed: _bedOf(msg), // a song softly under the voice
           autoPlaySoft: _helloAutoId != null &&
               msg['id']?.toString() == _helloAutoId,
         );

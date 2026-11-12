@@ -245,6 +245,7 @@ class HeartBubble extends StatefulWidget {
     this.openedAt,
     this.justSent = false,
     this.onFirstOpen,
+    this.onOpen,
     this.onUnsealDue,
     this.onSealedPeek,
     this.onMenu,
@@ -319,6 +320,8 @@ class HeartBubble extends StatefulWidget {
 
   /// The recipient opened it for the first time → report the receipt.
   final VoidCallback? onFirstOpen;
+  // Every open (e.g. a good-night lullaby plays as it opens).
+  final VoidCallback? onOpen;
 
   /// A timed heart's moment just passed but its note hasn't arrived yet →
   /// ask the server to unseal it.
@@ -807,6 +810,7 @@ class _HeartBubbleState extends State<HeartBubble>
       _reported = true;
       widget.onFirstOpen?.call();
     }
+    widget.onOpen?.call();
     _syncBeat(); // opened → stop calling for attention
     if (!_sparkle && _awake) _sleep(); // …and let the stars fade away
     if (_isLong) {

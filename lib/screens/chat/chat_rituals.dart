@@ -143,6 +143,12 @@ extension _ChatRituals on _ChatPageState {
     });
     _markRitual('gn_done_${widget.friendId}');
     showToast(context, 'Sealed till 7 AM — they wake up to it 🌅');
+    // A lullaby from Our Playlist rides inside it (20 s, plays as it
+    // opens); the chip above the composer lets me change or drop it.
+    _ourSongBed(clip: 20).then((bed) {
+      if (bed == null || !mounted || !_heartMode) return;
+      rebuildWith(() => _pendingBed = {'kind': 'lullaby', ...bed});
+    });
   }
 
   void _dismissGoodNight() {
@@ -156,8 +162,27 @@ extension _ChatRituals on _ChatPageState {
       return false;
     }
     if (DateTime.now().hour < 18) return false;
+    // Listening together today keeps the streak too (the server counts it).
+    if (_listenedToday) return false;
     final w = _wroteToday;
     return !(w.mine && w.theirs);
+  }
+
+  /// We listened together today (a "Listened together" log in this chat).
+  bool get _listenedToday {
+    final now = DateTime.now();
+    for (final m in _messages) {
+      final d = _ts(m['timestamp']);
+      if (d == null) continue;
+      if (d.year != now.year || d.month != now.month || d.day != now.day) {
+        break; // newest-first: past today
+      }
+      if ((m['message_type'] ?? '') == 'live' &&
+          (m['content'] ?? '').toString().trim() == 'listened') {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// Who has written in this chat today (messages are newest-first).
@@ -185,9 +210,11 @@ extension _ChatRituals on _ChatPageState {
     final w = _wroteToday;
     final first = _livePeerLabel.trim().split(RegExp(r'\s+')).first;
     final days = '$_streakDays days in tune';
-    if (w.mine && !w.theirs) return '$days — nudge $first to keep it going';
+    if (w.mine && !w.theirs) {
+      return '$days — nudge $first, or play one song together';
+    }
     if (w.theirs && !w.mine) return '$days — reply tonight to keep it going';
-    return '$days — say something tonight to keep it';
+    return '$days — keep the fire: play one song together tonight';
   }
 
   /// Oldest-first: the most meaningful (furthest back) same-day message.
@@ -270,13 +297,34 @@ extension _ChatRituals on _ChatPageState {
 
   /// The chips row above the composer (good night / on this day).
   Widget _buildRitualChips(ColorScheme scheme, bool isDark) {
-    if (!MomentPrefs.instance.rituals.value) return const SizedBox.shrink();
+    final rituals = MomentPrefs.instance.rituals.value;
+    // Song memories: the pending song bed (always), missed-call voice note
+    // and long-call song (with the rituals).
+    final songChips = _songMemoryChips(rituals: rituals);
+    if (!rituals && songChips.isEmpty) return const SizedBox.shrink();
     final chips = <Widget>[];
     // More than one → they share a sideways row.
-    final memo = _onThisDay;
-    final many = [_showGoodNight, _annivToday && !_isGroup, _streakAtRisk,
-          memo != null && !_heartMode].where((b) => b).length > 1;
-    if (_showGoodNight) {
+    final memo = rituals ? _onThisDay : null;
+    final many = [
+          ...songChips.map((_) => true),
+          rituals && _showGoodNight,
+          rituals && _annivToday && !_isGroup,
+          rituals && _streakAtRisk,
+          memo != null && !_heartMode,
+        ].where((b) => b).length >
+        1;
+    for (final s in songChips) {
+      chips.add(_ritualChip(
+        inRow: many,
+        scheme: scheme,
+        isDark: isDark,
+        icon: s.icon,
+        label: s.label,
+        onTap: s.onTap,
+        onClose: s.onClose,
+      ));
+    }
+    if (rituals && _showGoodNight) {
       chips.add(_ritualChip(
         inRow: many,
         scheme: scheme,
@@ -287,7 +335,7 @@ extension _ChatRituals on _ChatPageState {
         onClose: _dismissGoodNight,
       ));
     }
-    if (_annivToday && !_isGroup) {
+    if (rituals && _annivToday && !_isGroup) {
       chips.add(_ritualChip(
         inRow: many,
         scheme: scheme,
@@ -309,7 +357,7 @@ extension _ChatRituals on _ChatPageState {
         },
       ));
     }
-    if (_streakAtRisk) {
+    if (rituals && _streakAtRisk) {
       chips.add(_ritualChip(
         inRow: many,
         scheme: scheme,
@@ -319,12 +367,18 @@ extension _ChatRituals on _ChatPageState {
         label: _streakNudgeLine,
         onTap: () {
           rebuildWith(() => _streakNudged = true);
-          _composerFocus.requestFocus();
+          final w = _wroteToday;
+          if (w.theirs && !w.mine) {
+            _composerFocus.requestFocus(); // "reply tonight"
+          } else {
+            // "…play one song together" → your song, in sync.
+            unawaited(_startListenTogether(presetTitle: _yourSongTitle));
+          }
         },
         onClose: () => rebuildWith(() => _streakNudged = true),
       ));
     }
-    final memory = _onThisDay;
+    final memory = memo;
     if (memory != null && !_heartMode) {
       final d = _ts(memory['timestamp'])!;
       final years = DateTime.now().year - d.year;

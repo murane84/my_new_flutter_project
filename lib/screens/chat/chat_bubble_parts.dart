@@ -358,10 +358,13 @@ class _VoiceNotePlayer extends StatefulWidget {
     required this.onColor,
     this.onPlaying,
     this.autoPlaySoft = false,
+    this.bed,
   });
 
   final String url;
   final int durationMs;
+  // A song from Our Playlist that plays softly underneath while it plays.
+  final Map<String, dynamic>? bed;
   // A "voice hello": play once, softly, as soon as it's on screen.
   final bool autoPlaySoft;
   final Color accent;
@@ -451,8 +454,17 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
         _player.pause();
         _player.seek(Duration.zero);
       }
-      widget.onPlaying?.call(s.playing &&
-          s.processingState != ja.ProcessingState.completed);
+      final on =
+          s.playing && s.processingState != ja.ProcessingState.completed;
+      widget.onPlaying?.call(on);
+      final bed = widget.bed;
+      if (bed != null) {
+        if (on) {
+          unawaited(_SongBed.play('voice-${widget.url}', bed));
+        } else {
+          unawaited(_SongBed.stop(owner: 'voice-${widget.url}'));
+        }
+      }
       setState(() {});
     });
     if (widget.autoPlaySoft && _autoPlayed.add(widget.url)) {
@@ -473,6 +485,9 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
   @override
   void dispose() {
     widget.onPlaying?.call(false); // a letter mid-countdown resumes
+    if (widget.bed != null) {
+      unawaited(_SongBed.stop(owner: 'voice-${widget.url}', fadeMs: 300));
+    }
     _speedN.removeListener(_onSpeed);
     if (identical(_active, this)) _active = null;
     _posSub?.cancel();

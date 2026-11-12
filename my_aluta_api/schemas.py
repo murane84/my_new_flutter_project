@@ -76,6 +76,8 @@ class MessageCreate(BaseModel):
     heart_mood: Optional[str] = None
     unlock_at: Optional[datetime] = None
     heart_save: Optional[bool] = None   # let the receiver save its media
+    # Song bed / lullaby (message_meta.py): {"bed": {...}}.
+    meta: Optional[str] = None
 
 
 class MessageEdit(BaseModel):
@@ -110,6 +112,7 @@ class Message(BaseModel):
     heart_locked: Optional[bool] = None # True: this copy was withheld from you
     heart_save: Optional[bool] = False  # sender allows saving its media
     poll: Optional[str] = None          # JSON poll state (polls.py)
+    meta: Optional[str] = None          # JSON extras (message_meta.py)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -145,6 +148,7 @@ class MessageWithSender(BaseModel):
     heart_locked: Optional[bool] = None # True: this copy was withheld from you
     heart_save: Optional[bool] = False  # sender allows saving its media
     poll: Optional[str] = None          # JSON poll state (polls.py)
+    meta: Optional[str] = None          # JSON extras (message_meta.py)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -210,6 +214,8 @@ class GroupMessageCreate(BaseModel):
     heart_for: Optional[int] = None
     # Polls (message_type 'poll'): JSON {"q", "options": [..], "multi"}.
     poll: Optional[str] = None
+    # Song bed / lullaby (message_meta.py): {"bed": {...}}.
+    meta: Optional[str] = None
 
 
 class AddMembers(BaseModel):

@@ -211,6 +211,9 @@ class LiveSessionController {
   DateTime? _sessionStartAt;
   bool _hadListener = false;
   bool _outcomeLogged = false;
+  // The song that was playing when we were first together — the history
+  // line remembers it ("Listened together" → date label + keepsake).
+  String? _togetherTitle;
 
   /// The host learned a listener declined — log 'declined' and suppress the
   /// end-of-session entry so we don't also post 'no answer'.
@@ -236,7 +239,11 @@ class LiveSessionController {
     unawaited(
       ApiService()
           .sendMessage(rid ?? 0, outcome,
-              messageType: 'live', mediaDuration: secs, conversationId: cid)
+              messageType: 'live',
+              mediaDuration: secs,
+              conversationId: cid,
+              // The song we shared (date label "♪ …" + keepsake).
+              mediaName: outcome == 'listened' ? _togetherTitle : null)
           .catchError((_) => null),
     );
   }
@@ -462,6 +469,7 @@ class LiveSessionController {
           .recordPlay(t, withName: activeLiveSession?.peerName));
     }
     currentTitle = t;
+    if (_hadListener) _togetherTitle ??= t;
     activeLiveSession?.title = t;
     // Push the new title straight into the media session so the now-playing
     // PRESENCE (NowPlayingPresence reads audioHandler.mediaItem) updates for
@@ -517,6 +525,7 @@ class LiveSessionController {
     _sessionStartAt = DateTime.now();
     _hadListener = false;
     _outcomeLogged = false;
+    _togetherTitle = null;
 
     // 1) Create the session on the server (metadata only — no audio uploaded).
     final base = await AppConfig.baseUrl;
@@ -589,6 +598,7 @@ class LiveSessionController {
     _sessionStartAt = DateTime.now();
     _hadListener = false;
     _outcomeLogged = false;
+    _togetherTitle = null;
 
     final base = await AppConfig.baseUrl;
     final res = await http.post(
@@ -2197,6 +2207,7 @@ class LiveSessionController {
         _peerEverPresent = true;
         _peerGraceful = false;
         _hadListener = true; // someone joined → history logs "listened"
+        if (currentTitle.isNotEmpty) _togetherTitle ??= currentTitle;
         if (rejoined) {
           final name = activeLiveSession?.peerName ?? 'Your friend';
           liveHostNotify?.call('$name reconnected');

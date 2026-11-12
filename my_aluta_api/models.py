@@ -154,6 +154,9 @@ class Message(Base):
     # ── Polls (message_type 'poll', groups) — see polls.py ───────────────────
     # JSON {"q": str, "options": [str], "multi": bool, "votes": {uid: [idx]}}
     poll = Column(Text, nullable=True)
+    # Small validated extras (message_meta.py), e.g. a song bed under a
+    # voice note / a good-night lullaby: {"bed": {"title", "url", "clip"}}.
+    meta = Column(Text, nullable=True)
 
     # New fields for visibility
     visible_to_sender = Column(Boolean, default=True)

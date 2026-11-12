@@ -524,6 +524,9 @@ extension _HomePageHelpers1 on HomePageState {
         }
       case 'feedback':
         showAppPopup(context, const FeedbackScreen(), avatarFlight: true);
+      case 'app_update':
+        // "Aluta 1.0.3 is ready" → straight to its card (Update / what's new).
+        AppUpdater.instance.check(context, manual: true);
       case 'space':
         final from = int.tryParse('${p['from']}');
         final space = from == null ? null : _spaceWithFriend(from);

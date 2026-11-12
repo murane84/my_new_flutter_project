@@ -166,7 +166,9 @@ extension _HomeMenu on HomePageState {
             if (AppUpdater.instance.supported)
               GenieMenuEntry(
                   icon: Icons.system_update_rounded,
-                  label: 'Check for updates',
+                  label: AppUpdater.instance.available.value == null
+                      ? 'Check for updates'
+                      : 'Update to ${AppUpdater.instance.available.value!['version']} ✨',
                   onTap: () =>
                       AppUpdater.instance.check(context, manual: true)),
           ],

@@ -891,6 +891,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     Future.delayed(const Duration(seconds: 8), () {
       if (mounted) AppUpdater.instance.check(context);
     });
+    // …and each time Aluta comes back to the front (same 6 h gate), so a
+    // phone that never closes the app still hears about a new build.
+    AppUpdater.instance.watchResume(() => context);
 
     // Android "Connected apps": surface Aluta actions ("Voice call on Aluta",
     // "Message on Aluta") under matched phone-book contacts, like WhatsApp /
@@ -2929,6 +2932,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
         break;
       }
       // (the open chat handles its own bubbles — don't swallow the event)
+    }
+    if (type == 'app_update') {
+      // Just published (server announce) → check now, toast if newer.
+      AppUpdater.instance.announced(context,
+          (event['build'] as num?)?.toInt() ?? 0, '${event['platform']}');
     }
     if (type == 'bond_ping' && event['kind'] == 'touch') {
       // My person is holding the heart and I'm elsewhere in the app: feel it

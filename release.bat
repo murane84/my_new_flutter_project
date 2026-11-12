@@ -64,8 +64,10 @@ echo == committing the version ==
 git add pubspec.yaml RELEASE_NOTES.txt
 git commit -q -m "Release %NAME% (build %BUILD%)"
 
-echo == web + server ==
-call deploy_web.bat || goto :err
+REM Publish to the server that's live NOW, then deploy. (Deploying first
+REM raced Railway's switch-over: the old server still answered, took the
+REM upload, and was stopped mid-way - phones kept seeing the old build.)
+set DEPLOY=1
 goto :publish_all
 
 :publish_only
@@ -82,34 +84,30 @@ if "%ALUTA_RELEASE_KEY%"=="" (
   echo.
   echo No ALUTA_RELEASE_KEY in this window - opening the uploader page.
   echo Version %NAME%, build %BUILD%. Files are in dist\
+  if "%DEPLOY%"=="1" call deploy_web.bat
   start "" "%URL%/admin/release"
   exit /b 0
 )
-REM Railway takes a minute or two to roll out a deploy: wait until the NEW
-REM server answers /app/latest with JSON (the old one sends the web app's
-REM HTML page) before sending the files (max ~6 min).
-echo == waiting for the server ==
-set /a TRIES=0
-:wait
-curl.exe -s "%URL%/app/latest?platform=android" | findstr /b /c:"{" >nul && goto :ready
-set /a TRIES+=1
-if %TRIES% GEQ 36 (
-  echo The server didn't come up in time. When it's live, run:  release.bat publish
-  exit /b 1
-)
-timeout /t 10 /nobreak >nul
-goto :wait
-:ready
-call :publish android aluta-%NAME%-arm64.apk || goto :pubfail
+REM Universal first: the arm64 publish is what announces the update, and
+REM older phones must find their file already there when they look.
 call :publish android-universal aluta-%NAME%-universal.apk || goto :pubfail
+call :publish android aluta-%NAME%-arm64.apk || goto :pubfail
 call :publish windows aluta-%NAME%-windows.zip || goto :pubfail
+echo == what phones see now ==
+curl.exe -s "%URL%/app/latest?platform=android"
+echo.
+if "%DEPLOY%"=="1" (
+  echo == web + server ==
+  call deploy_web.bat || goto :err
+)
 
 :done
 echo.
 echo ============================================================
 echo  Aluta %NAME% (build %BUILD%) is out.
-echo  Phones on older builds will offer the update within hours,
-echo  or at once from Menu - Account - Check for updates.
+echo  Open apps get an "is ready" toast now; closed phones get a
+echo  notification; anyone else sees it at next open.
+echo  Check: %URL%/app/latest?platform=android shows build %BUILD%
 echo ============================================================
 goto :eof
 

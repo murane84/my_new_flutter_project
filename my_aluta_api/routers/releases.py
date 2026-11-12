@@ -15,12 +15,14 @@ so storage stays flat and the download links never change.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import html
 import json
 import os
 import tempfile
+import threading
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -227,6 +229,7 @@ async def publish(
     build: int = Form(...),
     notes: str = Form(""),
     min_build: int | None = Form(None),
+    announce: bool = Form(True),
     file: UploadFile = File(...),
 ):
     if not _key_ok(key):
@@ -271,4 +274,65 @@ async def publish(
     }
     with open(_meta_path(platform), "w", encoding="utf-8") as f:
         json.dump(meta, f)
-    return {"ok": True, "on_volume": _on_volume(), **meta}
+    announced = _announce(meta) if announce else 0
+    return {"ok": True, "on_volume": _on_volume(), "announced": announced,
+            **meta}
+
+
+# The universal APK is the same build as the arm64 one — announcing both
+# would ping every phone twice. Windows apps hear it over their socket.
+_ANNOUNCE = ("android", "windows")
+_tasks: set = set()  # keep the socket fan-out task alive until it's done
+
+
+def _announce(meta: dict) -> int:
+    """Tell people a new build is out, so nobody sits on an old one.
+    Open apps get an `app_update` socket event (they check and show a toast);
+    closed Android apps get a data push that shows one quiet notification.
+    Each app compares the build with its own and ignores what it has.
+    Returns how many sockets were told."""
+    if meta["platform"] not in _ANNOUNCE:
+        return 0
+    evt = {
+        "type": "app_update",
+        "platform": meta["platform"],
+        "version": meta["version"],
+        "build": meta["build"],
+    }
+    told = 0
+    try:
+        from websocket_manager import broadcast_event, connected_users
+        uids = list(connected_users.keys())
+        told = len(uids)
+        t = asyncio.get_running_loop().create_task(broadcast_event(uids, evt))
+        _tasks.add(t)
+        t.add_done_callback(_tasks.discard)
+    except Exception as e:  # noqa: BLE001
+        print(f"[release] socket announce failed: {e}")
+    if meta["platform"] == "android":
+        first = next((l.strip(" -•*\t") for l in meta["notes"].splitlines()
+                      if l.strip(" -•*\t")), "")
+        threading.Thread(target=_push_android, daemon=True, args=(
+            {**evt, "note": first[:120]},)).start()
+    return told
+
+
+def _push_android(data: dict) -> None:
+    """One data push per Android user (background thread — FCM is slow)."""
+    try:
+        from database import SessionLocal
+        from models import DeviceToken
+        from push import push_available, send_push_to_user
+        if not push_available():
+            return
+        db = SessionLocal()
+        try:
+            uids = [r[0] for r in db.query(DeviceToken.user_id).filter(
+                DeviceToken.platform == "android").distinct().all()]
+        finally:
+            db.close()
+        for uid in uids:
+            send_push_to_user(uid, data, platform="android")
+        print(f"[release] pushed build {data['build']} to {len(uids)} user(s)")
+    except Exception as e:  # noqa: BLE001
+        print(f"[release] push announce failed: {e}")

@@ -4,11 +4,13 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'contact_names.dart';
 import 'group_meta.dart';
 import 'heartbeat_log.dart';
+import 'app_updater.dart';
 import 'notif_service.dart';
 import '../widgets/reply_banner.dart';
 import '../screens/api_service.dart';
@@ -315,6 +317,29 @@ Future<void> handleFcmData(Map<String, dynamic> data,
             ? null
             : data['message_id'].toString(),
         hushable: true,
+      );
+    } else if (type == 'app_update') {
+      // A new build was published. Open app: the socket already toasted it.
+      // Closed: one notification per build, only if it's newer than mine.
+      final build = int.tryParse('${data['build']}') ?? 0;
+      if (foreground || !AppUpdater.instance.supported) return;
+      final mineB =
+          int.tryParse((await PackageInfo.fromPlatform()).buildNumber) ?? 0;
+      final p = await SharedPreferences.getInstance();
+      if (build <= mineB || (p.getInt(AppUpdater.kPushed) ?? 0) >= build) {
+        return;
+      }
+      await p.setInt(AppUpdater.kPushed, build);
+      final note = (data['note'] ?? '').toString().trim();
+      await showAlutaNotification(
+        channel: alutaTeamChannel,
+        title: '✨ Aluta ${data['version'] ?? ''} is ready',
+        body: note.isEmpty
+            ? 'Tap to update — your chats stay as they are'
+            : '$note · tap to update',
+        id: alutaNotifId('app_update', '0'),
+        payload: {'kind': 'app_update'},
+        actions: const [(kOpen, 'Update')],
       );
     } else if (type == 'feedback_update') {
       final fid = (data['feedback_id'] ?? '').toString();

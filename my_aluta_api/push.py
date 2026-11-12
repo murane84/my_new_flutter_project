@@ -100,11 +100,13 @@ def push_available() -> bool:
     return _load_credentials() is not None and _project_id() is not None
 
 
-def _tokens_for(user_id: int) -> list[str]:
+def _tokens_for(user_id: int, platform: Optional[str] = None) -> list[str]:
     db = SessionLocal()
     try:
-        rows = db.query(DeviceToken).filter(
-            DeviceToken.user_id == user_id).all()
+        q = db.query(DeviceToken).filter(DeviceToken.user_id == user_id)
+        if platform:
+            q = q.filter(DeviceToken.platform == platform)
+        rows = q.all()
         return [r.token for r in rows]
     except Exception:  # noqa: BLE001
         return []
@@ -169,6 +171,7 @@ def send_push_to_user(
     user_id: int,
     data: dict,
     notification: Optional[dict] = None,
+    platform: Optional[str] = None,
 ) -> None:
     """Best-effort FCM data push to every registered device of {user_id}. Never
     raises. Data values are coerced to strings (FCM v1 requirement). Tokens FCM
@@ -187,7 +190,7 @@ def send_push_to_user(
                 "missing FIREBASE_PROJECT_ID, or google-auth not installed)."
             )
             return
-        tokens = _tokens_for(user_id)
+        tokens = _tokens_for(user_id, platform)
         if not tokens:
             print(
                 f"[push] SKIP user={user_id} type={kind}: user has 0 "

@@ -29,6 +29,14 @@ import 'haptics.dart';
 ///  • Windows: opens the new zip's download in the browser (a running app
 ///    can't replace its own files).
 ///
+/// How it reaches people (so nobody sits on an old build):
+///  • a toast "✨ Aluta 1.0.3 is ready" — Update starts it, a tap shows
+///    what's new, Later hides that build for a day;
+///  • after three Laters (or a build a week old) the card itself comes up;
+///  • checks at start-up and whenever the app comes back to the front
+///    (at most every 6 h), and at once when the server announces a
+///    publish (socket `app_update`, or a push while Aluta is closed).
+///
 /// Off on web / iOS / macOS / Linux, and in a store build
 /// (`--dart-define=PLAY_STORE=true`): Play forbids self-updating there.
 class AppUpdater {
@@ -38,6 +46,41 @@ class AppUpdater {
   static const bool _playStore = bool.fromEnvironment('PLAY_STORE');
   static const _kSnooze = 'update_snooze_v1'; // "<build>|<epoch ms>"
   static const _kChecked = 'update_checked_v1'; // epoch ms of last auto check
+  static const _kLaters = 'update_laters_v1'; // "<build>|<times Later>"
+  static const kPushed = 'update_pushed_v1'; // build last announced by push
+
+  /// The newer release found by the last check (null: up to date / unknown)
+  /// — the menu shows "Update to 1.0.3" from it.
+  final ValueNotifier<Map<String, dynamic>?> available =
+      ValueNotifier<Map<String, dynamic>?>(null);
+
+  AppLifecycleListener? _life;
+
+  /// From Home once: check again whenever Aluta comes back to the front
+  /// (still at most every 6 h — people who never close the app get it too).
+  void watchResume(BuildContext Function() context) {
+    if (!supported || _life != null) return;
+    _life = AppLifecycleListener(onResume: () {
+      final c = context();
+      if (c.mounted) check(c);
+    });
+  }
+
+  /// The server just published [build] (socket event): check now, past the
+  /// 6 h gate, if it's newer than mine. A little jitter so every open app
+  /// doesn't hit the server in the same second.
+  Future<void> announced(
+      BuildContext context, int build, String platform) async {
+    if (!supported || build <= 0) return;
+    // A Windows build means nothing to a phone, and the other way round.
+    if ((platform == 'windows') != !_android) return;
+    final mine =
+        int.tryParse((await PackageInfo.fromPlatform()).buildNumber) ?? 0;
+    if (build <= mine) return;
+    await Future.delayed(
+        Duration(milliseconds: 500 + DateTime.now().microsecond % 4000));
+    if (context.mounted) check(context, force: true);
+  }
 
   bool get _android => defaultTargetPlatform == TargetPlatform.android;
 
@@ -78,7 +121,10 @@ class AppUpdater {
           .get(Uri.parse('$base/app/latest?platform=android'))
           .timeout(const Duration(seconds: 12));
     }
-    if (resp.statusCode != 200) return null;
+    // Never call a failed answer "up to date" — that's how an unpublished
+    // or lost release hid itself. 404 = nothing published for this slot.
+    if (resp.statusCode == 404) throw const _NoRelease();
+    if (resp.statusCode != 200) throw Exception('HTTP ${resp.statusCode}');
     final data = Map<String, dynamic>.from(jsonDecode(resp.body) as Map);
     final mine = int.tryParse((await PackageInfo.fromPlatform()).buildNumber) ?? 0;
     final build = (data['build'] as num?)?.toInt() ?? 0;
@@ -89,7 +135,8 @@ class AppUpdater {
 
   /// At start-up: at most every 6 hours, quietly. [manual]: from the menu —
   /// always checks and says when everything is up to date.
-  Future<void> check(BuildContext context, {bool manual = false}) async {
+  Future<void> check(BuildContext context,
+      {bool manual = false, bool force = false}) async {
     if (!supported || _busy) {
       if (manual && !supported && context.mounted) {
         showToast(context, 'Updates for this app come from where you got it',
@@ -101,12 +148,13 @@ class AppUpdater {
     try {
       final p = await SharedPreferences.getInstance();
       final now = DateTime.now().millisecondsSinceEpoch;
-      if (!manual) {
+      if (!manual && !force) {
         final last = p.getInt(_kChecked) ?? 0;
         if (now - last < const Duration(hours: 6).inMilliseconds) return;
       }
       await p.setInt(_kChecked, now);
       final rel = await _newer();
+      available.value = rel;
       if (!context.mounted) return;
       if (rel == null) {
         if (manual) {
@@ -127,19 +175,97 @@ class AppUpdater {
           return;
         }
       }
-      await _offer(context, rel, required: required);
-    } catch (_) {
+      if (manual || required || await _escalate(p, rel)) {
+        await _offer(context, rel, required: required);
+      } else {
+        _nudge(context, rel);
+      }
+    } catch (e) {
       if (manual && context.mounted) {
-        showToast(context, 'Couldn’t check for updates — try again',
-            type: ToastType.error);
+        if (e is _NoRelease) {
+          showToast(context, 'No download is published for this device yet',
+              type: ToastType.info);
+        } else {
+          showToast(context, 'Couldn’t check for updates — try again',
+              type: ToastType.error);
+        }
       }
     } finally {
       _busy = false;
     }
   }
 
+  /// Put off three times, or out for a week → the card, not a toast.
+  Future<bool> _escalate(SharedPreferences p, Map<String, dynamic> rel) async {
+    final s = (p.getString(_kLaters) ?? '').split('|');
+    final laters = s.length == 2 && s[0] == '${rel['build']}'
+        ? int.tryParse(s[1]) ?? 0
+        : 0;
+    if (laters >= 3) return true;
+    final at = DateTime.tryParse((rel['updated_at'] ?? '').toString());
+    return at != null && DateTime.now().difference(at).inDays >= 7;
+  }
+
+  /// The gentle way: a toast that doesn't stop what they're doing.
+  void _nudge(BuildContext context, Map<String, dynamic> rel) {
+    Haptics.lightImpact();
+    final note = (rel['notes'] ?? '')
+        .toString()
+        .split('\n')
+        .map((l) => l.replaceFirst(RegExp(r'^[-•*]\s*'), '').trim())
+        .firstWhere((l) => l.isNotEmpty, orElse: () => '');
+    void open({bool start = false}) {
+      if (context.mounted) {
+        _offer(context, rel, required: false, start: start);
+      }
+    }
+
+    showToast(
+      context,
+      '✨ Aluta ${rel['version']} is ready',
+      type: ToastType.info,
+      duration: const Duration(seconds: 12),
+      detail: note.isEmpty ? 'Tap to see what’s new' : note,
+      onTap: open,
+      actions: [
+        ToastAction('Later', () => _later(rel)),
+        ToastAction('Update', () => open(start: true)),
+      ],
+    );
+  }
+
+  Future<void> _later(Map<String, dynamic> rel) async {
+    final p = await SharedPreferences.getInstance();
+    final b = '${rel['build']}';
+    final s = (p.getString(_kLaters) ?? '').split('|');
+    final n = (s.length == 2 && s[0] == b ? int.tryParse(s[1]) ?? 0 : 0) + 1;
+    await p.setString(_kLaters, '$b|$n');
+    await p.setString(_kSnooze, '$b|${DateTime.now().millisecondsSinceEpoch}');
+  }
+
+  /// The download page in the browser — the way out if the in-app
+  /// download or installer won't play along.
+  Future<void> openDownloadPage() async {
+    final base = await AppConfig.baseUrl;
+    await launchUrl(Uri.parse('$base/download'),
+        mode: LaunchMode.externalApplication);
+  }
+
   Future<void> _offer(BuildContext context, Map<String, dynamic> rel,
-      {required bool required}) async {
+      {required bool required, bool start = false}) async {
+    if (_sheetUp) return;
+    _sheetUp = true;
+    try {
+      await _showCard(context, rel, required: required, start: start);
+    } finally {
+      _sheetUp = false;
+    }
+  }
+
+  bool _sheetUp = false;
+
+  Future<void> _showCard(BuildContext context, Map<String, dynamic> rel,
+      {required bool required, required bool start}) async {
     final later = await showAdaptiveSheet<bool>(
       context: context,
       isDismissible: !required,
@@ -148,14 +274,11 @@ class AppUpdater {
       isScrollControlled: true,
       builder: (c) => PopScope(
         canPop: !required,
-        child: _UpdateCard(rel: rel, required: required, updater: this),
+        child: _UpdateCard(
+            rel: rel, required: required, start: start, updater: this),
       ),
     );
-    if (later == true) {
-      final p = await SharedPreferences.getInstance();
-      await p.setString(
-          _kSnooze, '${rel['build']}|${DateTime.now().millisecondsSinceEpoch}');
-    }
+    if (later == true) await _later(rel);
   }
 
   /// Download (with progress), verify, open the installer. Returns an error
@@ -214,12 +337,20 @@ class AppUpdater {
   }
 }
 
+class _NoRelease implements Exception {
+  const _NoRelease();
+}
+
 /// "Aluta 1.0.3 is ready" — what's new, Update / Later, then progress.
 class _UpdateCard extends StatefulWidget {
   const _UpdateCard(
-      {required this.rel, required this.required, required this.updater});
+      {required this.rel,
+      required this.required,
+      required this.updater,
+      this.start = false});
   final Map<String, dynamic> rel;
   final bool required;
+  final bool start; // Update tapped on the toast → begin right away
   final AppUpdater updater;
 
   @override
@@ -229,6 +360,16 @@ class _UpdateCard extends StatefulWidget {
 class _UpdateCardState extends State<_UpdateCard> {
   bool _working = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.start) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _update();
+      });
+    }
+  }
 
   Future<void> _update() async {
     Haptics.selectionClick();
@@ -330,12 +471,21 @@ class _UpdateCardState extends State<_UpdateCard> {
                       ),
                     ),
             ),
-            if (_error != null)
+            if (_error != null) ...[
               Padding(
-                padding: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.only(bottom: 4),
                 child: Text(_error!,
                     style: const TextStyle(color: Color(0xFFE53935))),
               ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: widget.updater.openDownloadPage,
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: const Text('Get it from the download page'),
+                ),
+              ),
+            ],
             if (defaultTargetPlatform == TargetPlatform.windows)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),

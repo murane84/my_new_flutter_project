@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_compress/video_compress.dart';
-import 'dart:convert' show base64Encode;
+import 'dart:convert' show base64Encode, jsonEncode;
 
 import '../../services/audio_handler.dart';
 import '../../utils/emoji_field.dart';
@@ -23,6 +23,8 @@ import '../../utils/radii.dart';
 import '../../utils/adaptive_sheet.dart';
 import '../../utils/depth.dart';
 import '../../widgets/keyboard_swap_panel.dart';
+import 'song_moment.dart';
+import 'story_viewer.dart' show StoryHooks;
 
 
 
@@ -498,6 +500,96 @@ class _MediaComposePageState extends State<_MediaComposePage> {
     }
   }
 
+  // A song moment under a photo status (song_moment.dart).
+  SongMoment? _moment;
+
+  Future<void> _addSong() async {
+    final m = await pickSongMoment(context);
+    if (m != null && mounted) setState(() => _moment = m);
+  }
+
+  /// A duo status: this photo goes to my person as "add your half"; when
+  /// they do, one side-by-side status goes live from both of us.
+  Future<void> _sendDuo(({int id, String name}) partner) async {
+    final bytes = _bytes;
+    if (bytes == null || _posting) return;
+    setState(() => _posting = true);
+    final mime = _mimeFor(widget.file, widget.kind);
+    final up = await ApiService().uploadMedia(
+        bytes: bytes, filename: widget.file.name, mime: mime);
+    final sent = up == null || up['url'] == null
+        ? null
+        : await ApiService().sendMessage(
+            partner.id, '📸 Duo status — add your half 💞',
+            messageType: 'image',
+            mediaUrl: up['url'].toString(),
+            mediaName: (up['name'] ?? widget.file.name).toString(),
+            mediaMime: (up['mime'] ?? mime).toString(),
+            mediaSize: (up['size'] as num?)?.toInt() ?? bytes.length,
+            meta: jsonEncode({'duo': 1}));
+    if (!mounted) return;
+    setState(() => _posting = false);
+    if (sent == null) {
+      _toast('Couldn’t send it — try again');
+      return;
+    }
+    final first = partner.name.trim().split(RegExp(r'\s+')).first;
+    _toast('Sent to $first — it goes live when they add their half 💞');
+    Navigator.pop(context);
+  }
+
+  Widget _songChip() {
+    final m = _moment;
+    String t(int ms) =>
+        '${ms ~/ 60000}:${((ms ~/ 1000) % 60).toString().padLeft(2, '0')}';
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Material(
+          color: Colors.white.withValues(alpha: 0.14),
+          shape: StadiumBorder(
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.25))),
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            onTap: _posting ? null : _addSong,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 7, 6, 7),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.music_note_rounded,
+                    size: 16, color: Colors.white),
+                const SizedBox(width: 6),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 220),
+                  child: Text(
+                      m == null
+                          ? 'Add a song'
+                          : '${m.title} · ${t(m.startMs)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w700)),
+                ),
+                if (m != null)
+                  InkResponse(
+                    onTap: () => setState(() => _moment = null),
+                    radius: 14,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 6),
+                      child: Icon(Icons.close_rounded,
+                          size: 15, color: Colors.white70),
+                    ),
+                  )
+                else
+                  const SizedBox(width: 6),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _post() async {
     final bytes = _bytes;
     if (bytes == null || _posting) return;
@@ -514,12 +606,24 @@ class _MediaComposePageState extends State<_MediaComposePage> {
       _toast('Upload failed — please try again');
       return;
     }
+    // The song moment travels as its own small clip.
+    final m = widget.kind == 'photo' ? _moment : null;
+    final song = m == null ? null : await uploadSongMoment(m);
+    if (!mounted) return;
+    if (m != null && song == null) {
+      setState(() => _posting = false);
+      _toast('Couldn’t add the song — try another, or post without it');
+      return;
+    }
     final created = await ApiService().createStory(
       kind: widget.kind,
       mediaAssetId: assetId,
       mediaMime: mime,
       caption: _caption.text.trim(),
       thumb: await _videoThumb(),
+      songAssetId: song?.$1,
+      songTitle: m?.title,
+      songStartMs: song?.$2,
     );
     if (!mounted) return;
     setState(() => _posting = false);
@@ -563,7 +667,30 @@ class _MediaComposePageState extends State<_MediaComposePage> {
             // keyboard height (image squeezed up + a blank gap). Just a little
             // breathing room; the Scaffold lifts this bar above the keyboard.
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-            child: Row(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              if (widget.kind == 'photo')
+                Row(children: [
+                  Flexible(child: _songChip()),
+                  if (StoryHooks.myPartner?.call() case final p?) ...[
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: ActionChip(
+                        backgroundColor: Colors.white.withValues(alpha: 0.14),
+                        side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.25)),
+                        shape: const StadiumBorder(),
+                        label: Text(
+                            '💞 Duo with ${p.name.trim().split(RegExp(r'\s+')).first}',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700)),
+                        onPressed: _posting ? null : () => _sendDuo(p),
+                      ),
+                    ),
+                  ],
+                ]),
+              Row(
               children: [
                 Expanded(
                   // Same pill (and keystroke ticks) as the chat composer.
@@ -609,6 +736,7 @@ class _MediaComposePageState extends State<_MediaComposePage> {
                       ),
               ],
             ),
+            ]),
           ),
           // Inline emoji panel: the caption bar stays visible directly above and
           // updates live as emojis are tapped (no covering modal sheet).

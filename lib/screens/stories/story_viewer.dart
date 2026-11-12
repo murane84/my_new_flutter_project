@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import 'package:just_audio/just_audio.dart' as ja;
 
 import '../../services/contact_names.dart';
 import 'dart:io';
@@ -52,6 +53,17 @@ class StoryHooks {
 
   /// Play this song from MY loaded songs. false = not in my songs.
   static bool Function(String title)? playOnMine;
+
+  /// Open our chat and start Listen Together with this song.
+  static void Function(BuildContext context, int authorId, String title)?
+      listenTogether;
+
+  /// My Harmony partner (for a duo status), or null.
+  static ({int id, String name})? Function()? myPartner;
+
+  /// Answer a status with a song from my player (sent to their chat).
+  static Future<void> Function(BuildContext context, int authorId,
+      String name, String about)? answerWithSong;
 }
 
 /// The shared-element tag of an author's story photo (tray bubble ⇄ the
@@ -473,6 +485,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     _replyCtrl.dispose();
     _progress.dispose();
     _disposeVideo();
+    _song?.dispose();
     super.dispose();
   }
 
@@ -497,6 +510,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     _awaitArt = false;
     _artProvider = null;
     _progress.duration = _photoDuration;
+    _stopSong();
 
     // Mark seen (not for my own stories — the backend ignores self-views).
     final item = _story;
@@ -504,6 +518,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       item.viewed = true;
       _group.hasUnseen = _group.stories.any((s) => !s.viewed);
       ApiService().markStoryViewed(item.id);
+    }
+
+    // A song moment plays under it (and the status lasts as long).
+    if (!item.isVideo && (item.songUrl ?? '').isNotEmpty) {
+      _playSong(item, gen).ignore();
     }
 
     if (item.isVideo && item.mediaUrl != null) {
@@ -782,6 +801,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     _paused = true;
     _progress.stop();
     _video?.pause();
+    if (_songOn) _song?.pause();
     if (mounted) setState(() {}); // freeze the GIF too
   }
 
@@ -797,6 +817,53 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     } else {
       _progress.forward();
     }
+    if (_songOn) _song?.play();
+  }
+
+  // ── Song moment: a photo / text status with a song under it ───────────────
+  ja.AudioPlayer? _song;
+  bool _songOn = false;
+  bool _songMuted = false;
+  static const Duration _songMoment = Duration(seconds: 15);
+
+  void _stopSong() {
+    if (!_songOn) return;
+    _songOn = false;
+    _song?.stop();
+  }
+
+  /// Start the status's song at its moment; the status lasts as long as it.
+  Future<void> _playSong(StoryItem item, int gen) async {
+    final rel = item.songUrl;
+    if (rel == null || rel.isEmpty) return;
+    _progress.duration = _songMoment;
+    final url = _absUrl(rel);
+    final headers = mediaAuthHeaders(url);
+    // Web <audio> can't send headers: the token rides as ?token= instead.
+    var uri = Uri.parse(url);
+    var hdrs = headers;
+    if (kIsWeb) {
+      final auth = headers['Authorization'] ?? '';
+      final tok = auth.startsWith('Bearer ') ? auth.substring(7).trim() : '';
+      if (tok.isNotEmpty) {
+        uri = Uri.parse('$url${url.contains('?') ? '&' : '?'}'
+            'token=${Uri.encodeQueryComponent(tok)}');
+      }
+      hdrs = const {};
+    }
+    try {
+      final p = _song ??= ja.AudioPlayer();
+      await p.setVolume(_songMuted ? 0 : 1);
+      await p.setAudioSource(ja.AudioSource.uri(uri, headers: hdrs));
+      if (!mounted || gen != _gen) return;
+      if (item.songStartMs > 0) {
+        await p.seek(Duration(milliseconds: item.songStartMs));
+      }
+      if (!mounted || gen != _gen) return;
+      _songOn = true;
+      // Never await play(): its future completes when the clip ENDS.
+      if (!_paused) p.play();
+    } catch (_) {}
   }
 
   double _activeFraction() {
@@ -916,7 +983,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                   // content, so skip the bottom caption bar for them.
                   if (!item.isText && (item.caption ?? '').isNotEmpty)
                     _captionBar(item),
-                  if (!_group.isMe) _storyActions(item),
+                  // (Mine too: the song chip; the rest are for friends.)
+                  _storyActions(item),
                   if (_group.isMe) _authorFooter(item) else _replyBar(),
                   const SizedBox(height: 12),
                 ],
@@ -1414,6 +1482,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         .map(StoryViewer.fromJson)
         .where((v) => v.userId != widget.myUserId)
         .toList();
+    // My person first, with a 💞 — the view that matters most.
+    bool mine(StoryViewer v) => (StoryHooks.closeness?.call(v.userId) ?? 0) == 2;
+    viewers.sort((a, b) => (mine(b) ? 1 : 0) - (mine(a) ? 1 : 0));
     // Per viewer: null = idle, '…' = sending, else what was sent. One nudge
     // per viewer per status — remembered on this device, so nobody gets a
     // second wave for the same status.
@@ -1559,9 +1630,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                        (v.reaction ?? '').isEmpty
-                                            ? name
-                                            : '$name  ${v.reaction}',
+                                        '${mine(v) ? '💞 ' : ''}'
+                                        '${(v.reaction ?? '').isEmpty ? name : '$name  ${v.reaction}'}',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
@@ -1752,20 +1822,32 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     final name = _displayName();
     final title = (item.musicTitle ?? '').trim();
     final music = item.isMusic && title.isNotEmpty;
-    final live = music && (StoryHooks.isPlayingNow?.call(author) ?? false);
-    final bonded = StoryHooks.isBonded?.call(author) ?? false;
+    final mine = _group.isMe;
+    final live = !mine &&
+        music &&
+        (StoryHooks.isPlayingNow?.call(author) ?? false);
+    final bonded = !mine && (StoryHooks.isBonded?.call(author) ?? false);
     final keepable = item.isMusic ||
         item.isSticker ||
         ((item.isPhoto || item.isVideo) && item.mediaUrl != null) ||
         (item.isText && (item.caption ?? '').trim().isNotEmpty);
+    final songTitle = (item.songTitle ?? '').trim();
     final chips = <Widget>[
+      // The song under this status: tap to mute / unmute it.
+      if (songTitle.isNotEmpty)
+        _actionChip(_songMuted ? '🔇' : '🎵',
+            songTitle.length > 28 ? '${songTitle.substring(0, 27)}…' : songTitle,
+            () {
+          setState(() => _songMuted = !_songMuted);
+          _song?.setVolume(_songMuted ? 0 : 1);
+        }),
       if (live && StoryHooks.tuneIn != null)
         _actionChip('🎧', 'Tune in', () {
           _pause();
           StoryHooks.tuneIn!(context, author, name, title);
         }),
       // Not on web: its player has no loaded-file paths to match.
-      if (music && StoryHooks.playOnMine != null && !kIsWeb)
+      if (!mine && music && StoryHooks.playOnMine != null && !kIsWeb)
         _actionChip('▶', 'Play on mine', () {
           final ok = StoryHooks.playOnMine!(title);
           ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
@@ -1775,6 +1857,20 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
             duration: const Duration(milliseconds: 1800),
             behavior: SnackBarBehavior.floating,
           ));
+        }),
+      // A music status → listen to it together, in sync.
+      if (music && StoryHooks.listenTogether != null && !_group.isMe)
+        _actionChip('🎧', 'Listen together', () {
+          _pause();
+          StoryHooks.listenTogether!(context, author, title);
+        }),
+      // Answer any status with a song ("this reminds me of…").
+      if (!_group.isMe && StoryHooks.answerWithSong != null)
+        _actionChip('🎵', 'Answer with a song', () async {
+          _pause();
+          await StoryHooks.answerWithSong!(
+              context, author, name, _statusLabel(item));
+          if (mounted) _resume();
         }),
       if (bonded && keepable)
         _actionChip('💞', 'Keep', () async {
@@ -1799,6 +1895,19 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         children: chips,
       ),
     );
+  }
+
+  /// "📷 your photo status" / "🎵 your “Song” status" — what a song answers.
+  String _statusLabel(StoryItem item) {
+    if (item.isMusic) return 'your “${item.musicTitle ?? 'song'}” status';
+    if (item.isVideo) return 'your video status';
+    if (item.isText) {
+      final t = (item.caption ?? '').trim();
+      return t.isEmpty
+          ? 'your status'
+          : 'your status “${t.length > 40 ? '${t.substring(0, 39)}…' : t}”';
+    }
+    return 'your photo status';
   }
 
   Widget _actionChip(String emoji, String label, VoidCallback onTap) {

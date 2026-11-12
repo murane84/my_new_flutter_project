@@ -361,6 +361,12 @@ class StoryCreate(BaseModel):
     background: Optional[str] = None
     # Video story: a tiny JPEG preview as a data URI (stories list).
     thumb: Optional[str] = None
+    # A song moment under a photo / text status (an uploaded clip).
+    song_asset_id: Optional[str] = None
+    song_title: Optional[str] = None
+    song_start_ms: Optional[int] = None
+    # Duo status: my bonded partner, posting it with me.
+    co_author_id: Optional[int] = None
 
 
 class StoryOut(BaseModel):
@@ -377,6 +383,10 @@ class StoryOut(BaseModel):
     music_art_url: Optional[str] = None
     background: Optional[str] = None
     thumb: Optional[str] = None
+    song_url: Optional[str] = None
+    song_title: Optional[str] = None
+    song_start_ms: Optional[int] = None
+    co_author_id: Optional[int] = None
     created_at: datetime
     expires_at: datetime
     # Has the requesting user already viewed this story?

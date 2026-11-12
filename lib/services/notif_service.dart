@@ -117,6 +117,10 @@ final ValueNotifier<String?> pendingVoiceReply = ValueNotifier<String?>(null);
 final ValueNotifier<String?> pendingListenTogether =
     ValueNotifier<String?>(null);
 
+/// The song that Listen Together should start with (e.g. "Listen together"
+/// on a friend's music status). Read once by the chat that starts it.
+String? pendingListenTitle;
+
 // ── Aluta notifications (everything that isn't a chat message or a call) ────
 // Listen Together invites, tune-in requests, Our Space moments, reactions and
 // Aluta-team replies. Each lives on its own channel (so it can be muted on

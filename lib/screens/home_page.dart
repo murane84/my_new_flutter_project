@@ -100,6 +100,7 @@ import 'group_call_screen.dart';
 import 'stories/stories_tray.dart';
 import 'stories/story_models.dart';
 import 'stories/story_viewer.dart';
+import 'stories/song_moment.dart' show pickLoadedSong;
 import '../services/story_mute.dart';
 import '../services/block_list.dart';
 import '../services/story_posting.dart';
@@ -736,6 +737,31 @@ class HomePageState extends rp.ConsumerState<HomePage>
     StoryHooks.tuneIn = (ctx, id, name, title) =>
         askToTuneIn(ctx, friendId: id, name: name, title: title);
     StoryHooks.playOnMine = _playLoadedSong;
+    // A music status → our chat, Listen Together starting with that song.
+    StoryHooks.listenTogether = (ctx, id, title) {
+      Navigator.of(ctx).maybePop(); // leave the viewer
+      pendingListenTitle = title;
+      pendingListenTogether.value = 's$id';
+      _handleMessageTap({
+        'type': 'message',
+        'friend_id': '$id',
+        'sender_name': _nameForUser(id),
+      });
+    };
+    StoryHooks.answerWithSong = _answerStatusWithSong;
+    StoryHooks.myPartner = () {
+      final s = _primarySpace;
+      if (s == null || (s['status'] != null && s['status'] != 'active')) {
+        return null;
+      }
+      for (final m in ((s['members'] as List?) ?? const []).whereType<Map>()) {
+        final id = (m['id'] as num?)?.toInt();
+        if (id != null && id != _myUserId) {
+          return (id: id, name: _nameForUser(id));
+        }
+      }
+      return null;
+    };
     // Scrolled back up by hand → the "↑ N new" chip has done its job.
     _circleScroll.addListener(() {
       if (_newWhileAway.isNotEmpty &&
@@ -4004,6 +4030,46 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// Play a song from MY loaded songs, matched loosely by title (exact,
   /// then "file starts with / contains it"). false = not loaded here.
   bool _playLoadedSong(String title) => playLoadedSongByTitle(title);
+
+  /// "🎵 Answer with a song" on a friend's status: pick one of my songs; it
+  /// goes to our chat as a playable song, with a line saying what it's for.
+  Future<void> _answerStatusWithSong(
+      BuildContext ctx, int id, String name, String about) async {
+    final first = name.trim().split(RegExp(r'\s+')).first;
+    final pick = await pickLoadedSong(ctx,
+        title: 'Answer with a song',
+        subtitle: 'It goes to $first’s chat, for $about');
+    if (pick == null) return;
+    final api = ApiService();
+    try {
+      final bytes = await pick.load();
+      if (bytes.length > 25 * 1024 * 1024) throw Exception('too big');
+      final mime = pick.fileName.toLowerCase().endsWith('.m4a')
+          ? 'audio/mp4'
+          : 'audio/mpeg';
+      final up = await api.uploadMedia(
+          bytes: bytes, filename: pick.fileName, mime: mime, ephemeral: true);
+      if (up == null || up['url'] == null) throw Exception('upload');
+      await api.sendMessage(id, '🎵 This one’s for $about',
+          messageType: 'text');
+      final sent = await api.sendMessage(id, pick.title,
+          messageType: 'song',
+          mediaUrl: up['url'].toString(),
+          mediaName: (up['name'] ?? pick.fileName).toString(),
+          mediaMime: (up['mime'] ?? mime).toString(),
+          mediaSize: (up['size'] as num?)?.toInt() ?? bytes.length);
+      if (sent == null) throw Exception('send');
+      if (ctx.mounted) {
+        showToast(ctx, '🎵 “${pick.title}” sent to $first',
+            type: ToastType.success);
+      }
+    } catch (_) {
+      if (ctx.mounted) {
+        showToast(ctx, 'Couldn’t send that song — try again',
+            type: ToastType.error);
+      }
+    }
+  }
 
   /// My person is holding the heart while I'm elsewhere in the app: a
   /// lub-dub, and (at most every 15 s) a quiet line saying who.

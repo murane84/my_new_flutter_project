@@ -5,6 +5,7 @@
           opens: {"title": str, "url": "/attachments/<id>", "clip": secs}
   date  — a planned meeting day "YYYY-MM-DD" (the chat counts down to it)
   quiet — sent while they sleep: the push arrives without sound
+  duo   — a photo sent as half of a duo status ("add your half")
 Anything else is dropped, and the whole thing stays tiny.
 """
 from __future__ import annotations
@@ -47,4 +48,7 @@ def clean_meta(raw) -> Optional[str]:
         out["date"] = day
     if data.get("quiet") in (True, 1, "1"):
         out["quiet"] = 1
+    # A duo status invite: "add your half" to this photo.
+    if data.get("duo") in (True, 1, "1"):
+        out["duo"] = 1
     return json.dumps(out, separators=(",", ":")) if out else None

@@ -65,6 +65,15 @@ def _may_see(db: Session, viewer: int, author: int) -> bool:
     return author in privacy.status_authors_visible_to(db, viewer, [author])
 
 
+def _may_see_story(db: Session, viewer: int, story: Story) -> bool:
+    """[viewer] may see this story: via its author, or — a duo — its
+    co-author."""
+    if _may_see(db, viewer, story.author_id):
+        return True
+    co = getattr(story, "co_author_id", None)
+    return co is not None and _may_see(db, viewer, int(co))
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -109,6 +118,11 @@ def _story_out(story: Story, *, viewed: bool, view_count: int = 0) -> schemas.St
         music_art_url=story.music_art_url,
         background=story.background,
         thumb=getattr(story, "thumb", None),
+        song_url=(f"/stories/media/{story.song_asset_id}"
+                  if getattr(story, "song_asset_id", None) else None),
+        song_title=getattr(story, "song_title", None),
+        song_start_ms=getattr(story, "song_start_ms", None),
+        co_author_id=getattr(story, "co_author_id", None),
         created_at=story.created_at,
         expires_at=story.expires_at,
         viewed=viewed,
@@ -164,6 +178,23 @@ def create_story(
         if not (payload.music_title or payload.caption):
             raise HTTPException(status_code=400, detail="Nothing to post")
 
+    # A song moment: the clip must be my own upload; only under a photo /
+    # text / sticker status.
+    song_id = (payload.song_asset_id or "").strip() or None
+    if song_id:
+        if kind not in ("photo", "text", "sticker"):
+            song_id = None
+        else:
+            sa = db.query(MediaAsset).filter(MediaAsset.id == song_id).first()
+            if not sa or sa.uploader_id != current_user.id:
+                raise HTTPException(status_code=400, detail="Unknown song")
+    # A duo: only with a mutual friend (my bonded partner, in practice).
+    co = payload.co_author_id
+    if co is not None:
+        if int(co) == current_user.id or \
+                int(co) not in set(_get_friend_ids(db, current_user.id)):
+            co = None
+
     # Sane sizes for what every viewer downloads and renders.
     if len(payload.caption or "") > 2000 or \
             len(payload.music_title or "") > 300 or \
@@ -210,6 +241,10 @@ def create_story(
         music_art_url=(payload.music_art_url or None),
         background=(payload.background or None),
         thumb=_clean_thumb(getattr(payload, "thumb", None)) if kind == "video" else None,
+        song_asset_id=song_id,
+        song_title=((payload.song_title or "").strip()[:200] or None) if song_id else None,
+        song_start_ms=max(0, int(payload.song_start_ms or 0)) if song_id else None,
+        co_author_id=co,
         created_at=now,
         expires_at=now + STORY_TTL,
     )
@@ -249,9 +284,12 @@ def stories_feed(
         db, me, _story_circle(db, me))
     author_ids.add(me)
 
+    from sqlalchemy import or_
     stories = (
         db.query(Story)
-        .filter(Story.author_id.in_(author_ids), Story.expires_at > now)
+        .filter(or_(Story.author_id.in_(author_ids),
+                    Story.co_author_id.in_(author_ids)),
+                Story.expires_at > now)
         .order_by(Story.created_at.asc())
         .all()
     )
@@ -269,7 +307,8 @@ def stories_feed(
     }
 
     # View counts for MY own stories only (others don't get to see counts).
-    my_story_ids = [s.id for s in stories if s.author_id == me]
+    my_story_ids = [s.id for s in stories
+                    if s.author_id == me or getattr(s, "co_author_id", None) == me]
     counts: dict[str, int] = {}
     if my_story_ids:
         for sid, c in (
@@ -284,9 +323,14 @@ def stories_feed(
         u.id: u for u in db.query(User).filter(User.id.in_(author_ids)).all()
     }
 
+    # A duo status shows under BOTH people (each whose circle includes me).
     grouped: dict[int, list[Story]] = {}
     for s in stories:
-        grouped.setdefault(s.author_id, []).append(s)
+        if s.author_id in author_ids:
+            grouped.setdefault(s.author_id, []).append(s)
+        co = getattr(s, "co_author_id", None)
+        if co is not None and co in author_ids and co != s.author_id:
+            grouped.setdefault(co, []).append(s)
 
     def group_out(aid: int) -> schemas.StoryGroupOut:
         u = authors.get(aid)
@@ -334,15 +378,18 @@ def get_story_media(
     friends, and only while the story is still active. Flexible auth so the web
     <img>/<video> can pass the token as a ?token= query param."""
     now = _now()
+    from sqlalchemy import or_
     story = (
         db.query(Story)
-        .filter(Story.media_asset_id == asset_id, Story.expires_at > now)
+        .filter(or_(Story.media_asset_id == asset_id,
+                    Story.song_asset_id == asset_id),
+                Story.expires_at > now)
         .first()
     )
     if not story:
         # Either no such story, or it has expired.
         raise HTTPException(status_code=404, detail="Story not found")
-    if not _may_see(db, current_user.id, story.author_id):
+    if not _may_see_story(db, current_user.id, story):
         raise HTTPException(status_code=403, detail="Not authorized to view this story")
 
     asset = db.query(MediaAsset).filter(MediaAsset.id == asset_id).first()
@@ -370,9 +417,9 @@ def mark_viewed(
     story = db.query(Story).filter(Story.id == story_id).first()
     if not story or story.expires_at <= now:
         raise HTTPException(status_code=404, detail="Story not found")
-    if not _may_see(db, me, story.author_id):
+    if not _may_see_story(db, me, story):
         raise HTTPException(status_code=403, detail="Not authorized to view this story")
-    if story.author_id == me:
+    if story.author_id == me or getattr(story, "co_author_id", None) == me:
         return {"ok": True}  # don't record self-views
 
     exists = (
@@ -399,7 +446,8 @@ def story_viewers(
     story = db.query(Story).filter(Story.id == story_id).first()
     if not story:
         raise HTTPException(status_code=404, detail="Story not found")
-    if story.author_id != current_user.id:
+    if current_user.id not in (story.author_id,
+                               getattr(story, "co_author_id", None)):
         raise HTTPException(status_code=403, detail="Only the author can see viewers")
 
     rows = (
@@ -450,8 +498,8 @@ def react_to_story(
     story = db.query(Story).filter(Story.id == story_id).first()
     if not story or story.expires_at <= _now():
         raise HTTPException(status_code=404, detail="Story not found")
-    if story.author_id == current_user.id or not _may_see(
-            db, current_user.id, story.author_id):
+    if story.author_id == current_user.id or not _may_see_story(
+            db, current_user.id, story):
         raise HTTPException(status_code=403, detail="Not your story to react to")
     row = db.query(StoryReaction).filter(
         StoryReaction.story_id == story_id,

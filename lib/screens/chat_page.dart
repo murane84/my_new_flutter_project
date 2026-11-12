@@ -10,6 +10,7 @@ import '../services/notif_service.dart'
     show
         cancelConversationNotifications,
         pendingListenTogether,
+        pendingListenTitle,
         pendingVoiceReply;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, compute, kIsWeb;
@@ -621,6 +622,7 @@ class _ChatPageState extends State<ChatPage>
   Timer? _partnerHoldEnd;
   Map<String, dynamic>? _sendBedOnce; // next send carries our song
   String? _sendDateOnce; // next send plans a date (YYYY-MM-DD)
+  bool _duoBusy = false; // making a duo status
   bool _amAdmin = false;
   final Set<String> _mentionCleared = {};
   List<Map<String, dynamic>>? _mentionCacheOf;
@@ -3026,8 +3028,11 @@ class _ChatPageState extends State<ChatPage>
     }
     pendingListenTogether.value = null;
     // Let the thread settle first (the song picker opens over it).
+    // A song asked for (a music status's "Listen together") starts it.
+    final title = pendingListenTitle;
+    pendingListenTitle = null;
     Future.delayed(const Duration(milliseconds: 450), () {
-      if (mounted) _startListenTogether();
+      if (mounted) _startListenTogether(presetTitle: title);
     });
   }
 

@@ -516,6 +516,14 @@ class Story(Base):
     # status list can show what it is before it's opened (photos use the
     # photo itself).
     thumb = Column(Text, nullable=True)
+    # A song moment under a photo / text status: the clip (its own story
+    # asset, ephemeral like the photo), its title, and where to start (ms).
+    song_asset_id = Column(String, nullable=True)
+    song_title = Column(String, nullable=True)
+    song_start_ms = Column(Integer, nullable=True)
+    # A duo status: posted by one partner WITH the other — it shows in both
+    # people's status lists as one post.
+    co_author_id = Column(Integer, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), index=True, nullable=False)

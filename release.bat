@@ -49,7 +49,9 @@ if not exist dist mkdir dist
 del /f /q dist\* 2>nul
 copy /y build\app\outputs\flutter-apk\app-arm64-v8a-release.apk dist\aluta-%NAME%-arm64.apk >nul || goto :err
 copy /y build\app\outputs\flutter-apk\app-release.apk dist\aluta-%NAME%-universal.apk >nul || goto :err
-tar -a -c -f dist\aluta-%NAME%-windows.zip -C build\windows\x64\runner\Release . || goto :err
+REM Zip with Windows' own zipper: tar's "./" entries made Explorer show the
+REM zip as EMPTY (and an odd archive looks more suspicious to scanners).
+powershell -NoProfile -Command "Compress-Archive -Path 'build\windows\x64\runner\Release\*' -DestinationPath 'dist\aluta-%NAME%-windows.zip' -Force" || goto :err
 del /f /q pubspec.yaml.bak 2>nul
 echo == Files in dist\ ==
 dir /b dist

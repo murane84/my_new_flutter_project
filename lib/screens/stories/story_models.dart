@@ -15,6 +15,11 @@ class StoryItem {
   final String? musicArtUrl;
   final String? background; // text-only story background colour hex
   final String? thumb; // video: tiny JPEG data URI (status list preview)
+  // A song moment under a photo / text status.
+  final String? songUrl; // /stories/media/<asset>
+  final String? songTitle;
+  final int songStartMs;
+  final int? coAuthorId; // a duo status, posted with my person
   final DateTime? createdAt;
   final DateTime? expiresAt;
   bool viewed; // mutable so the viewer can flip it locally
@@ -32,6 +37,10 @@ class StoryItem {
     this.musicArtUrl,
     this.background,
     this.thumb,
+    this.songUrl,
+    this.songTitle,
+    this.songStartMs = 0,
+    this.coAuthorId,
     this.createdAt,
     this.expiresAt,
     this.viewed = false,
@@ -59,6 +68,10 @@ class StoryItem {
         musicArtUrl: j['music_art_url'] as String?,
         background: j['background'] as String?,
         thumb: j['thumb'] as String?,
+        songUrl: j['song_url'] as String?,
+        songTitle: j['song_title'] as String?,
+        songStartMs: (j['song_start_ms'] as num?)?.toInt() ?? 0,
+        coAuthorId: (j['co_author_id'] as num?)?.toInt(),
         createdAt: _dt(j['created_at']),
         expiresAt: _dt(j['expires_at']),
         viewed: j['viewed'] == true,

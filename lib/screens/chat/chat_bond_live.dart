@@ -227,6 +227,77 @@ extension _ChatBondLive on _ChatPageState {
     await _sendMessage();
   }
 
+  // ── Duo status ─────────────────────────────────────────────────────────────
+
+  /// My person sent half of a duo status: add my photo → one side-by-side
+  /// status goes live, from both of us.
+  Future<void> _addDuoHalf(Map<String, dynamic> msg) async {
+    final rel = (msg['media_url'] as String?) ?? '';
+    final partnerId = int.tryParse('${msg['sender_id']}');
+    if (rel.isEmpty || partnerId == null) return;
+    final src = await showAdaptiveSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (!kIsWeb)
+            ListTile(
+              leading: const Icon(Icons.photo_camera_rounded),
+              title: const Text('Take my half'),
+              onTap: () => Navigator.pop(c, ImageSource.camera),
+            ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_rounded),
+            title: const Text('Choose a photo'),
+            onTap: () => Navigator.pop(c, ImageSource.gallery),
+          ),
+        ]),
+      ),
+    );
+    if (src == null || !mounted) return;
+    final picked = await ImagePicker()
+        .pickImage(source: src, maxWidth: 1600, imageQuality: 88);
+    if (picked == null || !mounted) return;
+    rebuildWith(() => _duoBusy = true);
+    try {
+      final url = fullMediaUrl(rel);
+      final theirs = await http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
+      if (theirs.statusCode != 200) throw Exception('their half');
+      final mine = await picked.readAsBytes();
+      // Theirs on the left, mine on the right (decoded off the UI thread).
+      final jpg = await compute(_composeDuo, (theirs.bodyBytes, mine));
+      if (jpg == null) throw Exception('compose');
+      final assetId = await ApiService().uploadStoryMedia(
+          bytes: jpg, filename: 'duo.jpg', mime: 'image/jpeg');
+      if (assetId == null) throw Exception('upload');
+      final them = _livePeerLabel.trim().split(RegExp(r'\s+')).first;
+      final me = _myName.trim().split(RegExp(r'\s+')).first;
+      final created = await ApiService().createStory(
+        kind: 'photo',
+        mediaAssetId: assetId,
+        mediaMime: 'image/jpeg',
+        caption: me.isEmpty ? '$them 💞' : '$them 💞 $me',
+        coAuthorId: partnerId,
+      );
+      if (created == null) throw Exception('post');
+      _songChipsDone.add('duo-${msg['id']}');
+      unawaited(ApiService().sendMessage(
+          partnerId, '💞 Our duo status is live',
+          messageType: 'text'));
+      if (mounted) {
+        showToast(context, 'Your duo status is live 💞',
+            type: ToastType.success);
+      }
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Couldn’t make the duo — try again',
+            type: ToastType.error);
+      }
+    } finally {
+      rebuildWith(() => _duoBusy = false);
+    }
+  }
+
   // ── Sleep-aware sending ────────────────────────────────────────────────────
 
   static final _gnRx = RegExp(
@@ -289,7 +360,12 @@ extension _ChatBondLive on _ChatPageState {
             (msg['message_type'] ?? 'text') == 'text'
         ? Map<String, dynamic>.from(meta['bed'] as Map)
         : null;
-    if (!quiet && bed == null) return null;
+    // A duo status invite from my person: add my half.
+    final duo = !isMe &&
+        (meta['duo'] == 1 || meta['duo'] == true) &&
+        (msg['message_type'] ?? '') == 'image';
+    final duoDone = _songChipsDone.contains('duo-${msg['id']}');
+    if (!quiet && bed == null && !duo) return null;
     final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: EdgeInsets.only(
@@ -305,6 +381,13 @@ extension _ChatBondLive on _ChatPageState {
                   msg['is_read'] != true &&
                   (_ts(msg['timestamp']) ?? DateTime(2000))
                       .isAfter(DateTime.now().subtract(const Duration(hours: 6))),
+            ),
+          if (duo)
+            ActionChip(
+              avatar: Text(duoDone ? '💞' : '📸'),
+              label: Text(duoDone ? 'Duo is live' : 'Add your half'),
+              shape: const StadiumBorder(),
+              onPressed: duoDone || _duoBusy ? null : () => _addDuoHalf(msg),
             ),
           if (quiet)
             Text(isMe ? '🌙 Sent quietly' : '🌙 Sent while you slept',
@@ -541,5 +624,37 @@ class _SpinningRecordState extends State<_SpinningRecord>
         ),
       ),
     );
+  }
+}
+
+/// Two photos side by side (theirs | mine) as one JPEG for a duo status —
+/// each half cover-cropped to 540×960, a thin rose seam between them.
+List<int>? _composeDuo((List<int>, List<int>) halves) {
+  try {
+    final a = img.decodeImage(Uint8List.fromList(halves.$1));
+    final b = img.decodeImage(Uint8List.fromList(halves.$2));
+    if (a == null || b == null) return null;
+    const w = 540, h = 960;
+    img.Image cover(img.Image src) {
+      final scale = (w / src.width) > (h / src.height)
+          ? w / src.width
+          : h / src.height;
+      final r = img.copyResize(src,
+          width: (src.width * scale).ceil(),
+          height: (src.height * scale).ceil(),
+          interpolation: img.Interpolation.average);
+      return img.copyCrop(r,
+          x: (r.width - w) ~/ 2, y: (r.height - h) ~/ 2, width: w, height: h);
+    }
+
+    final out = img.Image(width: w * 2, height: h);
+    img.compositeImage(out, cover(a), dstX: 0, dstY: 0);
+    img.compositeImage(out, cover(b), dstX: w, dstY: 0);
+    img.fillRect(out,
+        x1: w - 2, y1: 0, x2: w + 2, y2: h,
+        color: img.ColorRgb8(0xFF, 0x5C, 0x8A));
+    return img.encodeJpg(out, quality: 84);
+  } catch (_) {
+    return null;
   }
 }

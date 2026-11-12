@@ -5191,10 +5191,6 @@ class _ChatPageState extends State<ChatPage>
       final mine = m['sender_id'].toString() == _myId;
       if (secs == 0 && !mine) missed++;
     }
-    String hm(Map<String, dynamic> m) => DateFormat.jm()
-        .format(parseServerTime((m['timestamp'] ?? '').toString()));
-    final from = hm(calls.last), to = hm(calls.first);
-    final range = from == to ? from : '$from–$to';
     // The icon tells how it ended: green if the latest call connected, red if
     // it was one I missed, neutral otherwise.
     final last = calls.first;
@@ -5203,18 +5199,20 @@ class _ChatPageState extends State<ChatPage>
     final Color tone = lastSecs > 0
         ? const Color(0xFF2BB673)
         : (!lastMine ? const Color(0xFFE53935) : scheme.onSurfaceVariant);
-    final textColor = scheme.onSurface;
+    // A quiet note in the timeline, the same size and look as the date
+    // chips ("Today") — it must never compete with the Message box. Colour
+    // lives only in the small icon and the "missed" words; the times are in
+    // the unfolded rows.
+    final lineColor = scheme.onSurface.withAlpha(35);
+    final muted = scheme.onSurfaceVariant;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(40, 8, 40, 4),
+      padding: const EdgeInsets.fromLTRB(40, 6, 40, 4),
       child: Center(
         child: Material(
-          color: isDark
-              ? scheme.surfaceContainerHigh.withValues(alpha: 0.92)
-              : scheme.surface.withValues(alpha: 0.95),
-          shape: StadiumBorder(
-              side: BorderSide(color: tone.withValues(alpha: 0.45))),
+          color: scheme.surface,
+          shape: StadiumBorder(side: BorderSide(color: lineColor)),
+          clipBehavior: Clip.antiAlias,
           child: InkWell(
-            customBorder: const StadiumBorder(),
             onTap: () {
               Haptics.selectionClick();
               setState(() {
@@ -5223,47 +5221,62 @@ class _ChatPageState extends State<ChatPage>
               });
             },
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+              padding: EdgeInsets.fromLTRB(12, 5, _isGroup ? 8 : 4, 5),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.call_rounded, size: 17, color: tone),
-                const SizedBox(width: 8),
+                Icon(Icons.call_rounded, size: 13, color: tone),
+                const SizedBox(width: 6),
                 Flexible(
                   child: Text.rich(
                     TextSpan(children: [
                       TextSpan(
                           text: '${calls.length} calls',
-                          style: const TextStyle(fontWeight: FontWeight.w800)),
+                          style: TextStyle(
+                              color: scheme.onSurface,
+                              fontWeight: FontWeight.w700)),
                       if (missed > 0)
                         TextSpan(
                             text: ' · $missed missed',
-                            style: const TextStyle(
-                                color: Color(0xFFE53935),
-                                fontWeight: FontWeight.w700)),
+                            style: const TextStyle(color: Color(0xFFE53935))),
                       if (talked > 0)
-                        TextSpan(text: ' · ${_fmtCallDur(talked)} talked'),
-                      TextSpan(
-                          text: ' · $range',
-                          style: TextStyle(color: scheme.onSurfaceVariant)),
+                        TextSpan(text: ' · ${_fmtCallDur(talked)}'),
                     ]),
-                    style: TextStyle(fontSize: 13, color: textColor),
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                        color: muted),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(width: 2),
                 AnimatedRotation(
                   turns: open ? 0.5 : 0,
                   duration: Motion.standard,
                   child: Icon(Icons.expand_less_rounded,
-                      size: 20, color: scheme.onSurfaceVariant),
+                      size: 16, color: muted),
                 ),
-                if (!_isGroup)
-                  IconButton(
-                    tooltip: 'Call back',
-                    visualDensity: VisualDensity.compact,
-                    icon: Icon(Icons.call_rounded,
-                        size: 18, color: accentInk(scheme)),
-                    onPressed: _callFriend,
+                if (!_isGroup) ...[
+                  Container(
+                      width: 1,
+                      height: 12,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      color: lineColor),
+                  // Call back: a small icon inside the chip, not a button
+                  // of its own.
+                  Tooltip(
+                    message: 'Call back',
+                    child: InkResponse(
+                      onTap: _callFriend,
+                      radius: 14,
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(Icons.call_rounded,
+                            size: 14, color: accentInk(scheme)),
+                      ),
+                    ),
                   ),
+                ],
               ]),
             ),
           ),

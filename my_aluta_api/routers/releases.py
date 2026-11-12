@@ -25,7 +25,7 @@ import tempfile
 import threading
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
 router = APIRouter(tags=["Releases"])
@@ -146,43 +146,150 @@ _WINDOWS_SVG = ('<svg viewBox="0 0 24 24"><path d="M3 5.5l7.5-1v7H3zm8.5-1.2L21 
 _PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "download_page.html")
 
 
+def _history() -> list:
+    """Android releases, newest first (kept on publish; the page's
+    "Earlier versions")."""
+    try:
+        with open(os.path.join(_dir(), "history.json"), encoding="utf-8") as f:
+            h = json.load(f)
+        return h if isinstance(h, list) else []
+    except Exception:
+        return []
+
+
+def _remember(meta: dict) -> None:
+    h = [x for x in _history() if x.get("build") != meta["build"]]
+    h.insert(0, {k: meta.get(k) for k in ("version", "build", "notes",
+                                           "updated_at", "size")})
+    try:
+        with open(os.path.join(_dir(), "history.json"), "w",
+                  encoding="utf-8") as f:
+            json.dump(h[:12], f)
+    except Exception as e:  # noqa: BLE001
+        print(f"[release] history not saved: {e}")
+
+
+_qr_memo: dict[str, str] = {}
+
+
+def _qr(url: str) -> str:
+    """Inline SVG QR for [url] ("" if segno isn't installed)."""
+    if url not in _qr_memo:
+        try:
+            import segno
+            _qr_memo[url] = segno.make(url, error="m").svg_inline(
+                scale=4, border=2, dark="#1d1215", light="#ffffff")
+        except Exception:
+            _qr_memo[url] = ""
+    return _qr_memo[url]
+
+
+def _notes_li(notes: str) -> str:
+    return "".join(
+        f"<li>{html.escape(line.lstrip('-•* ').strip())}</li>"
+        for line in (notes or "").splitlines() if line.strip())
+
+
+def _trust(m: dict) -> str:
+    sha = html.escape(str(m.get("sha256") or ""))
+    if len(sha) < 16:
+        return ""
+    return (f'<div class="trust"><span data-i18n="trust">Published by Ozilane</span>'
+            f' · SHA-256 <code title="{sha}">{sha[:8]}…{sha[-6:]}</code>'
+            f'<button type="button" class="copy" data-copy="{sha}" data-i18n="copy">Copy</button></div>')
+
+
+def _facts(m: dict, os_label: str, os_key: str, os_value: str) -> str:
+    e = html.escape
+    return f"""<div class="facts">
+      <div><span data-i18n="f_version">Version</span><b>{e(str(m.get('version', '—')))}</b></div>
+      <div><span data-i18n="f_size">Size</span><b>{_mb(m.get('size'))}</b></div>
+      <div><span>{os_label}</span><b data-i18n="{os_key}">{os_value}</b></div>
+      <div><span data-i18n="f_updated">Updated</span><b>{_when(m.get('updated_at'))}</b></div>
+    </div>"""
+
+
 @router.get("/download", response_class=HTMLResponse, include_in_schema=False)
 @router.get("/download/", response_class=HTMLResponse, include_in_schema=False)
-def download_page():
+def download_page(request: Request):
     a = _meta("android")
     u = _meta("android-universal")
     w = _meta("windows")
     e = html.escape
+    host = request.headers.get("x-forwarded-host") or request.url.netloc
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
+    page_url = f"{scheme}://{host}/download"
+
     if a:
-        notes = "".join(
-            f"<li>{e(line.lstrip('-• ').strip())}</li>"
-            for line in (a.get("notes") or "").splitlines() if line.strip())
-        uni = (f'<a class="sub" href="/download/aluta-universal.apk">Older or 32-bit '
-               f'phone? Get the universal APK ({_mb(u.get("size"))})</a>' if u else "")
-        new = (f'<div class="new"><h3>What’s new</h3><ul>{notes}</ul></div>'
+        notes = _notes_li(a.get("notes"))
+        uni = (f'<a class="sub" href="/download/aluta-universal.apk"><span data-i18n="uni">Older or '
+               f'32-bit phone? Get the universal APK</span> ({_mb(u.get("size"))})</a>' if u else "")
+        new = (f'<div class="new"><h3 data-i18n="new">What’s new</h3><ul>{notes}</ul></div>'
                if notes else "")
-        card = f"""<div class="card">
+        and_card = f"""<div class="card" id="c-and">
     <div class="app"><img src="/icons/Icon-192.png" alt="">
-      <div><h2>Aluta for Android</h2><p>Free · no ads in the way</p></div></div>
-    <div class="facts">
-      <div><span>Version</span><b>{e(str(a.get('version', '—')))}</b></div>
-      <div><span>Size</span><b>{_mb(a.get('size'))}</b></div>
-      <div><span>Android</span><b>7.0 and above</b></div>
-      <div><span>Updated</span><b>{_when(a.get('updated_at'))}</b></div>
-    </div>
-    <a class="btn" href="/download/aluta.apk">{_ANDROID_SVG}Download for Android</a>
-    {uni}{new}
+      <div><h2>Aluta for Android</h2><p data-i18n="free">Free · no ads in the way</p></div></div>
+    {_facts(a, 'Android', 'f_and_min', '7.0 and above')}
+    <a class="btn" data-get="android" href="/download/aluta.apk">{_ANDROID_SVG}<span data-i18n="btn_and">Download for Android</span></a>
+    {uni}{new}{_trust(a)}
   </div>"""
+        and_tile = f"""<a class="tile t-and" data-get="android" href="/download/aluta.apk">
+    <span class="ic">{_ANDROID_SVG}</span>
+    <span><b>Aluta for Android</b><small><span data-i18n="f_version">Version</span> {e(str(a.get('version', '')))} · {_mb(a.get('size'))}</small></span>
+    <span class="go" data-i18n="nav_dl">Download</span></a>"""
+        bar = (f'<div class="sbar" id="sbar"><span><b>Aluta {e(str(a.get("version", "")))}</b>'
+               f'<small>{_mb(a.get("size"))} · Android</small></span>'
+               f'<a class="chip" data-get="android" href="/download/aluta.apk" data-i18n="nav_dl">Download</a></div>')
     else:
-        card = ('<div class="card"><h2>Coming soon</h2>'
-                '<p>The Android app will be here shortly.</p></div>')
-    win = (f"""<a class="tile rise d3" href="/download/aluta-windows.zip">
+        and_card = ('<div class="card" id="c-and"><h2 data-i18n="soon">Coming soon</h2>'
+                    '<p data-i18n="soon_s">The Android app will be here shortly.</p></div>')
+        and_tile = bar = ""
+
+    if w:
+        wn = _notes_li(w.get("notes"))
+        win_new = (f'<div class="new"><h3 data-i18n="new">What’s new</h3><ul>{wn}</ul></div>'
+                   if wn else "")
+        win_card = f"""<div class="card" id="c-win">
+    <div class="app"><span class="winic">{_WINDOWS_SVG}</span>
+      <div><h2>Aluta for Windows</h2><p data-i18n="free">Free · no ads in the way</p></div></div>
+    {_facts(w, 'Windows', 'f_win_min', '10 and 11')}
+    <a class="btn" data-get="windows" href="/download/aluta-windows.zip">{_WINDOWS_SVG}<span data-i18n="btn_win">Download for Windows</span></a>
+    <p class="sub" data-i18n="win_how">Unzip it and open Aluta.exe. To update, unzip over your old Aluta folder.</p>
+    {win_new}{_trust(w)}
+  </div>"""
+        win_tile = f"""<a class="tile t-win" data-get="windows" href="/download/aluta-windows.zip">
     <span class="ic">{_WINDOWS_SVG}</span>
-    <span><b>Aluta for Windows</b><small>Version {e(str(w.get('version', '')))} · {_mb(w.get('size'))} · unzip and open Aluta</small></span>
-    <span class="go">Download</span></a>""" if w else "")
+    <span><b>Aluta for Windows</b><small><span data-i18n="f_version">Version</span> {e(str(w.get('version', '')))} · {_mb(w.get('size'))} · <span data-i18n="win_short">unzip and open Aluta</span></small></span>
+    <span class="go" data-i18n="nav_dl">Download</span></a>"""
+    else:
+        win_card = win_tile = ""
+
+    qr = _qr(page_url) if a else ""
+    qr_box = (f"""<div class="qr"><div class="code">{qr}</div><div>
+    <b data-i18n="qr_t">Get it on your phone</b>
+    <span data-i18n="qr_s">Point your phone’s camera here — this page opens there, ready to download.</span></div></div>"""
+              if qr else "")
+
+    cur = a.get("build") if a else None
+    older = [h for h in _history() if h.get("build") != cur]
+    if older:
+        items = "".join(
+            f"<li><b>{e(str(h.get('version', '')))}</b><small>{_when(h.get('updated_at'))}</small>"
+            f"<ul>{_notes_li(h.get('notes'))}</ul></li>" for h in older)
+        history = (f'<details class="hist"><summary data-i18n="hist">Earlier versions</summary>'
+                   f'<ol>{items}</ol></details>')
+    else:
+        history = ""
+
     with open(_PAGE, encoding="utf-8") as f:
         page = f.read()
-    return page.replace("{{CARD}}", card).replace("{{WINDOWS}}", win)
+    for k, v in {
+        "{{AND_CARD}}": and_card, "{{WIN_CARD}}": win_card, "{{QR}}": qr_box,
+        "{{WIN_TILE}}": win_tile, "{{AND_TILE}}": and_tile,
+        "{{HISTORY}}": history, "{{BAR}}": bar,
+    }.items():
+        page = page.replace(k, v)
+    return page
 
 
 # ── Publishing ───────────────────────────────────────────────────────────────
@@ -274,6 +381,8 @@ async def publish(
     }
     with open(_meta_path(platform), "w", encoding="utf-8") as f:
         json.dump(meta, f)
+    if platform == "android":
+        _remember(meta)
     announced = _announce(meta) if announce else 0
     return {"ok": True, "on_volume": _on_volume(), "announced": announced,
             **meta}

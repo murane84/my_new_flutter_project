@@ -187,10 +187,29 @@ extension _HomeFriendListView on HomePageState {
                               combined, scheme, textColor, wide),
                         ),
                       );
-                      if (wide) return switched;
+                      // A quiet painted room behind the lists (like the
+                      // Listen Together room) — on a big screen a short
+                      // list no longer sits on a glaring white sheet.
+                      // Static, so pages slide over it.
+                      final backdrop = Positioned.fill(
+                        // Follows the open page: Harmony's hearts, Circle's
+                        // section (status rings · record · bubbles), Glow's
+                        // light; desktop paints each column its own.
+                        child: AmbientBackdrop(
+                          motif: _friendLayer == 'glow'
+                              ? AmbientMotif.glow
+                              : wide || _friendLayer == 'harmony'
+                                  ? AmbientMotif.harmony
+                                  : circleMotif(_circleView),
+                          right: _friendLayer != 'glow' && wide
+                              ? circleMotif(_circleView)
+                              : null,
+                        ),
+                      );
+                      if (wide) return Stack(children: [backdrop, switched]);
                       // Phones: the whole chat screen is one swipe path that
                       // follows the finger (see _SwipePath).
-                      return _SwipePath(
+                      return Stack(children: [backdrop, _SwipePath(
                         current: switched,
                         hasNeighbor: (fwd) => _pathStep(fwd) != null,
                         neighbor: (fwd) {
@@ -204,7 +223,7 @@ extension _HomeFriendListView on HomePageState {
                           final s = _pathStep(fwd);
                           if (s != null) _goPathStep(s);
                         },
-                      );
+                      )]);
                     },
                   ),
           ),

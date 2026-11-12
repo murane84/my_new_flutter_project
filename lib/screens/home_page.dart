@@ -42,6 +42,7 @@ import 'feedback_screen.dart';
 import '../utils/popup_shell.dart';
 import '../utils/bounce_tap.dart';
 import '../utils/brand_theme.dart';
+import '../widgets/ambient_backdrop.dart';
 import '../widgets/chat_wallpaper_sheet.dart';
 import '../widgets/person_avatar.dart';
 import '../widgets/story_ring.dart';

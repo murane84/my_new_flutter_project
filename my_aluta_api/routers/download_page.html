@@ -5,6 +5,15 @@
 <meta name="description" content="Download Aluta for Android and Windows — chat, listen together in sync and keep your moments in Our Space.">
 <meta name="theme-color" content="#140d10">
 <link rel="icon" href="/favicon.png">
+<script>
+/* Which device is this? Decides which card leads (before first paint). */
+(function(){var u=navigator.userAgent,os=/android/i.test(u)?'android':
+/iphone|ipad|ipod/i.test(u)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)?'ios':
+/windows/i.test(u)?'windows':'other',c=document.documentElement.classList;
+c.add('os-'+os);if(os==='windows'||os==='other')c.add('desk');
+var l='';try{l=localStorage.getItem('aluta_dl_lang')||''}catch(e){}
+if(!l)l=/^sw/i.test(navigator.language||'')?'sw':'en';document.documentElement.lang=l})();
+</script>
 <style>
 /* Aluta's tokens, as in the app: radii sm 8 · md 12 · lg 16 · xl 22 · xxl 28;
    motion quick 180 · standard 260 · emphasized 360ms, ease-out to enter. */
@@ -16,8 +25,9 @@
 html{background:var(--bg)}
 body{margin:0;min-height:100vh;color:#f6eef0;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
 background:radial-gradient(900px 520px at 78% -8%,#5a1229 0,transparent 62%),
-radial-gradient(700px 420px at -10% 30%,#3a0c1c 0,transparent 60%),var(--bg);background-attachment:fixed}
+radial-gradient(700px 420px at -10% 30%,#3a0c1c 0,transparent 60%),var(--bg);background-attachment:fixed;overflow-x:hidden}
 a{color:inherit}
+button{font:inherit;cursor:pointer}
 /* Sticky frosted header — like the app bar. */
 header{position:sticky;top:0;z-index:10;backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);
 background:rgba(20,13,16,.62);border-bottom:1px solid var(--edge)}
@@ -28,18 +38,28 @@ background:rgba(20,13,16,.62);border-bottom:1px solid var(--edge)}
 .ghost{text-decoration:none;font-size:14px;font-weight:700;color:var(--soft);padding:8px 12px;border-radius:999px;
 transition:background var(--quick),color var(--quick)}
 .ghost:hover{background:var(--glass);color:#fff}
+.lang{display:flex;border:1px solid var(--edge);border-radius:999px;padding:2px}
+.lang button{border:0;background:none;color:var(--soft);font-size:12px;font-weight:800;padding:5px 9px;border-radius:999px}
+html[lang=en] .lang [data-l=en],html[lang=sw] .lang [data-l=sw]{background:#ffffff1a;color:#fff}
 .chip{text-decoration:none;font-size:14px;font-weight:800;color:#fff;padding:8px 14px;border-radius:999px;
-background:linear-gradient(#ff3a60,var(--accent) 55%,#a00024);box-shadow:0 4px 14px #e0103a55}
+background:linear-gradient(#ff3a60,var(--accent) 55%,#a00024);box-shadow:0 4px 14px #e0103a55;white-space:nowrap}
 .wrap{max-width:1120px;margin:0 auto;padding:24px 16px 32px}
 .pill{display:inline-block;border:1px solid #ff5a7a66;color:var(--rose);background:#ff2d5512;
 border-radius:999px;padding:4px 12px;font-size:12px;font-weight:800;letter-spacing:.08em}
 h1{font-size:36px;line-height:1.08;margin:14px 0 10px;letter-spacing:-.01em}
 h1 em{font-style:normal;background:linear-gradient(90deg,#ff5a7a,#ff9fb1);-webkit-background-clip:text;background-clip:text;color:transparent}
 .lead{color:var(--soft);margin:0 0 22px;font-size:17px}
+/* The download card: only the one for this device shows. */
 .card{background:var(--card);color:var(--ink);border-radius:var(--r-xxl);padding:22px;
 box-shadow:0 1px 4px #0003,0 22px 60px #0008}
+#c-win,#c-ios{display:none}
+.os-windows #c-win,.os-ios #c-ios{display:block}
+.os-windows #c-and,.os-ios #c-and{display:none}
 .app{display:flex;gap:14px;align-items:center}
 .app img{width:60px;height:60px;border-radius:var(--r-lg)}
+.winic{width:60px;height:60px;border-radius:var(--r-lg);display:grid;place-items:center;
+background:linear-gradient(135deg,#ff5a7a,var(--accent))}
+.winic svg{width:30px;height:30px;fill:#fff}
 .app h2{margin:0;font-size:22px}.app p{margin:2px 0 0;color:var(--muted)}
 .facts{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0}
 .facts span{display:block;font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
@@ -50,69 +70,298 @@ box-shadow:0 8px 22px #e0103a55;transition:transform var(--quick) var(--enter),b
 .btn:hover{transform:translateY(-2px);box-shadow:0 12px 28px #e0103a66}
 .btn:active{transform:translateY(0) scale(.98)}
 .btn svg{width:20px;height:20px;fill:currentColor}
-.sub{display:block;text-align:center;color:var(--muted);font-size:13px;margin-top:12px}
-.new h3{margin:20px 0 6px;font-size:15px}.new ul{margin:0;padding-left:20px;color:#4b3c40}.new li{margin:3px 0}
+.sub{display:block;text-align:center;color:var(--muted);font-size:13px;margin:12px 0 0}
+.new h3{margin:18px 0 6px;font-size:15px}.new ul{margin:0;padding-left:20px;color:#4b3c40;font-size:15px}.new li{margin:3px 0}
+.trust{margin-top:16px;padding-top:12px;border-top:1px solid #eee2e5;font-size:12px;color:var(--muted);
+display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.trust code{font:12px ui-monospace,Consolas,monospace;color:#4b3c40;background:#f6eef0;padding:2px 6px;border-radius:6px}
+.copy{border:0;background:none;color:var(--accent);font-weight:800;font-size:12px;padding:2px 4px}
+.ios ol{padding-left:20px;color:#4b3c40;margin:14px 0 18px}.ios li{margin:5px 0}
+.ios p{color:#4b3c40;margin:14px 0 0}
+/* Scan to get it on the phone — desktops only. */
+.qr{display:none;gap:16px;align-items:center;margin-top:16px;padding:14px;border-radius:var(--r-xl);
+background:var(--glass);border:1px solid var(--edge)}
+.desk .qr{display:flex}
+.qr .code{flex:none;width:112px;height:112px;border-radius:var(--r-md);overflow:hidden;background:#fff;display:grid;place-items:center}
+.qr .code svg{width:100%;height:100%}
+.qr b{display:block}.qr span{color:var(--soft);font-size:14px}
 .tile{display:flex;align-items:center;gap:14px;margin-top:16px;padding:16px;border-radius:var(--r-xl);
 background:var(--glass);border:1px solid var(--edge);text-decoration:none;transition:background var(--quick),transform var(--quick) var(--enter)}
 .tile:hover{background:rgba(255,255,255,.10);transform:translateY(-2px)}
-.tile .ic{width:44px;height:44px;border-radius:var(--r-md);display:grid;place-items:center;background:#ffffff12}
+.tile .ic{flex:none;width:44px;height:44px;border-radius:var(--r-md);display:grid;place-items:center;background:#ffffff12}
 .tile .ic svg{width:22px;height:22px;fill:#ff9fb1}
 .tile b{display:block}.tile small{color:var(--soft)}
 .tile .go{margin-left:auto;color:var(--rose);font-weight:800;font-size:14px}
+/* The other platform as a small row: Android people see Windows, and back. */
+.t-and{display:none}.os-windows .t-and{display:flex}.os-windows .t-win{display:none}
+.os-ios .t-win,.os-ios .t-and{display:none}
 .feats{display:grid;grid-template-columns:1fr;gap:12px;margin:28px 0 0}
 .feat{padding:16px;border-radius:var(--r-xl);background:var(--glass);border:1px solid var(--edge)}
 .feat b{display:block;margin-bottom:2px}.feat span{color:var(--soft);font-size:14px}
+/* A look inside — three phones, drawn (not screenshots). */
+.shots{margin-top:28px}
+.shots h3{font-size:16px;margin:0 0 12px}
+.strip{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 2px 12px;scrollbar-width:thin}
+.phone{flex:none;scroll-snap-align:start;width:196px}
+.scr{aspect-ratio:196/360;border-radius:30px;padding:10px;background:#0b0709;border:1px solid #ffffff22;box-shadow:0 16px 40px #0009}
+.in{height:100%;border-radius:22px;overflow:hidden;background:#fff5f7;color:var(--ink);font-size:11px;position:relative;
+display:flex;flex-direction:column}
+.phone figcaption{text-align:center;color:var(--soft);font-size:13px;margin-top:8px}
+.top{display:flex;align-items:center;gap:7px;padding:12px 10px 8px;background:#fff;border-bottom:1px solid #f3dfe4;font-weight:800}
+.av{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#ffb1c1,#e0103a);flex:none}
+.av.b{background:linear-gradient(135deg,#9bd3ff,#3b6cff)}
+.msgs{flex:1;padding:10px;display:flex;flex-direction:column;gap:7px;justify-content:flex-end}
+.m{max-width:78%;padding:7px 10px;border-radius:14px;background:#fff;box-shadow:0 1px 2px #0001;line-height:1.3}
+.m.me{align-self:flex-end;background:linear-gradient(#ff3a60,#e0103a);color:#fff}
+.song{display:flex;gap:8px;align-items:center}
+.vin{width:28px;height:28px;border-radius:50%;flex:none;background:radial-gradient(circle,#e0103a 0 22%,#222 24% 100%);
+box-shadow:inset 0 0 0 3px #333}
+.tick{font-size:9px;opacity:.85;text-align:right;margin-top:2px}
+.lt{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+background:radial-gradient(circle at 50% 30%,#ffd9e1,#fff5f7 70%)}
+.disc{width:104px;height:104px;border-radius:50%;background:radial-gradient(circle,#e0103a 0 18%,#1c1114 19% 100%);
+box-shadow:0 10px 24px #0004,inset 0 0 0 10px #241519,inset 0 0 0 22px #1c1114,inset 0 0 0 23px #3a2a2f;animation:spin 6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.wave{display:flex;gap:2px;align-items:center;height:22px}
+.wave i{width:3px;border-radius:2px;background:#e0103a}
+.wave i:nth-child(n+12){background:#e7c9d0}
+.who{display:flex;align-items:center;gap:4px;font-weight:700;color:#7a6a6e}
+.who .av{width:18px;height:18px;margin-right:-8px;border:2px solid #fff}
+.hero{margin:10px;padding:12px;border-radius:16px;color:#fff;background:linear-gradient(135deg,#ff3a60,#a00024)}
+.hero b{display:block;font-size:14px}.hero small{opacity:.85}
+.count{margin:0 10px;padding:9px 10px;border-radius:12px;background:#fff;font-weight:700;display:flex;justify-content:space-between}
+.count em{font-style:normal;color:#e0103a}
+.grid{flex:1;margin:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.grid i{border-radius:10px;background:linear-gradient(135deg,#ffd0da,#ffe9ee)}
+.grid i:nth-child(2){background:linear-gradient(135deg,#ffe2b8,#ffd0da)}
+.grid i:nth-child(3){background:linear-gradient(135deg,#d7e3ff,#ffd9e6)}
 .how{margin-top:28px;color:var(--soft);font-size:14px;padding:18px;border-radius:var(--r-xl);border:1px dashed var(--edge)}
 .how h3{color:#fff;font-size:16px;margin:0 0 8px}.how li{margin:5px 0}.how p{margin:10px 0 0}
+.os-ios .how,.os-windows .how{display:none}
+.hist{margin-top:16px;padding:14px 18px;border-radius:var(--r-xl);background:var(--glass);border:1px solid var(--edge);font-size:14px}
+.hist summary{cursor:pointer;font-weight:800;color:#fff}
+.hist ol{list-style:none;padding:0;margin:10px 0 0}
+.hist>ol>li{padding:10px 0;border-top:1px solid var(--edge)}
+.hist small{color:var(--soft);margin-left:8px}
+.hist ul{margin:4px 0 0;padding-left:18px;color:var(--soft)}
 footer{max-width:1120px;margin:0 auto;padding:22px 16px 34px;color:#a8979c;font-size:13px;
 display:flex;gap:16px;flex-wrap:wrap;border-top:1px solid var(--edge)}
 footer a{text-decoration:none}footer a:hover{color:#fff}
 footer span{margin-left:auto}
+/* Phones: once the big button scrolls away, a slim bar keeps it in reach. */
+.sbar{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:20;
+display:flex;align-items:center;gap:12px;padding:10px 10px 10px 16px;border-radius:999px;
+background:rgba(30,18,22,.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+border:1px solid var(--edge);box-shadow:0 12px 30px #000a;transform:translateY(160%);transition:transform var(--std) var(--enter)}
+.sbar.show{transform:none}
+.sbar b{display:block;font-size:14px}.sbar small{color:var(--soft);font-size:12px}
+.sbar .chip{margin-left:auto}
+.desk .sbar,.os-ios .sbar{display:none}
+/* After tapping Download: what to do next. */
+.guide{position:fixed;inset:0;z-index:30;display:none;align-items:flex-end;justify-content:center;
+background:#0008;padding:12px}
+.guide.open{display:flex}
+.sheet{width:100%;max-width:440px;background:#fff;color:var(--ink);border-radius:var(--r-xxl);padding:22px;
+box-shadow:0 20px 60px #000a;animation:rise var(--emph) var(--enter) both}
+.sheet h3{margin:0 0 4px;font-size:19px;display:flex;align-items:center;gap:10px}
+.sheet h3 i{width:12px;height:12px;border-radius:50%;background:var(--accent);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{transform:scale(.6);opacity:.5}}
+.sheet ol{counter-reset:s;list-style:none;padding:0;margin:14px 0}
+.sheet li{counter-increment:s;display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:var(--r-lg);margin:6px 0;color:#4b3c40}
+.sheet li:before{content:counter(s);flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+font-weight:800;font-size:13px;background:#f6eef0;color:var(--accent)}
+.sheet li.hot{background:#fff0f3;box-shadow:inset 0 0 0 1px #ffc6d2}
+.sheet li.hot:before{background:var(--accent);color:#fff}
+.sheet .row{display:flex;gap:10px;align-items:center}
+.sheet .again{color:var(--muted);font-size:13px}
+.sheet .ok{margin-left:auto;border:0;border-radius:999px;padding:10px 18px;font-weight:800;color:#fff;
+background:linear-gradient(#ff3a60,var(--accent) 55%,#a00024)}
+[data-guide]{display:none}
 /* Arrive like the app's cards: a short rise + fade, one after another. */
 .rise{animation:rise var(--emph) var(--enter) both}
 .d1{animation-delay:60ms}.d2{animation-delay:120ms}.d3{animation-delay:180ms}.d4{animation-delay:240ms}
 @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.rise{animation:none}.btn,.tile{transition:none}}
-@media (max-width:420px){.bar nav .ghost{display:none}}
-/* Desktop: the story on the left, the download card on the right. */
+@media (prefers-reduced-motion:reduce){.rise,.sheet,.disc{animation:none}.btn,.tile,.sbar{transition:none}}
+@media (max-width:480px){.bar nav .ghost{display:none}}
+@media (min-width:600px){.guide{align-items:center}}
+/* Desktop: the story on the left, the download card on the right — kept in
+   view (and never taller than the window) while the left side scrolls. */
 @media (min-width:900px){
   .bar{padding:12px 40px}
   .wrap{padding:64px 40px 48px}
   .layout{display:grid;grid-template-columns:1.1fr 1fr;column-gap:64px;
     grid-template-areas:"intro side" "extra side";align-items:start}
-  .intro{grid-area:intro}.side{grid-area:side;position:sticky;top:88px}.extra{grid-area:extra}
+  .intro{grid-area:intro}.extra{grid-area:extra;min-width:0}
+  .side{grid-area:side;position:sticky;top:84px;max-height:calc(100vh - 100px);overflow-y:auto;
+    scrollbar-width:thin;padding-bottom:4px;border-radius:var(--r-xxl)}
   h1{font-size:58px;margin-top:18px}
   .lead{font-size:19px;max-width:30em}
   .feats{grid-template-columns:repeat(3,1fr)}
+  .strip{overflow:visible}.phone{flex:1 1 0;min-width:0;width:auto}
   footer{padding:22px 40px 34px}
 }
 </style></head><body>
 <header><div class="bar">
   <a class="brand" href="/"><img src="/icons/Icon-192.png" alt="">Aluta</a>
-  <nav><a class="ghost" href="/">Open in browser</a><a class="chip" href="#get">Download</a></nav>
+  <nav><div class="lang" role="group" aria-label="Language"><button data-l="en">EN</button><button data-l="sw">SW</button></div>
+  <a class="ghost" href="/" data-i18n="nav_open">Open in browser</a><a class="chip" href="#get" data-i18n="nav_dl">Download</a></nav>
 </div></header>
 <main class="wrap"><div class="layout">
 <section class="intro">
-  <span class="pill rise">LATEST VERSION — FREE</span>
-  <h1 class="rise d1">Chat, music and love — <em>together</em></h1>
-  <p class="lead rise d2">Chat with your people, listen together in sync, and keep your moments in Our Space.</p>
+  <span class="pill rise" data-i18n="pill">LATEST VERSION — FREE</span>
+  <h1 class="rise d1" data-i18n="h1">Chat, music and love — <em>together</em></h1>
+  <p class="lead rise d2" data-i18n="lead">Chat with your people, listen together in sync, and keep your moments in Our Space.</p>
 </section>
-<aside class="side rise d2" id="get">{{CARD}}</aside>
-<section class="extra">
-  {{WINDOWS}}
-  <div class="feats rise d3">
-    <div class="feat"><b>Listen together</b><span>The same song, in sync, wherever you are.</span></div>
-    <div class="feat"><b>Our Space</b><span>Your playlist, moments, diary and love letters.</span></div>
-    <div class="feat"><b>Chats that remember</b><span>The songs you shared stay with your days.</span></div>
+<aside class="side rise d2" id="get">
+  {{AND_CARD}}
+  {{WIN_CARD}}
+  <div class="card ios" id="c-ios">
+    <div class="app"><img src="/icons/Icon-192.png" alt="">
+      <div><h2 data-i18n="ios_t">On iPhone? Use Aluta in Safari</h2></div></div>
+    <p data-i18n="ios_s">There’s no iPhone app yet — Aluta works in your browser, with your chats, music and Our Space.</p>
+    <ol><li data-i18n="ios_1">Open Aluta below in Safari.</li>
+      <li data-i18n="ios_2">Tap <b>Share</b>, then <b>Add to Home Screen</b>.</li>
+      <li data-i18n="ios_3">Open it from your home screen, like any app.</li></ol>
+    <a class="btn" href="/"><span data-i18n="ios_btn">Open Aluta</span></a>
   </div>
-  <div class="how rise d4"><h3>How to install on Android</h3><ol>
-    <li>Tap <b>Download for Android</b> and open the file when it finishes.</li>
-    <li>If Android asks, allow your browser to <b>install unknown apps</b>.</li>
-    <li>Play Protect may not know Aluta yet — tap <b>More details → Install anyway</b>.</li>
-    <li>“App not installed”? Use the <b>universal APK</b> (link under the button).</li>
-    <li>Already have Aluta? Installing updates it — your chats stay.</li>
-  </ol><p>After this, Aluta tells you itself when a new version is ready.</p></div>
+  {{QR}}
+</aside>
+<section class="extra">
+  {{WIN_TILE}}
+  {{AND_TILE}}
+  <div class="feats rise d3">
+    <div class="feat"><b data-i18n="ft1">Listen together</b><span data-i18n="fs1">The same song, in sync, wherever you are.</span></div>
+    <div class="feat"><b>Our Space</b><span data-i18n="fs2">Your playlist, moments, diary and love letters.</span></div>
+    <div class="feat"><b data-i18n="ft3">Chats that remember</b><span data-i18n="fs3">The songs you shared stay with your days.</span></div>
+  </div>
+  <div class="shots rise d3"><h3 data-i18n="shots">A look inside</h3><div class="strip">
+    <figure class="phone" style="margin:0"><div class="scr"><div class="in">
+      <div class="top"><span class="av"></span>Neema 💞</div>
+      <div class="msgs">
+        <div class="m">Good morning ☀️</div>
+        <div class="m me">Morning love — this one's for you</div>
+        <div class="m me song"><span class="vin"></span><span><b>Our song</b><br>tap to play together</span></div>
+        <div class="m">🥹❤️</div>
+      </div></div></div><figcaption data-i18n="cap1">Chats with your songs in them</figcaption></figure>
+    <figure class="phone" style="margin:0"><div class="scr"><div class="in">
+      <div class="top">🎧 <span data-i18n="ft1">Listen together</span></div>
+      <div class="lt"><div class="disc"></div><b>Sifai · Q-Jay</b>
+        <div class="wave"><i style="height:8px"></i><i style="height:16px"></i><i style="height:11px"></i><i style="height:20px"></i><i style="height:9px"></i><i style="height:15px"></i><i style="height:22px"></i><i style="height:12px"></i><i style="height:17px"></i><i style="height:8px"></i><i style="height:14px"></i><i style="height:19px"></i><i style="height:10px"></i><i style="height:16px"></i><i style="height:7px"></i><i style="height:13px"></i><i style="height:18px"></i><i style="height:9px"></i></div>
+        <div class="who"><span class="av"></span><span class="av b"></span>&nbsp;&nbsp; 2 · in sync</div></div>
+      </div></div><figcaption data-i18n="cap2">The same song, at the same second</figcaption></figure>
+    <figure class="phone" style="margin:0"><div class="scr"><div class="in">
+      <div class="hero"><small>OUR SPACE</small><b>Me &amp; You</b><small>Close since August · 10 moments</small></div>
+      <div class="count"><span>📅 Date night</span><em>in 3 days</em></div>
+      <div class="grid"><i></i><i></i><i></i><i></i></div>
+      </div></div><figcaption data-i18n="cap3">A space for just the two of you</figcaption></figure>
+  </div></div>
+  <div class="how rise d4"><h3 data-i18n="how_t">How to install on Android</h3><ol>
+    <li data-i18n="how_1">Tap <b>Download for Android</b> and open the file when it finishes.</li>
+    <li data-i18n="how_2">If Android asks, allow your browser to <b>install unknown apps</b>.</li>
+    <li data-i18n="how_3">Play Protect may not know Aluta yet — tap <b>More details → Install anyway</b>.</li>
+    <li data-i18n="how_4">“App not installed”? Use the <b>universal APK</b> (link under the button).</li>
+    <li data-i18n="how_5">Already have Aluta? Installing updates it — your chats stay.</li>
+  </ol><p data-i18n="how_p">After this, Aluta tells you itself when a new version is ready.</p></div>
+  {{HISTORY}}
 </section>
 </div></main>
-<footer><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/about">About</a><span>© Ozilane</span></footer>
+<footer><a href="/privacy" data-i18n="privacy">Privacy</a><a href="/terms" data-i18n="terms">Terms</a><a href="/about" data-i18n="about">About</a><span>© Ozilane</span></footer>
+{{BAR}}
+<div class="guide" id="guide" role="dialog" aria-modal="true"><div class="sheet">
+  <div data-guide="android">
+    <h3><i></i><span data-i18n="g_t">Downloading Aluta…</span></h3>
+    <ol><li class="hot"><span data-i18n="g_1">When it finishes, tap the download — at the top of your screen or in <b>Downloads</b>.</span></li>
+      <li><span data-i18n="g_2">Asked about <b>unknown apps</b>? Allow your browser — just this once.</span></li>
+      <li><span data-i18n="g_3">Tap <b>Install</b>. Play Protect: <b>More details → Install anyway</b>.</span></li></ol>
+  </div>
+  <div data-guide="windows">
+    <h3><i></i><span data-i18n="gw_t">Downloading Aluta for Windows…</span></h3>
+    <ol><li class="hot"><span data-i18n="gw_1">Open the zip and choose <b>Extract all</b>.</span></li>
+      <li><span data-i18n="gw_2">Open <b>Aluta.exe</b> in the new folder.</span></li>
+      <li><span data-i18n="gw_3">Windows protected your PC? <b>More info → Run anyway</b> — Aluta isn’t in the Store yet.</span></li></ol>
+  </div>
+  <div class="row"><a class="again" id="again" href="#" data-i18n="g_again">Didn’t start? Tap here</a>
+    <button class="ok" id="gok" data-i18n="g_ok">Got it</button></div>
+</div></div>
+<script>
+(function(){
+var SW={nav_open:'Fungua kwenye kivinjari',nav_dl:'Pakua',pill:'TOLEO JIPYA — BURE',
+h1:'Gumzo, muziki na mapenzi — <em>pamoja</em>',
+lead:'Ongea na watu wako, sikilizeni muziki pamoja kwa wakati mmoja, na hifadhini matukio yenu kwenye Our Space.',
+free:'Bure · bila matangazo ya kukusumbua',f_version:'Toleo',f_size:'Ukubwa',f_updated:'Imesasishwa',
+f_and_min:'7.0 na kuendelea',f_win_min:'10 na 11',btn_and:'Pakua kwa Android',btn_win:'Pakua kwa Windows',
+uni:'Simu ya zamani au ya 32-bit? Pakua APK ya jumla',new:'Vipya',
+win_how:'Fungua zip kisha fungua Aluta.exe. Kusasisha, fungua zip juu ya folda yako ya zamani ya Aluta.',
+win_short:'fungua zip kisha fungua Aluta',trust:'Imechapishwa na Ozilane',copy:'Nakili',copied:'Imenakiliwa ✓',
+soon:'Inakuja hivi karibuni',soon_s:'Programu ya Android itakuwa hapa muda si mrefu.',
+ios_t:'Una iPhone? Tumia Aluta kwenye Safari',
+ios_s:'Bado hakuna programu ya iPhone — Aluta inafanya kazi kwenye kivinjari chako, pamoja na gumzo zako, muziki na Our Space.',
+ios_1:'Fungua Aluta hapa chini kwenye Safari.',ios_2:'Gusa <b>Share</b>, kisha <b>Add to Home Screen</b>.',
+ios_3:'Ifungue kutoka skrini yako ya mwanzo, kama programu nyingine.',ios_btn:'Fungua Aluta',
+qr_t:'Ipate kwenye simu yako',qr_s:'Elekeza kamera ya simu yako hapa — ukurasa huu utafunguka huko, tayari kupakua.',
+ft1:'Sikilizeni pamoja',fs1:'Wimbo mmoja, kwa wakati mmoja, popote mlipo.',
+fs2:'Orodha yenu ya nyimbo, matukio, shajara na barua za mapenzi.',ft3:'Gumzo zinazokumbuka',
+fs3:'Nyimbo mlizotumiana zinabaki na siku zenu.',shots:'Ndani ya Aluta',
+cap1:'Gumzo zenye nyimbo zenu ndani',cap2:'Wimbo mmoja, sekunde ileile',cap3:'Sehemu yenu wawili tu',
+how_t:'Jinsi ya kusakinisha kwenye Android',
+how_1:'Gusa <b>Pakua kwa Android</b> kisha fungua faili likimaliza kupakuliwa.',
+how_2:'Android ikiuliza, ruhusu kivinjari chako <b>kusakinisha programu zisizojulikana</b>.',
+how_3:'Play Protect huenda bado haiitambui Aluta — gusa <b>More details → Install anyway</b>.',
+how_4:'Imeandika “App not installed”? Tumia <b>APK ya jumla</b> (kiungo chini ya kitufe).',
+how_5:'Una Aluta tayari? Kusakinisha kunaisasisha — gumzo zako zinabaki.',
+how_p:'Baada ya hapo, Aluta itakuambia yenyewe toleo jipya likiwa tayari.',hist:'Matoleo ya awali',
+privacy:'Faragha',terms:'Masharti',about:'Kuhusu',
+g_t:'Inapakua Aluta…',g_1:'Ikimaliza, gusa faili — juu ya skrini yako au kwenye <b>Downloads</b>.',
+g_2:'Umeulizwa kuhusu <b>unknown apps</b>? Ruhusu kivinjari chako — mara moja tu.',
+g_3:'Gusa <b>Install</b>. Play Protect: <b>More details → Install anyway</b>.',
+gw_t:'Inapakua Aluta kwa Windows…',gw_1:'Fungua zip kisha chagua <b>Extract all</b>.',
+gw_2:'Fungua <b>Aluta.exe</b> kwenye folda mpya.',
+gw_3:'Windows protected your PC? <b>More info → Run anyway</b> — Aluta bado haipo kwenye Store.',
+g_again:'Haijaanza? Gusa hapa',g_ok:'Sawa'};
+var EN={};document.querySelectorAll('[data-i18n]').forEach(function(el){
+  var k=el.getAttribute('data-i18n');if(!(k in EN))EN[k]=el.innerHTML});
+EN.copied='Copied ✓';
+var doc=document.documentElement;
+function lang(l){doc.lang=l;var d=l==='sw'?SW:EN;
+  document.querySelectorAll('[data-i18n]').forEach(function(el){var k=el.getAttribute('data-i18n');
+    if(d[k]!=null)el.innerHTML=d[k]});
+  try{localStorage.setItem('aluta_dl_lang',l)}catch(e){}}
+document.querySelectorAll('.lang button').forEach(function(b){b.onclick=function(){lang(b.dataset.l)}});
+if(doc.lang==='sw')lang('sw');
+function t(k){return (doc.lang==='sw'?SW:EN)[k]||k}
+
+// Windows with no Windows build yet → the Android card leads after all.
+if(doc.classList.contains('os-windows')&&!document.getElementById('c-win')){
+  doc.classList.remove('os-windows');doc.classList.add('os-other')}
+
+// Copy the checksum.
+document.querySelectorAll('.copy').forEach(function(b){b.onclick=function(){
+  var done=function(){b.textContent=t('copied');setTimeout(function(){b.innerHTML=t('copy')},1600)};
+  if(navigator.clipboard)navigator.clipboard.writeText(b.dataset.copy).then(done,function(){});}});
+
+// After a download tap: what to do next (the download itself carries on).
+var g=document.getElementById('guide'),last=null;
+function close(){g.classList.remove('open')}
+document.querySelectorAll('[data-get]').forEach(function(a){a.addEventListener('click',function(){
+  var kind=a.dataset.get;
+  if(kind==='android'&&!doc.classList.contains('os-android'))return; // a PC saving the APK
+  last=a.href;
+  g.querySelectorAll('[data-guide]').forEach(function(s){s.style.display=s.dataset.guide===kind?'block':'none'});
+  setTimeout(function(){g.classList.add('open')},350);
+})});
+document.getElementById('gok').onclick=close;
+g.addEventListener('click',function(e){if(e.target===g)close()});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')close()});
+document.getElementById('again').onclick=function(e){e.preventDefault();if(last)location.href=last};
+
+// Phones: the slim Download bar once the card's button is out of sight.
+var bar=document.getElementById('sbar'),btn=document.querySelector('#c-and .btn');
+if(bar&&btn&&'IntersectionObserver' in window){
+  var seen=false;
+  new IntersectionObserver(function(es){es.forEach(function(e){
+    if(e.isIntersecting)seen=true;
+    bar.classList.toggle('show',seen&&!e.isIntersecting&&e.boundingClientRect.top<0)})}).observe(btn);
+}
+})();
+</script>
 </body></html>

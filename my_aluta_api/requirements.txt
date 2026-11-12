@@ -23,3 +23,5 @@ requests
 # Two-factor / password recovery: TOTP (Google Authenticator) code generation
 # and verification.
 pyotp
+# QR code on the /download page ("get it on your phone")
+segno

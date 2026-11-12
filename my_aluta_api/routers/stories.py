@@ -108,12 +108,24 @@ def _story_out(story: Story, *, viewed: bool, view_count: int = 0) -> schemas.St
         music_artist=story.music_artist,
         music_art_url=story.music_art_url,
         background=story.background,
+        thumb=getattr(story, "thumb", None),
         created_at=story.created_at,
         expires_at=story.expires_at,
         viewed=viewed,
         view_count=view_count,
     )
 
+
+
+def _clean_thumb(raw):
+    """A small JPEG/PNG/WebP data URI, or None (anything else is dropped)."""
+    t = (raw or "").strip()
+    if not t or len(t) > 40000:
+        return None
+    if not t.startswith(("data:image/jpeg;base64,", "data:image/png;base64,",
+                         "data:image/webp;base64,")):
+        return None
+    return t
 
 @router.post("", response_model=schemas.StoryOut)
 def create_story(
@@ -197,6 +209,7 @@ def create_story(
         music_artist=(payload.music_artist or None),
         music_art_url=(payload.music_art_url or None),
         background=(payload.background or None),
+        thumb=_clean_thumb(getattr(payload, "thumb", None)) if kind == "video" else None,
         created_at=now,
         expires_at=now + STORY_TTL,
     )

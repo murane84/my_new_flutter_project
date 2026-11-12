@@ -10,6 +10,7 @@ import '../../utils/readable.dart';
 import '../../services/story_mute.dart';
 import '../../services/story_posting.dart';
 import '../../widgets/edge_scroll_row.dart';
+import '../../widgets/story_ring.dart';
 import '../../utils/radii.dart';
 import '../../utils/adaptive_sheet.dart';
 
@@ -375,8 +376,9 @@ class _StoriesTrayState extends State<StoriesTray> {
       ring: _Ring(
         size: ringSize,
         // My own ring: coloured if I have a live story, else a neutral dashed
-        // "add" look.
+        // "add" look. One arc per status I've posted.
         state: mine != null ? _RingState.own : _RingState.none,
+        segments: mine?.stories.length ?? 1,
         badge: GestureDetector(
           onTap: _addStory,
           child: Container(
@@ -392,10 +394,21 @@ class _StoriesTrayState extends State<StoriesTray> {
                 color: readableOn(Theme.of(context).colorScheme.primary), size: badgeSize * 0.68),
           ),
         ),
-        child: Hero(
-          tag: storyHeroTag(widget.myUserId ?? -1),
-          child: _avatarCircle(avatar, widget.myName, avatarRadius),
-        ),
+        child: mine == null
+            ? Hero(
+                tag: storyHeroTag(widget.myUserId ?? -1),
+                child: _avatarCircle(avatar, widget.myName, avatarRadius),
+              )
+            : _StoryPreview(
+                story: mine.stories.last,
+                radius: avatarRadius,
+                absUrl: _absUrl,
+                face: Hero(
+                  tag: storyHeroTag(widget.myUserId ?? -1),
+                  child:
+                      _avatarCircle(avatar, widget.myName, avatarRadius * 0.4),
+                ),
+              ),
       ),
     );
   }
@@ -422,14 +435,30 @@ class _StoriesTrayState extends State<StoriesTray> {
             : partner
                 ? (g.hasUnseen ? _RingState.partner : _RingState.partnerSeen)
                 : (g.hasUnseen ? _RingState.unseen : _RingState.seen),
+        // One arc per status; the watched ones grey (oldest first).
+        seen: [for (final s in g.stories) s.viewed],
         badge: partner
             ? Text('💞', style: TextStyle(fontSize: badgeSize * 0.7))
             : null,
-        // The photo flies into the viewer's header (and back to here).
-        child: Hero(
-          tag: storyHeroTag(g.authorId),
-          child: _avatarCircle(avatar, _nameFor(g), avatarRadius),
-        ),
+        // A peek at the post itself — the first one not watched yet (else
+        // the newest) — with their photo small in the corner. That photo
+        // flies into the viewer's header (and back to here).
+        child: g.stories.isEmpty
+            ? Hero(
+                tag: storyHeroTag(g.authorId),
+                child: _avatarCircle(avatar, _nameFor(g), avatarRadius),
+              )
+            : _StoryPreview(
+                story: g.stories.firstWhere((s) => !s.viewed,
+                    orElse: () => g.stories.last),
+                radius: avatarRadius,
+                absUrl: _absUrl,
+                face: Hero(
+                  tag: storyHeroTag(g.authorId),
+                  child: _avatarCircle(
+                      avatar, _nameFor(g), avatarRadius * 0.4),
+                ),
+              ),
       ),
     );
     return muted ? Opacity(opacity: 0.5, child: tile) : tile;
@@ -506,44 +535,44 @@ class _Ring extends StatelessWidget {
   final Widget child;
   final Widget? badge;
   final double size;
+  // Watched flags, oldest → newest (one arc each); or just a count.
+  final List<bool>? seen;
+  final int segments;
 
   const _Ring(
-      {required this.state, required this.child, this.badge, this.size = 66});
+      {required this.state,
+      required this.child,
+      this.badge,
+      this.size = 66,
+      this.seen,
+      this.segments = 1});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    Gradient? gradient;
-    Color? solid;
+    // The same colours as the friend list's ring (widgets/story_ring.dart).
+    final count = seen?.length ?? segments;
+    final List<bool> flags;
+    List<Color> colors = StoryRingStyle.unseen;
+    Color seenColor = StoryRingStyle.seen(scheme);
     switch (state) {
       case _RingState.unseen:
-        gradient = const LinearGradient(
-          colors: [Color(0xFFF9A825), Color(0xFFE91E63), Color(0xFF7B1FA2)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        );
-        break;
-      case _RingState.own:
-        solid = scheme.primary;
-        break;
+        flags = seen ?? List.filled(count, false);
       case _RingState.seen:
-        solid = Colors.grey.shade400;
-        break;
+        flags = List.filled(count, true);
+      case _RingState.own:
+        colors = [scheme.primary, scheme.primary];
+        flags = List.filled(count, false);
       case _RingState.none:
-        solid = Colors.grey.shade300;
-        break;
+        seenColor = scheme.onSurface.withValues(alpha: 0.16);
+        flags = const [true];
       case _RingState.partner:
-        // My Harmony partner's new status: warm theme → rose → gold.
-        gradient = SweepGradient(colors: [
-          scheme.primary,
-          const Color(0xFFFF5C8A),
-          const Color(0xFFF2A541),
-          scheme.primary,
-        ]);
-        break;
+        colors = StoryRingStyle.partner(scheme);
+        seenColor = StoryRingStyle.partnerSeen;
+        flags = seen ?? List.filled(count, false);
       case _RingState.partnerSeen:
-        solid = const Color(0xFFFF5C8A).withValues(alpha: 0.45);
-        break;
+        seenColor = StoryRingStyle.partnerSeen;
+        flags = List.filled(count, true);
     }
     return SizedBox(
       width: size,
@@ -551,23 +580,15 @@ class _Ring extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          Container(
-            width: size,
-            height: size,
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: gradient,
-              color: gradient == null ? solid : null,
+          Positioned.fill(
+            child: CustomPaint(
+              painter: StoryRingPainter(
+                  seen: flags, colors: colors, seenColor: seenColor),
             ),
-            child: Container(
-              padding: const EdgeInsets.all(2),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Theme.of(context).colorScheme.surface,
-              ),
-              child: child,
-            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(5),
+            child: child,
           ),
           if (badge != null)
             Positioned(bottom: -2, right: -2, child: badge!),
@@ -576,3 +597,127 @@ class _Ring extends StatelessWidget {
     );
   }
 }
+
+/// A peek at a status inside the ring: the photo itself, a video's first
+/// frame, a text status in its colour, a music status's cover — with the
+/// author's photo small in the corner.
+class _StoryPreview extends StatelessWidget {
+  const _StoryPreview({
+    required this.story,
+    required this.radius,
+    required this.absUrl,
+    required this.face,
+  });
+  final StoryItem story;
+  final double radius;
+  final String Function(String rel) absUrl;
+  final Widget face;
+
+  Color? _hex(String? h) {
+    final v = (h ?? '').replaceFirst('#', '');
+    final n = int.tryParse(v.length == 6 ? 'FF$v' : v, radix: 16);
+    return n == null ? null : Color(n);
+  }
+
+  Widget _peek(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final d = radius * 2;
+    Widget img(ImageProvider p) => Image(
+          image: p,
+          width: d,
+          height: d,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        );
+    final media = story.mediaUrl;
+    if ((story.isPhoto || story.isSticker) && (media ?? '').isNotEmpty) {
+      final u = absUrl(media!);
+      return img(authNetworkImageProvider(u, mediaAuthHeaders(u),
+          cacheSize: 200));
+    }
+    if (story.isVideo) {
+      final b = StoryThumbs.bytes(story.id, story.thumb);
+      return Stack(fit: StackFit.expand, children: [
+        if (b != null)
+          img(MemoryImage(b))
+        else
+          const DecoratedBox(
+              decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                      colors: [Color(0xFF2A2230), Color(0xFF0E0B10)]))),
+        Center(
+          child: Icon(Icons.play_arrow_rounded,
+              color: Colors.white.withValues(alpha: 0.9), size: radius * 0.7),
+        ),
+      ]);
+    }
+    if (story.isMusic) {
+      final art = story.musicArtUrl;
+      return Stack(fit: StackFit.expand, children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: SweepGradient(colors: [
+              const Color(0xFF151015),
+              scheme.primary.withValues(alpha: 0.55),
+              const Color(0xFF151015),
+            ]),
+          ),
+        ),
+        if ((art ?? '').isNotEmpty) img(NetworkImage(art!)),
+        if ((art ?? '').isEmpty)
+          Icon(Icons.music_note_rounded,
+              color: Colors.white, size: radius * 0.8),
+      ]);
+    }
+    // Text: its own colour, the first words.
+    final bg = _hex(story.background) ?? scheme.primary;
+    final words = (story.caption ?? '').trim();
+    return ColoredBox(
+      color: bg,
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(radius * 0.22),
+          child: Text(words.isEmpty ? '…' : words,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: bg.computeLuminance() > 0.55
+                      ? Colors.black87
+                      : Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: radius * 0.3,
+                  height: 1.1)),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = radius * 2;
+    return SizedBox(
+      width: d,
+      height: d,
+      child: Stack(clipBehavior: Clip.none, children: [
+        ClipOval(
+          child: SizedBox(width: d, height: d, child: _peek(context)),
+        ),
+        Positioned(
+          left: -2,
+          bottom: -2,
+          child: Container(
+            padding: const EdgeInsets.all(1.5),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Theme.of(context).colorScheme.surface,
+            ),
+            child: face,
+          ),
+        ),
+      ]),
+    );
+  }
+}
+

@@ -44,6 +44,7 @@ import '../utils/bounce_tap.dart';
 import '../utils/brand_theme.dart';
 import '../widgets/chat_wallpaper_sheet.dart';
 import '../widgets/person_avatar.dart';
+import '../widgets/story_ring.dart';
 import '../widgets/net_gate.dart';
 import '../widgets/now_glow.dart';
 import 'api_service.dart';
@@ -3927,32 +3928,20 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// The story rim on a friend's photo — the SAME language as the status
   /// tray: my Harmony partner's new status glows warm theme → rose → gold,
   /// their seen one a soft rose; everyone else the usual gradient / grey.
-  BoxDecoration _storyRim(int id, StoryGroup story, ColorScheme scheme) {
+  /// The status ring on a friend's photo: one arc per status, watched ones
+  /// grey — the same painter and colours as the status row.
+  StoryRingPainter _storyRim(int id, StoryGroup story, ColorScheme scheme) {
     final partner = _isHarmonyPartner(id);
-    if (story.hasUnseen) {
-      return BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: SweepGradient(
-            colors: partner
-                ? [
-                    scheme.primary,
-                    const Color(0xFFFF5C8A),
-                    const Color(0xFFF2A541),
-                    scheme.primary,
-                  ]
-                : const [
-                    Color(0xFFF9A825),
-                    Color(0xFFE91E63),
-                    Color(0xFF7B1FA2),
-                    Color(0xFFF9A825),
-                  ]),
-      );
-    }
-    return BoxDecoration(
-      shape: BoxShape.circle,
-      color: partner
-          ? const Color(0xFFFF5C8A).withValues(alpha: 0.45)
-          : scheme.onSurface.withValues(alpha: 0.28),
+    return StoryRingPainter(
+      seen: [
+        for (final s in story.stories)
+          // A muted friend never lights up as new.
+          s.viewed || !story.hasUnseen,
+      ],
+      colors: partner ? StoryRingStyle.partner(scheme) : StoryRingStyle.unseen,
+      seenColor:
+          partner ? StoryRingStyle.partnerSeen : StoryRingStyle.seen(scheme),
+      stroke: 3.5,
     );
   }
 
@@ -5145,8 +5134,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       height: face + 8,
                       child: Stack(alignment: Alignment.center, children: [
                         Positioned.fill(
-                          child: DecoratedBox(
-                            decoration: _storyRim(fid, story, scheme),
+                          child: CustomPaint(
+                            painter: _storyRim(fid, story, scheme),
                           ),
                         ),
                         Container(

@@ -286,6 +286,8 @@ def ensure_media_schema():
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS heart_save BOOLEAN DEFAULT FALSE",
         # Song bed / lullaby extras (message_meta.py).
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS meta TEXT",
+        # Video status preview (stories list).
+        "ALTER TABLE stories ADD COLUMN IF NOT EXISTS thumb TEXT",
         # Ozilane Key: opaque per-user subject, linked-at cache, two-step flag.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_subject VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_linked_at TIMESTAMPTZ",

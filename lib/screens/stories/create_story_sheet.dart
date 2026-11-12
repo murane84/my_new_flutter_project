@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
+import 'package:video_compress/video_compress.dart';
+import 'dart:convert' show base64Encode;
 
 import '../../services/audio_handler.dart';
 import '../../utils/emoji_field.dart';
@@ -480,6 +482,22 @@ class _MediaComposePageState extends State<_MediaComposePage> {
     super.dispose();
   }
 
+  /// A tiny JPEG of a video's first frame, so friends' status list can show
+  /// what it is before they open it (phones only; null elsewhere).
+  Future<String?> _videoThumb() async {
+    if (kIsWeb || widget.kind != 'video' || widget.file.path.isEmpty) {
+      return null;
+    }
+    try {
+      final b = await VideoCompress.getByteThumbnail(widget.file.path,
+          quality: 30, position: 0);
+      if (b == null || b.isEmpty || b.length > 28000) return null;
+      return 'data:image/jpeg;base64,${base64Encode(b)}';
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _post() async {
     final bytes = _bytes;
     if (bytes == null || _posting) return;
@@ -501,6 +519,7 @@ class _MediaComposePageState extends State<_MediaComposePage> {
       mediaAssetId: assetId,
       mediaMime: mime,
       caption: _caption.text.trim(),
+      thumb: await _videoThumb(),
     );
     if (!mounted) return;
     setState(() => _posting = false);

@@ -14,6 +14,7 @@ class StoryItem {
   final String? musicArtist;
   final String? musicArtUrl;
   final String? background; // text-only story background colour hex
+  final String? thumb; // video: tiny JPEG data URI (status list preview)
   final DateTime? createdAt;
   final DateTime? expiresAt;
   bool viewed; // mutable so the viewer can flip it locally
@@ -30,6 +31,7 @@ class StoryItem {
     this.musicArtist,
     this.musicArtUrl,
     this.background,
+    this.thumb,
     this.createdAt,
     this.expiresAt,
     this.viewed = false,
@@ -56,6 +58,7 @@ class StoryItem {
         musicArtist: j['music_artist'] as String?,
         musicArtUrl: j['music_art_url'] as String?,
         background: j['background'] as String?,
+        thumb: j['thumb'] as String?,
         createdAt: _dt(j['created_at']),
         expiresAt: _dt(j['expires_at']),
         viewed: j['viewed'] == true,

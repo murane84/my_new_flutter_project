@@ -512,6 +512,10 @@ class Story(Base):
     # Background colour (hex like "#RRGGBB" or "#AARRGGBB") for a text-only
     # story (kind == "text"); the caption holds the text.
     background = Column(String, nullable=True)
+    # Tiny JPEG preview (data URI, ≤ ~30 KB) for a VIDEO status, so the
+    # status list can show what it is before it's opened (photos use the
+    # photo itself).
+    thumb = Column(Text, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), index=True, nullable=False)

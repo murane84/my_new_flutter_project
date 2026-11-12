@@ -4106,6 +4106,7 @@ class ApiService {
     String? musicArtist,
     String? musicArtUrl,
     String? background,
+    String? thumb, // video: tiny JPEG data URI for the status list
   }) async {
     // Every post shows on "Your story" (posting ring → Posted ✓) and makes
     // Home refetch statuses — see StoryPosting.
@@ -4126,6 +4127,7 @@ class ApiService {
           'music_artist': ?musicArtist,
           'music_art_url': ?musicArtUrl,
           'background': ?background,
+          'thumb': ?thumb,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {

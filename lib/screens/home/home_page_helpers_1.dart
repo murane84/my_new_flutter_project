@@ -1984,8 +1984,8 @@ extension _HomePageHelpers1 on HomePageState {
         child: Stack(alignment: Alignment.center, children: [
           // Story ring on the rim (gradient = unseen, grey = seen).
           Positioned.fill(
-            child: DecoratedBox(
-              decoration: _storyRim(id, story, scheme),
+            child: CustomPaint(
+              painter: _storyRim(id, story, scheme),
             ),
           ),
           Container(

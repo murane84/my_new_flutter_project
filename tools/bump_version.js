@@ -3,6 +3,7 @@
 //   node tools/bump_version.js minor    1.0.2+3 -> 1.1.0+4
 //   node tools/bump_version.js major    1.0.2+3 -> 2.0.0+4
 //   node tools/bump_version.js build    1.0.2+3 -> 1.0.2+4   (same name)
+//   node tools/bump_version.js show     prints 1.0.2+3, changes nothing
 // The +N (build number) ALWAYS goes up: Android only installs a higher one
 // as an update, and the in-app updater compares it. Prints the new
 // version (e.g. "1.0.3+4") and nothing else.
@@ -19,6 +20,10 @@ if (!m) {
   process.exit(1);
 }
 let [maj, min, pat, build] = m.slice(1).map(Number);
+if (kind === 'show') {
+  console.log(`${maj}.${min}.${pat}+${build}`);
+  process.exit(0);
+}
 if (kind === 'major') { maj++; min = 0; pat = 0; }
 else if (kind === 'minor') { min++; pat = 0; }
 else if (kind === 'patch') { pat++; }

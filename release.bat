@@ -4,13 +4,16 @@ REM release.bat - one command for a new Aluta release:
 REM   1. raises the version in pubspec.yaml (patch by default)
 REM   2. builds Android (arm64 + universal APK) and Windows (zipped)
 REM   3. puts the files in dist\ with clear names
-REM   4. publishes them to aluta.ozilane.com/admin/release (if the key is set)
-REM   5. commits the version and runs deploy_web.bat (web + server)
+REM   4. commits the version and runs deploy_web.bat (web + server)
+REM   5. waits for the new server, then publishes the files to
+REM      aluta.ozilane.com/admin/release (if the key is set)
 REM
 REM Usage:   release.bat            1.0.2+3 -> 1.0.3+4
 REM          release.bat minor      1.0.2+3 -> 1.1.0+4
 REM          release.bat major      1.0.2+3 -> 2.0.0+4
 REM          release.bat build      1.0.2+3 -> 1.0.2+4
+REM          release.bat publish    no build: publish what's in dist\ now
+REM                                 (e.g. after a failed upload)
 REM
 REM What's new: write it in RELEASE_NOTES.txt (one change per line) first.
 REM
@@ -25,13 +28,12 @@ set DEFINE=--dart-define=PROD_URL=%URL%
 
 del /f /q ".git\HEAD.lock" ".git\index.lock" ".git\refs\heads\main.lock" 2>nul
 
+if /i "%1"=="publish" goto :publish_only
+
 copy /y pubspec.yaml pubspec.yaml.bak >nul
 for /f "delims=" %%v in ('node tools\bump_version.js %1') do set VER=%%v
 if "%VER%"=="" goto :err
-for /f "tokens=1,2 delims=+" %%a in ("%VER%") do (
-  set NAME=%%a
-  set BUILD=%%b
-)
+call :split_version
 echo.
 echo ==== Aluta %NAME% (build %BUILD%) ====
 
@@ -54,24 +56,51 @@ dir /b dist
 
 if not exist RELEASE_NOTES.txt echo Improvements and fixes> RELEASE_NOTES.txt
 
-if "%ALUTA_RELEASE_KEY%"=="" (
-  echo.
-  echo No ALUTA_RELEASE_KEY on this PC - opening the uploader page.
-  echo Version %NAME%, build %BUILD%. Files are in dist\
-  start "" "%URL%/admin/release"
-) else (
-  call :publish android aluta-%NAME%-arm64.apk || goto :err
-  call :publish android-universal aluta-%NAME%-universal.apk || goto :err
-  call :publish windows aluta-%NAME%-windows.zip || goto :err
-)
-
 echo == committing the version ==
 git add pubspec.yaml RELEASE_NOTES.txt
 git commit -q -m "Release %NAME% (build %BUILD%)"
 
 echo == web + server ==
 call deploy_web.bat || goto :err
+goto :publish_all
 
+:publish_only
+for /f "delims=" %%v in ('node tools\bump_version.js show') do set VER=%%v
+call :split_version
+if not exist dist\aluta-%NAME%-arm64.apk (
+  echo dist\ has no build of %NAME% - run release.bat to build it.
+  exit /b 1
+)
+echo ==== publishing Aluta %NAME% (build %BUILD%) from dist\ ====
+
+:publish_all
+if "%ALUTA_RELEASE_KEY%"=="" (
+  echo.
+  echo No ALUTA_RELEASE_KEY in this window - opening the uploader page.
+  echo Version %NAME%, build %BUILD%. Files are in dist\
+  start "" "%URL%/admin/release"
+  exit /b 0
+)
+REM Railway takes a minute or two to roll out a deploy: wait until the NEW
+REM server answers /app/latest with JSON (the old one sends the web app's
+REM HTML page) before sending the files (max ~6 min).
+echo == waiting for the server ==
+set /a TRIES=0
+:wait
+curl.exe -s "%URL%/app/latest?platform=android" | findstr /b /c:"{" >nul && goto :ready
+set /a TRIES+=1
+if %TRIES% GEQ 36 (
+  echo The server didn't come up in time. When it's live, run:  release.bat publish
+  exit /b 1
+)
+timeout /t 10 /nobreak >nul
+goto :wait
+:ready
+call :publish android aluta-%NAME%-arm64.apk || goto :pubfail
+call :publish android-universal aluta-%NAME%-universal.apk || goto :pubfail
+call :publish windows aluta-%NAME%-windows.zip || goto :pubfail
+
+:done
 echo.
 echo ============================================================
 echo  Aluta %NAME% (build %BUILD%) is out.
@@ -79,6 +108,19 @@ echo  Phones on older builds will offer the update within hours,
 echo  or at once from Menu - Account - Check for updates.
 echo ============================================================
 goto :eof
+
+:pubfail
+echo.
+echo *** Publishing failed - the build is safe in dist\.
+echo     Fix the cause above, then run:  release.bat publish
+exit /b 1
+
+:split_version
+for /f "tokens=1,2 delims=+" %%a in ("%VER%") do (
+  set NAME=%%a
+  set BUILD=%%b
+)
+exit /b 0
 
 :publish
 echo == publishing %1 ==

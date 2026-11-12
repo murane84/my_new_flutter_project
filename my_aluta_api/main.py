@@ -484,7 +484,7 @@ def about_aluta():
 
 # ✅ Release uploads: key + size checked BEFORE the body is read (FastAPI
 #    would otherwise spool a stranger's multi-GB upload to disk first).
-app.middleware("http")(releases_router.guard_upload)
+app.add_middleware(releases_router.GuardUpload)
 
 
 # ✅ CORS

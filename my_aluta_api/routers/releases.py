@@ -99,30 +99,48 @@ def _locked(ip: str, now: float) -> bool:
     return False
 
 
-async def guard_upload(request, call_next):
+def _refuse(request):
+    """Why this upload may not even be read (a response), or None."""
+    import time
+    from fastapi.responses import JSONResponse
+    now = time.time()
+    ip = _ip(request)
+    if _locked(ip, now):
+        return JSONResponse({"detail": "Too many wrong keys — try later"},
+                            status_code=429)
+    if not _key_ok(request.headers.get("x-release-key", "")):
+        _fails.setdefault(ip, []).append(now)
+        _fails.setdefault("*", []).append(now)
+        return JSONResponse({"detail": "Wrong key"}, status_code=403)
+    try:
+        size = int(request.headers.get("content-length", ""))
+    except ValueError:
+        return JSONResponse({"detail": "Content-Length needed"},
+                            status_code=411)
+    if size > MAX_BYTES + 1024 * 1024:
+        return JSONResponse({"detail": "File too large"}, status_code=413)
+    return None
+
+
+class GuardUpload:
     """POST /admin/release: the key must come as an X-Release-Key header
     and the body must declare a sane size — both checked before a byte
-    of the upload is read. Wrong keys are throttled."""
-    if request.method == "POST" and request.url.path.rstrip("/") == "/admin/release":
-        import time
-        from fastapi.responses import JSONResponse
-        now = time.time()
-        ip = _ip(request)
-        if _locked(ip, now):
-            return JSONResponse({"detail": "Too many wrong keys — try later"},
-                                status_code=429)
-        if not _key_ok(request.headers.get("x-release-key", "")):
-            _fails.setdefault(ip, []).append(now)
-            _fails.setdefault("*", []).append(now)
-            return JSONResponse({"detail": "Wrong key"}, status_code=403)
-        try:
-            size = int(request.headers.get("content-length", ""))
-        except ValueError:
-            return JSONResponse({"detail": "Content-Length needed"},
-                                status_code=411)
-        if size > MAX_BYTES + 1024 * 1024:
-            return JSONResponse({"detail": "File too large"}, status_code=413)
-    return await call_next(request)
+    of the upload is read; wrong keys are throttled. Plain ASGI and only
+    for that one path: every other request (downloads, media streams,
+    websockets) passes straight through, untouched."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if (scope["type"] == "http" and scope["method"] == "POST"
+                and scope["path"].rstrip("/") == "/admin/release"):
+            from starlette.requests import Request
+            resp = _refuse(Request(scope))
+            if resp is not None:
+                await resp(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
 
 
 # ── Public ────────────────────────────────────────────────────────────────────

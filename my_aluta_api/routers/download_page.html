@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Download Aluta</title>
+<meta name="description" content="Download Aluta for Android and Windows — chat, listen together in sync and keep your moments in Our Space.">
+<meta name="theme-color" content="#140d10">
+<link rel="icon" href="/favicon.png">
+<style>
+/* Aluta's tokens, as in the app: radii sm 8 · md 12 · lg 16 · xl 22 · xxl 28;
+   motion quick 180 · standard 260 · emphasized 360ms, ease-out to enter. */
+:root{--bg:#140d10;--card:#fff;--ink:#1d1215;--muted:#7a6a6e;--soft:#d9c7cc;
+--accent:#e0103a;--rose:#ff8aa0;--glass:rgba(255,255,255,.06);--edge:rgba(255,255,255,.10);
+--r-md:12px;--r-lg:16px;--r-xl:22px;--r-xxl:28px;--quick:180ms;--std:260ms;--emph:360ms;
+--enter:cubic-bezier(.215,.61,.355,1)}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;min-height:100vh;color:#f6eef0;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+background:radial-gradient(900px 520px at 78% -8%,#5a1229 0,transparent 62%),
+radial-gradient(700px 420px at -10% 30%,#3a0c1c 0,transparent 60%),var(--bg);background-attachment:fixed}
+a{color:inherit}
+/* Sticky frosted header — like the app bar. */
+header{position:sticky;top:0;z-index:10;backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);
+background:rgba(20,13,16,.62);border-bottom:1px solid var(--edge)}
+.bar{max-width:1120px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;font-weight:800;font-size:18px}
+.brand img{width:32px;height:32px;border-radius:9px}
+.bar nav{margin-left:auto;display:flex;gap:8px;align-items:center}
+.ghost{text-decoration:none;font-size:14px;font-weight:700;color:var(--soft);padding:8px 12px;border-radius:999px;
+transition:background var(--quick),color var(--quick)}
+.ghost:hover{background:var(--glass);color:#fff}
+.chip{text-decoration:none;font-size:14px;font-weight:800;color:#fff;padding:8px 14px;border-radius:999px;
+background:linear-gradient(#ff3a60,var(--accent) 55%,#a00024);box-shadow:0 4px 14px #e0103a55}
+.wrap{max-width:1120px;margin:0 auto;padding:24px 16px 32px}
+.pill{display:inline-block;border:1px solid #ff5a7a66;color:var(--rose);background:#ff2d5512;
+border-radius:999px;padding:4px 12px;font-size:12px;font-weight:800;letter-spacing:.08em}
+h1{font-size:36px;line-height:1.08;margin:14px 0 10px;letter-spacing:-.01em}
+h1 em{font-style:normal;background:linear-gradient(90deg,#ff5a7a,#ff9fb1);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{color:var(--soft);margin:0 0 22px;font-size:17px}
+.card{background:var(--card);color:var(--ink);border-radius:var(--r-xxl);padding:22px;
+box-shadow:0 1px 4px #0003,0 22px 60px #0008}
+.app{display:flex;gap:14px;align-items:center}
+.app img{width:60px;height:60px;border-radius:var(--r-lg)}
+.app h2{margin:0;font-size:22px}.app p{margin:2px 0 0;color:var(--muted)}
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0}
+.facts span{display:block;font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.facts b{font-size:17px}
+.btn{display:flex;gap:10px;justify-content:center;align-items:center;text-decoration:none;color:#fff;font-weight:800;
+padding:15px;border-radius:var(--r-lg);background:linear-gradient(#ff3a60,var(--accent) 55%,#a00024);
+box-shadow:0 8px 22px #e0103a55;transition:transform var(--quick) var(--enter),box-shadow var(--quick)}
+.btn:hover{transform:translateY(-2px);box-shadow:0 12px 28px #e0103a66}
+.btn:active{transform:translateY(0) scale(.98)}
+.btn svg{width:20px;height:20px;fill:currentColor}
+.sub{display:block;text-align:center;color:var(--muted);font-size:13px;margin-top:12px}
+.new h3{margin:20px 0 6px;font-size:15px}.new ul{margin:0;padding-left:20px;color:#4b3c40}.new li{margin:3px 0}
+.tile{display:flex;align-items:center;gap:14px;margin-top:16px;padding:16px;border-radius:var(--r-xl);
+background:var(--glass);border:1px solid var(--edge);text-decoration:none;transition:background var(--quick),transform var(--quick) var(--enter)}
+.tile:hover{background:rgba(255,255,255,.10);transform:translateY(-2px)}
+.tile .ic{width:44px;height:44px;border-radius:var(--r-md);display:grid;place-items:center;background:#ffffff12}
+.tile .ic svg{width:22px;height:22px;fill:#ff9fb1}
+.tile b{display:block}.tile small{color:var(--soft)}
+.tile .go{margin-left:auto;color:var(--rose);font-weight:800;font-size:14px}
+.feats{display:grid;grid-template-columns:1fr;gap:12px;margin:28px 0 0}
+.feat{padding:16px;border-radius:var(--r-xl);background:var(--glass);border:1px solid var(--edge)}
+.feat b{display:block;margin-bottom:2px}.feat span{color:var(--soft);font-size:14px}
+.how{margin-top:28px;color:var(--soft);font-size:14px;padding:18px;border-radius:var(--r-xl);border:1px dashed var(--edge)}
+.how h3{color:#fff;font-size:16px;margin:0 0 8px}.how li{margin:5px 0}.how p{margin:10px 0 0}
+footer{max-width:1120px;margin:0 auto;padding:22px 16px 34px;color:#a8979c;font-size:13px;
+display:flex;gap:16px;flex-wrap:wrap;border-top:1px solid var(--edge)}
+footer a{text-decoration:none}footer a:hover{color:#fff}
+footer span{margin-left:auto}
+/* Arrive like the app's cards: a short rise + fade, one after another. */
+.rise{animation:rise var(--emph) var(--enter) both}
+.d1{animation-delay:60ms}.d2{animation-delay:120ms}.d3{animation-delay:180ms}.d4{animation-delay:240ms}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.rise{animation:none}.btn,.tile{transition:none}}
+@media (max-width:420px){.bar nav .ghost{display:none}}
+/* Desktop: the story on the left, the download card on the right. */
+@media (min-width:900px){
+  .bar{padding:12px 40px}
+  .wrap{padding:64px 40px 48px}
+  .layout{display:grid;grid-template-columns:1.1fr 1fr;column-gap:64px;
+    grid-template-areas:"intro side" "extra side";align-items:start}
+  .intro{grid-area:intro}.side{grid-area:side;position:sticky;top:88px}.extra{grid-area:extra}
+  h1{font-size:58px;margin-top:18px}
+  .lead{font-size:19px;max-width:30em}
+  .feats{grid-template-columns:repeat(3,1fr)}
+  footer{padding:22px 40px 34px}
+}
+</style></head><body>
+<header><div class="bar">
+  <a class="brand" href="/"><img src="/icons/Icon-192.png" alt="">Aluta</a>
+  <nav><a class="ghost" href="/">Open in browser</a><a class="chip" href="#get">Download</a></nav>
+</div></header>
+<main class="wrap"><div class="layout">
+<section class="intro">
+  <span class="pill rise">LATEST VERSION — FREE</span>
+  <h1 class="rise d1">Chat, music and love — <em>together</em></h1>
+  <p class="lead rise d2">Chat with your people, listen together in sync, and keep your moments in Our Space.</p>
+</section>
+<aside class="side rise d2" id="get">{{CARD}}</aside>
+<section class="extra">
+  {{WINDOWS}}
+  <div class="feats rise d3">
+    <div class="feat"><b>Listen together</b><span>The same song, in sync, wherever you are.</span></div>
+    <div class="feat"><b>Our Space</b><span>Your playlist, moments, diary and love letters.</span></div>
+    <div class="feat"><b>Chats that remember</b><span>The songs you shared stay with your days.</span></div>
+  </div>
+  <div class="how rise d4"><h3>How to install on Android</h3><ol>
+    <li>Tap <b>Download for Android</b> and open the file when it finishes.</li>
+    <li>If Android asks, allow your browser to <b>install unknown apps</b>.</li>
+    <li>Play Protect may not know Aluta yet — tap <b>More details → Install anyway</b>.</li>
+    <li>“App not installed”? Use the <b>universal APK</b> (link under the button).</li>
+    <li>Already have Aluta? Installing updates it — your chats stay.</li>
+  </ol><p>After this, Aluta tells you itself when a new version is ready.</p></div>
+</section>
+</div></main>
+<footer><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/about">About</a><span>© Ozilane</span></footer>
+</body></html>

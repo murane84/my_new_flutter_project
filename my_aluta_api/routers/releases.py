@@ -135,85 +135,52 @@ def _when(iso) -> str:
         return "—"
 
 
+_ANDROID_SVG = ('<svg viewBox="0 0 24 24"><path d="M17.6 9.48l1.84-3.18a.38.38 0 0 0-.66-.38l-1.86 3.22a11.4 '
+                '11.4 0 0 0-9.84 0L5.22 5.92a.38.38 0 0 0-.66.38L6.4 9.48A10.8 10.8 0 0 0 1 18h22a10.8 10.8 0 '
+                '0 0-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 '
+                '1.25 1.25 0 0 1 0 2.5z"/></svg>')
+_WINDOWS_SVG = ('<svg viewBox="0 0 24 24"><path d="M3 5.5l7.5-1v7H3zm8.5-1.2L21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5z'
+                'm8.5 0H21V21l-9.5-1.3z"/></svg>')
+_PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "download_page.html")
+
+
 @router.get("/download", response_class=HTMLResponse, include_in_schema=False)
 @router.get("/download/", response_class=HTMLResponse, include_in_schema=False)
 def download_page():
     a = _meta("android")
     u = _meta("android-universal")
     w = _meta("windows")
-    uni = (f'<a class="alt2" href="/download/aluta-universal.apk">Older or '
-           f'32-bit phone? Get the universal APK ({_mb(u.get("size"))})</a>'
-           if u else "")
     e = html.escape
     if a:
         notes = "".join(
             f"<li>{e(line.lstrip('-• ').strip())}</li>"
             for line in (a.get("notes") or "").splitlines() if line.strip())
-        card = f"""
-      <div class="card">
-        <div class="app">
-          <img src="/icons/Icon-192.png" alt="" onerror="this.style.display='none'">
-          <div><h2>Aluta</h2><p>Chat, music and love — together</p></div>
-        </div>
-        <div class="grid">
-          <div><span>Version</span><b>{e(str(a.get('version', '—')))}</b></div>
-          <div><span>Size</span><b>{_mb(a.get('size'))}</b></div>
-          <div><span>Android</span><b>7.0 and above</b></div>
-          <div><span>Updated</span><b>{_when(a.get('updated_at'))}</b></div>
-        </div>
-        <a class="btn" href="/download/aluta.apk">Download for Android</a>
-        {uni}
-        {f'<div class="new"><h3>What’s new</h3><ul>{notes}</ul></div>' if notes else ''}
-      </div>"""
+        uni = (f'<a class="sub" href="/download/aluta-universal.apk">Older or 32-bit '
+               f'phone? Get the universal APK ({_mb(u.get("size"))})</a>' if u else "")
+        new = (f'<div class="new"><h3>What’s new</h3><ul>{notes}</ul></div>'
+               if notes else "")
+        card = f"""<div class="card">
+    <div class="app"><img src="/icons/Icon-192.png" alt="">
+      <div><h2>Aluta for Android</h2><p>Free · no ads in the way</p></div></div>
+    <div class="facts">
+      <div><span>Version</span><b>{e(str(a.get('version', '—')))}</b></div>
+      <div><span>Size</span><b>{_mb(a.get('size'))}</b></div>
+      <div><span>Android</span><b>7.0 and above</b></div>
+      <div><span>Updated</span><b>{_when(a.get('updated_at'))}</b></div>
+    </div>
+    <a class="btn" href="/download/aluta.apk">{_ANDROID_SVG}Download for Android</a>
+    {uni}{new}
+  </div>"""
     else:
-        card = '<div class="card"><h2>Coming soon</h2><p>The Android app will be here shortly.</p></div>'
-    win = (f'<a class="alt" href="/download/aluta-windows.zip">Aluta for Windows '
-           f'{html.escape(str(w.get("version", "")))} (.zip, {_mb(w.get("size"))})</a>'
-           if w else "")
-    return f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Download Aluta</title>
-<meta name="description" content="Download Aluta for Android — chat, listen together and keep your moments.">
-<meta name="theme-color" content="#1a1014">
-<style>
-:root{{--bg:#140d10;--card:#ffffff;--ink:#1d1215;--muted:#7a6a6e;--accent:#e0103a;--line:#eadfe2}}
-*{{box-sizing:border-box}}
-body{{margin:0;background:radial-gradient(1200px 500px at 70% -10%,#4a0f22 0,transparent 60%),var(--bg);
-color:#f6eef0;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}}
-.wrap{{max-width:560px;margin:0 auto;padding:28px 16px 40px}}
-.pill{{display:inline-block;border:1px solid #ff5a7a66;color:#ff8aa0;background:#ff2d5512;
-border-radius:999px;padding:4px 12px;font-size:12px;font-weight:800;letter-spacing:.08em}}
-h1{{font-size:34px;line-height:1.1;margin:14px 0 10px}}
-.lead{{color:#d9c7cc;margin:0 0 22px}}
-.card{{background:var(--card);color:var(--ink);border-radius:22px;padding:22px;box-shadow:0 18px 50px #0007}}
-.app{{display:flex;gap:14px;align-items:center}}
-.app img{{width:64px;height:64px;border-radius:16px}}
-.app h2{{margin:0;font-size:22px}} .app p{{margin:2px 0 0;color:var(--muted)}}
-.grid{{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0}}
-.grid span{{display:block;font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}}
-.grid b{{font-size:17px}}
-.btn{{display:block;text-align:center;background:linear-gradient(#ff3a60,var(--accent) 55%,#a00024);
-color:#fff;text-decoration:none;font-weight:800;padding:15px;border-radius:16px;box-shadow:0 8px 22px #e0103a55}}
-.new h3{{margin:20px 0 6px;font-size:15px}} .new ul{{margin:0;padding-left:20px;color:#4b3c40}}
-.alt{{display:block;text-align:center;color:#ff9fb1;margin-top:16px}}
-.alt2{{display:block;text-align:center;color:var(--muted);font-size:13px;margin-top:12px}}
-.how{{margin-top:26px;color:#d9c7cc;font-size:14px}}
-.how h3{{color:#fff;font-size:16px;margin:0 0 8px}} .how li{{margin:4px 0}}
-</style></head><body><div class="wrap">
-<span class="pill">LATEST VERSION — FREE</span>
-<h1>Download Aluta</h1>
-<p class="lead">Chat with your people, listen together in sync, and keep your moments in Our Space.</p>
-{card}
-{win}
-<div class="how"><h3>How to install</h3><ol>
-<li>Tap <b>Download for Android</b> and open the file when it finishes.</li>
-<li>If Android asks, allow your browser to <b>install unknown apps</b>.</li>
-<li>Play Protect may say it doesn’t know the app — tap <b>More details → Install anyway</b>. Aluta isn’t on the Play Store yet.</li>
-<li>“App not installed”? Your phone needs the <b>universal APK</b> (link under the button).</li>
-<li>Already have Aluta? Installing updates it — your chats stay.</li>
-</ol><p>After this, Aluta tells you when a new version is ready.</p></div>
-</div></body></html>"""
+        card = ('<div class="card"><h2>Coming soon</h2>'
+                '<p>The Android app will be here shortly.</p></div>')
+    win = (f"""<a class="tile rise d3" href="/download/aluta-windows.zip">
+    <span class="ic">{_WINDOWS_SVG}</span>
+    <span><b>Aluta for Windows</b><small>Version {e(str(w.get('version', '')))} · {_mb(w.get('size'))} · unzip and open Aluta</small></span>
+    <span class="go">Download</span></a>""" if w else "")
+    with open(_PAGE, encoding="utf-8") as f:
+        page = f.read()
+    return page.replace("{{CARD}}", card).replace("{{WINDOWS}}", win)
 
 
 # ── Publishing ───────────────────────────────────────────────────────────────

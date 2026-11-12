@@ -175,7 +175,7 @@ class AppUpdater {
           return;
         }
       }
-      if (manual || required || await _escalate(p, rel)) {
+      if (manual || required || _escalate(p, rel)) {
         await _offer(context, rel, required: required);
       } else {
         _nudge(context, rel);
@@ -196,7 +196,7 @@ class AppUpdater {
   }
 
   /// Put off three times, or out for a week → the card, not a toast.
-  Future<bool> _escalate(SharedPreferences p, Map<String, dynamic> rel) async {
+  bool _escalate(SharedPreferences p, Map<String, dynamic> rel) {
     final s = (p.getString(_kLaters) ?? '').split('|');
     final laters = s.length == 2 && s[0] == '${rel['build']}'
         ? int.tryParse(s[1]) ?? 0

@@ -706,7 +706,11 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
 
   Future<void> _download(String fileName) async {
     final base = await AppConfig.baseUrl;
-    final uri = Uri.parse('$base/downloads/$fileName');
+    // Android → the download page (fits-your-phone APK, install steps);
+    // Windows → the zip straight away.
+    final uri = Uri.parse(fileName.endsWith('.apk')
+        ? '$base/download'
+        : '$base/download/$fileName');
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
       showToast(context, 'Could not start the download', type: ToastType.error);

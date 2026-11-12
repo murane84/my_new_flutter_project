@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -9,6 +10,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../utils/adaptive_sheet.dart';
 import '../utils/app_config.dart';
@@ -16,14 +18,18 @@ import '../utils/radii.dart';
 import '../utils/toast_helper.dart';
 import 'haptics.dart';
 
-/// Updates for the Android app while Aluta lives outside the Play Store.
+/// Updates for the Android and Windows apps while Aluta lives outside the
+/// stores.
 ///
 /// The server (routers/releases.py) says which build is newest; if mine is
 /// older, a card offers it ("Later" hides that build for a day). A build
-/// below `min_build` must update. Update downloads the APK with progress,
-/// checks its SHA-256, and hands it to Android's installer.
+/// below `min_build` must update.
+///  • Android: downloads the APK that fits this phone (arm64, else the
+///    universal one) with progress, checks its SHA-256, opens the installer.
+///  • Windows: opens the new zip's download in the browser (a running app
+///    can't replace its own files).
 ///
-/// Off on web / desktop / iOS, and in a Play Store build
+/// Off on web / iOS / macOS / Linux, and in a store build
 /// (`--dart-define=PLAY_STORE=true`): Play forbids self-updating there.
 class AppUpdater {
   AppUpdater._();
@@ -33,8 +39,28 @@ class AppUpdater {
   static const _kSnooze = 'update_snooze_v1'; // "<build>|<epoch ms>"
   static const _kChecked = 'update_checked_v1'; // epoch ms of last auto check
 
+  bool get _android => defaultTargetPlatform == TargetPlatform.android;
+
   bool get supported =>
-      !kIsWeb && !_playStore && defaultTargetPlatform == TargetPlatform.android;
+      !kIsWeb &&
+      !_playStore &&
+      (_android || defaultTargetPlatform == TargetPlatform.windows);
+
+  /// Which published file fits this device: arm64 phones get the small
+  /// split APK, older / 32-bit phones the universal one.
+  String? _slotMemo;
+  Future<String> _slot() async {
+    if (_slotMemo != null) return _slotMemo!;
+    if (!_android) return _slotMemo = 'windows';
+    try {
+      final info = await DeviceInfoPlugin().androidInfo;
+      return _slotMemo = info.supported64BitAbis.contains('arm64-v8a')
+          ? 'android'
+          : 'android-universal';
+    } catch (_) {
+      return _slotMemo = 'android-universal'; // installs everywhere
+    }
+  }
 
   bool _busy = false;
   final ValueNotifier<double?> progress = ValueNotifier<double?>(null);
@@ -42,9 +68,16 @@ class AppUpdater {
   /// The newest release if it's newer than this install, else null.
   Future<Map<String, dynamic>?> _newer() async {
     final base = await AppConfig.baseUrl;
-    final resp = await http
-        .get(Uri.parse('$base/app/latest?platform=android'))
+    final slot = await _slot();
+    var resp = await http
+        .get(Uri.parse('$base/app/latest?platform=$slot'))
         .timeout(const Duration(seconds: 12));
+    // No universal build published → the arm64 one is the only choice.
+    if (resp.statusCode == 404 && slot == 'android-universal') {
+      resp = await http
+          .get(Uri.parse('$base/app/latest?platform=android'))
+          .timeout(const Duration(seconds: 12));
+    }
     if (resp.statusCode != 200) return null;
     final data = Map<String, dynamic>.from(jsonDecode(resp.body) as Map);
     final mine = int.tryParse((await PackageInfo.fromPlatform()).buildNumber) ?? 0;
@@ -126,10 +159,17 @@ class AppUpdater {
   }
 
   /// Download (with progress), verify, open the installer. Returns an error
-  /// line, or null when the installer opened.
+  /// line, or null when the installer (Windows: the browser download) opened.
   Future<String?> install(Map<String, dynamic> rel) async {
     final base = await AppConfig.baseUrl;
     final url = '$base${rel['url'] ?? '/download/aluta.apk'}';
+    if (!_android) {
+      final ok = await launchUrl(Uri.parse(url),
+          mode: LaunchMode.externalApplication);
+      return ok
+          ? null
+          : 'Couldn’t open the download — get it from aluta.ozilane.com/download';
+    }
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/aluta-${rel['build']}.apk');
     progress.value = 0;
@@ -295,6 +335,15 @@ class _UpdateCardState extends State<_UpdateCard> {
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Text(_error!,
                     style: const TextStyle(color: Color(0xFFE53935))),
+              ),
+            if (defaultTargetPlatform == TargetPlatform.windows)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                    'The new version downloads in your browser — close Aluta, '
+                    'unzip it over your Aluta folder and open it again.',
+                    style: TextStyle(
+                        fontSize: 12.5, color: scheme.onSurfaceVariant)),
               ),
             Row(children: [
               if (!widget.required)

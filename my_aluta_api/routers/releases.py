@@ -28,12 +28,18 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 router = APIRouter(tags=["Releases"])
 
+# One file per slot; publishing replaces it, so the volume never piles up.
+#   android            arm64 APK (--split-per-abi) — almost every phone
+#   android-universal  universal APK — older / 32-bit phones
+#   windows            the Windows app, zipped
 PLATFORMS = {
     "android": "aluta.apk",
+    "android-universal": "aluta-universal.apk",
     "windows": "aluta-windows.zip",
 }
 _MIME = {
     "android": "application/vnd.android.package-archive",
+    "android-universal": "application/vnd.android.package-archive",
     "windows": "application/zip",
 }
 MAX_BYTES = 200 * 1024 * 1024  # 200 MB — an arm64 APK is ~30 MB
@@ -104,6 +110,11 @@ def download_apk():
     return _serve("android")
 
 
+@router.get("/download/aluta-universal.apk", include_in_schema=False)
+def download_universal():
+    return _serve("android-universal")
+
+
 @router.get("/download/aluta-windows.zip", include_in_schema=False)
 @router.get("/downloads/aluta-windows.zip", include_in_schema=False)
 def download_windows():
@@ -128,7 +139,11 @@ def _when(iso) -> str:
 @router.get("/download/", response_class=HTMLResponse, include_in_schema=False)
 def download_page():
     a = _meta("android")
+    u = _meta("android-universal")
     w = _meta("windows")
+    uni = (f'<a class="alt2" href="/download/aluta-universal.apk">Older or '
+           f'32-bit phone? Get the universal APK ({_mb(u.get("size"))})</a>'
+           if u else "")
     e = html.escape
     if a:
         notes = "".join(
@@ -147,11 +162,13 @@ def download_page():
           <div><span>Updated</span><b>{_when(a.get('updated_at'))}</b></div>
         </div>
         <a class="btn" href="/download/aluta.apk">Download for Android</a>
+        {uni}
         {f'<div class="new"><h3>What’s new</h3><ul>{notes}</ul></div>' if notes else ''}
       </div>"""
     else:
         card = '<div class="card"><h2>Coming soon</h2><p>The Android app will be here shortly.</p></div>'
-    win = ('<a class="alt" href="/download/aluta-windows.zip">Windows app (.zip)</a>'
+    win = (f'<a class="alt" href="/download/aluta-windows.zip">Aluta for Windows '
+           f'{html.escape(str(w.get("version", "")))} (.zip, {_mb(w.get("size"))})</a>'
            if w else "")
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -180,6 +197,7 @@ h1{{font-size:34px;line-height:1.1;margin:14px 0 10px}}
 color:#fff;text-decoration:none;font-weight:800;padding:15px;border-radius:16px;box-shadow:0 8px 22px #e0103a55}}
 .new h3{{margin:20px 0 6px;font-size:15px}} .new ul{{margin:0;padding-left:20px;color:#4b3c40}}
 .alt{{display:block;text-align:center;color:#ff9fb1;margin-top:16px}}
+.alt2{{display:block;text-align:center;color:var(--muted);font-size:13px;margin-top:12px}}
 .how{{margin-top:26px;color:#d9c7cc;font-size:14px}}
 .how h3{{color:#fff;font-size:16px;margin:0 0 8px}} .how li{{margin:4px 0}}
 </style></head><body><div class="wrap">
@@ -192,6 +210,7 @@ color:#fff;text-decoration:none;font-weight:800;padding:15px;border-radius:16px;
 <li>Tap <b>Download for Android</b> and open the file when it finishes.</li>
 <li>If Android asks, allow your browser to <b>install unknown apps</b>.</li>
 <li>Play Protect may say it doesn’t know the app — tap <b>More details → Install anyway</b>. Aluta isn’t on the Play Store yet.</li>
+<li>“App not installed”? Your phone needs the <b>universal APK</b> (link under the button).</li>
 <li>Already have Aluta? Installing updates it — your chats stay.</li>
 </ol><p>After this, Aluta tells you when a new version is ready.</p></div>
 </div></body></html>"""
@@ -214,7 +233,10 @@ progress{{width:100%;margin-top:12px}}</style></head><body>
 <h2>Publish an Aluta release</h2>{vol}
 <form id="f">
 <label>Release key</label><input name="key" type="password" required>
-<label>Platform</label><select name="platform"><option>android</option><option>windows</option></select>
+<label>Platform</label><select name="platform">
+<option value="android">android — arm64 APK (app-arm64-v8a-release.apk)</option>
+<option value="android-universal">android-universal — universal APK (app-release.apk)</option>
+<option value="windows">windows — zipped Release folder</option></select>
 <label>Version (e.g. 1.0.3)</label><input name="version" required>
 <label>Build number (the +N in pubspec, e.g. 4)</label><input name="build" type="number" min="1" required>
 <label>Lowest build that may keep working (optional — older ones must update)</label><input name="min_build" type="number" min="0">

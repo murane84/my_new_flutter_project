@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:just_audio/just_audio.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
 
 import '../services/live_session_service.dart' show BytesAudioSource;
 import '../services/now_playing_presence.dart';
@@ -120,6 +121,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   @override
   void initState() {
     super.initState();
+    _loadReleases();
     _psSub = _player.playerStateStream.listen(_onPlayerState);
     _abSub = _player.positionStream.listen((pos) {
       // Feed the shared play clock — the lyrics sheet follows it.
@@ -1188,6 +1190,38 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     });
   }
 
+  // The published app builds (version + size) for "Get the full app" —
+  // fetched once per visit from /app/latest, the same source the download
+  // page and the in-app updater use.
+  static final Map<String, Map<String, dynamic>> _releases = {};
+  static bool _releasesAsked = false;
+
+  Future<void> _loadReleases() async {
+    if (_releasesAsked) return;
+    _releasesAsked = true;
+    try {
+      final base = await AppConfig.baseUrl;
+      for (final p in const ['android', 'windows']) {
+        final r = await http
+            .get(Uri.parse('$base/app/latest?platform=$p'))
+            .timeout(const Duration(seconds: 10));
+        if (r.statusCode == 200) {
+          final d = jsonDecode(r.body);
+          if (d is Map) _releases[p] = Map<String, dynamic>.from(d);
+        }
+      }
+      if (mounted) setState(() {});
+    } catch (_) {}
+  }
+
+  /// "1.0.2 · 61 MB" for a platform, or '' when not published yet.
+  String _relLine(String platform) {
+    final r = _releases[platform];
+    if (r == null) return '';
+    final mb = ((r['size'] as num?) ?? 0) / 1048576;
+    return '${r['version'] ?? ''}${mb > 0 ? ' · ${mb.toStringAsFixed(0)} MB' : ''}';
+  }
+
   Widget _infoCard(ThemeData theme) {
     return Container(
       width: 280,
@@ -1245,13 +1279,21 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           Text('Get the full app',
               style: theme.textTheme.labelMedium
                   ?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 6),
+          const SizedBox(height: 2),
+          Text(
+              'Your whole music library, background play, Listen Together '
+              'with calls — and it updates itself.',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: widget.textColor)),
+          const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () => _download('aluta.apk'),
               icon: const Icon(Icons.android, size: 18),
-              label: const Text('Android'),
+              label: Text(_relLine('android').isEmpty
+                  ? 'Android'
+                  : 'Android · ${_relLine('android')}'),
             ),
           ),
           const SizedBox(height: 8),
@@ -1260,7 +1302,21 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
             child: OutlinedButton.icon(
               onPressed: () => _download('aluta-windows.zip'),
               icon: const Icon(Icons.desktop_windows, size: 18),
-              label: const Text('Windows'),
+              label: Text(_relLine('windows').isEmpty
+                  ? 'Windows'
+                  : 'Windows · ${_relLine('windows')}'),
+            ),
+          ),
+          // What's new + how to install, on the download page.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: () async {
+                final base = await AppConfig.baseUrl;
+                await launchUrl(Uri.parse('$base/download'),
+                    mode: LaunchMode.externalApplication);
+              },
+              child: const Text('What’s new · how to install →'),
             ),
           ),
         ],

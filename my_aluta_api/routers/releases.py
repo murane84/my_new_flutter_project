@@ -175,6 +175,10 @@ _qr_memo: dict[str, str] = {}
 def _qr(url: str) -> str:
     """Inline SVG QR for [url] ("" if segno isn't installed)."""
     if url not in _qr_memo:
+        # A handful of hosts at most (the domain, the railway.app name);
+        # never let made-up Host headers grow this.
+        if len(_qr_memo) >= 8:
+            _qr_memo.clear()
         try:
             import segno
             _qr_memo[url] = segno.make(url, error="m").svg_inline(
@@ -216,8 +220,14 @@ def download_page(request: Request):
     u = _meta("android-universal")
     w = _meta("windows")
     e = html.escape
-    host = request.headers.get("x-forwarded-host") or request.url.netloc
-    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
+    # Behind Railway's proxy: the public host + https come in headers
+    # (a proxy chain can send "https,http" — the first is the visitor's).
+    host = (request.headers.get("x-forwarded-host") or request.url.netloc
+            ).split(",")[0].strip()
+    scheme = (request.headers.get("x-forwarded-proto") or request.url.scheme
+              ).split(",")[0].strip()
+    if scheme not in ("http", "https"):
+        scheme = "https"
     page_url = f"{scheme}://{host}/download"
 
     if a:

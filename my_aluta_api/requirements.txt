@@ -24,4 +24,4 @@ requests
 # and verification.
 pyotp
 # QR code on the /download page ("get it on your phone")
-segno
+segno>=1.5

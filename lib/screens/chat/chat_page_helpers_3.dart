@@ -2109,9 +2109,13 @@ extension _ChatPageHelpers3 on _ChatPageState {
       );
     }
     if (msg['is_read'] == true) {
-      // My bonded person saw it: a tiny heartbeat instead of the ticks.
+      // My bonded person saw it: the same ticks in Aluta's rose, beating
+      // once (lub-dub) as they turn — a heart icon here read as a second
+      // reaction next to the real ❤️ ones.
       if (_bondedHere) {
-        return _HeartbeatTick(id: '${msg['id']}', color: read);
+        return _HeartbeatTick(
+            id: '${msg['id']}',
+            color: accentInk(Theme.of(context).colorScheme));
       }
       return Icon(Icons.done_all, size: 13, color: read);
     }

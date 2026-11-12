@@ -102,8 +102,8 @@ class _SongBed {
   }
 }
 
-/// "Seen" in a bonded chat: a tiny heart that beats twice (lub-dub) the
-/// first time it appears, then rests.
+/// "Seen" in a bonded chat: the read ticks in Aluta's rose, beating twice
+/// (lub-dub) the first time they appear, then resting.
 class _HeartbeatTick extends StatefulWidget {
   const _HeartbeatTick({required this.id, required this.color});
   final String id;
@@ -145,17 +145,17 @@ class _HeartbeatTickState extends State<_HeartbeatTick>
       return d >= w ? 0 : h * (1 - d / w);
     }
 
-    return 1 + bump(0.18, 0.18, 0.45) + bump(0.55, 0.16, 0.28);
+    return 1 + bump(0.18, 0.18, 0.32) + bump(0.55, 0.16, 0.2);
   }
 
   @override
   Widget build(BuildContext context) {
-    final icon = Icon(Icons.favorite_rounded, size: 11, color: widget.color);
+    final icon = Icon(Icons.done_all, size: 13, color: widget.color);
     final c = _c;
     return Tooltip(
       message: 'Seen',
       child: SizedBox(
-        width: 14,
+        width: 13,
         height: 13,
         child: Center(
           child: c == null

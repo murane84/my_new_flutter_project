@@ -114,3 +114,7 @@ my_aluta_api/webapp/downloads/
 
 # local repo backup bundle (contains pre-purge history, never commit)
 aluta-repo-backup-*.bundle
+
+# release.bat output
+/dist/
+pubspec.yaml.bak

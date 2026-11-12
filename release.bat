@@ -1,0 +1,99 @@
+@echo off
+REM ---------------------------------------------------------------------------
+REM release.bat - one command for a new Aluta release:
+REM   1. raises the version in pubspec.yaml (patch by default)
+REM   2. builds Android (arm64 + universal APK) and Windows (zipped)
+REM   3. puts the files in dist\ with clear names
+REM   4. publishes them to aluta.ozilane.com/admin/release (if the key is set)
+REM   5. commits the version and runs deploy_web.bat (web + server)
+REM
+REM Usage:   release.bat            1.0.2+3 -> 1.0.3+4
+REM          release.bat minor      1.0.2+3 -> 1.1.0+4
+REM          release.bat major      1.0.2+3 -> 2.0.0+4
+REM          release.bat build      1.0.2+3 -> 1.0.2+4
+REM
+REM What's new: write it in RELEASE_NOTES.txt (one change per line) first.
+REM
+REM Auto-publish: set your publish key ONCE on this PC (it stays private):
+REM          setx ALUTA_RELEASE_KEY "your-UPLOAD_KEY-value"
+REM   then open a NEW cmd window. Without it, the uploader page opens instead.
+REM ---------------------------------------------------------------------------
+setlocal
+cd /d %~dp0
+set URL=https://aluta.ozilane.com
+set DEFINE=--dart-define=PROD_URL=%URL%
+
+del /f /q ".git\HEAD.lock" ".git\index.lock" ".git\refs\heads\main.lock" 2>nul
+
+copy /y pubspec.yaml pubspec.yaml.bak >nul
+for /f "delims=" %%v in ('node tools\bump_version.js %1') do set VER=%%v
+if "%VER%"=="" goto :err
+for /f "tokens=1,2 delims=+" %%a in ("%VER%") do (
+  set NAME=%%a
+  set BUILD=%%b
+)
+echo.
+echo ==== Aluta %NAME% (build %BUILD%) ====
+
+call flutter pub get || goto :err
+echo == Android: arm64 APK ==
+call flutter build apk --release --split-per-abi %DEFINE% || goto :err
+echo == Android: universal APK ==
+call flutter build apk --release %DEFINE% || goto :err
+echo == Windows ==
+call flutter build windows --release %DEFINE% || goto :err
+
+if not exist dist mkdir dist
+del /f /q dist\* 2>nul
+copy /y build\app\outputs\flutter-apk\app-arm64-v8a-release.apk dist\aluta-%NAME%-arm64.apk >nul || goto :err
+copy /y build\app\outputs\flutter-apk\app-release.apk dist\aluta-%NAME%-universal.apk >nul || goto :err
+tar -a -c -f dist\aluta-%NAME%-windows.zip -C build\windows\x64\runner\Release . || goto :err
+del /f /q pubspec.yaml.bak 2>nul
+echo == Files in dist\ ==
+dir /b dist
+
+if not exist RELEASE_NOTES.txt echo Improvements and fixes> RELEASE_NOTES.txt
+
+if "%ALUTA_RELEASE_KEY%"=="" (
+  echo.
+  echo No ALUTA_RELEASE_KEY on this PC - opening the uploader page.
+  echo Version %NAME%, build %BUILD%. Files are in dist\
+  start "" "%URL%/admin/release"
+) else (
+  call :publish android aluta-%NAME%-arm64.apk || goto :err
+  call :publish android-universal aluta-%NAME%-universal.apk || goto :err
+  call :publish windows aluta-%NAME%-windows.zip || goto :err
+)
+
+echo == committing the version ==
+git add pubspec.yaml RELEASE_NOTES.txt
+git commit -q -m "Release %NAME% (build %BUILD%)"
+
+echo == web + server ==
+call deploy_web.bat || goto :err
+
+echo.
+echo ============================================================
+echo  Aluta %NAME% (build %BUILD%) is out.
+echo  Phones on older builds will offer the update within hours,
+echo  or at once from Menu - Account - Check for updates.
+echo ============================================================
+goto :eof
+
+:publish
+echo == publishing %1 ==
+curl.exe -sS --fail-with-body -X POST "%URL%/admin/release" ^
+  -F "key=%ALUTA_RELEASE_KEY%" -F "platform=%1" -F "version=%NAME%" ^
+  -F "build=%BUILD%" -F "notes=<RELEASE_NOTES.txt" -F "file=@dist\%2" || exit /b 1
+echo.
+exit /b 0
+
+:err
+echo.
+echo *** RELEASE FAILED - see the error above. ***
+if exist pubspec.yaml.bak (
+  copy /y pubspec.yaml.bak pubspec.yaml >nul
+  del /f /q pubspec.yaml.bak
+  echo The version in pubspec.yaml was put back.
+)
+exit /b 1

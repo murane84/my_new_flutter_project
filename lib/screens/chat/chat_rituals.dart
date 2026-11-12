@@ -213,9 +213,12 @@ extension _ChatRituals on _ChatPageState {
     required String label,
     required VoidCallback onTap,
     required VoidCallback onClose,
+    bool inRow = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+      padding: inRow
+          ? const EdgeInsets.only(right: 8)
+          : const EdgeInsets.fromLTRB(14, 0, 14, 6),
       child: Align(
         alignment: Alignment.centerLeft,
         child: ClipRRect(
@@ -269,8 +272,13 @@ extension _ChatRituals on _ChatPageState {
   Widget _buildRitualChips(ColorScheme scheme, bool isDark) {
     if (!MomentPrefs.instance.rituals.value) return const SizedBox.shrink();
     final chips = <Widget>[];
+    // More than one → they share a sideways row.
+    final memo = _onThisDay;
+    final many = [_showGoodNight, _annivToday && !_isGroup, _streakAtRisk,
+          memo != null && !_heartMode].where((b) => b).length > 1;
     if (_showGoodNight) {
       chips.add(_ritualChip(
+        inRow: many,
         scheme: scheme,
         isDark: isDark,
         icon: Icons.nightlight_round,
@@ -281,6 +289,7 @@ extension _ChatRituals on _ChatPageState {
     }
     if (_annivToday && !_isGroup) {
       chips.add(_ritualChip(
+        inRow: many,
         scheme: scheme,
         isDark: isDark,
         icon: Icons.favorite_rounded,
@@ -302,6 +311,7 @@ extension _ChatRituals on _ChatPageState {
     }
     if (_streakAtRisk) {
       chips.add(_ritualChip(
+        inRow: many,
         scheme: scheme,
         isDark: isDark,
         icon: Icons.local_fire_department_rounded,
@@ -319,6 +329,7 @@ extension _ChatRituals on _ChatPageState {
       final d = _ts(memory['timestamp'])!;
       final years = DateTime.now().year - d.year;
       chips.add(_ritualChip(
+        inRow: many,
         scheme: scheme,
         isDark: isDark,
         icon: Icons.auto_awesome_rounded,
@@ -337,6 +348,22 @@ extension _ChatRituals on _ChatPageState {
       ));
     }
     if (chips.isEmpty) return const SizedBox.shrink();
-    return Column(mainAxisSize: MainAxisSize.min, children: chips);
+    if (chips.length == 1) return chips.first;
+    // Several at once (good night + streak + on this day): one sideways row
+    // like every chip row in Aluta, not a stack that pushes the chat up.
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: SizedBox(
+        height: 34,
+        child: EdgeScrollRow(
+          builder: (context, ctrl) => ListView(
+            controller: ctrl,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            children: chips,
+          ),
+        ),
+      ),
+    );
   }
 }

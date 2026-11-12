@@ -31,8 +31,6 @@ class _SongBed {
   static Timer? _clip;
   static int _gen = 0;
 
-  static bool isFor(String owner) => _owner == owner;
-
   static Future<bool> play(String owner, Map<String, dynamic> bed,
       {double volume = 0.16}) async {
     if (_owner == owner && (_p?.playing ?? false)) return true;

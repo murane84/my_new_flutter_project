@@ -48,6 +48,7 @@ import '../widgets/net_gate.dart';
 import '../widgets/now_glow.dart';
 import 'api_service.dart';
 import '../services/device_report.dart';
+import '../services/app_updater.dart';
 import '../services/net_check.dart';
 import 'websocket_manager.dart';
 import 'live_session_screen.dart';
@@ -857,6 +858,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
     DeviceReport.send();
     // Pick up any file downloads left unfinished (app killed / slept).
     DownloadManager.instance.init();
+    // Android outside the Play Store: is a newer Aluta published? (quietly,
+    // at most every 6 h; a few seconds in so it never competes with start-up)
+    Future.delayed(const Duration(seconds: 8), () {
+      if (mounted) AppUpdater.instance.check(context);
+    });
 
     // Android "Connected apps": surface Aluta actions ("Voice call on Aluta",
     // "Message on Aluta") under matched phone-book contacts, like WhatsApp /

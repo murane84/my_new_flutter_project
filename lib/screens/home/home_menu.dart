@@ -163,6 +163,12 @@ extension _HomeMenu on HomePageState {
                 icon: Icons.shield_outlined,
                 label: 'Legal & About',
                 onTap: () => showLegalMenu(context)),
+            if (AppUpdater.instance.supported)
+              GenieMenuEntry(
+                  icon: Icons.system_update_rounded,
+                  label: 'Check for updates',
+                  onTap: () =>
+                      AppUpdater.instance.check(context, manual: true)),
           ],
         ),
         // Its own top-level entry, so sharing a view is always one tap away.

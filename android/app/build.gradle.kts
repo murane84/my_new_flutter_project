@@ -1,5 +1,16 @@
-val flutterVersionCode = 1
-val flutterVersionName = "1.0"
+import java.util.Properties
+import java.io.FileInputStream
+
+// Release signing: android/key.properties (never committed) points at the
+// upload keystore. Every update MUST be signed with this same key, or
+// Android refuses to install it over the old app. Without the file, release
+// builds fall back to the debug key (only installs over other debug-key
+// builds made on THIS computer).
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
 
 plugins {
     id("com.android.application")
@@ -34,8 +45,10 @@ android {
         // ✅ Required by most of your plugins
         targetSdk = 36
 
-        versionCode = flutterVersionCode
-        versionName = flutterVersionName
+        // From pubspec.yaml "version: 1.0.3+4" → name 1.0.3, code 4. The
+        // in-app updater compares this code with the published build.
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
     }
 
     compileOptions {
@@ -46,9 +59,23 @@ android {
 
     // Kotlin jvmTarget 17 is set centrally in android/build.gradle.kts (AGP 8.11 / Kotlin 2.2 compilerOptions)
 
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (keystorePropertiesFile.exists())
+                signingConfigs.getByName("release")
+            else
+                signingConfigs.getByName("debug")
             isMinifyEnabled = false
             isShrinkResources = false
         }

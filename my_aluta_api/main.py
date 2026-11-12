@@ -30,6 +30,7 @@ from routers import spaces as spaces_router
 from routers import plan as plan_router
 from routers import wallpapers as wallpapers_router
 from routers import ozilane as ozilane_router
+from routers import releases as releases_router
 import admin_panel
 
 # 🔒 Never write a login token into the logs. Addresses can still carry one
@@ -178,6 +179,9 @@ app.include_router(feedback_router.router)
 # "Free music": search songs that are legally free to download (Jamendo CC +
 # Internet Archive CC / public domain). JAMENDO_CLIENT_ID enables Jamendo.
 app.include_router(free_music_router.router)
+# Releases outside the Play Store: /download page, /app/latest (in-app update
+# check), /admin/release uploader. Files on the Railway volume, not Postgres.
+app.include_router(releases_router.router)
 app.include_router(websocket_router)
 
 

@@ -25,6 +25,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
         _pendingPartnerBanner(scheme),
         _milestoneBanner(scheme),
         _weekSongCard(scheme),
+        _wordsCard(scheme),
       ];
 
       // Each dashboard card by its key, so the order can be the couple's own.

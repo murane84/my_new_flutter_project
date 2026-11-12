@@ -77,6 +77,7 @@ part 'space/space_page_helpers_2.dart'; // _RelationshipSpacePageState helpers (
 part 'space/space_page_helpers_3.dart'; // _RelationshipSpacePageState helpers (23 methods)
 part 'space/space_page_helpers_4.dart'; // _RelationshipSpacePageState helpers (36 methods)
 part 'space/space_dashboard_layout.dart'; // compact sticky hero + responsive dashboard
+part 'space/space_words.dart'; // "this month in your words" card
 
 /// "Our Space" — a bond rendered as a *place*, not a chat thread. Opening a
 /// pinned Space shows the story of that connection: who you are together, how
@@ -564,6 +565,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   bool _nudging = false;
   // Settings open in place, right under the pinned hero.
   bool _settingsOpen = false;
+  // "This month in your words" (space_words.dart).
+  Map<String, dynamic>? _words;
   // Today's question folds to a chip once you've both answered.
   bool _qExpanded = false;
   // Drawer: sections with nothing in them yet sit behind "More…".
@@ -838,14 +841,17 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       ApiService().getSpace(_id),
       if (pid != null) ApiService().getStreak(_id).catchError((_) => null),
       if (pid != null) ApiService().listRecaps(_id).catchError((_) => null),
+      if (pid != null) ApiService().getSpaceWords(_id).catchError((_) => null),
     ]);
     if (!mounted) return;
     final full = got[0] as Map<String, dynamic>?;
     final streak = pid != null ? got[1] as Map<String, dynamic>? : null;
     final recaps = pid != null ? got[2] as Map<String, dynamic>? : null;
+    final words = pid != null ? got[3] as Map<String, dynamic>? : null;
     if (full != null) {
       setState(() {
         _space = full;
+        if (words != null) _words = words;
         if (streak != null) _streak = streak;
         if (pid != null) {
           _recapReady =

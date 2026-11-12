@@ -572,6 +572,8 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         // Someone @-mentioned ME → it gets through even a muted group
         // (an @all doesn't).
         bypassMute: mentioned && !everyone,
+        // Sent while I sleep (after our good night) → no sound.
+        quiet: data['quiet'] == '1',
       );
     }
   } catch (_) {/* best-effort */}

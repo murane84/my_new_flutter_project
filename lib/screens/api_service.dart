@@ -2576,6 +2576,27 @@ class ApiService {
     }
   }
 
+  /// "This month in your words": counts of the pair's own warm phrases
+  /// this month ({month, items: [{phrase, me, them, total}]}), or null.
+  Future<Map<String, dynamic>?> getSpaceWords(int spaceId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.get(
+        Uri.parse('${await _baseUrl}/spaces/$spaceId/words'),
+        headers: _authHeaders(token),
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final d = jsonDecode(resp.body);
+        if (d is Map<String, dynamic>) return d;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('getSpaceWords failed: $e');
+      return null;
+    }
+  }
+
   /// The full, playable Monthly Mixtape recap for a calendar month (YYYY-MM).
   Future<Map<String, dynamic>?> getRecap(int spaceId, String month) async {
     try {

@@ -381,13 +381,6 @@ extension _ChatSongMemories on _ChatPageState {
         });
   }
 
-  /// The JSON meta for a send carrying [bed] (its 'kind' stays local).
-  String? _bedMeta(Map<String, dynamic>? bed) {
-    if (bed == null) return null;
-    final b = Map<String, dynamic>.from(bed)..remove('kind');
-    return jsonEncode({'bed': b});
-  }
-
   /// The bed a received message carries, or null.
   Map<String, dynamic>? _bedOf(Map<String, dynamic> msg) {
     final raw = msg['meta'];
@@ -511,6 +504,17 @@ extension _ChatSongMemories on _ChatPageState {
         },
         onClose: () =>
             rebuildWith(() => _songChipsDone.add('lc-${long['id']}')),
+      ));
+    }
+    // "when can I see you?" → plan the day; the header counts down to it.
+    final ask = _meetAsk;
+    if (ask != null) {
+      out.add((
+        icon: Icons.event_rounded,
+        label: 'Plan a date 💞',
+        onTap: () => _planDate(ask),
+        onClose: () =>
+            rebuildWith(() => _songChipsDone.add('md-${ask['id']}')),
       ));
     }
     return out;

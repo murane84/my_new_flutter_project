@@ -1,8 +1,10 @@
 """Small, validated extras a message can carry (JSON in messages.meta).
 
-Today: a song "bed" — a song from the pair's Our Playlist that plays softly
-under a voice note, or as a short lullaby when a good-night heart opens:
-    {"bed": {"title": str, "url": "/attachments/<id>" | None, "clip": secs}}
+  bed   — a song from the pair's Our Playlist that plays softly under a
+          voice note / a message, or as a lullaby when a good-night heart
+          opens: {"title": str, "url": "/attachments/<id>", "clip": secs}
+  date  — a planned meeting day "YYYY-MM-DD" (the chat counts down to it)
+  quiet — sent while they sleep: the push arrives without sound
 Anything else is dropped, and the whole thing stays tiny.
 """
 from __future__ import annotations
@@ -12,6 +14,7 @@ import re
 from typing import Optional
 
 _URL = re.compile(r"^/attachments/[A-Za-z0-9_-]{1,64}$")
+_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def clean_meta(raw) -> Optional[str]:
@@ -39,4 +42,9 @@ def clean_meta(raw) -> Optional[str]:
             if 0 < clip <= 60:
                 b["clip"] = clip
             out["bed"] = b
+    day = str(data.get("date") or "").strip()
+    if _DAY.match(day):
+        out["date"] = day
+    if data.get("quiet") in (True, 1, "1"):
+        out["quiet"] = 1
     return json.dumps(out, separators=(",", ":")) if out else None

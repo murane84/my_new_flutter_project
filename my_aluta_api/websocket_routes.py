@@ -553,6 +553,35 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                     })
                 except Exception:
                     pass
+            elif etype == "bond_ping":
+                # Little live signals between two mutual friends, never
+                # stored and never pushed:
+                #   here / leave — "I'm in our chat" (the other side shows
+                #       "Here together" only while they're in it too);
+                #   touch / touch_end — holding the heart: they feel a
+                #       lub-dub while their app is open.
+                try:
+                    to = int(data.get("to"))
+                    kind = str(data.get("kind") or "")
+                    if kind in ("here", "leave", "touch", "touch_end"):
+                        import crud as _crud_b
+                        _bdb = SessionLocal()
+                        try:
+                            ok = to in _crud_b._get_friend_ids(
+                                _bdb, int(user_id))
+                        finally:
+                            _bdb.close()
+                        state = _presence_in(to, f"dm:{int(user_id)}")
+                        live = (state == "here") if kind in ("here", "leave") \
+                            else (state != "offline")
+                        if ok and live:
+                            await notify_user(to, {
+                                "type": "bond_ping",
+                                "user_id": int(user_id),
+                                "kind": kind,
+                            })
+                except Exception:
+                    pass
             elif etype == "active_conv":
                 # The client reports which conversation it is actively viewing
                 # (e.g. "dm:42" / "grp:7"), or null when it leaves. We skip the

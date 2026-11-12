@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/physics.dart' show SpringSimulation, SpringDescription;
 
 import '../services/fcm_service.dart' show ActiveChat;
+import '../services/bond_live.dart';
 import '../services/notif_service.dart'
     show
         cancelConversationNotifications,
@@ -164,6 +165,7 @@ part 'chat/chat_morning.dart';
 part 'chat/chat_voice_hello.dart';    // 5-second voice hello 🎙️        // deliver at their morning 🌅
 part 'chat/chat_music_moments.dart';  // song reactions, dedications, voice-over-music
 part 'chat/chat_song_memories.dart';  // day songs, keepsakes, song beds, heartbeat seen
+part 'chat/chat_bond_live.dart';      // here together, hold to feel, dates, quiet sends
 
 // ─── Timestamp helpers ───────────────────────────────────────────────────────
 
@@ -610,6 +612,15 @@ class _ChatPageState extends State<ChatPage>
   Map<String, String>? _songDaysMemo;
   int _songDaysSig = -1;
   final Set<String> _songChipsDone = {};
+  // Live bond moments (chat_bond_live.dart).
+  DateTime? _partnerHereAt;
+  DateTime? _hereSentAt;
+  bool _iHolding = false;
+  bool _partnerHolding = false;
+  Timer? _beatTimer;
+  Timer? _partnerHoldEnd;
+  Map<String, dynamic>? _sendBedOnce; // next send carries our song
+  String? _sendDateOnce; // next send plans a date (YYYY-MM-DD)
   bool _amAdmin = false;
   final Set<String> _mentionCleared = {};
   List<Map<String, dynamic>>? _mentionCacheOf;
@@ -778,6 +789,8 @@ class _ChatPageState extends State<ChatPage>
         // Refresh presence so the backend keeps suppressing this chat's push
         // while it's open (short TTL; leaving lets it expire quickly).
         _sendActivePresence(true);
+        // Bonded: "I'm here" for the Here together line.
+        _bondHereTick();
       },
     );
 
@@ -920,6 +933,13 @@ class _ChatPageState extends State<ChatPage>
       ActiveChat.instance.leaveDm(widget.friendId.toString());
     }
     _sendActivePresence(false);
+    if (_bondedHere) {
+      if (_iHolding) _bondPing('touch_end');
+      _bondPing('leave');
+      BondLive.instance.setTogether(widget.friendId, false);
+    }
+    _beatTimer?.cancel();
+    _partnerHoldEnd?.cancel();
     _ws.close();
     UploadManager.instance.rev.removeListener(_onUploadsChanged);
     DownloadManager.instance.rev.removeListener(_onDownloadsChanged);
@@ -934,6 +954,14 @@ class _ChatPageState extends State<ChatPage>
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden) {
       _saveDraft();
+    }
+    // Here together: away from the app = not here; back = here again.
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _holdEnd();
+      _bondPing('leave');
+    } else if (state == AppLifecycleState.resumed) {
+      _bondHereTick();
     }
   }
 
@@ -1708,6 +1736,8 @@ class _ChatPageState extends State<ChatPage>
           if (idx != -1) _messages[idx]['pinned_until'] = null;
         });
       }
+    } else if (type == 'bond_ping') {
+      _onBondPing(event);
     } else if (type == 'typing') {
       final uid = event['user_id'];
       final convId = event['conversation_id']?.toString();
@@ -2144,10 +2174,12 @@ class _ChatPageState extends State<ChatPage>
     final heartFor = (heart && _isGroup) ? _heartFor : null;
     final heartForName = heartFor == null ? null : _heartForName;
     final heartSave = (heart && attach != null && _heartSave) ? true : null;
-    // A good-night lullaby rides inside the heart.
-    final bedMeta = (heart && _pendingBed?['kind'] == 'lullaby')
-        ? _bedMeta(_pendingBed)
-        : null;
+    // A good-night lullaby rides inside the heart; "send with our song"
+    // and "plan a date" ride on a plain message; "quiet" while they sleep.
+    final lullaby = heart && _pendingBed?['kind'] == 'lullaby';
+    final bedMeta = _metaFor(
+        bed: lullaby ? _pendingBed : (heart ? null : _sendBedOnce),
+        date: heart ? null : _sendDateOnce);
     _markActivity();
     _ctrl.clear();
     setState(() {
@@ -2159,7 +2191,9 @@ class _ChatPageState extends State<ChatPage>
       _heartFor = null;
       _heartForName = null;
       _heartSave = false;
-      if (bedMeta != null) _pendingBed = null;
+      if (lullaby) _pendingBed = null;
+      _sendBedOnce = null;
+      _sendDateOnce = null;
     });
     _saveDraft(); // text now empty → clears the stored draft
     if (_isGroup) setState(_closeMentionPicker);
@@ -2184,8 +2218,8 @@ class _ChatPageState extends State<ChatPage>
         optimistic['unlock_at'] = unlockAt.toUtc().toIso8601String();
         optimistic['content'] = '';
       }
-      if (bedMeta != null) optimistic['meta'] = bedMeta;
     }
+    if (bedMeta != null) optimistic['meta'] = bedMeta;
     _insertOptimistic(optimistic);
 
     // The sealed photo / clip uploads once; a retry reuses it.
@@ -3125,7 +3159,7 @@ class _ChatPageState extends State<ChatPage>
             : bed != null
                 ? '🎵 with “${_clip('${bed['title']}', 48)}”'
                 : _voiceMusicCaption(),
-        meta: _bedMeta(bed),
+        meta: _metaFor(bed: bed),
       );
       _recordSong = null;
     } catch (_) {
@@ -7152,10 +7186,25 @@ class _ChatPageState extends State<ChatPage>
                               ),
                               // Secret-heart toggle — stays visible while
                               // typing so you can mark a note as a secret ❤.
-                              IconButton(
-                                tooltip: _heartMode
-                                    ? 'Secret heart: on'
-                                    : 'Send as a secret heart',
+                              // Bonded: HOLD it and they feel a lub-dub
+                              // (both holding → one heart, both screens).
+                              GestureDetector(
+                                onLongPressStart:
+                                    _bondedHere ? (_) => _holdStart() : null,
+                                onLongPressEnd:
+                                    _bondedHere ? (_) => _holdEnd() : null,
+                                onLongPressCancel:
+                                    _bondedHere ? _holdEnd : null,
+                                child: IconButton(
+                                // (No long-press tooltip on phones when the
+                                // hold means "let them feel you".)
+                                tooltip: (_bondedHere && !emojiFloats(context))
+                                    ? null
+                                    : _heartMode
+                                        ? 'Secret heart: on'
+                                        : _bondedHere
+                                            ? 'Secret heart · hold: let them feel you'
+                                            : 'Send as a secret heart',
                                 icon: Icon(
                                   _heartMode
                                       ? Icons.favorite_rounded
@@ -7172,6 +7221,7 @@ class _ChatPageState extends State<ChatPage>
                                   }
                                 }),
                                 visualDensity: VisualDensity.compact,
+                              ),
                               ),
                               // Text field. Desktop: Enter=send, Shift+Enter=newline.
                               Expanded(
@@ -7724,6 +7774,8 @@ class _ChatPageState extends State<ChatPage>
                                   (msg['is_deleted'] == true ||
                                       _reactionsOf(msg).isEmpty))
                                 _buildSeenAvatar(scheme),
+                              // Sent with our song · sent while you slept.
+                              ?_bondNotes(msg, isMe),
                             ],
                           );
                         },
@@ -7944,6 +7996,18 @@ class _ChatPageState extends State<ChatPage>
                             },
                             child: _mediaBrowser,
                           ),
+                        ),
+                      ),
+                    // Holding the heart (me / them / both): it beats here.
+                    if (_iHolding || _partnerHolding)
+                      Positioned.fill(
+                        child: _HoldHearts(
+                          mine: _iHolding,
+                          theirs: _partnerHolding,
+                          name: _livePeerLabel
+                              .trim()
+                              .split(RegExp(r'\s+'))
+                              .first,
                         ),
                       ),
                     if (_viewerImages != null) _buildInlineViewer(),

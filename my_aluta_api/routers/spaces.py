@@ -27,6 +27,7 @@ from models import (
     MediaAsset, DailyPrompt, DailyPromptAnswer, Dedication, LoveCapsule,
     SharedListenDay, CoupleStreak, CoupleUnlock,
 )
+import re
 import uuid as _uuid
 from datetime import date as _date
 import crud
@@ -2211,6 +2212,63 @@ def get_streak(
     cached; grants any newly-reached milestone (idempotent) and nudges both."""
     space = _owned_space_or_404(db, space_id, current_user.id)
     return _streak_state(db, space, current_user)
+
+
+# ── This month in your words ─────────────────────────────────────────────────
+# "You said 'miss you' 14 times this month 🥹" — counted on demand from the
+# pair's own DM this calendar month (both ways). Nothing is stored; only the
+# two of them can ask (their Space), and only counts come back, never text.
+_WORDS = [
+    ("miss you", re.compile(r"\bmiss+\s*(?:you|u|ya|yu)\b|\bnakumiss|\bnimekumiss", re.I)),
+    ("love you", re.compile(r"\blove\s*(?:you|u|ya)\b|\bnakupenda|\bily\b", re.I)),
+    ("good night", re.compile(r"\bgood\s*night\b|\bgn\b|\busiku\s*mwema|\blala\s*salama", re.I)),
+    ("good morning", re.compile(r"\bgood\s*morning\b|\bgm\b|\bhabari\s*za\s*asubuhi", re.I)),
+    ("baby", re.compile(r"\bbab(?:y|e|ie)\b|\bmpenzi\b|\bdarling\b", re.I)),
+    ("❤️", re.compile(r"❤️|❤|😍|🥰|😘")),
+]
+
+
+@router.get("/{space_id}/words")
+def month_words(
+    space_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    pk, partner = _bond_pair_key(space, current_user.id)
+    if pk is None:
+        return {"month": None, "items": []}
+    from models import Message
+    now = datetime.now(timezone.utc)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    a, b = int(current_user.id), int(partner)
+    rows = (
+        db.query(Message.sender_id, Message.content)
+        .filter(
+            or_(and_(Message.sender_id == a, Message.receiver_id == b),
+                and_(Message.sender_id == b, Message.receiver_id == a)),
+            Message.timestamp >= start,
+            Message.is_deleted.isnot(True),
+        )
+        .limit(20000)
+        .all()
+    )
+    counts = {k: {"me": 0, "them": 0} for k, _ in _WORDS}
+    for sid, text in rows:
+        if not text:
+            continue
+        who = "me" if int(sid) == a else "them"
+        for key, rx in _WORDS:
+            n = len(rx.findall(text))
+            if n:
+                counts[key][who] += n
+    items = [
+        {"phrase": k, "me": v["me"], "them": v["them"],
+         "total": v["me"] + v["them"]}
+        for k, v in counts.items() if v["me"] + v["them"] >= 2
+    ]
+    items.sort(key=lambda x: -x["total"])
+    return {"month": start.strftime("%Y-%m"), "items": items[:4]}
 
 
 # ── Monthly Mixtape recap (§5.8) ─────────────────────────────────────────────

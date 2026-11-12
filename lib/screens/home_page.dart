@@ -49,6 +49,7 @@ import '../widgets/now_glow.dart';
 import 'api_service.dart';
 import '../services/device_report.dart';
 import '../services/app_updater.dart';
+import '../services/bond_live.dart';
 import '../services/net_check.dart';
 import 'websocket_manager.dart';
 import 'live_session_screen.dart';
@@ -2902,6 +2903,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
       }
       // (the open chat handles its own bubbles — don't swallow the event)
     }
+    if (type == 'bond_ping' && event['kind'] == 'touch') {
+      // My person is holding the heart and I'm elsewhere in the app: feel it
+      // (the open chat with them shows its own heart instead).
+      final sid = '${event['user_id']}';
+      if (!ActiveChat.instance.suppresses(senderId: sid)) _feelHeld(sid);
+    }
     if (type == 'typing') {
       // Group typing carries a conversation_id → light the GROUP tile, not the
       // sender's DM row (which would wrongly suggest the reply lands in the DM).
@@ -4008,6 +4015,29 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// Play a song from MY loaded songs, matched loosely by title (exact,
   /// then "file starts with / contains it"). false = not loaded here.
   bool _playLoadedSong(String title) => playLoadedSongByTitle(title);
+
+  /// My person is holding the heart while I'm elsewhere in the app: a
+  /// lub-dub, and (at most every 15 s) a quiet line saying who.
+  DateTime? _heldToastAt;
+  void _feelHeld(String senderId) {
+    final id = int.tryParse(senderId);
+    if (id == null || _bondWith(id) == null) return;
+    () async {
+      await Haptics.mediumImpact();
+      await Future<void>.delayed(const Duration(milliseconds: 170));
+      await Haptics.lightImpact();
+    }();
+    final now = DateTime.now();
+    if (_heldToastAt != null &&
+        now.difference(_heldToastAt!) < const Duration(seconds: 15)) {
+      return;
+    }
+    _heldToastAt = now;
+    if (!mounted) return;
+    final first = _nameForUser(id).trim().split(RegExp(r'\s+')).first;
+    showToast(context, '💓 $first is holding you — open your chat to hold back',
+        type: ToastType.info);
+  }
 
   // ── List navigation ─────────────────────────────────────────────────────
 
@@ -5230,6 +5260,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       NowPlayingPresence.instance,
                       QuickStatus.instance,
                       HeartbeatLog.instance,
+                      BondLive.instance,
                       _minuteTick,
                     ]),
                     builder: (context, _) {
@@ -5318,6 +5349,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
                           bold = (tLead.length + 4, tLead.length + 4 + lt2.length);
                         }
                         color = accentInk(scheme);
+                      } else if (BondLive.instance.togetherWith(fid)) {
+                        // Both of us in our chat right now.
+                        text = '💞 Here together';
+                        color = accentInk(scheme);
                       } else if (same) {
                         text = '$bothLead$t” ❤️';
                         bold = (bothLead.length, bothLead.length + t.length);
@@ -5332,6 +5367,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
                         color = songInk;
                       } else {
                         text = [
+                          // The day we planned to meet, counting down.
+                          ?BondLive.countdownLine(
+                              BondLive.instance.dateWith(fid)),
                           if (qs.isNotEmpty) qs,
                           if (base.isNotEmpty) base,
                           if (dedWaiting) '💝 left you a song',

@@ -52,6 +52,17 @@ extension _ChatMorning on _ChatPageState {
                 _holdForMorning();
               },
             ),
+            if (_bondedHere)
+              ListTile(
+                leading: const Text('🎵', style: TextStyle(fontSize: 22)),
+                title: const Text('Send with our song'),
+                subtitle: Text(
+                    'A 10-second clip of your song plays softly when $first opens it'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _sendWithSong();
+                },
+              ),
             ListTile(
               leading: Icon(Icons.send_rounded, color: accentInk(scheme)),
               title: const Text('Send now'),

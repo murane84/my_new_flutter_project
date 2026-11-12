@@ -826,6 +826,8 @@ Future<void> showMessageNotification({
   bool bypassMute = false,
   // Not a message (a heartbeat, "they're online"): quiet hours hush it.
   bool hushable = false,
+  // Sent while I sleep (after a good night): shown without sound.
+  bool quiet = false,
 }) async {
   // A group the user muted stays quiet (except a mention of me).
   final gid = int.tryParse(conversationId ?? '');
@@ -875,7 +877,7 @@ Future<void> showMessageNotification({
     final personKey = hasGroup
         ? 'c$conversationId'
         : (hasSender ? 's$senderId' : null);
-    final hush = hushable && await QuietHours.isNow();
+    final hush = quiet || (hushable && await QuietHours.isNow());
     await _fln.show(
       id: notifId,
       title: title,

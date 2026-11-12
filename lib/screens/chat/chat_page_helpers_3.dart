@@ -2323,7 +2323,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
                 duration: Motion.quick,
                 child: anyRecording
                     ? const _RecordingPulse(key: ValueKey('rec'))
-                    : Row(
+                    : _bondedHere
+                        // My person typing: a little record turning.
+                        ? const _SpinningRecord(key: ValueKey('vinyl'))
+                        : Row(
                         key: const ValueKey('dots'),
                         mainAxisSize: MainAxisSize.min,
                         children:

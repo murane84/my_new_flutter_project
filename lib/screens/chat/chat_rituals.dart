@@ -58,6 +58,8 @@ extension _ChatRituals on _ChatPageState {
         if (mounted && _activeConvKey == convAtStart) _searchDeepLoad();
       });
     }
+    // Bonded: say "I'm here" now (Here together) and show any planned day.
+    _bondHereTick();
     // The "In tune" streak with this partner (keep-it-alive chip).
     final sid = _defaultKeepSpaceId;
     if (sid == null) return;

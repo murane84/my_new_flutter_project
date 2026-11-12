@@ -127,6 +127,7 @@ exit /b 0
 :publish
 echo == publishing %1 ==
 curl.exe -sS --fail-with-body -X POST "%URL%/admin/release" ^
+  -H "X-Release-Key: %ALUTA_RELEASE_KEY%" ^
   -F "key=%ALUTA_RELEASE_KEY%" -F "platform=%1" -F "version=%NAME%" ^
   -F "build=%BUILD%" -F "notes=<RELEASE_NOTES.txt" -F "file=@dist\%2" || exit /b 1
 echo.

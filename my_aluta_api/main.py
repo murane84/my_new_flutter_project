@@ -10,7 +10,6 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
 
-from config import DATABASE_URL
 from database import engine
 from models import Base
 
@@ -412,11 +411,10 @@ def health_check():
 #    message moved here to /api.
 @app.get("/api")
 def api_info():
-    environment = os.getenv("ENVIRONMENT", "development")
-    response = {"message": "Welcome to My Aluta API"}
-    if environment == "development":
-        response["database_url"] = DATABASE_URL
-    return response
+    # Never the database URL (it holds the DB password): ENVIRONMENT
+    # defaults to "development", so one missing variable on Railway used
+    # to hand it to anyone who opened /api.
+    return {"message": "Welcome to My Aluta API"}
 
 
 # ✅ Legal documents. Served by the API itself so the app can link to them
@@ -482,6 +480,11 @@ def about_aluta():
     if os.path.isfile(path):
         return FileResponse(path, media_type="text/html")
     return Response(status_code=404)
+
+
+# ✅ Release uploads: key + size checked BEFORE the body is read (FastAPI
+#    would otherwise spool a stranger's multi-GB upload to disk first).
+app.middleware("http")(releases_router.guard_upload)
 
 
 # ✅ CORS

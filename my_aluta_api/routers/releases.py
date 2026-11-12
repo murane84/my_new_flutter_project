@@ -79,6 +79,52 @@ def _key_ok(key: str) -> bool:
     return bool(want) and hmac.compare_digest(key.encode(), want.encode())
 
 
+# Wrong keys: 5 per address per 15 min, 30 overall per hour → 429.
+_fails: dict[str, list[float]] = {}
+
+
+def _ip(request) -> str:
+    # Railway appends the real client to X-Forwarded-For: take the LAST
+    # entry (the first ones can be typed by anyone).
+    xff = request.headers.get("x-forwarded-for", "")
+    return (xff.split(",")[-1].strip() if xff else
+            (request.client.host if request.client else "?"))
+
+
+def _locked(ip: str, now: float) -> bool:
+    for k, win, cap in ((ip, 900, 5), ("*", 3600, 30)):
+        _fails[k] = [t for t in _fails.get(k, []) if now - t < win]
+        if len(_fails[k]) >= cap:
+            return True
+    return False
+
+
+async def guard_upload(request, call_next):
+    """POST /admin/release: the key must come as an X-Release-Key header
+    and the body must declare a sane size — both checked before a byte
+    of the upload is read. Wrong keys are throttled."""
+    if request.method == "POST" and request.url.path.rstrip("/") == "/admin/release":
+        import time
+        from fastapi.responses import JSONResponse
+        now = time.time()
+        ip = _ip(request)
+        if _locked(ip, now):
+            return JSONResponse({"detail": "Too many wrong keys — try later"},
+                                status_code=429)
+        if not _key_ok(request.headers.get("x-release-key", "")):
+            _fails.setdefault(ip, []).append(now)
+            _fails.setdefault("*", []).append(now)
+            return JSONResponse({"detail": "Wrong key"}, status_code=403)
+        try:
+            size = int(request.headers.get("content-length", ""))
+        except ValueError:
+            return JSONResponse({"detail": "Content-Length needed"},
+                                status_code=411)
+        if size > MAX_BYTES + 1024 * 1024:
+            return JSONResponse({"detail": "File too large"}, status_code=413)
+    return await call_next(request)
+
+
 # ── Public ────────────────────────────────────────────────────────────────────
 
 @router.get("/app/latest")
@@ -228,6 +274,13 @@ def download_page(request: Request):
               ).split(",")[0].strip()
     if scheme not in ("http", "https"):
         scheme = "https"
+    # The QR only ever points at our own address — never at whatever a
+    # request's Host header claims.
+    ok = {h.strip() for h in os.getenv(
+        "PUBLIC_HOSTS", "aluta.ozilane.com").split(",") if h.strip()}
+    if not (host in ok or host.endswith(".up.railway.app")
+            or host.split(":")[0] in ("localhost", "127.0.0.1")):
+        host, scheme = sorted(ok)[0], "https"
     page_url = f"{scheme}://{host}/download"
 
     if a:
@@ -334,7 +387,7 @@ f.onsubmit=e=>{{e.preventDefault();const x=new XMLHttpRequest();p.hidden=false;
 x.upload.onprogress=v=>{{if(v.lengthComputable)p.value=v.loaded/v.total}};
 x.onload=()=>{{o.textContent=x.status+' '+x.responseText}};
 x.onerror=()=>{{o.textContent='Upload failed'}};
-x.open('POST','/admin/release');x.send(new FormData(f));}};
+x.open('POST','/admin/release');x.setRequestHeader('X-Release-Key',f.key.value);x.send(new FormData(f));}};
 </script></body></html>"""
 
 

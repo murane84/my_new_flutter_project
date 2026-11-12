@@ -8077,6 +8077,10 @@ class _ChatPageState extends State<ChatPage>
                   _isGroup
                       ? '${widget.memberCount} members'
                       : [
+                          // Same lines as Home's chat header: both of us
+                          // here now, and the day we planned to meet.
+                          if (_bondedHere && _togetherNow) '💞 Here together',
+                          ?BondLive.countdownLine(_plannedDate?.day),
                           // "📞 Free to talk · online"
                           if (QuickStatus.instance
                               .lineFor(widget.friendId)

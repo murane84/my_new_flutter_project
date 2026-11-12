@@ -700,6 +700,8 @@ extension _ChatPageHelpers2 on _ChatPageState {
     // send run in the background so the composer never blocks. The original
     // (uncompressed) bytes/mime/name are captured for the attempt so a retry
     // starts clean.
+    // Photos, videos and files sent at night go quiet too, like messages.
+    meta ??= _metaFor();
     final tempId = _newTempId();
     final convKey = _activeConvKey;
     final optimistic = _optimisticMsg(tempId, type, caption);

@@ -39,11 +39,13 @@ echo ==== Aluta %NAME% (build %BUILD%) ====
 
 call flutter pub get || goto :err
 echo == Android: arm64 APK ==
-call flutter build apk --release --split-per-abi %DEFINE% || goto :err
+call flutter build apk --release --split-per-abi --no-pub %DEFINE% || goto :err
 echo == Android: universal APK ==
-call flutter build apk --release %DEFINE% || goto :err
+call flutter build apk --release --no-pub %DEFINE% || goto :err
 echo == Windows ==
-call flutter build windows --release %DEFINE% || goto :err
+REM A running Aluta locks Aluta.exe (LNK1104 "cannot open file") - close it.
+taskkill /IM Aluta.exe /F >nul 2>&1
+call flutter build windows --release --no-pub %DEFINE% || goto :err
 
 if not exist dist mkdir dist
 del /f /q dist\* 2>nul

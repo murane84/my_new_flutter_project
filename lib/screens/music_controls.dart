@@ -1607,6 +1607,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
                 if (i < 0 || !mounted) return;
                 setState(() {
                   _playlist.removeAt(i);
+                  // Keep pointing at the song that's actually playing.
+                  if (i < _currentIndex) _currentIndex--;
                   if (_currentIndex >= _playlist.length) {
                     _currentIndex = _playlist.length - 1;
                   }
@@ -1660,7 +1662,11 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     }
     final at = TrackMemory.instance.resumeAt(path, len);
     if (at == null || !mounted) return;
-    if (_currentIndex < 0 || _playlist[_currentIndex] != path) return;
+    if (_currentIndex < 0 ||
+        _currentIndex >= _playlist.length ||
+        _playlist[_currentIndex] != path) {
+      return;
+    }
     await _player.seek(at);
     if (!mounted) return;
     final h = at.inHours, m = at.inMinutes % 60, s = at.inSeconds % 60;
@@ -1693,6 +1699,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     if (i < 0) return false;
     setState(() {
       _playlist.removeAt(i);
+      if (i < _currentIndex) _currentIndex--;
       if (_currentIndex >= _playlist.length) {
         _currentIndex = _playlist.length - 1;
       }
@@ -2755,6 +2762,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       onRemove: (i) {
         setState(() {
           _playlist.removeAt(i);
+          // A song above the playing one left: the index follows the song.
+          if (i < _currentIndex) _currentIndex--;
           if (_currentIndex >= _playlist.length) {
             _currentIndex = _playlist.length - 1;
           }

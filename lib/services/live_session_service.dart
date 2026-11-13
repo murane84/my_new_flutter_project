@@ -2256,7 +2256,16 @@ class LiveSessionController {
   Future<bool> _listenerSeekReal(int realMs) async {
     if (realMs < _listenerBaseMs) {
       if (_fullSong != null) {
-        await _useFullSong(); // the whole song is here: play from anywhere
+        // The whole song is here: play from anywhere. (The swap reloads the
+        // player, so pick the music back up if the room is playing — a
+        // drift correction on repeat doesn't press play itself.)
+        await _useFullSong();
+        final local = realMs < 0 ? 0 : realMs;
+        try {
+          await player.seek(Duration(milliseconds: local));
+        } catch (_) {}
+        if (_hostPlaying && !_onCall) unawaited(player.play());
+        return true;
       } else {
         _waitingForHost = true;
         try {

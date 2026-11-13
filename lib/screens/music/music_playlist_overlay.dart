@@ -1162,8 +1162,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       return const SizedBox.shrink();
     }
     final dismissed = prefsNow?.getInt(_kTidyDismissed) ?? 0;
-    final tidyShowing = _messySongs().length >= 3 &&
-        _messySongs().length > dismissed;
+    final messyN = _messySongs().length;
+    final tidyShowing = messyN >= 3 && messyN > dismissed;
     if (tidyShowing) return const SizedBox.shrink();
     final seen = prefsNow?.getInt(_kRediscoverSeen) ?? 0;
     if (DateTime.now().millisecondsSinceEpoch - seen <

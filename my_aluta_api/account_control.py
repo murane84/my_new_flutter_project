@@ -68,7 +68,9 @@ def check(user_id: int, iat: Optional[float]) -> Optional[str]:
     blocked, why, so = e
     if blocked:
         return why
-    if so is not None and (iat is None or iat < so):
+    # iat is whole seconds: compare against the whole second of the sign-out
+    # so a fresh sign-in in that same second isn't refused.
+    if so is not None and (iat is None or iat < int(so)):
         return "Signed out — please sign in again."
     return None
 

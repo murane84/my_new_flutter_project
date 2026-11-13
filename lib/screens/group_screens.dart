@@ -146,7 +146,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
   Widget _tile(Map<String, dynamic> g, ColorScheme scheme) {
     final members = (g['members'] as List?) ?? const [];
     final unread = (g['unread_count'] as num?)?.toInt() ?? 0;
-    final lastRaw = (g['last_message'] ?? '').toString();
+    final lastRaw = withoutReplyQuote((g['last_message'] ?? '').toString());
     // Friendly label if the preview is a bare call / listen outcome token.
     final last = mapOutcomeToken(lastRaw) ?? lastRaw;
     return ListTile(

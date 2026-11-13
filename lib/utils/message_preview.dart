@@ -23,3 +23,13 @@ const Map<String, String> _kOutcomeTokens = <String, String>{
 /// [raw] is ordinary message text that should be shown as-is.
 String? mapOutcomeToken(String raw) =>
     _kOutcomeTokens[raw.trim().toLowerCase()];
+
+/// A reply is stored as the quoted message first ("> …" lines, a blank
+/// line), then the answer. Previews (chat list, banners) show the ANSWER —
+/// showing the quote put the friend's words after "You:".
+String withoutReplyQuote(String raw) {
+  if (!raw.startsWith('> ')) return raw;
+  final lines = raw.split('\n');
+  final k = lines.takeWhile((l) => l.startsWith('> ')).length;
+  return lines.skip(k).join('\n').trim();
+}

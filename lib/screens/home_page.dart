@@ -3019,8 +3019,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
       // A secret heart's note never goes into a notification.
       final text = (data['message_type'] ?? '').toString() == 'heart'
           ? '❤️ Sent you a secret heart'
-          : (data['content'] ?? data['text'] ?? data['message'] ?? '')
-              .toString();
+          // A reply: the banner / notification shows the answer, not the quote.
+          : withoutReplyQuote(
+              (data['content'] ?? data['text'] ?? data['message'] ?? '')
+                  .toString());
       // Badge the sender immediately (unless their chat is open) — the fetch
       // below reconciles to the server's authoritative count a moment later.
       final senderId = (senderObj?['id'] as num?)?.toInt() ??

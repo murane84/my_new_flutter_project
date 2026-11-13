@@ -1495,7 +1495,8 @@ extension _HomePageHelpers1 on HomePageState {
   /// contact shares store JSON in the message body; show a label in the chat
   /// list instead of the raw JSON.
   String _previewText(String raw) {
-    final s = raw.trim();
+    raw = withoutReplyQuote(raw.trim());
+    final s = raw;
     // Safety net: a call / listen-together log whose raw outcome token leaked
     // into the preview (e.g. a server last_message that carries no type).
     final mapped = mapOutcomeToken(s);

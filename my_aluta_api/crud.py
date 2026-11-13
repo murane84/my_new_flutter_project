@@ -302,6 +302,15 @@ def list_preview(msg) -> str:
     if (getattr(msg, "message_type", None) or "").lower() == "heart":
         return "❤️ Secret message"
     content = (msg.content or "").strip()
+    # A reply stores the quoted message first ("> …" lines, a blank line),
+    # then the answer: preview the ANSWER (the list said "You: <their words>"
+    # and the push showed the quote).
+    if content.startswith("> "):
+        lines = content.split("\n")
+        k = 0
+        while k < len(lines) and lines[k].startswith("> "):
+            k += 1
+        content = "\n".join(lines[k:]).strip()
     mtype = (msg.message_type or "text").lower()
     mime = (msg.media_mime or "").lower()
     name = (msg.media_name or "").strip()

@@ -145,6 +145,31 @@ class GuardUpload:
 
 # ── Public ────────────────────────────────────────────────────────────────────
 
+# `flutter build apk --split-per-abi` gives each APK its own Android
+# versionCode: ABI × 1000 + build (arm64-v8a = 2) — the 1.0.6 arm64 APK is
+# 2007, not 7. Phones compare THAT number, so what we tell them must be in
+# the same space, or every arm64 phone thinks it's ahead ("latest") forever.
+# The universal APK keeps the plain build; Windows / web too.
+_ABI_BASE = {"android": 2000}
+
+
+def _vc(slot: str, build) -> int:
+    try:
+        b = int(build or 0)
+    except (TypeError, ValueError):
+        return 0
+    base = _ABI_BASE.get(slot, 0)
+    return base + b if 0 < b < 1000 else b
+
+
+def _public(slot: str, m: dict) -> dict:
+    out = dict(m)
+    out["build"] = _vc(slot, m.get("build"))
+    if m.get("min_build"):
+        out["min_build"] = _vc(slot, m.get("min_build"))
+    return out
+
+
 @router.get("/app/latest")
 def latest(platform: str = "android"):
     """What the app compares its own build number with."""
@@ -153,7 +178,7 @@ def latest(platform: str = "android"):
     m = _meta(platform)
     if m is None:
         raise HTTPException(status_code=404, detail="No release yet")
-    return {**m, "url": f"/download/{PLATFORMS[platform]}"}
+    return {**_public(platform, m), "url": f"/download/{PLATFORMS[platform]}"}
 
 
 def _serve(platform: str):
@@ -477,8 +502,9 @@ def latest_versions() -> dict:
     for slot in PLATFORMS:
         m = _meta(slot)
         if m:
-            out[slot] = {"version": m.get("version"), "build": m.get("build"),
-                         "min_build": m.get("min_build") or 0}
+            out[slot] = {"version": m.get("version"),
+                         "build": _vc(slot, m.get("build")),
+                         "min_build": _vc(slot, m.get("min_build"))}
     try:
         vj = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
                           "webapp", "version.json")
@@ -518,7 +544,8 @@ def _announce(meta: dict) -> int:
         # 1.0.4 apps only understand the older `app_update` event: send
         # both until everyone is on the server-first build.
         legacy = {"type": "app_update", "platform": meta["platform"],
-                  "version": meta["version"], "build": meta["build"]}
+                  "version": meta["version"],
+                  "build": _vc(meta["platform"], meta["build"])}
 
         async def _both():
             await broadcast_event(uids, evt)
@@ -533,7 +560,8 @@ def _announce(meta: dict) -> int:
                       if l.strip(" -•*\t")), "")
         threading.Thread(target=_push_android, daemon=True, args=(
             {"type": "app_update", "platform": "android",
-             "version": meta["version"], "build": meta["build"],
+             "version": meta["version"],
+             "build": _vc("android", meta["build"]),
              "note": first[:120]},)).start()
     return told
 

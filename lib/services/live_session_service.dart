@@ -795,6 +795,7 @@ class LiveSessionController {
   bool _resumingFromCall = false;
   bool isRoomSession = false; // set by the screen (group room vs 1:1)
   StreamSubscription<AudioInterruptionEvent>? _intSub;
+  StreamSubscription<void>? _noisySub;
   double _volBeforeDuck = 1;
 
   void _watchInterruptions() {
@@ -810,7 +811,18 @@ class LiveSessionController {
           }
           return;
         }
-        setOnCall(e.begin, src: 'os');
+        // A CALL takes the audio for a while and gives it back (pause).
+        // Another app taking it for good (unknown — e.g. a video started)
+        // isn't a call: it's a plain pause, never "on a call".
+        if (e.type == AudioInterruptionType.pause) {
+          setOnCall(e.begin, src: 'os');
+        } else if (e.begin) {
+          if (player.playing) player.pause();
+        }
+      });
+      // Headphones unplugged: never blast the room out of the speaker.
+      _noisySub = s.becomingNoisyEventStream.listen((_) {
+        if (player.playing) player.pause();
       });
     }).catchError((_) {});
   }
@@ -823,6 +835,10 @@ class LiveSessionController {
   void setOnCall(bool on, {String src = 'aluta'}) {
     if (_disposed) return;
     on ? _callSources.add(src) : _callSources.remove(src);
+    on = _callSources.isNotEmpty;
+    // An Aluta call ending also releases the audio it held — don't stay
+    // "on a call" waiting for an OS event that may never come.
+    if (!on && src == 'aluta') _callSources.remove('os');
     on = _callSources.isNotEmpty;
     if (on == _onCall) return;
     _onCall = on;
@@ -847,6 +863,18 @@ class LiveSessionController {
       }
       // 1:1: the host resumes for both with a 3·2·1 (see _onPeerCall).
     }
+  }
+
+  /// LISTENER: play pressed while the room is already playing (I was
+  /// paused locally — headphones unplugged, another app) → back in at the
+  /// live spot on my own. true = handled here (no request to the host).
+  bool resumeLocal() {
+    if (role != LiveRole.listener || !_hostPlaying || !_listenerStarted) {
+      return false;
+    }
+    if (player.playing) return true;
+    _listenerSeekReal(_hostPositionMs).then((_) => player.play());
+    return true;
   }
 
   /// HOST: a listener's on_call note. In a 1:1 the music waits for them.
@@ -874,6 +902,8 @@ class LiveSessionController {
     if (role != LiveRole.host) return;
     // A second press while counting would skip the 3·2·1 for everyone.
     if (_countingDown) return;
+    // The host is on a call: the music waits (a listener can't start it).
+    if (_onCall && by != _myUserId) return;
     if (player.playing) return;
     _countingDown = true;
     final back = _resumingFromCall;
@@ -2817,6 +2847,7 @@ class LiveSessionController {
   Future<void> dispose() async {
     _disposed = true;
     await _intSub?.cancel();
+    await _noisySub?.cancel();
     await _teardown();
     await player.dispose();
   }

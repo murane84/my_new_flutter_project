@@ -684,6 +684,16 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     }
   }
 
+  /// A listener's play / pause: pausing asks the host (for everyone); play
+  /// while the music is already going just brings ME back in.
+  void _listenerPlayPause(bool playing) {
+    if (playing) {
+      _c.requestControl('pause');
+    } else if (!_c.resumeLocal()) {
+      _c.requestControl('play');
+    }
+  }
+
   // ── Calls ────────────────────────────────────────────────────────────────
   final Set<int> _onCallIds = {}; // who's on a call right now (📞 badge)
   bool _afterCall = false; // this countdown is a "welcome back"
@@ -1897,7 +1907,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                               ? _c.player.pause()
                               : _c.resumeWithCountdown(widget.myUserId);
                         } else {
-                          _c.requestControl(playing ? 'pause' : 'play');
+                          _listenerPlayPause(playing);
                         }
                       },
                 icon: Icon(playing
@@ -3102,7 +3112,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                     diameter: 58,
                     onTap: !_ready
                         ? null
-                        : () => _c.requestControl(playing ? 'pause' : 'play'),
+                        : () => _listenerPlayPause(playing),
                   ),
                 ),
                 btn(Icons.forward_10_rounded,

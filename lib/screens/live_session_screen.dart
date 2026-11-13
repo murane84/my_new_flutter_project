@@ -444,6 +444,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       onError: (e) => _snack('Connection error: $e'),
     );
     _c.onQueueChanged = _syncFromQueue;
+    _c.isRoomSession = widget.isRoom; // calls: a room plays on, a 1:1 waits
     // Register the active session BEFORE announcing it. The music panel listens
     // for the announcement and immediately reads activeLiveSession.controller to
     // subscribe to the live player's play/pause stream — if we announced first,
@@ -649,10 +650,30 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         break;
       case 'play':
       case 'pause':
+        if (e['type'] == 'pause' && e['call'] == true) {
+          // Paused for a call: not anyone's button — the call line stands.
+          setState(() {
+            _pausedBy = null;
+            _showReasons = false;
+          });
+          break;
+        }
+        if (e['type'] == 'play' && e['after_call'] == true) {
+          setState(() {
+            _onCallIds.clear();
+            _status = '▶ Back together';
+            _pausedBy = null;
+          });
+          break;
+        }
         _onPlayPauseBy(e['type'] == 'play', (e['by'] as num?)?.toInt());
         break;
       case 'countdown':
+        _afterCall = e['after_call'] == true;
         _startCountdown((e['secs'] as num?)?.toInt() ?? 3);
+        break;
+      case 'on_call':
+        _onCallNote((e['by'] as num?)?.toInt(), e['on'] == true);
         break;
       case 'pause_reason':
         _onPauseReason((e['by'] as num?)?.toInt(), '${e['reason']}');
@@ -661,6 +682,52 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         _onReadyNudge((e['by'] as num?)?.toInt(), (e['to'] as num?)?.toInt());
         break;
     }
+  }
+
+  // ── Calls ────────────────────────────────────────────────────────────────
+  final Set<int> _onCallIds = {}; // who's on a call right now (📞 badge)
+  bool _afterCall = false; // this countdown is a "welcome back"
+
+  bool _isHostId(int? id) {
+    if (id == null) return false;
+    if (_isHost) return id == widget.myUserId;
+    final i = _participants.indexWhere((x) => x.id == id);
+    return i != -1 ? _participants[i].isHost : !widget.isRoom;
+  }
+
+  void _onCallNote(int? by, bool on) {
+    if (!mounted || by == null) return;
+    final me = by == widget.myUserId;
+    final who = _nameOfId(by);
+    final host = _isHostId(by);
+    setState(() {
+      on ? _onCallIds.add(by) : _onCallIds.remove(by);
+      if (on) {
+        // The host's music waits for everyone; in a 1:1 a listener's call
+        // pauses for both; in a room only they step out.
+        if (host) {
+          _status = me
+              ? '📞 You’re on a call — the music will wait'
+              : '📞 $who is on a call — the music will wait';
+        } else if (!widget.isRoom) {
+          _status = me
+              ? '📞 You’re on a call — paused for you both'
+              : '📞 $who is on a call — paused for you both';
+        }
+        _showReasons = false;
+      }
+      _reactionFeed.insert(
+          0,
+          _ReactionLog(me ? 'You' : who, '📞', DateTime.now(),
+              text: on
+                  ? (widget.isRoom && !host
+                      ? 'stepped out for a call'
+                      : 'on a call')
+                  : (me ? 'are back' : 'is back'),
+              mine: me,
+              avatar: _avatarFor(by)));
+      if (_reactionFeed.length > 80) _reactionFeed.removeLast();
+    });
   }
 
   // ── Pauses, the human way ────────────────────────────────────────────────
@@ -2425,8 +2492,22 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                         size: 12, color: accentInk(scheme)),
                   ),
                 ),
+              // On a call right now.
+              if (_onCallIds.contains(p.id))
+                Positioned(
+                  top: -4,
+                  left: -4,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: scheme.surface,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Text('📞', style: TextStyle(fontSize: 11)),
+                  ),
+                )
               // Paused, not gone: everyone here keeps a breathing dot.
-              if (_pausedBy != null)
+              else if (_pausedBy != null)
                 const Positioned(top: -1, left: -1, child: StillHereDot()),
               if (p.lastReaction != null)
                 Positioned(
@@ -2721,7 +2802,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                 const SizedBox(height: 2),
                 Text(
                   _countdown != null
-                      ? 'Starting together in $_countdown…'
+                      ? (_afterCall
+                          ? 'Welcome back — starting in $_countdown…'
+                          : 'Starting together in $_countdown…')
                       : catching && !_isHost && !_reconnecting
                           ? 'Your connection is catching up…'
                           : _isHost

@@ -15,6 +15,7 @@ import 'notif_service.dart';
 import 'call_lock.dart';
 import 'contact_names.dart';
 import 'telecom_service.dart';
+import 'live_session_service.dart' show activeLiveSession;
 
 /// High-level state of the single active Aluta voice call.
 enum CallState {
@@ -75,6 +76,19 @@ class CallService {
         ));
     _syncTone();
     _syncOngoing();
+    _syncLiveSession();
+  }
+
+  // A Listen Together session on this device waits while I'm on an Aluta
+  // call (dialling, connecting or talking) and comes back with a 3·2·1.
+  bool _liveHeld = false;
+  void _syncLiveSession() {
+    final on = state == CallState.calling ||
+        state == CallState.connecting ||
+        state == CallState.connected;
+    if (on == _liveHeld) return;
+    _liveHeld = on;
+    activeLiveSession?.controller.setOnCall(on);
   }
 
   // ── Call tones ────────────────────────────────────────────────────────────

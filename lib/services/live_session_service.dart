@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/widgets.dart' show WidgetsBinding, AppLifecycleState;
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../utils/net.dart' as http;
+import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -146,10 +147,13 @@ class LiveSessionController {
       _loud = AndroidLoudnessEnhancer();
       player = AudioPlayer(
         audioPipeline: AudioPipeline(androidAudioEffects: [_loud!, _eq!]),
+        // Calls are handled below (who's on a call, who waits, 3·2·1 back).
+        handleInterruptions: false,
       );
     } else {
-      player = AudioPlayer();
+      player = AudioPlayer(handleInterruptions: false);
     }
+    _watchInterruptions();
     // Warm the persistent audio cache so cache hits (skip re-download) work from
     // the first track. Best-effort; never blocks session start.
     LiveAudioCache.instance.init();
@@ -777,6 +781,93 @@ class LiveSessionController {
 
   bool _countingDown = false;
 
+  // ── Calls during a session ───────────────────────────────────────────────
+  // A phone call (or an Aluta call) on THIS device:
+  //  • host → the music waits for everyone ("📞 X is on a call"), then
+  //    comes back with a 3·2·1 when the call ends;
+  //  • a listener in a 1:1 → the host pauses for both, same 3·2·1 back;
+  //  • a listener in a group room → only they step out; the room plays on
+  //    and they rejoin at the live spot when the call ends.
+  // A short duck (a notification sound) just lowers the volume.
+  bool _onCall = false;
+  bool _wasPlayingBeforeCall = false;
+  bool _pausedForPeerCall = false; // host: my 1:1 listener is on a call
+  bool _resumingFromCall = false;
+  bool isRoomSession = false; // set by the screen (group room vs 1:1)
+  StreamSubscription<AudioInterruptionEvent>? _intSub;
+  double _volBeforeDuck = 1;
+
+  void _watchInterruptions() {
+    if (kIsWeb) return;
+    AudioSession.instance.then((s) {
+      _intSub = s.interruptionEventStream.listen((e) {
+        if (e.type == AudioInterruptionType.duck) {
+          if (e.begin) {
+            _volBeforeDuck = player.volume;
+            player.setVolume(_volBeforeDuck * 0.3);
+          } else {
+            player.setVolume(_volBeforeDuck);
+          }
+          return;
+        }
+        setOnCall(e.begin, src: 'os');
+      });
+    }).catchError((_) {});
+  }
+
+  // Two things can say "on a call": the phone's audio system and Aluta's
+  // own call engine. On while either says so; back when both are done.
+  final Set<String> _callSources = {};
+
+  /// This device is on a call (phone or Aluta) / back from it.
+  void setOnCall(bool on, {String src = 'aluta'}) {
+    if (_disposed) return;
+    on ? _callSources.add(src) : _callSources.remove(src);
+    on = _callSources.isNotEmpty;
+    if (on == _onCall) return;
+    _onCall = on;
+    // Tell everyone FIRST, so the pause that follows reads as a call.
+    sendNote('on_call', {'on': on});
+    onEvent?.call({'type': 'on_call', 'by': ?_myUserId, 'on': on, 'local': true});
+    if (role == LiveRole.host) {
+      if (on) {
+        _wasPlayingBeforeCall = player.playing;
+        if (player.playing) player.pause();
+      } else if (_wasPlayingBeforeCall && !_pausedForPeerCall) {
+        _wasPlayingBeforeCall = false;
+        _resumingFromCall = true;
+        resumeWithCountdown(_myUserId);
+      }
+    } else {
+      if (on) {
+        if (player.playing) player.pause(); // only my ears
+      } else if (isRoomSession && _hostPlaying && _listenerStarted) {
+        // Room played on: back in at the live spot, no countdown.
+        _listenerSeekReal(_hostPositionMs).then((_) => player.play());
+      }
+      // 1:1: the host resumes for both with a 3·2·1 (see _onPeerCall).
+    }
+  }
+
+  /// HOST: a listener's on_call note. In a 1:1 the music waits for them.
+  void _onPeerCall(int? by, bool on) {
+    if (role != LiveRole.host || isRoomSession) return;
+    if (on) {
+      if (player.playing) {
+        _pausedForPeerCall = true;
+        _ctlBy = by;
+        _ctlAt = DateTime.now();
+        player.pause();
+      }
+    } else if (_pausedForPeerCall) {
+      _pausedForPeerCall = false;
+      if (!_onCall) {
+        _resumingFromCall = true;
+        resumeWithCountdown(by);
+      }
+    }
+  }
+
   /// HOST: play after a 3·2·1 everyone sees, so the music drops on the same
   /// beat for all. Already playing (or counting) → plain play.
   Future<void> resumeWithCountdown(int? by) async {
@@ -785,8 +876,15 @@ class LiveSessionController {
     if (_countingDown) return;
     if (player.playing) return;
     _countingDown = true;
-    _sendControl({'type': 'countdown', 'by': ?by, 'secs': 3});
-    onEvent?.call({'type': 'countdown', 'by': ?by, 'secs': 3, 'local': true});
+    final back = _resumingFromCall;
+    _sendControl({
+      'type': 'countdown', 'by': ?by, 'secs': 3,
+      if (back) 'after_call': true,
+    });
+    onEvent?.call({
+      'type': 'countdown', 'by': ?by, 'secs': 3, 'local': true,
+      if (back) 'after_call': true,
+    });
     await Future.delayed(const Duration(seconds: 3));
     _countingDown = false;
     if (_disposed) return;
@@ -1761,7 +1859,7 @@ class LiveSessionController {
       if (_hostPositionMs > 0) {
         await _listenerSeekReal(_hostPositionMs);
       }
-      if (_hostPlaying) unawaited(player.play());
+      if (_hostPlaying && !_onCall) unawaited(player.play());
     } catch (e) {
       _listenerStarted = false;
       _log('listener: cache playback failed: $e');
@@ -1874,10 +1972,17 @@ class LiveSessionController {
       final by = recent ? _ctlBy : _myUserId;
       _ctlBy = null;
       _ctlAt = null;
+      // A pause for a call isn't anyone's button; a resume after one is a
+      // "welcome back".
+      final call = !playing && (_onCall || _pausedForPeerCall);
+      final back = playing && _resumingFromCall;
+      if (playing) _resumingFromCall = false;
       _sendControl({
         'type': playing ? 'play' : 'pause',
         'position_ms': player.position.inMilliseconds,
         'by': ?by,
+        if (call) 'call': true,
+        if (back) 'after_call': true,
       });
       // The host's own screen hears it too (it gets no echo of its own
       // broadcast). The very first "playing" is the session starting.
@@ -1889,6 +1994,8 @@ class LiveSessionController {
         'type': playing ? 'play' : 'pause',
         'by': ?by,
         'local': true,
+        if (call) 'call': true,
+        if (back) 'after_call': true,
       });
     });
     // Periodic position so the listener stays in sync (also covers seeks).
@@ -2075,7 +2182,7 @@ class LiveSessionController {
       if (_hostPositionMs > _listenerBaseMs) {
         await _listenerSeekReal(_hostPositionMs);
       }
-      if (autoplay && _hostPlaying) unawaited(player.play());
+      if (autoplay && _hostPlaying && !_onCall) unawaited(player.play());
     } catch (e) {
       // A playback failure was previously silent — surface it so the listener
       // screen can show an error instead of sitting mute at 00:00.
@@ -2244,6 +2351,7 @@ class LiveSessionController {
         return;
       }
     }
+    if (type == 'on_call') _onPeerCall(_asInt(msg['by']), msg['on'] == true);
     onEvent?.call(msg);
 
     // WebRTC signaling is peer-addressed and handled the same way regardless of
@@ -2470,6 +2578,8 @@ class LiveSessionController {
         // Ignore the actual transport until the full song is buffered (started
         // via 'eos'); otherwise playback would begin from a partial buffer.
         if (!_listenerStarted) break;
+        // On a call: keep up with the position, but stay quiet till it ends.
+        if (_onCall) break;
         if (playPos is int) await _listenerSeekReal(playPos);
         unawaited(player.play()); // future resolves on track END — don't await
         break;
@@ -2706,6 +2816,7 @@ class LiveSessionController {
 
   Future<void> dispose() async {
     _disposed = true;
+    await _intSub?.cancel();
     await _teardown();
     await player.dispose();
   }

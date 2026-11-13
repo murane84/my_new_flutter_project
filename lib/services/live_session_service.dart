@@ -769,6 +769,7 @@ class LiveSessionController {
   void requestControl(String action, {int? positionMs, int? index}) {
     _sendControl({
       'type': 'ctl',
+      'by': ?_myUserId, // who pressed it — shown as "Juma paused"
       'action': action,
       'position_ms': ?positionMs,
       'index': ?index,
@@ -1829,12 +1830,36 @@ class LiveSessionController {
 
   int? _asInt(dynamic v) => v is int ? v : int.tryParse(v?.toString() ?? '');
 
+  // Who pressed play/pause last (a listener's request, ≤3 s ago); anything
+  // else — the host's own buttons, the notification, a call — is the host.
+  int? _ctlBy;
+  DateTime? _ctlAt;
+  bool _sawFirstPlaying = false;
+
   void _broadcastHostPlayback() {
-    // Mirror play/pause to the listener.
+    // Mirror play/pause to the listener — and say WHO did it, so a pause
+    // reads "Juma paused" instead of looking like the network froze.
     _playingSub = player.playingStream.listen((playing) {
+      final recent = _ctlAt != null &&
+          DateTime.now().difference(_ctlAt!) < const Duration(seconds: 3);
+      final by = recent ? _ctlBy : _myUserId;
+      _ctlBy = null;
+      _ctlAt = null;
       _sendControl({
         'type': playing ? 'play' : 'pause',
         'position_ms': player.position.inMilliseconds,
+        'by': ?by,
+      });
+      // The host's own screen hears it too (it gets no echo of its own
+      // broadcast). The very first "playing" is the session starting.
+      if (playing && !_sawFirstPlaying) {
+        _sawFirstPlaying = true;
+        return;
+      }
+      onEvent?.call({
+        'type': playing ? 'play' : 'pause',
+        'by': ?by,
+        'local': true,
       });
     });
     // Periodic position so the listener stays in sync (also covers seeks).
@@ -2222,6 +2247,10 @@ class LiveSessionController {
         // authoritatively; the resulting play/pause/position/track_change
         // broadcast keeps everyone in sync.
         final action = msg['action'];
+        if (action == 'play' || action == 'pause' || action == 'playpause') {
+          _ctlBy = _asInt(msg['by']);
+          _ctlAt = DateTime.now();
+        }
         switch (action) {
           case 'playpause':
             player.playing ? player.pause() : player.play();

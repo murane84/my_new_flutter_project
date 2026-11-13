@@ -646,11 +646,47 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         _setRoster(people, (data['waiting'] as List?) ?? const []);
         break;
       case 'play':
-        setState(() => _status = 'Playing');
-        break;
       case 'pause':
-        setState(() => _status = 'Paused');
+        _onPlayPauseBy(e['type'] == 'play', (e['by'] as num?)?.toInt());
         break;
+    }
+  }
+
+  // Who paused / resumed — so a pause reads as a person, never as the
+  // network freezing ("⏸ Juma paused the song").
+  Timer? _byTimer;
+  void _onPlayPauseBy(bool playing, int? by) {
+    if (!mounted) return;
+    final me = by != null && by == widget.myUserId;
+    String? who;
+    if (by != null && !me) {
+      final i = _participants.indexWhere((x) => x.id == by);
+      who = i != -1 ? _participants[i].name : widget.peerName;
+    }
+    final line = by == null
+        ? (playing ? 'Playing' : 'Paused')
+        : playing
+            ? (me ? '▶ You resumed the song' : '▶ $who resumed the song')
+            : (me ? '⏸ You paused the song' : '⏸ $who paused the song');
+    setState(() {
+      _status = line;
+      if (by != null) {
+        _reactionFeed.insert(
+            0,
+            _ReactionLog(me ? 'You' : who!, playing ? '▶' : '⏸', DateTime.now(),
+                text: playing ? 'resumed the song' : 'paused the song',
+                mine: me,
+                avatar: _avatarFor(by)));
+        if (_reactionFeed.length > 80) _reactionFeed.removeLast();
+      }
+    });
+    // A resume settles back to "Playing"; a pause stays named until the
+    // music moves again (that's when it matters most).
+    _byTimer?.cancel();
+    if (playing) {
+      _byTimer = Timer(const Duration(seconds: 4), () {
+        if (mounted && _status == line) setState(() => _status = 'Playing');
+      });
     }
   }
 
@@ -1373,6 +1409,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     _queueGlow.dispose();
     _awayTimer?.cancel();
     _discSpin.dispose();
+    _byTimer?.cancel();
     _stagePlaying.dispose();
     _stageCheer.dispose();
     _commentCtrl.dispose();

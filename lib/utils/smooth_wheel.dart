@@ -1,4 +1,3 @@
-import 'package:flutter/animation.dart';
 import 'package:flutter/widgets.dart';
 
 /// A ScrollController whose MOUSE WHEEL glides instead of jumping in steps

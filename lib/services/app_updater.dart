@@ -690,10 +690,14 @@ class _UpdateCardState extends State<_UpdateCard> {
   bool _working = false;
   String? _error;
   bool _cell = false; // on mobile data (Android)
+  String? _mineVersion; // "from 1.0.6"
 
   @override
   void initState() {
     super.initState();
+    PackageInfo.fromPlatform().then((i) {
+      if (mounted) setState(() => _mineVersion = i.version);
+    });
     widget.updater.onMobileData().then((cell) {
       if (!mounted) return;
       setState(() => _cell = cell);
@@ -733,6 +737,7 @@ class _UpdateCardState extends State<_UpdateCard> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final dark = scheme.brightness == Brightness.dark;
     final rel = widget.rel;
     final notes = (rel['notes'] ?? '')
         .toString()
@@ -742,166 +747,289 @@ class _UpdateCardState extends State<_UpdateCard> {
         .take(6)
         .toList();
     final size = (rel['size'] as num?)?.toInt() ?? 0;
+    final mb = size > 0 ? (size / 1048576).toStringAsFixed(0) : null;
+    final windows = defaultTargetPlatform == TargetPlatform.windows;
+    final deep = Color.alphaBlend(Colors.black.withValues(alpha: 0.35),
+        scheme.primary);
+
+    // A soft note box (mobile data / Windows / error), same look for all.
+    Widget note(IconData icon, Widget text, {Widget? action, Color? tint}) =>
+        Container(
+          margin: const EdgeInsets.only(top: 12),
+          padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+          decoration: BoxDecoration(
+            color: (tint ?? scheme.primary).withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(Radii.lg),
+            border: Border.all(
+                color: (tint ?? scheme.primary).withValues(alpha: 0.18)),
+          ),
+          child: Row(children: [
+            Icon(icon, size: 18, color: tint ?? scheme.primary),
+            const SizedBox(width: 10),
+            Expanded(child: text),
+            ?action,
+          ]),
+        );
+
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: scheme.primary.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(Radii.md),
+            // ── The hero: brand, the new version, what it costs ──────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(Radii.xl),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [scheme.primary, deep],
                 ),
-                child: Icon(Icons.system_update_rounded,
-                    color: scheme.primary),
+                boxShadow: [
+                  BoxShadow(
+                    color: scheme.primary.withValues(alpha: 0.35),
+                    blurRadius: 22,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                        widget.required
-                            ? 'Please update Aluta'
-                            : 'Aluta ${rel['version']} is ready',
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w800)),
-                    Text(
-                        widget.required
-                            ? 'This version can’t keep up with the new server — '
-                                'update to keep chatting.'
-                            : size > 0
-                                ? '${(size / 1048576).toStringAsFixed(0)} MB · your chats stay as they are'
-                                : 'Your chats stay as they are',
-                        style: TextStyle(
-                            fontSize: 13, color: scheme.onSurfaceVariant)),
-                  ],
+              child: Row(children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(Radii.lg),
+                  ),
+                  child: Image.asset('assets/images/logo.png',
+                      errorBuilder: (_, _, _) => Icon(
+                          Icons.system_update_rounded,
+                          color: scheme.primary)),
                 ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(Radii.lg),
+                        ),
+                        child: Text(
+                            widget.required ? 'UPDATE NEEDED' : '✨ NEW VERSION',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.8)),
+                      ),
+                      const SizedBox(height: 6),
+                      Text('Aluta ${rel['version']}',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              height: 1.1)),
+                      const SizedBox(height: 3),
+                      Text(
+                          [
+                            if (_mineVersion != null) 'from $_mineVersion',
+                            ?(mb == null ? null : '$mb MB'),
+                            'your chats stay',
+                          ].join(' · '),
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.85),
+                              fontSize: 12.5)),
+                    ],
+                  ),
+                ),
+              ]),
+            ),
+            if (widget.required)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                    'This version can’t keep up with the new server — '
+                    'update to keep chatting.',
+                    style: TextStyle(color: scheme.onSurfaceVariant)),
               ),
-            ]),
+
+            // ── What's new: clean rows, text wraps under itself ──────────
             if (notes.isNotEmpty) ...[
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
               Text('What’s new',
                   style: TextStyle(
+                      fontSize: 15,
                       fontWeight: FontWeight.w800,
                       color: scheme.onSurface)),
-              const SizedBox(height: 4),
-              for (final n in notes)
-                Padding(
-                  padding: const EdgeInsets.only(top: 3),
-                  child: Text('•  $n',
-                      style: TextStyle(color: scheme.onSurfaceVariant)),
-                ),
-            ],
-            const SizedBox(height: 16),
-            ValueListenableBuilder<double?>(
-              valueListenable: widget.updater.progress,
-              builder: (_, v, _) => !_working
-                  ? const SizedBox.shrink()
-                  : Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(Radii.sm),
-                        child: LinearProgressIndicator(
-                            value: (v == null || v <= 0) ? null : v,
-                            minHeight: 6),
-                      ),
-                    ),
-            ),
-            if (_error != null) ...[
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(_error!,
-                    style: const TextStyle(color: Color(0xFFE53935))),
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: widget.updater.openDownloadPage,
-                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                  label: const Text('Get it from the download page'),
-                ),
-              ),
-            ],
-            if (defaultTargetPlatform == TargetPlatform.windows)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(
-                    'The new version downloads in your browser — close Aluta, '
-                    'unzip it over your Aluta folder and open it again.',
-                    style: TextStyle(
-                        fontSize: 12.5, color: scheme.onSurfaceVariant)),
-              ),
-            if (defaultTargetPlatform == TargetPlatform.windows)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: widget.updater.openDownloadPage,
-                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                  label: const Text('Open the download page (with install steps)'),
-                ),
-              ),
-            // Mobile data: say so, and let them wait for Wi-Fi.
-            if (_cell && !_working)
-              ValueListenableBuilder<bool>(
-                valueListenable: widget.updater.waitingForWifi,
-                builder: (_, waiting, _) => Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: scheme.primary.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(Radii.md),
-                  ),
-                  child: Row(children: [
-                    Icon(
-                        waiting
-                            ? Icons.wifi_rounded
-                            : Icons.signal_cellular_alt_rounded,
-                        size: 18,
-                        color: scheme.primary),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                          waiting
-                              ? 'Waiting for Wi-Fi to download it — or get it now'
-                              : 'You’re on mobile data'
-                                  '${size > 0 ? ' — this uses ${(size / 1048576).toStringAsFixed(0)} MB' : ''}',
-                          style: TextStyle(
-                              fontSize: 12.5, color: scheme.onSurface)),
-                    ),
-                    // (a required update can't wait)
-                    if (!waiting && !widget.required)
-                      TextButton(
-                        onPressed: _waitWifi,
-                        child: const Text('Wait for Wi-Fi'),
+              const SizedBox(height: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220),
+                child: SingleChildScrollView(
+                  child: Column(children: [
+                    for (final n in notes)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 7,
+                              height: 7,
+                              margin: const EdgeInsets.only(top: 7, right: 12),
+                              decoration: BoxDecoration(
+                                color: scheme.primary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(n,
+                                  style: TextStyle(
+                                      fontSize: 14.5,
+                                      height: 1.35,
+                                      color: dark
+                                          ? Colors.white.withValues(alpha: 0.88)
+                                          : scheme.onSurface)),
+                            ),
+                          ],
+                        ),
                       ),
                   ]),
                 ),
               ),
-            Row(children: [
-              if (!widget.required)
-                TextButton(
-                  onPressed:
-                      _working ? null : () => Navigator.of(context).pop(true),
-                  child: const Text('Later'),
+            ],
+
+            // ── Notes: mobile data · Windows · something went wrong ──────
+            if (_cell && !_working)
+              ValueListenableBuilder<bool>(
+                valueListenable: widget.updater.waitingForWifi,
+                builder: (_, waiting, _) => note(
+                  waiting
+                      ? Icons.wifi_rounded
+                      : Icons.signal_cellular_alt_rounded,
+                  Text(
+                      waiting
+                          ? 'Waiting for Wi-Fi to download it — or get it now'
+                          : 'You’re on mobile data${mb == null ? '' : ' — this uses $mb MB'}',
+                      style: TextStyle(fontSize: 12.5, color: scheme.onSurface)),
+                  // (a required update can't wait)
+                  action: waiting || widget.required
+                      ? null
+                      : TextButton(
+                          onPressed: _waitWifi,
+                          child: const Text('Wait for Wi-Fi')),
                 ),
-              const Spacer(),
-              FilledButton.icon(
-                onPressed: _working ? null : _update,
-                icon: const Icon(Icons.download_rounded),
-                label: Text(_working
-                    ? 'Downloading…'
-                    : _cell
-                        ? 'Download now'
-                        : 'Update'),
               ),
-            ]),
+            if (windows)
+              note(
+                Icons.folder_zip_rounded,
+                Text(
+                    'It downloads in your browser — close Aluta, unzip it over '
+                    'your Aluta folder and open it again.',
+                    style: TextStyle(fontSize: 12.5, color: scheme.onSurface)),
+                action: IconButton(
+                  tooltip: 'Download page (with install steps)',
+                  onPressed: widget.updater.openDownloadPage,
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                ),
+              ),
+            if (_error != null)
+              note(
+                Icons.error_outline_rounded,
+                Text(_error!,
+                    style: TextStyle(fontSize: 12.5, color: scheme.onSurface)),
+                tint: const Color(0xFFE53935),
+                action: TextButton(
+                  onPressed: widget.updater.openDownloadPage,
+                  child: const Text('Download page'),
+                ),
+              ),
+
+            // ── The action: a button that fills as it downloads ──────────
+            const SizedBox(height: 18),
+            if (_working)
+              ValueListenableBuilder<double?>(
+                valueListenable: widget.updater.progress,
+                builder: (_, v, _) {
+                  final f = (v ?? 0).clamp(0.0, 1.0);
+                  final got = size > 0 ? (size * f / 1048576).round() : null;
+                  final label = f >= 1
+                      ? 'Opening the installer…'
+                      : v == null || v <= 0
+                          ? 'Starting the download…'
+                          : got != null && mb != null
+                              ? 'Downloading ${(f * 100).round()}% · $got of $mb MB'
+                              : 'Downloading ${(f * 100).round()}%';
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(Radii.xxl),
+                    child: SizedBox(
+                      height: 54,
+                      child: Stack(fit: StackFit.expand, children: [
+                        ColoredBox(color: deep.withValues(alpha: 0.55)),
+                        FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: (v == null || v <= 0) ? 0.04 : f,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(colors: [
+                                scheme.primary,
+                                Color.alphaBlend(
+                                    Colors.white.withValues(alpha: 0.18),
+                                    scheme.primary),
+                              ]),
+                            ),
+                          ),
+                        ),
+                        Center(
+                          child: Text(label,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14.5)),
+                        ),
+                      ]),
+                    ),
+                  );
+                },
+              )
+            else
+              Row(children: [
+                if (!widget.required)
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text('Later'),
+                  ),
+                if (!widget.required) const SizedBox(width: 8),
+                Expanded(
+                  child: SizedBox(
+                    height: 54,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        shape: const StadiumBorder(),
+                        textStyle: const TextStyle(
+                            fontSize: 15.5, fontWeight: FontWeight.w800),
+                      ),
+                      onPressed: _update,
+                      icon: Icon(windows
+                          ? Icons.download_rounded
+                          : Icons.system_update_rounded),
+                      label: Text(_cell
+                          ? 'Download now'
+                          : windows
+                              ? 'Download'
+                              : 'Update now'),
+                    ),
+                  ),
+                ),
+              ]),
           ],
         ),
       ),

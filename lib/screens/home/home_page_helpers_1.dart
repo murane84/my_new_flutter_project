@@ -1272,7 +1272,8 @@ extension _HomePageHelpers1 on HomePageState {
   /// A friend-list preview string for a cached chat message.
   String _previewFromCachedMessage(Map<String, dynamic> m) {
     final type = (m['message_type'] ?? 'text').toString();
-    final text = (m['content'] ?? '').toString().trim();
+    // A reply (photo / voice / sticker too): its text without the quote.
+    final text = withoutReplyQuote((m['content'] ?? '').toString().trim());
     final name = (m['media_name'] ?? '').toString().trim();
     String withText(String label) => text.isEmpty ? label : '$label · $text';
     if (m['is_deleted'] == true) return 'This message was deleted';

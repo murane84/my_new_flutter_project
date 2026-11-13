@@ -10,7 +10,10 @@ import '../utils/radii.dart';
 /// confirm with your password from a full-access device. Nothing here
 /// touches a live shared memory — see the server side (admin_panel.py).
 class AdminToolsSection extends StatefulWidget {
-  const AdminToolsSection({super.key});
+  const AdminToolsSection({super.key, this.onChanged});
+
+  /// After a tool ran: the page's storage figures refresh too.
+  final VoidCallback? onChanged;
 
   @override
   State<AdminToolsSection> createState() => _AdminToolsSectionState();
@@ -57,7 +60,7 @@ const _tools = [
       'Lets Postgres reuse the space freed by the clean-ups (VACUUM ANALYZE of '
           'the biggest tables). Safe while Aluta runs.',
       'Tidy now',
-      'tables tidied'),
+      'tables'),
 ];
 
 class _AdminToolsSectionState extends State<AdminToolsSection> {
@@ -99,12 +102,17 @@ class _AdminToolsSectionState extends State<AdminToolsSection> {
       if (dry) {
         setState(() => _preview[t.path] = r);
       } else {
-        final n = t.path == 'vacuum'
-            ? ((r['vacuumed'] as List?)?.length ?? 0)
-            : (r['files'] as num?)?.toInt() ?? 0;
-        adminToast(context, 'Done — $n ${t.audit}');
+        if (t.path == 'vacuum') {
+          final n = (r['started'] as List?)?.length ?? 0;
+          adminToast(context,
+              'Tidying $n tables in the background — takes a few minutes');
+        } else {
+          final n = (r['files'] as num?)?.toInt() ?? 0;
+          adminToast(context, 'Done — $n ${t.audit}');
+        }
         _preview.remove(t.path);
         await _loadHealth();
+        widget.onChanged?.call();
       }
     } on AdminApiException catch (e) {
       if (mounted) adminToast(context, e.message, error: true);

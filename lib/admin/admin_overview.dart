@@ -195,7 +195,7 @@ class _AdminOverviewState extends State<AdminOverview> {
           ],
           // System: server health + the clean-up tools (Phase 3).
           if (widget.view == AdminMetricsView.system) ...[
-            const AdminToolsSection(),
+            AdminToolsSection(onChanged: () => _load(quiet: true)),
             const SizedBox(height: 14),
           ],
           const SizedBox(height: 24),

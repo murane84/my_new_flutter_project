@@ -1637,38 +1637,47 @@ def admin_tool_sweep(payload: ToolIn, ctx: AdminCtx = Depends(admin_ctx),
     return {"dry_run": False, "files": n, "bytes": before["bytes"]}
 
 
+def _text_columns(db: Session) -> list:
+    """(table, column, is_json) for every text-ish column in the database.
+    On Postgres straight from the live schema (so a column added by a boot
+    ALTER or a table outside the models is never missed); elsewhere from
+    the models."""
+    if _is_pg(db):
+        rows = db.execute(text(
+            "SELECT table_name, column_name, data_type "
+            "FROM information_schema.columns WHERE table_schema = 'public' "
+            "AND data_type IN ('text', 'character varying', 'json', 'jsonb')"
+        )).fetchall()
+        return [(r[0], r[1], r[2] in ("json", "jsonb")) for r in rows]
+    from models import Base
+    from sqlalchemy import JSON, String, Text
+    return [(t.name, c.name, isinstance(c.type, JSON))
+            for t in Base.metadata.sorted_tables for c in t.columns
+            if isinstance(c.type, (String, Text, JSON))]
+
+
 def _referenced_ids(db: Session) -> set:
     """Every 32-hex id mentioned in any text column of any table except
     media_assets itself — what something still points to."""
-    from models import Base
-    from sqlalchemy import JSON, String, Text
     import re as _re
     pat = _re.compile(_HEX_ID)
     pg = _is_pg(db)
     refs: set = set()
-    for table in Base.metadata.sorted_tables:
-        if table.name == "media_assets":
+    for tname, cname, is_json in _text_columns(db):
+        if tname == "media_assets":
             continue
-        for col in table.columns:
-            if not isinstance(col.type, (String, Text, JSON)):
-                continue
-            c = f'"{col.name}"'
-            expr = f"{c}::text" if isinstance(col.type, JSON) and pg else c
-            try:
-                if pg:
-                    rows = db.execute(text(
-                        f'SELECT {expr} FROM "{table.name}" '
-                        f"WHERE {expr} ~ '{_HEX_ID}'")).fetchall()
-                else:
-                    rows = db.execute(text(
-                        f'SELECT {expr} FROM "{table.name}" '
-                        f"WHERE {expr} IS NOT NULL")).fetchall()
-            except Exception:
-                db.rollback()  # a table not created yet / odd column
-                continue
-            for (v,) in rows:
-                if v:
-                    refs.update(pat.findall(str(v).lower()))
+        col = f'"{cname}"'
+        expr = f"{col}::text" if is_json and pg else col
+        where = f"{expr} ~ '{_HEX_ID}'" if pg else f"{expr} IS NOT NULL"
+        try:
+            rows = db.execute(text(
+                f'SELECT {expr} FROM "{tname}" WHERE {where}')).fetchall()
+        except Exception:
+            db.rollback()  # a table not created yet / odd column
+            continue
+        for (v,) in rows:
+            if v:
+                refs.update(pat.findall(str(v).lower()))
     return refs
 
 
@@ -1728,18 +1737,23 @@ def admin_tool_vacuum(payload: ToolIn, ctx: AdminCtx = Depends(admin_ctx),
               for r in rows]
     if payload.dry_run:
         return {"dry_run": True, "supported": True, "tables": tables}
-    from database import engine
-    done = []
-    with engine.connect().execution_options(
-            isolation_level="AUTOCOMMIT") as conn:
-        for t in tables:
-            try:
-                conn.execute(text(f'VACUUM (ANALYZE) "{t["table"]}"'))
-                done.append(t["table"])
-            except Exception as e:  # noqa: BLE001
-                print(f"[admin] vacuum {t['table']} failed: {e}")
+    names = [t["table"] for t in tables]
+
+    def _vacuum():
+        # In the background: on a big table it can take minutes, longer than
+        # a request should wait. Safe while Aluta runs (plain VACUUM, no lock
+        # that blocks reads/writes).
+        from database import engine
+        with engine.connect().execution_options(
+                isolation_level="AUTOCOMMIT") as conn:
+            for n in names:
+                try:
+                    conn.execute(text(f'VACUUM (ANALYZE) "{n}"'))
+                except Exception as e:  # noqa: BLE001
+                    print(f"[admin] vacuum {n} failed: {e}")
+    threading.Thread(target=_vacuum, daemon=True).start()
     _audit(db, "tool_vacuum", user_id=ctx.user.id, device_id=ctx.device.id,
-           ip=ctx.ip, detail={"tables": done})
+           ip=ctx.ip, detail={"tables": names})
     db.commit()
     return {"dry_run": False, "supported": True, "tables": tables,
-            "vacuumed": done}
+            "started": names}

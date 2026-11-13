@@ -186,6 +186,11 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       // reconnects and the server re-delivers the invite → the prompt appears.
       // App open: the socket already shows the invite prompt.
       if (foreground) return;
+      // Already in this session (Aluta in the background mid-session).
+      if (activeLiveSession?.controller.sessionId ==
+          (data['session_id'] ?? '').toString()) {
+        return;
+      }
       final host = mine((data['host_username'] ?? 'Someone').toString());
       final song = (data['track_title'] ?? '').toString().trim();
       final hostId = (data['host_id'] ?? '').toString();

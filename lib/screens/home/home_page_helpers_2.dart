@@ -843,6 +843,8 @@ extension _HomePageHelpers2 on HomePageState {
         final host = who('host_username', 'Your friend');
         final song = ((d['track'] as Map?)?['title'] ?? '').toString().trim();
         if (sid.isEmpty) return;
+        // Already in it (a re-delivery after a blip): no notification.
+        if (activeLiveSession?.controller.sessionId == sid) return;
         show('🎧 $host wants to listen with you',
             song.isEmpty ? "You'll hear the same song, in sync"
                 : '$song · you\'ll hear it in sync',

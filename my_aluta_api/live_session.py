@@ -40,6 +40,10 @@ class LiveSession:
         self.invited_ids: List[int] = list(invited_ids)
         # Listeners who explicitly declined — don't re-deliver the invite to them.
         self.declined_ids: set[int] = set()
+        # Everyone who has joined at least once. A member whose connection
+        # blips is NOT re-invited (their app rejoins by itself) — re-sending
+        # the invite on every reconnect kept popping it up mid-session.
+        self.joined_ids: set[int] = set()
         # Everyone explicitly allowed (host + invited listeners). For OPEN rooms
         # this is just the seed — any friend of the host may also join (that
         # check happens at WS-connect time against the Friend table).
@@ -123,6 +127,7 @@ class LiveSessionManager:
             if (user_id in s.allowed_ids
                     and user_id != s.host_id
                     and user_id not in s.declined_ids
+                    and user_id not in s.joined_ids
                     and user_id not in s.connections
                     and s.host_id in s.connections):
                 out.append(s)
@@ -139,6 +144,7 @@ class LiveSessionManager:
         session = self.sessions.get(session_id)
         if session is not None:
             session.connections[user_id] = websocket
+            session.joined_ids.add(user_id)
 
     def detach(self, session_id: str, user_id: int, websocket: WebSocket = None) -> bool:
         """Remove a user's connection, returning True only if one was actually

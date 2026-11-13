@@ -725,10 +725,10 @@ extension _HomePageHelpers1 on HomePageState {
         DateTime.now().difference(_joiningLiveAt!) <
             const Duration(seconds: 30);
     if (justJoined) return;
-    if (activeLiveSession?.controller.sessionId == sessionId) {
-      _reopenLiveSession(); // a re-invite for the room we're in
-      return;
-    }
+    // A re-delivered invite for the session I'm already in (my connection
+    // blipped): nothing to ask — and never pull the session screen over
+    // whatever I'm doing (it used to reopen on every reconnect).
+    if (activeLiveSession?.controller.sessionId == sessionId) return;
     final rawHostName = data['host_username']?.toString() ?? 'Someone';
     // Show the host by the name the user has for them in their friend list /
     // phone book (saved contact name), falling back to the app username — so the

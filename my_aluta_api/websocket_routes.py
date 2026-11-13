@@ -1,5 +1,7 @@
 # websocket_routes.py
 import asyncio
+
+_REINVITE_TASKS: set = set()  # delayed "rejoin" invites in flight
 import json
 from typing import Optional
 
@@ -370,18 +372,40 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
     try:
         from live_session import MANAGER as _LIVE
         from routers.live import _blocked as _lv_blocked, _in_group as _lv_in
-        for s in _LIVE.pending_invites_for(uid):
-            if _lv_blocked(uid, s.host_id):
-                continue  # a block since the invite: it's gone for them
-            await notify_user(uid, {
+        def _invite(s, rejoin=False):
+            return {
                 "type": "live_invite",
                 "data": {
                     "session_id": s.session_id,
                     "host_id": s.host_id,
                     "host_username": s.host_username,
                     "track": s.track,
+                    "rejoin": rejoin,
                 },
-            })
+            }
+
+        async def _reinvite_later(sid: str):
+            # Someone who was IN this session: their connection blip rejoins
+            # on its own within seconds — re-inviting at once popped the
+            # invite up mid-session on every reconnect. Still out after 20 s
+            # (their app was closed) → the invite is their way back in.
+            await asyncio.sleep(20)
+            s2 = _LIVE.get(sid)
+            if (s2 is not None and uid not in s2.connections
+                    and s2.host_id in s2.connections
+                    and uid not in s2.declined_ids):
+                await notify_user(uid, _invite(s2, rejoin=True))
+
+        for s in _LIVE.pending_invites_for(uid):
+            if _lv_blocked(uid, s.host_id):
+                continue  # a block since the invite: it's gone for them
+            if uid in s.joined_ids:
+                t = asyncio.get_running_loop().create_task(
+                    _reinvite_later(s.session_id))
+                _REINVITE_TASKS.add(t)  # keep it alive till it's done
+                t.add_done_callback(_REINVITE_TASKS.discard)
+                continue
+            await notify_user(uid, _invite(s))
         # Also surface any OPEN "Listening Room" a friend is hosting right now, so
         # a user who comes online mid-room sees the drop-in card immediately
         # (the same info GET /live/rooms returns on a fresh friend-list load).

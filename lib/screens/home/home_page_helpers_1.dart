@@ -752,6 +752,14 @@ extension _HomePageHelpers1 on HomePageState {
             .firstWhere((f) => f['id']?.toString() == data['host_id']?.toString(),
                 orElse: () => const <String, dynamic>{})['avatar_url'] as String?,
         trackTitle: (track['title'] ?? 'a song').toString(),
+        // I was in it and Aluta closed / dropped out: a way back in.
+        heading:
+            data['rejoin'] == true ? 'Still listening' : 'Listen together?',
+        verb: data['rejoin'] == true
+            ? ' is still playing — come back in?'
+            : ' wants to listen with you, live.',
+        acceptLabel: data['rejoin'] == true ? 'Rejoin' : 'Join',
+        declineLabel: data['rejoin'] == true ? 'Not now' : 'Decline',
       ),
       transitionBuilder: (_, anim, _, child) => FadeTransition(
         opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),

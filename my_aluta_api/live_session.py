@@ -40,9 +40,9 @@ class LiveSession:
         self.invited_ids: List[int] = list(invited_ids)
         # Listeners who explicitly declined — don't re-deliver the invite to them.
         self.declined_ids: set[int] = set()
-        # Everyone who has joined at least once. A member whose connection
-        # blips is NOT re-invited (their app rejoins by itself) — re-sending
-        # the invite on every reconnect kept popping it up mid-session.
+        # Everyone who has joined at least once: re-invited only if they're
+        # still out 20 s after coming back online (a blip rejoins by itself;
+        # an app that was closed mid-session gets its way back in).
         self.joined_ids: set[int] = set()
         # Everyone explicitly allowed (host + invited listeners). For OPEN rooms
         # this is just the seed — any friend of the host may also join (that
@@ -127,7 +127,6 @@ class LiveSessionManager:
             if (user_id in s.allowed_ids
                     and user_id != s.host_id
                     and user_id not in s.declined_ids
-                    and user_id not in s.joined_ids
                     and user_id not in s.connections
                     and s.host_id in s.connections):
                 out.append(s)

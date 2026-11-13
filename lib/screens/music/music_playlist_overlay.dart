@@ -1033,6 +1033,99 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     );
   }
 
+  /// The quiet last line: "12 voice notes & recordings hidden · Show".
+  Widget _hiddenLine(ColorScheme scheme) {
+    return ValueListenableBuilder<List<String>>(
+      valueListenable: SongFilter.instance.hiddenList,
+      builder: (context, hidden, _) {
+        if (hidden.isEmpty) return const SizedBox(height: 8);
+        final n = hidden.length;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+          child: Center(
+            child: TextButton.icon(
+              onPressed: () => _showHidden(context),
+              icon: Icon(Icons.mic_none_rounded,
+                  size: 16, color: scheme.onSurfaceVariant),
+              label: Text(
+                '$n voice note${n == 1 ? '' : 's'} & recordings hidden · Show',
+                style: TextStyle(
+                    fontSize: 12.5, color: scheme.onSurfaceVariant),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// The hidden files, each with "This is a song" to bring it back.
+  void _showHidden(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    showAdaptiveSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => ValueListenableBuilder<List<String>>(
+        valueListenable: SongFilter.instance.hiddenList,
+        builder: (ctx, hidden, _) => ConstrainedBox(
+          constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(ctx).height * 0.75),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 2),
+                child: Text('Hidden from your playlist',
+                    style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: scheme.onSurface)),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                    'Voice notes and recordings aren’t songs, so Aluta keeps '
+                    'them out. Nothing is deleted — bring back any that are '
+                    'really songs.',
+                    style: TextStyle(
+                        fontSize: 12.5, color: scheme.onSurfaceVariant)),
+              ),
+              if (hidden.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: Text('Nothing hidden')),
+                ),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: hidden.length,
+                  itemBuilder: (_, i) {
+                    final p = hidden[i];
+                    final file = p.split(RegExp(r'[\\/]')).last;
+                    return ListTile(
+                      dense: true,
+                      minTileHeight: 54,
+                      leading: Icon(Icons.graphic_eq_rounded,
+                          color: scheme.onSurfaceVariant),
+                      title: Text(file,
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      trailing: TextButton(
+                        onPressed: () => SongFilter.instance.bringBack([p]),
+                        child: const Text('This is a song'),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // Per-track options sheet (⋮).
   void _showTrackOptions(
       BuildContext context, String path, int realIdx, bool isFav) {
@@ -1132,6 +1225,15 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 },
                 iconColor: isFav ? Colors.pinkAccent : null,
               ),
+              // A voice note / recording that slipped in: out, and it never
+              // comes back on a rescan ("This is a song" undoes it).
+              _optionTile(scheme, Icons.mic_off_rounded, 'Not a song', () {
+                Navigator.pop(ctx);
+                SongFilter.instance.hide(path);
+                widget.onRemove(realIdx);
+                showToast(context, 'Hidden — find it under “hidden” at the '
+                    'bottom of the list', type: ToastType.info);
+              }),
               _optionTile(
                 scheme,
                 Icons.playlist_remove_rounded,
@@ -1472,9 +1574,12 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                         controller: _listCtrl,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 4),
-                        itemCount: displayed.length,
-                        itemBuilder: (ctx, i) =>
-                            _row(scheme, displayed, displayedPaths, i),
+                        // + one quiet line at the end when voice notes /
+                        // recordings were kept out ("12 hidden · Show").
+                        itemCount: displayed.length + 1,
+                        itemBuilder: (ctx, i) => i < displayed.length
+                            ? _row(scheme, displayed, displayedPaths, i)
+                            : _hiddenLine(scheme),
                       ),
           ),
           ],

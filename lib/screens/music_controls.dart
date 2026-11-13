@@ -48,6 +48,7 @@ import 'listening_audience_sheet.dart';
 import '../services/audio_handler.dart';
 import '../services/metadata_overrides.dart';
 import '../services/song_names.dart';
+import '../services/song_filter.dart';
 import '../services/track_title.dart' show cleanTrackName;
 import '../utils/marquee_text.dart';
 import '../utils/typing_guard.dart';
@@ -412,6 +413,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   @override
   void initState() {
     super.initState();
+    // "This is a song" from the hidden list → back into the playlist.
+    SongFilter.instance.onBringBack = _bringBackSongs;
     // The song's cover colour also tints the ring friends see around my
     // photo in their Circle list.
     _artAccentVN.addListener(_shareArtAccent);
@@ -555,6 +558,9 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   @override
   void dispose() {
+    if (SongFilter.instance.onBringBack == _bringBackSongs) {
+      SongFilter.instance.onBringBack = null;
+    }
     _tapSync.dispose();
     _sleepVN.dispose();
     _revealFresh.dispose();
@@ -1826,7 +1832,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   Future<void> _restorePlaylist() async {
     try {
       final p = await SharedPreferences.getInstance();
-      final saved = p.getStringList('music_playlist') ?? const [];
+      await SongFilter.instance.load();
+      // Voice notes / recordings saved by an older version (or hidden by
+      // the person since) stay out.
+      final saved = (p.getStringList('music_playlist') ?? const <String>[])
+          .where((x) => !SongFilter.instance.isHidden(x))
+          .toList();
       if (saved.isNotEmpty) {
         // Load saved paths AS-IS — no per-file existsSync sweep at launch (that
         // device I/O is what we're eliminating). Any file that has since moved or
@@ -1836,6 +1847,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         setState(() => _playlist = List<String>.from(saved));
         _publishPlaylist();
         _restoreLastTrack();
+        unawaited(_sweepRecordings());
       }
     } catch (_) {}
     // LAZY BY DESIGN: we do NOT scan the device library at launch. A cold scan
@@ -2415,13 +2427,20 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       // Only songs that arrived on the device since the last scan — a song
       // the user removed from the playlist never sneaks back in.
       final have = _playlist.toSet();
-      final added = <String>[];
+      var added = <String>[];
+      final infos = <String, Map<dynamic, dynamic>>{};
       for (final s in songs) {
         final p = s.data;
         if (p.isEmpty) continue;
         _addedAt[p] = s.dateAdded ?? 0;
-        if (!have.contains(p) && (s.dateAdded ?? 0) > since) added.add(p);
+        if (!have.contains(p) && (s.dateAdded ?? 0) > since) {
+          added.add(p);
+          final i = _songInfo(s);
+          if (i != null) infos[p] = i;
+        }
       }
+      // New WhatsApp voice notes / recordings never arrive as "new songs".
+      added = SongFilter.instance.keepSongs(added, infos: infos);
       if (added.isEmpty) return;
       setState(() => _playlist = [..._playlist, ...added]);
       _publishPlaylist();
@@ -2430,6 +2449,58 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   }
 
   static const _kLastScanKey = 'music_last_scan_s_v1';
+
+  /// The MediaStore row behind a scanned song (tags, duration, "not music"
+  /// flags) — what SongFilter needs to tell a song from a voice note.
+  static Map<dynamic, dynamic>? _songInfo(Object s) {
+    try {
+      final dynamic d = s;
+      final m = d.getMap;
+      return m is Map ? m : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Once per launch (Android): take out voice notes / recordings that an
+  /// older version put in the saved playlist, now that their tags and
+  /// length are known.
+  bool _swept = false;
+  Future<void> _sweepRecordings() async {
+    if (_swept || !_isMobile) return;
+    _swept = true;
+    try {
+      final songs = await SongLibrary.songs();
+      final infos = <String, Map<dynamic, dynamic>>{};
+      for (final s in songs) {
+        final i = _songInfo(s);
+        if (s.data.isNotEmpty && i != null) infos[s.data] = i;
+      }
+      final keep = SongFilter.instance.keepSongs(_playlist, infos: infos);
+      if (!mounted || keep.length == _playlist.length) return;
+      final cur = _currentIndex >= 0 && _currentIndex < _playlist.length
+          ? _playlist[_currentIndex]
+          : null;
+      setState(() {
+        _playlist = keep;
+        final i = cur == null ? -1 : keep.indexOf(cur);
+        // (The playing file itself was a voice note: it keeps playing, the
+        // list just no longer points at it.)
+        _currentIndex = i >= 0 ? i : -1;
+      });
+      _publishPlaylist();
+    } catch (_) {}
+  }
+
+  /// "This is a song" → append the files back (skipping any already in).
+  void _bringBackSongs(List<String> paths) {
+    if (!mounted) return;
+    final have = _playlist.toSet();
+    final add = paths.where((p) => !have.contains(p)).toList();
+    if (add.isEmpty) return;
+    setState(() => _playlist = [..._playlist, ...add]);
+    _publishPlaylist();
+  }
 
   /// Loads the device's music library via MediaStore (fast, indexed), prompting
   /// for permission if needed. Does NOT open the sheet — callers decide when to
@@ -2446,10 +2517,18 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       orderType: OrderType.ASC_OR_SMALLER,
       uriType: UriType.EXTERNAL,
     );
+    final infos = <String, Map<dynamic, dynamic>>{};
     for (final s in songs) {
-      if (s.data.isNotEmpty) _addedAt[s.data] = s.dateAdded ?? 0;
+      if (s.data.isNotEmpty) {
+        _addedAt[s.data] = s.dateAdded ?? 0;
+        final i = _songInfo(s);
+        if (i != null) infos[s.data] = i;
+      }
     }
-    final paths = songs.map((s) => s.data).where((p) => p.isNotEmpty).toList();
+    // Songs only — voice notes and recordings stay out (see SongFilter).
+    final paths = SongFilter.instance.keepSongs(
+        songs.map((s) => s.data).where((p) => p.isNotEmpty).toList(),
+        infos: infos);
     if (paths.isEmpty) {
       _snack('No audio files found');
       return;

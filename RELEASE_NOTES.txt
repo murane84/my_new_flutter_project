@@ -1,27 +1,2 @@
-Friend menu knows where you stand: online → chat or call in one tap; playing → Tune in
-Our Space in the friend menu shows bonded, request sent, or "asked you"
-Smoother scrolling on 90/120 Hz phones — Aluta adjusts to your phone by itself
-Smooth mouse-wheel scrolling on PC and web
-Status: the photo fills the screen in its own colours
-Status: the song plays as a little spinning record — tap to listen together
-Status: birthdays and special days get a "Send a song" button and confetti
-Status: your reactions float up over the photo
-Your person's status: "Add to our moments" and "Start a duo"
-Status on PC: everyone's statuses down the side — tap to jump between them
-Status stays paused while you pick a GIF or emoji
-You're told the moment a new version is out, with a reminder every 6 hours if you skip it
-On mobile data: choose Download now or Wait for Wi-Fi
-Web: a "Reload" prompt when a new version is live
-Chat list shows your reply, not the message you replied to
-Chat list previews read longer messages on one line
-Listen together: see who paused, and why (brb, a call, love this part)
-Listen together: 3·2·1 — the music starts again together for everyone
-Listen together: "Ready when you are 💞" and "still here" dots while paused
-Listen together: a long pause can be saved to pick up later
-Listen together: tells you when it's the connection, not a person
-Listen together: when someone gets a call, everyone knows — the music waits, then 3·2·1 back
-In a group room, a call only pauses the person on the call — the room plays on
-Listen together: unplugging headphones pauses instead of playing out loud
-Listen together: no more invite popping up again while you're already listening
-Listen together: if Aluta closed mid-session, a "Rejoin" brings you back in
-Listen together: an old "wants to tune in" banner no longer restarts the session
+Listen together keeps going when Aluta's server updates — just a short "catching up"
+Update prompts now reach every Android phone

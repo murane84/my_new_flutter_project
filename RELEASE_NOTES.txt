@@ -1,2 +1,12 @@
-Listen together keeps going when Aluta's server updates — just a short "catching up"
-Update prompts now reach every Android phone
+Update card redesigned — see what's new and your download progress at a glance
+Long "What's new" lists now scroll inside the update card instead of stretching it
+Bring them along — see when your bonded partner is on an older Aluta and invite them to update with one tap
+Get a little "they're here ✨" when the partner you invited updates
+Music sounds full and in stereo again right after a call — no more flat, mono sound
+Privacy, Terms and About now switch with your chosen transition, and a swipe follows your finger
+About now shows your Aluta version — tap it to copy for support
+Privacy Policy and Terms refreshed to match today's Aluta features
+You'll be asked once to review and accept the updated Privacy Policy and Terms
+Desktop chat: one slim glass pill (😊 · reply · more) appears on a message when you hover — no more stacked buttons
+Desktop chat: reactions open only when you click 😊, then unfold in a soft strip — reply straight from the pill
+Windows: emoji now look the same soft way as on Android

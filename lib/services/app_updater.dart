@@ -691,6 +691,13 @@ class _UpdateCardState extends State<_UpdateCard> {
   String? _error;
   bool _cell = false; // on mobile data (Android)
   String? _mineVersion; // "from 1.0.6"
+  final _notesScroll = ScrollController();
+
+  @override
+  void dispose() {
+    _notesScroll.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -744,7 +751,7 @@ class _UpdateCardState extends State<_UpdateCard> {
         .split('\n')
         .map((l) => l.replaceFirst(RegExp(r'^[-•*]\s*'), '').trim())
         .where((l) => l.isNotEmpty)
-        .take(6)
+        .take(60) // any length — the list scrolls on its own
         .toList();
     final size = (rel['size'] as num?)?.toInt() ?? 0;
     final mb = size > 0 ? (size / 1048576).toStringAsFixed(0) : null;
@@ -865,44 +872,71 @@ class _UpdateCardState extends State<_UpdateCard> {
             // ── What's new: clean rows, text wraps under itself ──────────
             if (notes.isNotEmpty) ...[
               const SizedBox(height: 16),
-              Text('What’s new',
-                  style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: scheme.onSurface)),
+              Row(children: [
+                Text('What’s new',
+                    style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: scheme.onSurface)),
+                const Spacer(),
+                if (notes.length > 3)
+                  Text('${notes.length} changes',
+                      style: TextStyle(
+                          fontSize: 12, color: scheme.onSurfaceVariant)),
+              ]),
               const SizedBox(height: 6),
+              // Long notes scroll inside their own box (with a soft fade at
+              // the bottom) — the card never grows past ~a third of the screen.
               ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 220),
-                child: SingleChildScrollView(
-                  child: Column(children: [
-                    for (final n in notes)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 5),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 7,
-                              height: 7,
-                              margin: const EdgeInsets.only(top: 7, right: 12),
-                              decoration: BoxDecoration(
-                                color: scheme.primary,
-                                shape: BoxShape.circle,
-                              ),
+                constraints: BoxConstraints(
+                    maxHeight: (MediaQuery.sizeOf(context).height * 0.3)
+                        .clamp(120.0, 300.0)),
+                child: ShaderMask(
+                  blendMode: BlendMode.dstIn,
+                  shaderCallback: (r) => const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.white, Colors.white, Colors.transparent],
+                    stops: [0, 0.86, 1],
+                  ).createShader(r),
+                  child: Scrollbar(
+                    controller: _notesScroll,
+                    child: SingleChildScrollView(
+                      controller: _notesScroll,
+                      padding: const EdgeInsets.only(right: 10, bottom: 18),
+                      child: Column(children: [
+                        for (final n in notes)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 5),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  width: 7,
+                                  height: 7,
+                                  margin:
+                                      const EdgeInsets.only(top: 7, right: 12),
+                                  decoration: BoxDecoration(
+                                    color: scheme.primary,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(n,
+                                      style: TextStyle(
+                                          fontSize: 14.5,
+                                          height: 1.35,
+                                          color: dark
+                                              ? Colors.white
+                                                  .withValues(alpha: 0.88)
+                                              : scheme.onSurface)),
+                                ),
+                              ],
                             ),
-                            Expanded(
-                              child: Text(n,
-                                  style: TextStyle(
-                                      fontSize: 14.5,
-                                      height: 1.35,
-                                      color: dark
-                                          ? Colors.white.withValues(alpha: 0.88)
-                                          : scheme.onSurface)),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ]),
+                          ),
+                      ]),
+                    ),
+                  ),
                 ),
               ),
             ],

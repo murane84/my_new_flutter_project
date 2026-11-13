@@ -1495,7 +1495,10 @@ extension _HomePageHelpers1 on HomePageState {
   /// contact shares store JSON in the message body; show a label in the chat
   /// list instead of the raw JSON.
   String _previewText(String raw) {
-    raw = withoutReplyQuote(raw.trim());
+    // One line in the card: a reply's quote is dropped, and a message
+    // written over several lines reads on as one (it used to stop at the
+    // first line break with "…").
+    raw = withoutReplyQuote(raw.trim()).replaceAll(RegExp(r'\s*\n\s*'), ' ');
     final s = raw;
     // Safety net: a call / listen-together log whose raw outcome token leaked
     // into the preview (e.g. a server last_message that carries no type).

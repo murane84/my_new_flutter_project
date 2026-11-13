@@ -599,12 +599,32 @@ extension _HomeSpaceActions on HomePageState {
     );
   }
 
+  /// Long-press on a friend: what fits RIGHT NOW. Online → one row to chat
+  /// or call them; playing → Tune in; Our Space knows if you're already
+  /// bonded or a request is waiting; a heads-up already set says so (tap to
+  /// cancel). Rebuilds live while open (presence, songs, heads-ups).
   void _showFriendQuickSheet(Map<String, dynamic> f, String name) {
     final scheme = Theme.of(context).colorScheme;
     final fid = int.tryParse(f['id'].toString()) ?? -1;
-    final online = fid > 0 &&
-        _isMutual(fid) &&
-        ref.read(presenceProvider).isOnline(fid);
+    final first = name.trim().split(RegExp(r'\s+')).first;
+    final mutual = fid > 0 && _isMutual(fid);
+    void call() => _showCallChoice(
+          friendId: fid,
+          name: name,
+          avatar: f['avatar_url'] as String?,
+          phone: f['phone'] as String?,
+        );
+    Widget inline(BuildContext ctx, IconData icon, String tip, VoidCallback go) =>
+        IconButton.filledTonal(
+          tooltip: tip,
+          visualDensity: VisualDensity.compact,
+          icon: Icon(icon, size: 19),
+          onPressed: () {
+            Navigator.pop(ctx);
+            go();
+          },
+        );
+
     _showQuickSheet(
       header: _quickSheetHeader(
         scheme,
@@ -613,110 +633,212 @@ extension _HomeSpaceActions on HomePageState {
             radius: 22,
             imageUrl: _avatarFull(f['avatar_url'])),
         title: name,
-        subtitle: online ? 'Online' : null,
+        subtitle: null,
       ),
       actions: (ctx) => [
-            Builder(builder: (_) {
+        rp.Consumer(builder: (_, r, _) {
+          final online = mutual && r.watch(presenceProvider).isOnline(fid);
+          return ListenableBuilder(
+            listenable: Listenable.merge(
+                [OnlineWatchList.instance, NowPlayingPresence.instance]),
+            builder: (_, _) {
+              final track =
+                  mutual ? NowPlayingPresence.instance.trackFor(fid) : null;
+              final rows = <Widget>[];
+
+              // ── Them, right now ────────────────────────────────────────
+              if (online) {
+                rows.add(ListTile(
+                  leading: _sheetIcon(scheme, Icons.circle),
+                  title: Text('$first is online now'),
+                  subtitle: const Text('Say hi, or call'),
+                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                    inline(ctx, Icons.chat_bubble_rounded, 'Chat',
+                        () => openChat(f)),
+                    const SizedBox(width: 6),
+                    inline(ctx, Icons.call_rounded, 'Call', call),
+                  ]),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    openChat(f);
+                  },
+                ));
+              } else if (mutual) {
+                final on = OnlineWatchList.instance.isWatching(fid);
+                rows.add(ListTile(
+                  leading: _sheetIcon(scheme, on
+                      ? Icons.notifications_off_outlined
+                      : Icons.notifications_active_outlined),
+                  title: Text(on
+                      ? "You'll know when $first is online"
+                      : 'Let me know when $first is online'),
+                  subtitle: Text(on
+                      ? 'Tap to cancel'
+                      : 'Just once — then it switches off'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _toggleOnlineWatch(fid, first);
+                  },
+                ));
+              }
+
+              // ── Their music ────────────────────────────────────────────
+              if (track != null) {
+                final t = (track['title'] ?? '').toString().trim();
+                final a = (track['artist'] ?? '').toString().trim();
+                rows.add(ListTile(
+                  leading: _sheetIcon(scheme, Icons.headphones_rounded),
+                  title: Text(t.isEmpty ? '$first is playing music' : 'Playing $t',
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(a.isEmpty ? 'Listen along with $first' : a,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  trailing: FilledButton.tonal(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _tuneInto(fid, name);
+                    },
+                    child: const Text('Tune in'),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _tuneInto(fid, name);
+                  },
+                ));
+              } else if (mutual) {
+                final on = OnlineWatchList.instance.isWatchingPlay(fid);
+                rows.add(ListTile(
+                  leading: _sheetIcon(scheme,
+                      on ? Icons.music_off_rounded : Icons.music_note_rounded),
+                  title: Text(on
+                      ? "You'll know when $first plays music"
+                      : 'Let me know when $first plays music'),
+                  subtitle: Text(on
+                      ? 'Tap to cancel'
+                      : 'Just once, with a Tune in button'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _togglePlayWatch(fid, first);
+                  },
+                ));
+              }
+
+              // Offline (or not mutual): chat, with Call beside it.
+              if (!online) {
+                rows.add(ListTile(
+                  leading: _sheetIcon(scheme, Icons.chat_bubble_rounded),
+                  title: const Text('Open chat'),
+                  trailing: inline(ctx, Icons.call_rounded, 'Call', call),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    openChat(f);
+                  },
+                ));
+              }
+
+              // ── Our Space: bonded / they asked / I asked / not yet ──────
+              if (mutual) rows.add(_spaceRowFor(ctx, scheme, fid, name, first));
+
+              rows.add(ListTile(
+                leading: _sheetIcon(scheme, Icons.card_giftcard_rounded),
+                title: const Text('Send a moment'),
+                subtitle: const Text('Dedicate a song or a note to them'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  if (fid > 0) _sendMomentToFriend(fid, name);
+                },
+              ));
               final pinned = _pinnedChats.contains(_pinKeyOf(f));
-              return ListTile(
-                leading: _sheetIcon(scheme, pinned
-                        ? Icons.push_pin_outlined
-                        : Icons.push_pin_rounded),
+              rows.add(ListTile(
+                leading: _sheetIcon(scheme,
+                    pinned ? Icons.push_pin_outlined : Icons.push_pin_rounded),
                 title: Text(pinned ? 'Unpin chat' : 'Pin chat to the top'),
                 onTap: () {
                   Navigator.pop(ctx);
                   _togglePinChat(f);
                 },
-              );
-            }),
-            if (_isMutual(fid))
-            ListTile(
-              leading: _sheetIcon(scheme, Icons.favorite_rounded),
-              title: const Text('Pin as Our Space'),
-              subtitle: const Text('Send a bond request — they confirm to pin'),
-              onTap: () {
-                Navigator.pop(ctx);
-                if (fid > 0) _requestBond(fid, name);
-              },
-            ),
-            ListTile(
-              leading: _sheetIcon(scheme, Icons.card_giftcard_rounded),
-              title: const Text('Send a moment'),
-              subtitle: const Text('Dedicate a song or a note to them'),
-              onTap: () {
-                Navigator.pop(ctx);
-                if (fid > 0) _sendMomentToFriend(fid, name);
-              },
-            ),
-            ListTile(
-              leading: _sheetIcon(scheme, Icons.call_rounded),
-              title: const Text('Call'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showCallChoice(
-                  friendId: fid,
-                  name: name,
-                  avatar: f['avatar_url'] as String?,
-                  phone: f['phone'] as String?,
-                );
-              },
-            ),
-            ListTile(
-              leading: _sheetIcon(scheme, Icons.chat_bubble_rounded),
-              title: const Text('Open chat'),
-              onTap: () {
-                Navigator.pop(ctx);
-                openChat(f);
-              },
-            ),
-            // One heads-up the next time they come online, then it ends.
-            if (fid > 0 &&
-                _isMutual(fid) &&
-                (OnlineWatchList.instance.isWatching(fid) ||
-                    !ref.read(presenceProvider).isOnline(fid)))
-              Builder(builder: (_) {
-                final first = name.trim().split(RegExp(r'\s+')).first;
-                final on = OnlineWatchList.instance.isWatching(fid);
-                return ListTile(
-                  leading: _sheetIcon(scheme, on
-                          ? Icons.notifications_off_outlined
-                          : Icons.notifications_active_outlined),
-                  title: Text(on
-                      ? 'Stop waiting for $first'
-                      : 'Let me know when $first is online'),
-                  subtitle: on
-                      ? null
-                      : const Text('Just once — then it switches off'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _toggleOnlineWatch(fid, first);
-                  },
-                );
-              }),
-            // One heads-up (with Tune in) the next time they play a song.
-            if (fid > 0 &&
-                _isMutual(fid) &&
-                (OnlineWatchList.instance.isWatchingPlay(fid) ||
-                    NowPlayingPresence.instance.trackFor(fid) == null))
-              Builder(builder: (_) {
-                final first = name.trim().split(RegExp(r'\s+')).first;
-                final on = OnlineWatchList.instance.isWatchingPlay(fid);
-                return ListTile(
-                  leading: _sheetIcon(scheme, on ? Icons.music_off_rounded : Icons.music_note_rounded),
-                  title: Text(on
-                      ? "Stop waiting for $first's music"
-                      : 'Let me know when $first plays music'),
-                  subtitle: on
-                      ? null
-                      : const Text('Just once, with a Tune in button'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _togglePlayWatch(fid, first);
-                  },
-                );
-              }),
+              ));
+              return Column(mainAxisSize: MainAxisSize.min, children: rows);
+            },
+          );
+        }),
       ],
     );
+  }
+
+  /// The Our Space row, knowing where the two of you stand.
+  Widget _spaceRowFor(BuildContext ctx, ColorScheme scheme, int fid,
+      String name, String first) {
+    final space = _spaceWithFriend(fid);
+    if (space != null) {
+      return ListTile(
+        leading: _sheetIcon(scheme, Icons.favorite_rounded),
+        title: const Text('Open Our Space'),
+        subtitle: Text('Your space with $first'),
+        onTap: () {
+          Navigator.pop(ctx);
+          _openSpace(space);
+        },
+      );
+    }
+    final theirs = _incomingBondRequests.firstWhere(
+        (r) => (r['from_user_id'] as num?)?.toInt() == fid,
+        orElse: () => const <String, dynamic>{});
+    if (theirs.isNotEmpty) {
+      return ListTile(
+        leading: _sheetIcon(scheme, Icons.favorite_rounded),
+        title: Text('$first asked to pin Our Space'),
+        subtitle: const Text('Accept to make it yours together'),
+        trailing: TextButton(
+          onPressed: () {
+            Navigator.pop(ctx);
+            _declineBondRequest(theirs);
+          },
+          child: const Text('Not now'),
+        ),
+        onTap: () {
+          Navigator.pop(ctx);
+          _acceptBondRequest(theirs);
+        },
+      );
+    }
+    final mine = _outgoingBondRequests.firstWhere(
+        (r) => (r['to_user_id'] as num?)?.toInt() == fid,
+        orElse: () => const <String, dynamic>{});
+    if (mine.isNotEmpty) {
+      return ListTile(
+        leading: _sheetIcon(scheme, Icons.hourglass_top_rounded),
+        title: const Text('Bond request sent'),
+        subtitle: Text('Waiting for $first to confirm · tap to cancel'),
+        onTap: () {
+          Navigator.pop(ctx);
+          _cancelBondRequest(mine, first);
+        },
+      );
+    }
+    return ListTile(
+      leading: _sheetIcon(scheme, Icons.favorite_rounded),
+      title: const Text('Pin as Our Space'),
+      subtitle: const Text('Send a bond request — they confirm to pin'),
+      onTap: () {
+        Navigator.pop(ctx);
+        _requestBond(fid, name);
+      },
+    );
+  }
+
+  /// Withdraw the bond request I sent.
+  Future<void> _cancelBondRequest(Map<String, dynamic> req, String first) async {
+    final id = (req['id'] as num?)?.toInt();
+    if (id == null) return;
+    final ok = await ApiService().cancelBondRequest(id);
+    if (!mounted) return;
+    showToast(
+        context,
+        ok
+            ? 'Request withdrawn — $first won’t see it anymore'
+            : 'Couldn’t withdraw it — try again',
+        type: ok ? ToastType.info : ToastType.error);
+    _loadBondRequests();
   }
 
   // ── Quick sheets (long-press on a friend's / a group's row) ─────────────

@@ -1399,13 +1399,25 @@ extension _HomeFriendListView on HomePageState {
                     final f = candidates[i];
                     final nm = _contactDisplayName(
                         f['phone']?.toString(), f['username'] as String? ?? '');
+                    final id = (f['id'] as num?)?.toInt();
+                    // Where we stand: a request of mine waiting, or theirs.
+                    final sent = _outgoingBondRequests.any(
+                        (r) => (r['to_user_id'] as num?)?.toInt() == id);
+                    final asked = _incomingBondRequests.any(
+                        (r) => (r['from_user_id'] as num?)?.toInt() == id);
                     return ListTile(
+                      enabled: !sent,
                       leading: InitialsAvatar(
                         name: nm,
                         radius: 20,
                         imageUrl: _avatarFull(f['avatar_url']),
                       ),
                       title: Text(nm),
+                      subtitle: sent
+                          ? const Text('Request sent · waiting for them')
+                          : asked
+                              ? const Text('Asked you — tap to accept 💞')
+                              : null,
                       onTap: () => Navigator.pop(ctx, f),
                     );
                   },
@@ -1421,6 +1433,14 @@ extension _HomeFriendListView on HomePageState {
     final fid = int.tryParse(chosen['id'].toString()) ?? -1;
     final nm = _contactDisplayName(
         chosen['phone']?.toString(), chosen['username'] as String? ?? '');
+    // They already asked → accepting is the answer, not a second request.
+    final theirs = _incomingBondRequests.firstWhere(
+        (r) => (r['from_user_id'] as num?)?.toInt() == fid,
+        orElse: () => const <String, dynamic>{});
+    if (theirs.isNotEmpty) {
+      _acceptBondRequest(theirs);
+      return;
+    }
     if (fid > 0) _requestBond(fid, nm);
   }
 

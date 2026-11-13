@@ -262,6 +262,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // yes/no — drives the friend-list banner + friend-tile chip. Loaded once + on
   // refresh and kept live by the bond_request* socket events.
   List<Map<String, dynamic>> _incomingBondRequests = [];
+  // Bond requests I sent that are still waiting (the friend sheet shows them).
+  List<Map<String, dynamic>> _outgoingBondRequests = [];
   // Monetization: whether the signed-in user is on the Together plan. Drives the
   // hero badge and unlocks the multiple-Spaces gate. Loaded once + on refresh.
   bool _isTogether = false;
@@ -5905,6 +5907,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
     if (!mounted) return;
     setState(() {
       _incomingBondRequests = ((data['incoming'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .toList();
+      _outgoingBondRequests = ((data['outgoing'] as List?) ?? const [])
           .whereType<Map>()
           .map((m) => Map<String, dynamic>.from(m))
           .toList();

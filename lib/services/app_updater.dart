@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
@@ -75,6 +76,7 @@ class AppUpdater {
   static const int _webBuilt = int.fromEnvironment('ALUTA_BUILD');
 
   Timer? _cycle;
+  BuildContext Function()? _homeCtx; // Home's context (outlives any sheet)
   bool get _cycleOn => supported || (kIsWeb && _webBuilt > 0);
 
   Future<int> _mine() async => kIsWeb
@@ -85,11 +87,13 @@ class AppUpdater {
   /// build the server announced is still not installed).
   void startCycle(BuildContext Function() context) {
     if (!_cycleOn || _cycle != null || _life != null) return;
+    _homeCtx = context;
     void tick() {
       final c = context();
       if (c.mounted) _remind(c);
     }
     Future.delayed(const Duration(seconds: 10), tick); // after a restart
+    _resumeWifiWait(context); // a "Wait for Wi-Fi" from before
     _cycle = Timer.periodic(const Duration(minutes: 15), (_) => tick());
     _life = AppLifecycleListener(onResume: tick);
   }
@@ -438,25 +442,117 @@ class AppUpdater {
     if (later == true) await _later(rel);
   }
 
-  /// Download (with progress), verify, open the installer. Returns an error
-  /// line, or null when the installer (Windows: the browser download) opened.
-  Future<String?> install(Map<String, dynamic> rel) async {
+  /// On mobile data right now (no Wi-Fi / cable)? Android only.
+  Future<bool> onMobileData() async {
+    if (!_android) return false;
+    try {
+      final r = await Connectivity().checkConnectivity();
+      return r.contains(ConnectivityResult.mobile) &&
+          !r.contains(ConnectivityResult.wifi) &&
+          !r.contains(ConnectivityResult.ethernet);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ── Wait for Wi-Fi ───────────────────────────────────────────────────────
+  // "Wait for Wi-Fi" on the card: the release is remembered; the moment the
+  // phone is on Wi-Fi (now, or the next time Aluta runs) it downloads
+  // quietly, then says "ready to install". Nothing spent on mobile data.
+  static const _kWifiWait = 'update_wifi_wait_v1'; // the release JSON
+  StreamSubscription<List<ConnectivityResult>>? _wifiSub;
+  BuildContext Function()? _wifiCtx;
+  bool _wifiBusy = false;
+
+  /// Is a Wi-Fi download queued (the card shows it)?
+  final ValueNotifier<bool> waitingForWifi = ValueNotifier<bool>(false);
+
+  Future<void> waitForWifi(Map<String, dynamic> rel) async {
+    final p = await SharedPreferences.getInstance();
+    final keep = Map<String, dynamic>.from(rel)..remove('__mine');
+    await p.setString(_kWifiWait, jsonEncode(keep));
+    // Later-equivalent: the reminders wait 6 h (it's handled).
+    await p.setString(
+        _kPrompted, '${rel['build']}|${DateTime.now().millisecondsSinceEpoch}');
+    _watchWifi(_homeCtx);
+  }
+
+  /// From the cycle: pick a queued Wi-Fi download back up after a restart.
+  Future<void> _resumeWifiWait(BuildContext Function() context) async {
+    if (!_android) return;
+    final p = await SharedPreferences.getInstance();
+    if ((p.getString(_kWifiWait) ?? '').isNotEmpty) _watchWifi(context);
+  }
+
+  void _watchWifi(BuildContext Function()? context) {
+    _wifiCtx = context ?? _wifiCtx;
+    waitingForWifi.value = true;
+    _wifiSub ??= Connectivity().onConnectivityChanged.listen((r) {
+      if (r.contains(ConnectivityResult.wifi) ||
+          r.contains(ConnectivityResult.ethernet)) {
+        _wifiDownload();
+      }
+    });
+    _wifiDownload(); // maybe on Wi-Fi already
+  }
+
+  Future<void> _wifiDownload() async {
+    if (_wifiBusy || await onMobileData()) return;
+    final p = await SharedPreferences.getInstance();
+    final raw = p.getString(_kWifiWait) ?? '';
+    if (raw.isEmpty) return;
+    final rel = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    final mine =
+        int.tryParse((await PackageInfo.fromPlatform()).buildNumber) ?? 0;
+    if (((rel['build'] as num?)?.toInt() ?? 0) <= mine) {
+      await _stopWifiWait();
+      return;
+    }
+    _wifiBusy = true;
+    try {
+      final (file, err) = await _download(rel, quiet: true);
+      if (file == null || err != null) return; // tries again on next Wi-Fi
+      await _stopWifiWait();
+      final c = _wifiCtx?.call();
+      if (c == null || !c.mounted) return;
+      Haptics.lightImpact();
+      showToast(
+        c,
+        '✨ Aluta ${rel['version']} is downloaded',
+        type: ToastType.success,
+        duration: const Duration(seconds: 14),
+        detail: 'Got it on Wi-Fi — tap to install',
+        onTap: () => _openInstaller(file),
+        actions: [ToastAction('Install', () => _openInstaller(file))],
+      );
+    } finally {
+      _wifiBusy = false;
+    }
+  }
+
+  Future<void> _stopWifiWait() async {
+    final p = await SharedPreferences.getInstance();
+    await p.remove(_kWifiWait);
+    await _wifiSub?.cancel();
+    _wifiSub = null;
+    waitingForWifi.value = false;
+  }
+
+  /// Download (with progress) + SHA-256 check. A copy already downloaded
+  /// and verified (e.g. on Wi-Fi) is reused. → (file, null) or (null, why).
+  Future<(File?, String?)> _download(Map<String, dynamic> rel,
+      {bool quiet = false}) async {
     final base = await AppConfig.baseUrl;
     final url = '$base${rel['url'] ?? '/download/aluta.apk'}';
-    if (!_android) {
-      final ok = await launchUrl(Uri.parse(url),
-          mode: LaunchMode.externalApplication);
-      return ok
-          ? null
-          : 'Couldn’t open the download — get it from aluta.ozilane.com/download';
-    }
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/aluta-${rel['build']}.apk');
-    progress.value = 0;
+    final ok = File('${file.path}.ok'); // written only after a good check
+    if (await file.exists() && await ok.exists()) return (file, null);
+    if (!quiet) progress.value = 0;
     final client = http.Client();
     try {
       final resp = await client.send(http.Request('GET', Uri.parse(url)));
-      if (resp.statusCode != 200) return 'The download isn’t available';
+      if (resp.statusCode != 200) return (null, 'The download isn’t available');
       final total = resp.contentLength ?? (rel['size'] as num?)?.toInt() ?? 0;
       final sink = file.openWrite();
       final hasher = Sha256().newHashSink();
@@ -465,7 +561,7 @@ class AppUpdater {
         sink.add(chunk);
         hasher.add(chunk);
         got += chunk.length;
-        if (total > 0) progress.value = got / total;
+        if (!quiet && total > 0) progress.value = got / total;
       }
       await sink.close();
       hasher.close();
@@ -475,23 +571,46 @@ class AppUpdater {
         final hex = h.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
         if (hex != want) {
           await file.delete().catchError((_) => file);
-          return 'The download was damaged — try again';
+          return (null, 'The download was damaged — try again');
         }
       }
-      progress.value = 1;
-      final r = await OpenFilex.open(file.path,
-          type: 'application/vnd.android.package-archive');
-      if (r.type != ResultType.done) {
-        return 'Allow Aluta to install apps, then tap Update again';
-      }
-      return null;
+      await ok.writeAsString('ok');
+      if (!quiet) progress.value = 1;
+      return (file, null);
     } catch (_) {
-      return 'The download stopped — check your connection';
+      return (null, 'The download stopped — check your connection');
     } finally {
       client.close();
-      if (progress.value != 1) progress.value = null;
+      if (!quiet && progress.value != 1) progress.value = null;
     }
   }
+
+  Future<String?> _openInstaller(File file) async {
+    final r = await OpenFilex.open(file.path,
+        type: 'application/vnd.android.package-archive');
+    return r.type == ResultType.done
+        ? null
+        : 'Allow Aluta to install apps, then tap Update again';
+  }
+
+  /// Android: download (or reuse the Wi-Fi copy), verify, open the
+  /// installer. Windows: the zip in the browser. → an error line, or null.
+  Future<String?> install(Map<String, dynamic> rel) async {
+    if (!_android) {
+      final base = await AppConfig.baseUrl;
+      final url = '$base${rel['url'] ?? '/download/aluta-windows.zip'}';
+      final ok = await launchUrl(Uri.parse(url),
+          mode: LaunchMode.externalApplication);
+      return ok
+          ? null
+          : 'Couldn’t open the download — get it from aluta.ozilane.com/download';
+    }
+    final (file, err) = await _download(rel);
+    if (file == null) return err;
+    await _stopWifiWait(); // done either way
+    return _openInstaller(file);
+  }
+
 }
 
 class _NoRelease implements Exception {
@@ -517,15 +636,28 @@ class _UpdateCard extends StatefulWidget {
 class _UpdateCardState extends State<_UpdateCard> {
   bool _working = false;
   String? _error;
+  bool _cell = false; // on mobile data (Android)
 
   @override
   void initState() {
     super.initState();
-    if (widget.start) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _update();
-      });
-    }
+    widget.updater.onMobileData().then((cell) {
+      if (!mounted) return;
+      setState(() => _cell = cell);
+      // Update tapped on the toast: start — unless that would spend mobile
+      // data; then the card asks first (Download now / Wait for Wi-Fi).
+      if (widget.start && !cell) _update();
+    });
+  }
+
+  Future<void> _waitWifi() async {
+    Haptics.selectionClick();
+    await widget.updater.waitForWifi(widget.rel);
+    if (!mounted) return;
+    showToast(context,
+        'We’ll download it on Wi-Fi and tell you when it’s ready 💞',
+        type: ToastType.success);
+    Navigator.of(context).pop(false);
   }
 
   Future<void> _update() async {
@@ -645,12 +777,59 @@ class _UpdateCardState extends State<_UpdateCard> {
             ],
             if (defaultTargetPlatform == TargetPlatform.windows)
               Padding(
-                padding: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.only(bottom: 6),
                 child: Text(
                     'The new version downloads in your browser — close Aluta, '
                     'unzip it over your Aluta folder and open it again.',
                     style: TextStyle(
                         fontSize: 12.5, color: scheme.onSurfaceVariant)),
+              ),
+            if (defaultTargetPlatform == TargetPlatform.windows)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: widget.updater.openDownloadPage,
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: const Text('Open the download page (with install steps)'),
+                ),
+              ),
+            // Mobile data: say so, and let them wait for Wi-Fi.
+            if (_cell && !_working)
+              ValueListenableBuilder<bool>(
+                valueListenable: widget.updater.waitingForWifi,
+                builder: (_, waiting, _) => Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(Radii.md),
+                  ),
+                  child: Row(children: [
+                    Icon(
+                        waiting
+                            ? Icons.wifi_rounded
+                            : Icons.signal_cellular_alt_rounded,
+                        size: 18,
+                        color: scheme.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                          waiting
+                              ? 'Waiting for Wi-Fi to download it — or get it now'
+                              : 'You’re on mobile data'
+                                  '${size > 0 ? ' — this uses ${(size / 1048576).toStringAsFixed(0)} MB' : ''}',
+                          style: TextStyle(
+                              fontSize: 12.5, color: scheme.onSurface)),
+                    ),
+                    // (a required update can't wait)
+                    if (!waiting && !widget.required)
+                      TextButton(
+                        onPressed: _waitWifi,
+                        child: const Text('Wait for Wi-Fi'),
+                      ),
+                  ]),
+                ),
               ),
             Row(children: [
               if (!widget.required)
@@ -663,7 +842,11 @@ class _UpdateCardState extends State<_UpdateCard> {
               FilledButton.icon(
                 onPressed: _working ? null : _update,
                 icon: const Icon(Icons.download_rounded),
-                label: Text(_working ? 'Downloading…' : 'Update'),
+                label: Text(_working
+                    ? 'Downloading…'
+                    : _cell
+                        ? 'Download now'
+                        : 'Update'),
               ),
             ]),
           ],

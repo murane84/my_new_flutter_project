@@ -14,6 +14,11 @@ REM          release.bat major      1.0.2+3 -> 2.0.0+4
 REM          release.bat build      1.0.2+3 -> 1.0.2+4
 REM          release.bat publish    no build: publish what's in dist\ now
 REM                                 (e.g. after a failed upload)
+REM          release.bat required   (with any of the above, e.g.
+REM                                 "release.bat minor required") makes it a
+REM                                 REQUIRED update: older builds are blocked
+REM                                 until they install it. Asks to confirm.
+REM                                 Only for a real breaking change.
 REM
 REM What's new: write it in RELEASE_NOTES.txt (one change per line) first.
 REM
@@ -28,10 +33,14 @@ set DEFINE=--dart-define=PROD_URL=%URL%
 
 del /f /q ".git\HEAD.lock" ".git\index.lock" ".git\refs\heads\main.lock" 2>nul
 
-if /i "%1"=="publish" goto :publish_only
+set KIND=%1
+set REQ=
+if /i "%1"=="required" (set REQ=1& set KIND=%2)
+if /i "%2"=="required" set REQ=1
+if /i "%KIND%"=="publish" goto :publish_only
 
 copy /y pubspec.yaml pubspec.yaml.bak >nul
-for /f "delims=" %%v in ('node tools\bump_version.js %1') do set VER=%%v
+for /f "delims=" %%v in ('node tools\bump_version.js %KIND%') do set VER=%%v
 if "%VER%"=="" goto :err
 call :split_version
 echo.
@@ -80,6 +89,17 @@ if not exist dist\aluta-%NAME%-arm64.apk (
 echo ==== publishing Aluta %NAME% (build %BUILD%) from dist\ ====
 
 :publish_all
+set MINF=
+if not "%REQ%"=="1" goto :req_done
+echo.
+echo  ************************************************************
+echo   REQUIRED UPDATE: every Aluta older than build %BUILD% will be
+echo   blocked until it installs %NAME%. Use only for a real breaking
+echo   change (e.g. an incompatible server change).
+echo  ************************************************************
+set /p OKREQ=Type YES to make it required (anything else = normal update): 
+if /i "%OKREQ%"=="YES" (set MINF=-F "min_build=%BUILD%") else (set REQ=& echo Publishing as a normal update.)
+:req_done
 if "%ALUTA_RELEASE_KEY%"=="" (
   echo.
   echo No ALUTA_RELEASE_KEY in this window - opening the uploader page.
@@ -108,6 +128,7 @@ echo  Aluta %NAME% (build %BUILD%) is out.
 echo  Open apps get an "is ready" toast now; closed phones get a
 echo  notification; anyone else sees it at next open.
 echo  Check: %URL%/app/latest?platform=android shows build %BUILD%
+if "%REQ%"=="1" echo  REQUIRED: older builds are blocked until they update.
 echo ============================================================
 goto :eof
 
@@ -129,7 +150,7 @@ echo == publishing %1 ==
 curl.exe -sS --fail-with-body -X POST "%URL%/admin/release" ^
   -H "X-Release-Key: %ALUTA_RELEASE_KEY%" ^
   -F "key=%ALUTA_RELEASE_KEY%" -F "platform=%1" -F "version=%NAME%" ^
-  -F "build=%BUILD%" -F "notes=<RELEASE_NOTES.txt" -F "file=@dist\%2" || exit /b 1
+  -F "build=%BUILD%" -F "notes=<RELEASE_NOTES.txt" %MINF% -F "file=@dist\%2" || exit /b 1
 echo.
 exit /b 0
 

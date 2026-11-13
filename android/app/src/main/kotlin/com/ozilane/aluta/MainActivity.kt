@@ -45,6 +45,9 @@ class MainActivity : AudioServiceFragmentActivity() {
     private var dlWake: android.os.PowerManager.WakeLock? = null
     private var dlWifi: android.net.wifi.WifiManager.WifiLock? = null
     private val keystrokeChannel = "aluta/keystroke"
+    // Smooth motion: what the screen can do + asking for its fastest rate
+    // (SmoothMotion.dart decides; many phones keep apps at 60 Hz otherwise).
+    private val displayChannel = "aluta/display"
     private var keystrokeSoundPool: SoundPool? = null
     private val keystrokeSoundIds = HashMap<String, Int>()
 
@@ -114,6 +117,52 @@ class MainActivity : AudioServiceFragmentActivity() {
         ComponentName("com.transsion.phonemanager", "com.itel.autobootmanager.activity.AutoBootMgrActivity")
     )
 
+    /** What the screen and phone can do, for SmoothMotion's choice. */
+    private fun displayInfo(): HashMap<String, Any> {
+        val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val mem = android.app.ActivityManager.MemoryInfo()
+        am.getMemoryInfo(mem)
+        val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        @Suppress("DEPRECATION")
+        val disp = if (Build.VERSION.SDK_INT >= 30) display else windowManager.defaultDisplay
+        val rates = ArrayList<Double>()
+        disp?.supportedModes?.forEach { m ->
+            val r = m.refreshRate.toDouble()
+            if (rates.none { kotlin.math.abs(it - r) < 0.5 }) rates.add(r)
+        }
+        return hashMapOf(
+            "rates" to rates,
+            "current" to (disp?.refreshRate?.toDouble() ?: 60.0),
+            "lowRam" to am.isLowRamDevice,
+            "ramMb" to (mem.totalMem / (1024 * 1024)),
+            "cores" to Runtime.getRuntime().availableProcessors(),
+            "powerSave" to pm.isPowerSaveMode,
+            "thermal" to (if (Build.VERSION.SDK_INT >= 29) pm.currentThermalStatus else 0),
+        )
+    }
+
+    /** Ask for the mode with this screen's resolution and the refresh rate
+     *  closest to [hz] (0 = let the system choose again). */
+    private fun setRefreshRate(hz: Float): Boolean {
+        @Suppress("DEPRECATION")
+        val disp = (if (Build.VERSION.SDK_INT >= 30) display else windowManager.defaultDisplay)
+            ?: return false
+        val cur = disp.mode
+        val attrs = window.attributes
+        if (hz <= 0f) {
+            attrs.preferredDisplayModeId = 0
+            if (Build.VERSION.SDK_INT >= 30) attrs.preferredRefreshRate = 0f
+        } else {
+            val best = disp.supportedModes
+                .filter { it.physicalWidth == cur.physicalWidth && it.physicalHeight == cur.physicalHeight }
+                .minByOrNull { kotlin.math.abs(it.refreshRate - hz) } ?: return false
+            attrs.preferredDisplayModeId = best.modeId
+            attrs.preferredRefreshRate = best.refreshRate
+        }
+        window.attributes = attrs
+        return true
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, reliabilityChannel)
@@ -125,6 +174,21 @@ class MainActivity : AudioServiceFragmentActivity() {
                     "openPopupPermissionSettings" -> result.success(openPopupPermission())
                     "openAppDetailsSettings" -> { openAppDetails(); result.success(true) }
                     else -> result.notImplemented()
+                }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, displayChannel)
+            .setMethodCallHandler { call, result ->
+                try {
+                    when (call.method) {
+                        "info" -> result.success(displayInfo())
+                        "setRate" -> {
+                            result.success(setRefreshRate((call.argument<Double>("hz") ?: 0.0).toFloat()))
+                        }
+                        else -> result.notImplemented()
+                    }
+                } catch (e: Exception) {
+                    result.success(null)
                 }
             }
 

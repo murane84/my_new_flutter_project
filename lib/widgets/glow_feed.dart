@@ -16,6 +16,7 @@ import '../screens/stories/quick_status_sheet.dart';
 import '../services/haptics.dart';
 import 'slide_track.dart';
 import '../utils/motion.dart';
+import '../utils/smooth_wheel.dart';
 import '../utils/radii.dart';
 import '../utils/depth.dart';
 
@@ -122,7 +123,7 @@ class _GlowFeedState extends State<GlowFeed> {
   static const _savedKey = 'glow_saved_v1';
   Set<String> _saved = {};
   _Filter _filter = _Filter.all;
-  final ScrollController _scroll = ScrollController();
+  final ScrollController _scroll = SmoothWheelController();
 
   void _toTop() {
     if (_scroll.hasClients) {

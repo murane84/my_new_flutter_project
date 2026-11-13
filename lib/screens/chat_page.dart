@@ -40,6 +40,7 @@ import '../services/metadata_overrides.dart' as track_meta;
 import 'token_helper.dart';
 import 'websocket_manager.dart';
 import '../utils/toast_helper.dart';
+import '../utils/smooth_wheel.dart';
 import '../utils/connection_status.dart';
 import '../utils/time_utils.dart';
 import '../utils/file_bytes.dart';
@@ -546,7 +547,7 @@ class _ChatPageState extends State<ChatPage>
   String? _mentionQuery;
   int _mentionStart = -1;
   final Set<int> _mentionTicked = {};
-  final _scrollCtrl = ScrollController();
+  final _scrollCtrl = SmoothWheelController();
   // Dedicated controller so the Listen-together picker's scrollbar can auto-hide
   // (show only while scrolling) instead of sitting over the row icons.
   final _pickerScrollCtrl = ScrollController();

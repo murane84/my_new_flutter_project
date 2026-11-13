@@ -15,6 +15,7 @@ import '../services/live_audio_cache.dart' show liveTrackFingerprint;
 import 'home_page.dart' show playbackBus, playlistNotifier;
 import '../state/playback_state.dart';
 import '../utils/file_bytes.dart';
+import '../utils/smooth_wheel.dart';
 import '../utils/toast_helper.dart';
 import '../services/net_check.dart';
 import '../utils/app_config.dart';
@@ -243,7 +244,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     with SingleTickerProviderStateMixin {
   late LiveSessionController _c;
   // Up-next list scroll (host + guest views) — for "find the playing song".
-  final ScrollController _queueCtrl = ScrollController();
+  final ScrollController _queueCtrl = SmoothWheelController();
   // Follow-along: the queue opens on the shared playing song and glides to
   // each new one — unless I scrolled it myself in the last few seconds (a
   // guest browsing to add a song is never yanked away). ⌖ always jumps.

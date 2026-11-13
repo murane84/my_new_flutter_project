@@ -198,7 +198,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   void initState() {
     super.initState();
     final offset = _lastOffset ?? prefsNow?.getDouble(_kPlOffsetKey) ?? 0.0;
-    _listCtrl = ScrollController(initialScrollOffset: offset);
+    _listCtrl = SmoothWheelController(initialScrollOffset: offset);
     _listCtrl.addListener(() {
       // A search is never restored on reopen, so a position inside search
       // results isn't one to come back to — keep the list's own.
@@ -462,6 +462,9 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           type: ArtworkType.AUDIO,
           artworkWidth: 30,
           artworkHeight: 30,
+          // Decode only what a 30 px circle needs (default 200 px) — lighter
+          // rows, smoother flings.
+          size: 96,
           artworkFit: BoxFit.cover,
           keepOldArtwork: true,
           nullArtworkWidget: fallback,
@@ -513,6 +516,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           type: ArtworkType.AUDIO,
           artworkWidth: 40,
           artworkHeight: 40,
+          size: 128,
           artworkFit: BoxFit.cover,
           artworkBorder: BorderRadius.circular(Radii.md),
           keepOldArtwork: true,

@@ -23,6 +23,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:marquee/marquee.dart';
 import '../utils/toast_helper.dart';
+import '../utils/smooth_wheel.dart';
 import '../utils/app_reload.dart';
 import '../utils/connection_status.dart';
 import '../utils/session_events.dart';
@@ -115,6 +116,7 @@ import '../services/connected_contacts_service.dart';
 import '../services/now_playing_presence.dart';
 import '../services/steady_listening.dart';
 import '../services/online_watch.dart';
+import '../services/smooth_motion.dart';
 import '../services/heartbeat_log.dart';
 import '../services/last_seen_privacy.dart';
 import '../services/quick_status.dart';
@@ -897,6 +899,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // …and each time Aluta comes back to the front (same 6 h gate), so a
     // phone that never closes the app still hears about a new build.
     AppUpdater.instance.watchResume(() => context);
+    // 90/120 Hz where the phone can keep up — decided by the app itself.
+    SmoothMotion.instance.init();
 
     // Android "Connected apps": surface Aluta actions ("Voice call on Aluta",
     // "Message on Aluta") under matched phone-book contacts, like WhatsApp /
@@ -3323,10 +3327,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // ── List navigation ──
   // Circle / Harmony list scroll (phone + desktop columns share them; the
   // lists' PageStorageKeys keep the position across a chat).
-  final ScrollController _circleScroll = ScrollController();
-  final ScrollController _harmonyScroll = ScrollController();
+  final ScrollController _circleScroll = SmoothWheelController();
+  final ScrollController _harmonyScroll = SmoothWheelController();
   // The maximised Status grid / Listening list (one is on screen at a time).
-  final ScrollController _circleMaxScroll = ScrollController();
+  final ScrollController _circleMaxScroll = SmoothWheelController();
   // Rows blinking right now ('s<friendId>' / 'g<convId>').
   final Set<String> _flashKeys = {};
   // Bumped on every _flashRows, so a row that is asked again while it is

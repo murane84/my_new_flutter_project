@@ -26,6 +26,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../state/playback_state.dart';
 import '../services/live_session_service.dart';
 import '../utils/toast_helper.dart';
+import '../utils/smooth_wheel.dart';
 import '../utils/prefs_now.dart';
 import '../widgets/now_glow.dart';
 import 'stories/quick_status_sheet.dart';
@@ -432,7 +433,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   late AnimationController _discCtrl;
   late AnimationController _queueCtrl; // drives the in-page queue open/close
-  final ScrollController _queueScrollCtrl = ScrollController();
+  final ScrollController _queueScrollCtrl = SmoothWheelController();
   // Identifies the playing row so the queue can centre it on open.
   final GlobalKey _nowQueueRowKey = GlobalKey();
   final NowGlowController _queueGlow = NowGlowController(); // ⌖ in Up next

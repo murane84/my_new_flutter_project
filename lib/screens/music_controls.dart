@@ -49,6 +49,7 @@ import '../services/audio_handler.dart';
 import '../services/metadata_overrides.dart';
 import '../services/song_names.dart';
 import '../services/song_filter.dart';
+import '../services/track_memory.dart';
 import '../services/track_title.dart' show cleanTrackName;
 import '../utils/marquee_text.dart';
 import '../utils/typing_guard.dart';
@@ -415,6 +416,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     super.initState();
     // "This is a song" from the hidden list → back into the playlist.
     SongFilter.instance.onBringBack = _bringBackSongs;
+    unawaited(TrackMemory.instance.load());
     // The song's cover colour also tints the ring friends see around my
     // photo in their Circle list.
     _artAccentVN.addListener(_shareArtAccent);
@@ -1356,6 +1358,18 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         _player.seek(abA);
       }
       _updateEdgeFade(pos);
+      // Long mixes remember where they were (every ~10 s).
+      final playingPath = _currentIndex >= 0 && _currentIndex < _playlist.length
+          ? _playlist[_currentIndex]
+          : null;
+      if (playingPath != null &&
+          !_switching &&
+          !_liveActive &&
+          DateTime.now().difference(_resumeSavedAt).inSeconds >= 10) {
+        _resumeSavedAt = DateTime.now();
+        TrackMemory.instance
+            .savePosition(playingPath, pos, _player.duration);
+      }
       // Feed the ambient bar's slim progress indicator (0..1). This updates a
       // standalone ValueNotifier so only that widget rebuilds, not the chat.
       final dur = _player.duration;
@@ -1577,17 +1591,86 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       if (_pruneIfMissing(path)) {
         if (mounted) _snack('Track no longer on device — removed');
       } else if (mounted) {
-        _snack(err == 'format'
-            ? 'Playback error — check file format'
-            : 'Cannot play: $err');
+        // Mark it and move on — a bad file never stops the music.
+        TrackMemory.instance.markBroken(path);
+        showToast(context, 'Can’t play this file — skipped',
+            type: ToastType.info,
+            duration: const Duration(seconds: 8),
+            actions: [
+              ToastAction('Remove from list', () {
+                final i = _playlist.indexOf(path);
+                if (i < 0 || !mounted) return;
+                setState(() {
+                  _playlist.removeAt(i);
+                  if (_currentIndex >= _playlist.length) {
+                    _currentIndex = _playlist.length - 1;
+                  }
+                });
+                _publishPlaylist();
+              }),
+            ]);
+        _skipBroken(index);
       }
       return;
     }
+    TrackMemory.instance.markPlayable(path);
+    // A long mix picks up where you left it.
+    unawaited(_maybeResume(path));
     // Re-enable auto-advance once playback has actually settled.
     Future.delayed(const Duration(milliseconds: 600), () {
       _switching = false;
     });
     if (_isMobile) _fetchMetadata(path);
+  }
+
+  DateTime _resumeSavedAt = DateTime.fromMillisecondsSinceEpoch(0);
+  int _brokenRun = 0;
+
+  /// After a file failed: play the next one in the current scope — but stop
+  /// after a few failures in a row (a whole folder gone) instead of looping.
+  void _skipBroken(int index) {
+    if (++_brokenRun > 5) {
+      _brokenRun = 0;
+      return;
+    }
+    final scope = _scopeIndices();
+    final pos = scope.indexOf(index);
+    if (pos >= 0 && pos + 1 < scope.length) {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) _play(scope[pos + 1]);
+      });
+    } else {
+      _brokenRun = 0;
+    }
+  }
+
+  /// Long tracks (≥ 15 min) reopen at the minute you stopped.
+  Future<void> _maybeResume(String path) async {
+    _brokenRun = 0;
+    // The length is known once the source is loaded.
+    var len = _player.duration;
+    for (var i = 0; len == null && i < 10; i++) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      len = _player.duration;
+    }
+    final at = TrackMemory.instance.resumeAt(path, len);
+    if (at == null || !mounted) return;
+    if (_currentIndex < 0 || _playlist[_currentIndex] != path) return;
+    await _player.seek(at);
+    if (!mounted) return;
+    final h = at.inHours, m = at.inMinutes % 60, s = at.inSeconds % 60;
+    final when = h > 0
+        ? '$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}'
+        : '$m:${s.toString().padLeft(2, '0')}';
+    showToast(context, 'Resumed at $when',
+        type: ToastType.info,
+        duration: const Duration(seconds: 6),
+        actions: [
+          ToastAction('Start over', () {
+            TrackMemory.instance.clearPosition(path);
+            _player.seek(Duration.zero);
+          }),
+        ]);
   }
 
   /// Lazy validation: if a track failed to play because its file is gone (moved
@@ -2525,6 +2608,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         if (i != null) infos[s.data] = i;
       }
     }
+    // A fresh scan gives files marked "can't play" another chance.
+    TrackMemory.instance.forgiveAll();
     // Songs only — voice notes and recordings stay out (see SongFilter).
     final paths = SongFilter.instance.keepSongs(
         songs.map((s) => s.data).where((p) => p.isNotEmpty).toList(),

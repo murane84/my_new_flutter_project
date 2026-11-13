@@ -10,7 +10,7 @@ part of '../music_controls.dart';
 enum _PlSort { manual, az, za, artist, recent, fileName, duration, size }
 
 // Smart auto-lists driven by listening stats.
-enum _Smart { none, recent, most }
+enum _Smart { none, recent, most, ours, rediscover }
 
 class _PlaylistOverlay extends StatefulWidget {
   final List<String> playlist;
@@ -595,6 +595,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       if (_smart == _Smart.most) {
         return (widget.playCounts[e.value] ?? 0) > 0;
       }
+      if (_smart == _Smart.ours) {
+        return SongInsights.instance.isOurs(_effTitle(e.value));
+      }
+      if (_smart == _Smart.rediscover) return _forgotten(e.value);
       if (_favOnly && !widget.favorites.contains(e.value)) return false;
       if (groupMembers != null && !groupMembers.contains(e.value)) return false;
       return true;
@@ -606,7 +610,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           .compareTo(widget.lastPlayed[a.value] ?? 0));
       return entries;
     }
-    if (_smart == _Smart.most) {
+    if (_smart == _Smart.most || _smart == _Smart.rediscover) {
       entries.sort((a, b) => (widget.playCounts[b.value] ?? 0)
           .compareTo(widget.playCounts[a.value] ?? 0));
       return entries;
@@ -1114,6 +1118,80 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     );
   }
 
+  static const _kRediscoverSeen = 'pl_rediscover_seen_v1';
+
+  /// A favourite gone quiet: played 3+ times, last played over 90 days ago.
+  bool _forgotten(String path) {
+    final plays = widget.playCounts[path] ?? 0;
+    final last = widget.lastPlayed[path] ?? 0;
+    if (plays < 3 || last <= 0) return false;
+    return DateTime.now()
+            .difference(DateTime.fromMillisecondsSinceEpoch(last))
+            .inDays >=
+        90;
+  }
+
+  /// "You haven't played these in 3 months" — at most once a week, never
+  /// together with the Tidy banner, gone once opened or dismissed.
+  Widget _rediscoverBanner(ColorScheme scheme) {
+    if (_smart != _Smart.none || _activeGroup != null || _favOnly) {
+      return const SizedBox.shrink();
+    }
+    final dismissed = prefsNow?.getInt(_kTidyDismissed) ?? 0;
+    final tidyShowing = _messySongs().length >= 3 &&
+        _messySongs().length > dismissed;
+    if (tidyShowing) return const SizedBox.shrink();
+    final seen = prefsNow?.getInt(_kRediscoverSeen) ?? 0;
+    if (DateTime.now().millisecondsSinceEpoch - seen <
+        const Duration(days: 7).inMilliseconds) {
+      return const SizedBox.shrink();
+    }
+    final n = widget.playlist.where(_forgotten).length;
+    if (n < 3) return const SizedBox.shrink();
+    void done() => prefsNow?.setInt(
+        _kRediscoverSeen, DateTime.now().millisecondsSinceEpoch);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 2, 10, 6),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+        decoration: BoxDecoration(
+          color: scheme.tertiary.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(Radii.lg),
+          border: Border.all(color: scheme.tertiary.withValues(alpha: 0.22)),
+        ),
+        child: Row(children: [
+          Icon(Icons.auto_awesome_rounded, size: 18, color: scheme.tertiary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text('$n favourites you haven’t played in 3 months',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface)),
+          ),
+          IconButton(
+            tooltip: 'Not now',
+            icon: Icon(Icons.close_rounded,
+                size: 18, color: scheme.onSurfaceVariant),
+            onPressed: () => setState(done),
+          ),
+          FilledButton.tonal(
+            style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                shape: const StadiumBorder()),
+            onPressed: () => setState(() {
+              done();
+              _smart = _Smart.rediscover;
+              _activeGroup = null;
+              _favOnly = false;
+            }),
+            child: const Text('Listen'),
+          ),
+        ]),
+      ),
+    );
+  }
+
   static const _kTidyDismissed = 'pl_tidy_dismissed_v1';
 
   /// Untagged songs whose file name reads messy and that you haven't edited.
@@ -1460,6 +1538,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   String _activeFilterLabel() {
     if (_smart == _Smart.recent) return 'Recent';
     if (_smart == _Smart.most) return 'Most played';
+    if (_smart == _Smart.ours) return 'Our songs';
+    if (_smart == _Smart.rediscover) return 'Rediscover';
     if (_activeGroup != null) return _activeGroup!;
     if (_favOnly) return 'Favourites';
     return 'All';
@@ -1729,8 +1809,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
               ),
             ),
 
-          // "23 song names look messy · Tidy them" (only when there are).
+          // "23 song names look messy · Tidy them" (only when there are),
+          // else a gentle "Rediscover" nudge.
           if (!_selecting) _tidyBanner(scheme),
+          if (!_selecting) _rediscoverBanner(scheme),
 
           // Track list.
           Expanded(
@@ -2444,6 +2526,27 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                       _favOnly = false;
                     }),
                   ),
+                  // Builds itself: songs you've listened to together.
+                  filterTile(
+                    Icons.favorite_rounded,
+                    'Our songs',
+                    _smart == _Smart.ours,
+                    () => pick(() {
+                      _smart = _Smart.ours;
+                      _activeGroup = null;
+                      _favOnly = false;
+                    }),
+                  ),
+                  filterTile(
+                    Icons.auto_awesome_rounded,
+                    'Rediscover',
+                    _smart == _Smart.rediscover,
+                    () => pick(() {
+                      _smart = _Smart.rediscover;
+                      _activeGroup = null;
+                      _favOnly = false;
+                    }),
+                  ),
                   if (widget.groups.isNotEmpty)
                     Divider(
                         height: 1, color: scheme.outlineVariant.withAlpha(70)),
@@ -2526,6 +2629,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       msg = 'Nothing played yet';
     } else if (_smart == _Smart.most) {
       msg = 'No play history yet';
+    } else if (_smart == _Smart.ours) {
+      msg = 'Songs you listen to together will gather here 💞';
+    } else if (_smart == _Smart.rediscover) {
+      msg = 'No forgotten favourites — you keep them all close 🎶';
     } else if (_activeGroup != null) {
       msg = 'No songs in "$_activeGroup" yet';
     } else if (_favOnly) {
@@ -2592,7 +2699,11 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             color: isNow ? scheme.primary : null,
           ),
         ),
-        subtitle: _effArtist(path).isEmpty
+        subtitle: TrackMemory.instance.isBroken(path)
+            ? Text('Can’t play this file',
+                maxLines: 1,
+                style: TextStyle(fontSize: 11, color: scheme.error))
+            : _effArtist(path).isEmpty
             ? null
             : Text(_effArtist(path),
                 maxLines: 1,

@@ -519,6 +519,15 @@ class SongInsights {
     return best;
   }
 
+  /// One of "our songs": played together in Listen Together, or first heard
+  /// with your person. Light (no ranking) — safe to ask per playlist row.
+  bool isOurs(String title) {
+    final s = _songs[_keyOf(title)];
+    if (s == null) return false;
+    return s['ours'] == true ||
+        ((s['fw'] as String?)?.trim().isNotEmpty ?? false);
+  }
+
   /// Listen Together started (counts toward the weekly recap).
   void recordTogether() {
     _together[_today] = (_together[_today] ?? 0) + 1;

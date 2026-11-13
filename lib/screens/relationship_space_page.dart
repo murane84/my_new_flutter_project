@@ -563,6 +563,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   }
 
   bool _nudging = false;
+  // "Bring them along": my partner runs an older Aluta → one invite per
+  // version (server checks bond + mutual + once). Null = nothing to show.
+  Map<String, dynamic>? _partnerApp;
+  bool _bringing = false;
   // Settings open in place, right under the pinned hero.
   bool _settingsOpen = false;
   // "This month in your words" (space_words.dart).
@@ -833,6 +837,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       } catch (_) {}
     }
     _cachePainted = false; // later reloads (events, saves) take this path
+    _loadPartnerApp();
     _warmLetters(); // love letters load alongside, ready when the shelf opens
     // The space, the In-tune streak and the recap card in PARALLEL, applied
     // in ONE update — so nothing trickles in card by card after opening.
@@ -1253,6 +1258,100 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       context,
       res.ok ? 'Sent 💭 they will feel it' : res.msg,
       type: res.ok ? ToastType.success : ToastType.error,
+    );
+  }
+
+  Future<void> _loadPartnerApp() async {
+    if (_partnerId == null) return;
+    final r = await ApiService().getPartnerApp(_id);
+    if (!mounted || r == null) return;
+    setState(() => _partnerApp = r['behind'] == true ? r : null);
+  }
+
+  /// Send my partner a personal "come join me on Aluta X" card.
+  Future<void> _bringAlong() async {
+    if (_bringing) return;
+    setState(() => _bringing = true);
+    final res = await ApiService().sendUpdateNudge(_id);
+    if (!mounted) return;
+    setState(() {
+      _bringing = false;
+      if (res.ok) _partnerApp = {...?_partnerApp, 'nudged': true};
+    });
+    showToast(
+      context,
+      res.ok ? 'Sent 💞 they’ll see it on their phone' : res.msg,
+      type: res.ok ? ToastType.success : ToastType.info,
+    );
+  }
+
+  /// The "bring them along" banner: only while my partner is on an older
+  /// Aluta. After the invite it stays as a quiet "invited" note until they
+  /// arrive (then it's gone).
+  Widget _bringAlongBanner(ColorScheme scheme) {
+    final a = _partnerApp;
+    if (a == null || _partnerId == null) return const SizedBox.shrink();
+    final name = _partnerFirstName;
+    final mine = (a['partner_version'] ?? '').toString();
+    final latest = (a['latest'] ?? '').toString();
+    final sent = a['nudged'] == true;
+    final note = (a['note'] ?? '').toString().trim();
+    final ink = readableOn(_accent);
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(Radii.lg),
+          color: _accent.withValues(alpha: 0.12),
+          border: Border.all(color: _accent.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            const Text('💞', style: TextStyle(fontSize: 24)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                      sent
+                          ? 'Invited $name to Aluta $latest'
+                          : '$name is still on Aluta $mine',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14.5,
+                          color: scheme.onSurface)),
+                  const SizedBox(height: 2),
+                  Text(
+                      sent
+                          ? 'You’ll hear the moment they arrive ✨'
+                          : note.isEmpty
+                              ? 'Bring them along to $latest'
+                              : 'Bring them along — $note',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 12.5, color: scheme.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            if (!sent) ...[
+              const SizedBox(width: 8),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: ink,
+                  shape: const StadiumBorder(),
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: _bringing ? null : _bringAlong,
+                child: Text(_bringing ? 'Sending…' : 'Invite'),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 

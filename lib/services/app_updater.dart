@@ -84,6 +84,24 @@ class AppUpdater {
       ? _webBuilt
       : int.tryParse((await PackageInfo.fromPlatform()).buildNumber) ?? 0;
 
+  /// What this install is, for the server (sent on every socket connect):
+  /// lets a bonded partner see "they're on an older Aluta" and invite them
+  /// along. Null where updates come from a store — nothing to invite to.
+  Future<Map<String, dynamic>?> clientInfo() async {
+    try {
+      if (!kIsWeb && !supported) return null;
+      final info = await PackageInfo.fromPlatform();
+      return {
+        'type': 'client_info',
+        'version': info.version,
+        'build': await _mine(),
+        'slot': kIsWeb ? 'web' : await _slot(),
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// From Home once: the 6-hour reminder cycle (it only acts while a newer
   /// build the server announced is still not installed).
   void startCycle(BuildContext Function() context) {

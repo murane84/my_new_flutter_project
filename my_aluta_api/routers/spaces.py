@@ -1559,6 +1559,101 @@ def nudge_partner(
     return {"ok": True}
 
 
+# ── "Bring them along": invite your partner to the newest Aluta ─────────────
+def _partner_behind(db: Session, space: RelationshipSpace, me: int):
+    """(partner_id, their AppInstall, newer release) when my ACCEPTED,
+    mutual bond partner runs an older Aluta than the one published for
+    their device; else None. Bond-only by construction: nobody else ever
+    learns which version someone runs."""
+    from models import AppInstall
+    from routers.releases import newer_than
+    partner = _active_partner(db, space, me)
+    if partner is None or not crud.are_mutual(db, me, partner):
+        return None
+    inst = db.get(AppInstall, int(partner))
+    if inst is None or not inst.version:
+        return None
+    rel = newer_than(inst.slot or "", inst.version)
+    return (partner, inst, rel) if rel else None
+
+
+@router.get("/{space_id}/partner-app")
+def partner_app(
+    space_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Is my partner on an older Aluta? → the "bring them along" chip."""
+    from models import UpdateNudge
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    got = _partner_behind(db, space, current_user.id)
+    if got is None:
+        return {"behind": False}
+    partner, inst, rel = got
+    nudged = db.query(UpdateNudge).filter(
+        UpdateNudge.from_user_id == current_user.id,
+        UpdateNudge.to_user_id == partner,
+        UpdateNudge.version == str(rel["version"]),
+    ).first() is not None
+    return {"behind": True, "partner_version": inst.version,
+            "latest": rel["version"], "note": rel["note"], "nudged": nudged}
+
+
+@router.post("/{space_id}/update-nudge")
+def update_nudge(
+    space_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """One personal "come join me on Aluta 1.0.7" per version per pair —
+    a warmer second path to the newest build beside the server's own
+    prompt. (Required updates stay the server's job.)"""
+    from models import UpdateNudge
+    space = _owned_space_or_404(db, space_id, current_user.id)
+    got = _partner_behind(db, space, current_user.id)
+    if got is None:
+        raise HTTPException(
+            status_code=409, detail="They're already on the newest Aluta 💞")
+    partner, _inst, rel = got
+    ver = str(rel["version"])
+    if db.query(UpdateNudge).filter(
+            UpdateNudge.from_user_id == current_user.id,
+            UpdateNudge.to_user_id == partner,
+            UpdateNudge.version == ver).first() is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"You've already invited them to Aluta {ver}")
+    db.add(UpdateNudge(from_user_id=current_user.id, to_user_id=partner,
+                       version=ver))
+    db.commit()
+    who = current_user.username or "Someone"
+    note = rel.get("note") or ""
+    line = f"{who} is on Aluta {ver} and wants you there too 💞"
+    try:
+        safe_notify_user(partner, {
+            "type": "update_nudge",
+            "data": {"space_id": space.id, "from_id": current_user.id,
+                     "from_username": who, "version": ver, "note": note,
+                     "line": line},
+        })
+    except Exception:
+        pass
+    if send_push_to_user is not None:
+        try:
+            send_push_to_user(partner, {
+                "type": "update_nudge",
+                "title": f"Aluta {ver} 💞",
+                "body": line,
+                "note": note,
+                "version": ver,
+                "from_id": str(current_user.id),
+                "from_name": who,
+            })
+        except Exception:
+            pass
+    return {"ok": True, "version": ver}
+
+
 _VALID_TRACK_SOURCES = {"manual", "share", "listen_together",
                         "question", "dedication"}
 

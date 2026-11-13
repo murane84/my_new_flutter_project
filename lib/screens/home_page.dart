@@ -2723,6 +2723,46 @@ class HomePageState extends rp.ConsumerState<HomePage>
       if (mounted) showToast(context, _inMyNames(data, line), type: ToastType.info);
       return;
     }
+    // My partner invites me to the newest Aluta — a personal card, not a
+    // system one: their name, the version, its headline change.
+    if (type == 'update_nudge') {
+      final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final ver = (data['version'] ?? '').toString();
+      final note = (data['note'] ?? '').toString().trim();
+      final line = (data['line'] ??
+              '${data['from_username'] ?? 'Your partner'} is on Aluta $ver '
+                  'and wants you there too 💞')
+          .toString();
+      if (!mounted) return;
+      void open() {
+        if (mounted) AppUpdater.instance.check(context, manual: true);
+      }
+      showToast(
+        context,
+        _inMyNames(data, line),
+        type: ToastType.info,
+        duration: const Duration(seconds: 14),
+        detail: note.isEmpty ? 'Tap to see what’s new' : '✨ $note',
+        onTap: open,
+        actions: [
+          ToastAction('Later', () {}),
+          ToastAction('Update', open),
+        ],
+      );
+      return;
+    }
+    // The partner I invited just arrived on the new version.
+    if (type == 'partner_updated') {
+      final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final line = (data['line'] ??
+              '${data['from_username'] ?? 'Your partner'} is here ✨')
+          .toString();
+      if (mounted) {
+        showToast(context, _inMyNames(data, line), type: ToastType.success);
+      }
+      spaceEventBus.value++; // the "bring them along" chip goes away
+      return;
+    }
     // Someone wants to pin a bond with you → show the approval banner + toast.
     if (type == 'bond_request') {
       final data = (event['data'] as Map?)?.cast<String, dynamic>() ?? const {};

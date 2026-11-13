@@ -352,6 +352,34 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         payload: {'kind': 'app_update'},
         actions: const [(kOpen, 'Update')],
       );
+    } else if (type == 'update_nudge') {
+      // My partner invites me to the newest Aluta (server spaces.py). Open
+      // app: the socket shows the personal card. Tap → the update card.
+      if (foreground || !AppUpdater.instance.supported) return;
+      final from = (data['from_id'] ?? '').toString();
+      final note = (data['note'] ?? '').toString().trim();
+      await showAlutaNotification(
+        channel: alutaTeamChannel,
+        title: mine((data['body'] ?? 'Your partner wants you on the new Aluta 💞')
+            .toString()),
+        body: note.isEmpty ? 'Tap to update — your chats stay as they are'
+            : '✨ $note · tap to update',
+        id: alutaNotifId('update_nudge', from),
+        payload: {'kind': 'app_update'},
+        actions: const [(kOpen, 'Update')],
+      );
+    } else if (type == 'partner_updated') {
+      // The partner I invited is on the new version now.
+      if (foreground) return;
+      final from = (data['from_id'] ?? '').toString();
+      await showAlutaNotification(
+        channel: alutaTeamChannel,
+        title: (data['title'] ?? 'Our Space 💞').toString(),
+        body: mine((data['body'] ?? 'Your partner is here ✨').toString()),
+        id: alutaNotifId('partner_updated', from),
+        payload: {'kind': 'space', 'from': from},
+        actions: const [(kOpen, 'Open')],
+      );
     } else if (type == 'feedback_update') {
       final fid = (data['feedback_id'] ?? '').toString();
       await showAlutaNotification(

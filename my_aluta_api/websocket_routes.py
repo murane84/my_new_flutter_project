@@ -439,6 +439,38 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                 continue
 
             etype = data.get("type")
+            if etype == "client_info":
+                # Which Aluta this person runs (sent on every connect).
+                # Anyone who invited them to this version hears they're here.
+                try:
+                    import app_installs
+                    loop = asyncio.get_running_loop()
+                    ver = str(data.get("version") or "")
+                    inviters = await loop.run_in_executor(
+                        None, app_installs.record, uid, ver,
+                        data.get("build"), data.get("slot"))
+                    for f in inviters:
+                        line = f"{caller_name} is on Aluta {ver} now ✨"
+                        await notify_user(f, {
+                            "type": "partner_updated",
+                            "data": {"from_id": uid,
+                                     "from_username": caller_name,
+                                     "version": ver, "line": line},
+                        })
+                        try:
+                            await loop.run_in_executor(
+                                None, send_push_to_user, f, {
+                                "type": "partner_updated",
+                                "title": "Our Space 💞",
+                                "body": line,
+                                "from_id": str(uid),
+                                "from_name": caller_name,
+                            })
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                continue
             if etype == "typing":
                 to = data.get("to")
                 conv = data.get("conv")

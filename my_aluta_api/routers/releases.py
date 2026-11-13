@@ -517,6 +517,25 @@ def latest_versions() -> dict:
     return out
 
 
+def newer_than(slot: str, version: str) -> dict | None:
+    """The published build for [slot] if it's a NEWER version than
+    [version], as {"version", "note"} (note = the first what's-new line);
+    else None. Web reloads itself, so it's never "behind". Compared by
+    version (not build number) so the arm64 numbering can't skew it."""
+    from app_installs import vtuple
+    if slot not in PLATFORMS:
+        return None
+    m = _meta(slot)
+    if m is None and slot == "android-universal":
+        m = _meta("android")
+    if not m or vtuple(m.get("version")) <= vtuple(version):
+        return None
+    note = next((ln.strip().lstrip("-•* ").strip()
+                 for ln in str(m.get("notes") or "").splitlines()
+                 if ln.strip()), "")
+    return {"version": m.get("version"), "note": note}
+
+
 # The universal APK is the same build as the arm64 one — announcing both
 # would ping every phone twice. Windows apps hear it over their socket.
 _ANNOUNCE = ("android", "windows")

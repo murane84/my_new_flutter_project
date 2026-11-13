@@ -374,6 +374,12 @@ extension _HomePageHelpers1 on HomePageState {
       userId: id.toString(),
       onEventReceived: _handleNotification,
       onDisconnected: () {},
+      // Which Aluta this is → a bonded partner can invite me to a newer one
+      // (and hears "they're here ✨" when I arrive).
+      onConnected: () async {
+        final info = await AppUpdater.instance.clientInfo();
+        if (info != null) _notifyWs?.sendEvent(info);
+      },
     );
     _notifyWs!.connect();
 

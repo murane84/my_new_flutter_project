@@ -23,6 +23,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
 
       final banners = <Widget>[
         _pendingPartnerBanner(scheme),
+        _bringAlongBanner(scheme),
         _milestoneBanner(scheme),
         _weekSongCard(scheme),
         _wordsCard(scheme),

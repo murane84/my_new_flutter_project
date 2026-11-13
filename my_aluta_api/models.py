@@ -1332,3 +1332,41 @@ class RelayStatus(Base):
     name = Column(String, primary_key=True)
     reported_at = Column(DateTime(timezone=True), nullable=False)
     payload = Column(Text, nullable=False, default="{}")
+
+
+class AppInstall(Base):
+    """Which Aluta build each person is running — reported by the app on
+    every socket connect. Only used to let a BONDED partner (accepted,
+    mutual) see "they're on an older Aluta" and invite them along; nobody
+    else ever sees it. Auto-created by create_all; no ALTER."""
+    __tablename__ = "app_installs"
+
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    version = Column(String, nullable=True)   # "1.0.7"
+    build = Column(Integer, nullable=True)    # as the app counts it
+    slot = Column(String, nullable=True)      # android | android-universal | windows | web
+    updated_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class UpdateNudge(Base):
+    """"Bring them along" — one invite per new version per pair. When the
+    invited partner shows up on that version (or newer), `arrived_at` is set
+    and the inviter hears "they're here ✨". Auto-created; no ALTER."""
+    __tablename__ = "update_nudges"
+    __table_args__ = (
+        UniqueConstraint("from_user_id", "to_user_id", "version",
+                         name="_update_nudge_uc"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    from_user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, index=True)
+    to_user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, index=True)
+    version = Column(String, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+    arrived_at = Column(DateTime(timezone=True), nullable=True)

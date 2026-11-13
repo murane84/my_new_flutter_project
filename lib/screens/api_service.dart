@@ -2576,6 +2576,60 @@ class ApiService {
     }
   }
 
+  /// Is my bond partner on an older Aluta? {behind, partner_version,
+  /// latest, note, nudged} — or null (offline / not a live bond).
+  Future<Map<String, dynamic>?> getPartnerApp(int spaceId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http
+          .get(
+            Uri.parse('${await _baseUrl}/spaces/$spaceId/partner-app'),
+            headers: _authHeaders(token),
+          )
+          .timeout(const Duration(seconds: 12));
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final d = jsonDecode(resp.body);
+        if (d is Map<String, dynamic>) return d;
+      }
+      return null;
+    } catch (e) {
+      _logger.w('getPartnerApp failed: $e');
+      return null;
+    }
+  }
+
+  /// "Bring them along" — invite my partner to the newest Aluta (once per
+  /// version). [msg] says why it didn't go, in plain words.
+  Future<({bool ok, String msg})> sendUpdateNudge(int spaceId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) {
+        return (ok: false, msg: 'Please sign in again to send it');
+      }
+      final resp = await http
+          .post(
+            Uri.parse('${await _baseUrl}/spaces/$spaceId/update-nudge'),
+            headers: _authHeaders(token),
+          )
+          .timeout(const Duration(seconds: 12));
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return (ok: true, msg: '');
+      }
+      String? detail;
+      try {
+        final d = jsonDecode(resp.body);
+        if (d is Map && d['detail'] is String) detail = d['detail'] as String;
+      } catch (_) {
+        // Not JSON — the generic wording below.
+      }
+      return (ok: false, msg: detail ?? 'Couldn’t send it — try again');
+    } catch (e) {
+      _logger.w('sendUpdateNudge failed: $e');
+      return (ok: false, msg: "Couldn't reach Aluta — check your internet");
+    }
+  }
+
   /// "This month in your words": counts of the pair's own warm phrases
   /// this month ({month, items: [{phrase, me, them, total}]}), or null.
   Future<Map<String, dynamic>?> getSpaceWords(int spaceId) async {

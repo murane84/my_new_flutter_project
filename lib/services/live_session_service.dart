@@ -903,11 +903,17 @@ class LiveSessionController {
     // A second press while counting would skip the 3·2·1 for everyone.
     if (_countingDown) return;
     // The host is on a call: the music waits (a listener can't start it).
-    if (_onCall && by != _myUserId) return;
+    if (_onCall && by != _myUserId) {
+      _resumingFromCall = false;
+      return;
+    }
     // Starting again (the host chose to, or the listener is back) ends any
     // wait for a listener's call — even if they left the session meanwhile.
     _pausedForPeerCall = false;
-    if (player.playing) return;
+    if (player.playing) {
+      _resumingFromCall = false; // nothing to welcome back to
+      return;
+    }
     _countingDown = true;
     final back = _resumingFromCall;
     _sendControl({

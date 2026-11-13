@@ -552,6 +552,11 @@ class _AdminAuditPageState extends State<AdminAuditPage> {
     'recovery_codes_regenerated': 'New recovery codes',
     'admin_frozen': 'Admin locked',
     'admin_unfrozen': 'Admin unlocked',
+    'user_reset_signin': 'Reset someone’s sign-in',
+    'user_paused': 'Paused an account',
+    'user_unpaused': 'Un-paused an account',
+    'user_delete_scheduled': 'Account set to delete in 7 days',
+    'user_restored': 'Restored an account',
   };
 
   (IconData, Color) _iconFor(Map<String, dynamic> e) {
@@ -570,6 +575,9 @@ class _AdminAuditPageState extends State<AdminAuditPage> {
     }
     if (a.startsWith('device')) {
       return (Icons.devices_rounded, const Color(0xFF7C4DFF));
+    }
+    if (a.startsWith('user_')) {
+      return (Icons.manage_accounts_rounded, const Color(0xFF00897B));
     }
     return (Icons.receipt_long_rounded, const Color(0xFF78909C));
   }

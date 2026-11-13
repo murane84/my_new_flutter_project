@@ -126,8 +126,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_token(data: dict, expires_delta: timedelta) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + expires_delta
-    to_encode.update({"exp": expire})
+    now = datetime.now(timezone.utc)
+    expire = now + expires_delta
+    # iat: lets an admin "sign out everywhere" (tokens issued before it die).
+    to_encode.update({"exp": expire, "iat": int(now.timestamp())})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def create_tokens(email: str, sid: str | None = None):
@@ -200,6 +202,13 @@ def _resolve_user_from_token(token: str, db: Session) -> User:
     user = get_user_by_email(db, email)
     if not user:
         raise credentials_exception
+
+    # Paused / being deleted / signed out everywhere by an admin.
+    import account_control
+    why = account_control.check(user.id, payload.get("iat"))
+    if why:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail=why, headers={"WWW-Authenticate": "Bearer"})
 
     # QR-linked devices carry a session id. If it's been revoked (or deleted)
     # from the user's phone, the token is dead immediately — every request checks.
@@ -300,6 +309,10 @@ def login_user(user: UserLogin, request: Request, db: Session = Depends(get_db))
     db_user = get_user_by_email(db, user.email)
     if not db_user or not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    import account_control
+    why = account_control.check(db_user.id, datetime.now(timezone.utc).timestamp())
+    if why:
+        raise HTTPException(status_code=403, detail=why)
 
     # Two-step sign-in (Ozilane Key): with it on + a phone linked, and this
     # device not trusted, the linked phone must approve AFTER the right
@@ -352,6 +365,10 @@ def refresh_access_token(
     user = get_user_by_email(db, email)
     if not user:
         raise HTTPException(status_code=403, detail="Invalid refresh token")
+    import account_control
+    why = account_control.check(user.id, payload.get("iat"))
+    if why:
+        raise HTTPException(status_code=403, detail=why)
 
     sid = payload.get("sid")
     if sid:

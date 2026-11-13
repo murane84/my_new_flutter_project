@@ -259,6 +259,9 @@ def _authenticate_ws(token: Optional[str], user_id: int) -> Optional[User]:
         db.close()
     if not user or user.id != user_id:
         return None
+    import account_control
+    if account_control.check(user.id, payload.get("iat")):
+        return None  # paused / being deleted / signed out everywhere
     return user
 
 

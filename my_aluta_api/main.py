@@ -109,6 +109,14 @@ async def lifespan(app: FastAPI):
                 raise
             except Exception:
                 pass
+            # Accounts whose 7-day delete freeze ended (admin) → gone.
+            try:
+                from account_control import purge_due
+                await asyncio.to_thread(purge_due)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
             await asyncio.sleep(3600)
     _media_task = asyncio.create_task(_media_loop())
     # Directional friendships (mutual rule): give real two-way pairs their

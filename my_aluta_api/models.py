@@ -1370,3 +1370,21 @@ class UpdateNudge(Base):
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)
     arrived_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class AccountControl(Base):
+    """Admin controls on one account (Admin Phase 2). Absent row = a normal
+    account. `disabled` pauses it (no sign-in, every token refused);
+    `delete_after` = full delete requested — the account is frozen (paused)
+    until then, restorable, then hard-deleted by the server's hourly job;
+    `signed_out_at` = "sign out everywhere": tokens issued before it stop
+    working. Auto-created by create_all; no ALTER."""
+    __tablename__ = "account_controls"
+
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    disabled = Column(Boolean, default=False, nullable=False)
+    reason = Column(String, nullable=True)
+    disabled_at = Column(DateTime(timezone=True), nullable=True)
+    delete_after = Column(DateTime(timezone=True), nullable=True)
+    signed_out_at = Column(DateTime(timezone=True), nullable=True)

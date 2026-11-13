@@ -9,6 +9,7 @@ import 'admin_devices.dart';
 import 'admin_feedback.dart';
 import 'admin_install.dart';
 import 'admin_overview.dart';
+import 'admin_users.dart';
 import 'admin_widgets.dart';
 import '../utils/radii.dart';
 import '../utils/depth.dart';
@@ -19,10 +20,11 @@ const int _kOverview = 0,
     _kSystem = 2,
     _kDevices = 3,
     _kFeedback = 4,
-    _kLog = 5;
+    _kPeople = 5,
+    _kLog = 6;
 
 /// Signed-in frame: Overview · Usage · System · Devices · Feedback ·
-/// Activity log, plus the always-there
+/// People · Activity log, plus the always-there
 /// "Lock admin" (Not me), the dark/light switch and sign-out.
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key, required this.session, required this.onSignOut});
@@ -138,6 +140,7 @@ class _AdminShellState extends State<AdminShell> {
           onOpenDevices: () => setState(() => _tab = _kDevices)),
       AdminDevicesPage(onChanged: _loadMe),
       AdminFeedbackPage(onChanged: _loadMe),
+      const AdminUsersPage(),
       const AdminAuditPage(),
     ];
     final wide = MediaQuery.sizeOf(context).width >= 840;
@@ -284,6 +287,11 @@ class _AdminShellState extends State<AdminShell> {
                 onTap: () => setState(() => _tab = _kFeedback),
               ),
               GenieMenuEntry(
+                icon: Icons.people_alt_rounded,
+                label: 'People',
+                onTap: () => setState(() => _tab = _kPeople),
+              ),
+              GenieMenuEntry(
                 icon: Icons.receipt_long_rounded,
                 label: 'Activity log',
                 onTap: () => setState(() => _tab = _kLog),
@@ -349,6 +357,10 @@ class _AdminShellState extends State<AdminShell> {
                               badge: newFeedback),
                           label: const Text('Feedback')),
                       const NavigationRailDestination(
+                          icon: Icon(Icons.people_alt_outlined),
+                          selectedIcon: Icon(Icons.people_alt_rounded),
+                          label: Text('People')),
+                      const NavigationRailDestination(
                           icon: Icon(Icons.receipt_long_outlined),
                           selectedIcon: Icon(Icons.receipt_long_rounded),
                           label: Text('Activity log')),
@@ -390,6 +402,10 @@ class _AdminShellState extends State<AdminShell> {
                     selectedIcon:
                         navIcon(Icons.rate_review_rounded, badge: newFeedback),
                     label: 'Feedback'),
+                const NavigationDestination(
+                    icon: Icon(Icons.people_alt_outlined),
+                    selectedIcon: Icon(Icons.people_alt_rounded),
+                    label: 'People'),
                 const NavigationDestination(
                     icon: Icon(Icons.receipt_long_outlined),
                     selectedIcon: Icon(Icons.receipt_long_rounded),

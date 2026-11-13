@@ -40,7 +40,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from jose import JWTError, jwt
 from pydantic import BaseModel
-from sqlalchemy import func as sa_func, text
+from sqlalchemy import func as sa_func, or_, text
 from sqlalchemy.orm import Session
 
 from cryptography.exceptions import InvalidSignature
@@ -1303,3 +1303,226 @@ def admin_feedback_update(feedback_id: int, payload: FeedbackUpdateIn,
            target=f.id, ip=ctx.ip, detail=changes)
     db.commit()
     return fb_out(f)
+
+
+# ── Phase 2: user management ────────────────────────────────────────────────
+# Search → a person's card (profile, devices, last seen, storage, plan) and
+# four actions: reset sign-in, pause / un-pause, delete (7-day freeze, then
+# gone) / restore. Every action needs a full (non-probation) device + the
+# owner's password, never targets the owner's own account, and is audited.
+
+def _acct_state(c) -> dict:
+    if c is None:
+        return {"status": "active"}
+    if c.delete_after is not None:
+        return {"status": "deleting", "delete_after": _iso(_aware(c.delete_after)),
+                "reason": c.reason}
+    if c.disabled:
+        return {"status": "paused", "since": _iso(_aware(c.disabled_at)),
+                "reason": c.reason}
+    return {"status": "active"}
+
+
+def _user_row(u: User, c) -> dict:
+    return {
+        "id": u.id,
+        "username": u.username,
+        "email": u.email,
+        "phone": u.phone,
+        "avatar_url": u.avatar_url,
+        "online": bool(u.is_online),
+        "last_seen": _iso(_aware(u.last_seen)),
+        "created_at": _iso(_aware(getattr(u, "created_at", None))),
+        "plan": getattr(u, "plan_tier", None) or "free",
+        **_acct_state(c),
+    }
+
+
+@router.get("/users")
+def admin_users(q: str = "", ctx: AdminCtx = Depends(admin_ctx),
+                db: Session = Depends(get_db)):
+    from models import AccountControl
+    term = " ".join((q or "").split())[:80]
+    query = db.query(User)
+    if term:
+        like = f"%{term}%"
+        query = query.filter(or_(User.username.ilike(like),
+                                 User.email.ilike(like),
+                                 User.phone.ilike(like)))
+    users = query.order_by(User.id.desc()).limit(40).all()
+    ctrl = {c.user_id: c for c in db.query(AccountControl).filter(
+        AccountControl.user_id.in_([u.id for u in users])).all()} if users else {}
+    # Paused / deleting accounts first, so nothing waiting is missed.
+    rows = [_user_row(u, ctrl.get(u.id)) for u in users]
+    rows.sort(key=lambda r: 0 if r["status"] != "active" else 1)
+    return {"users": rows}
+
+
+@router.get("/users/{user_id}")
+def admin_user(user_id: int, ctx: AdminCtx = Depends(admin_ctx),
+               db: Session = Depends(get_db)):
+    from models import AccountControl, UserDevice, AppInstall
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(404, "No such user")
+    c = db.query(AccountControl).filter(AccountControl.user_id == u.id).first()
+    out = _user_row(u, c)
+    out["devices"] = [{
+        "platform": d.platform,
+        "os": getattr(d, "os_version", None),
+        "app_version": getattr(d, "app_version", None),
+        "last_seen": _iso(_aware(getattr(d, "last_seen", None))),
+    } for d in db.query(UserDevice).filter(UserDevice.user_id == u.id)
+        .order_by(UserDevice.id.desc()).limit(10).all()]
+    inst = db.get(AppInstall, u.id)
+    out["app"] = ({"version": inst.version, "slot": inst.slot,
+                   "seen": _iso(_aware(inst.updated_at))} if inst else None)
+    live = "data IS NOT NULL AND purged_at IS NULL"
+    row = db.execute(text(
+        f"SELECT COUNT(*), COALESCE(SUM(size),0) FROM media_assets "
+        f"WHERE {live} AND uploader_id = :u"), {"u": u.id}).fetchone()
+    out["storage"] = {"files": int(row[0] or 0), "bytes": int(row[1] or 0)}
+    try:
+        import crud
+        out["friends"] = len(crud._get_friend_ids(db, u.id))
+    except Exception:
+        out["friends"] = None
+    out["two_factor"] = bool(getattr(u, "totp_enabled", False))
+    out["ozilane_key"] = bool(getattr(u, "ozkey_subject", None))
+    out["is_you"] = u.id == ctx.user.id
+    return out
+
+
+class UserActionIn(BaseModel):
+    password: str
+    reason: Optional[str] = None
+    confirm: Optional[str] = None  # delete: type the username
+
+
+def _act_target(db: Session, ctx: AdminCtx, user_id: int,
+                payload: UserActionIn) -> User:
+    require_full(ctx)
+    _step_up(ctx, payload.password)
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(404, "No such user")
+    if u.id == ctx.user.id or (u.email or "").lower() in _owner_emails():
+        raise HTTPException(403, "Not on the owner's own account")
+    return u
+
+
+def _control(db: Session, user_id: int):
+    from models import AccountControl
+    c = db.query(AccountControl).filter(AccountControl.user_id == user_id).first()
+    if c is None:
+        c = AccountControl(user_id=user_id, disabled=False)
+        db.add(c)
+    return c
+
+
+def _save_control(db: Session, c) -> None:
+    import account_control
+    db.commit()
+    db.refresh(c)
+    account_control.refresh(c, c.user_id)
+
+
+@router.post("/users/{user_id}/reset-signin")
+def admin_user_reset(user_id: int, payload: UserActionIn,
+                     ctx: AdminCtx = Depends(admin_ctx),
+                     db: Session = Depends(get_db)):
+    """Reset password / sign-in: a one-time temporary password (shown once,
+    here), every device signed out, and the app asks them to choose their
+    own password right after signing in. Nothing is deleted."""
+    from auth import get_password_hash
+    u = _act_target(db, ctx, user_id, payload)
+    alphabet = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
+    temp = "".join(secrets.choice(alphabet) for _ in range(10))
+    u.hashed_password = get_password_hash(temp)
+    u.must_change_password = True
+    u.refresh_token = None
+    c = _control(db, u.id)
+    c.signed_out_at = _now()
+    _save_control(db, c)
+    _audit(db, "user_reset_signin", user_id=ctx.user.id,
+           device_id=ctx.device.id, target=f"user:{u.id}", ip=ctx.ip)
+    db.commit()
+    return {"ok": True, "temp_password": temp, "username": u.username}
+
+
+@router.post("/users/{user_id}/pause")
+def admin_user_pause(user_id: int, payload: UserActionIn,
+                     ctx: AdminCtx = Depends(admin_ctx),
+                     db: Session = Depends(get_db)):
+    u = _act_target(db, ctx, user_id, payload)
+    c = _control(db, u.id)
+    c.disabled = True
+    c.disabled_at = _now()
+    c.reason = (payload.reason or "").strip()[:200] or None
+    _save_control(db, c)
+    _audit(db, "user_paused", user_id=ctx.user.id, device_id=ctx.device.id,
+           target=f"user:{u.id}", ip=ctx.ip,
+           detail={"reason": c.reason})
+    db.commit()
+    return {"ok": True, **_acct_state(c)}
+
+
+@router.post("/users/{user_id}/unpause")
+def admin_user_unpause(user_id: int, payload: UserActionIn,
+                       ctx: AdminCtx = Depends(admin_ctx),
+                       db: Session = Depends(get_db)):
+    u = _act_target(db, ctx, user_id, payload)
+    c = _control(db, u.id)
+    if c.delete_after is not None:
+        raise HTTPException(409, "This account is being deleted — restore it")
+    c.disabled = False
+    c.reason = None
+    _save_control(db, c)
+    _audit(db, "user_unpaused", user_id=ctx.user.id, device_id=ctx.device.id,
+           target=f"user:{u.id}", ip=ctx.ip)
+    db.commit()
+    return {"ok": True, **_acct_state(c)}
+
+
+DELETE_FREEZE = timedelta(days=7)
+
+
+@router.post("/users/{user_id}/delete")
+def admin_user_delete(user_id: int, payload: UserActionIn,
+                      ctx: AdminCtx = Depends(admin_ctx),
+                      db: Session = Depends(get_db)):
+    """Full delete (the person asked, or abuse): typed username → frozen for
+    7 days (restorable), then the server deletes it for good. Shared chats
+    then show a deleted user; the other person's own messages stay."""
+    u = _act_target(db, ctx, user_id, payload)
+    if (payload.confirm or "").strip() != (u.username or ""):
+        raise HTTPException(400, "Type the username exactly to confirm")
+    c = _control(db, u.id)
+    c.disabled = True
+    c.disabled_at = c.disabled_at or _now()
+    c.delete_after = _now() + DELETE_FREEZE
+    c.reason = (payload.reason or "").strip()[:200] or None
+    u.refresh_token = None
+    _save_control(db, c)
+    _audit(db, "user_delete_scheduled", user_id=ctx.user.id,
+           device_id=ctx.device.id, target=f"user:{u.id}",
+           ip=ctx.ip,
+           detail={"delete_after": _iso(c.delete_after), "reason": c.reason})
+    db.commit()
+    return {"ok": True, **_acct_state(c)}
+
+
+@router.post("/users/{user_id}/restore")
+def admin_user_restore(user_id: int, payload: UserActionIn,
+                       ctx: AdminCtx = Depends(admin_ctx),
+                       db: Session = Depends(get_db)):
+    u = _act_target(db, ctx, user_id, payload)
+    c = _control(db, u.id)
+    c.delete_after = None
+    c.disabled = False
+    c.reason = None
+    _save_control(db, c)
+    _audit(db, "user_restored", user_id=ctx.user.id, device_id=ctx.device.id,
+           target=f"user:{u.id}", ip=ctx.ip)
+    db.commit()
+    return {"ok": True, **_acct_state(c)}

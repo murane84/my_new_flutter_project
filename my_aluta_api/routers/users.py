@@ -250,11 +250,17 @@ def delete_account(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from models import Message, MediaAsset
-
     user = db.query(User).filter(User.id == current_user.id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    hard_delete_user(db, user)
+    return {"detail": "Account deleted"}
+
+
+def hard_delete_user(db: Session, user: User) -> None:
+    """Permanently delete one account and its server data (the user's own
+    request, or the end of an admin's 7-day delete freeze)."""
+    from models import Message, MediaAsset
 
     # Wipe attachment blobs referenced by this user's messages.
     msgs = (
@@ -276,7 +282,6 @@ def delete_account(
     # friend / mute / block rows (FK ON DELETE CASCADE).
     db.delete(user)
     db.commit()
-    return {"detail": "Account deleted"}
 
 @router.get("/users/", response_model=List[schemas.PublicUser], tags=["Users"])
 def get_all_users_except_current(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

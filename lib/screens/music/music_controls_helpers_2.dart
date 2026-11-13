@@ -251,6 +251,22 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
   void _publishPlaylist() {
     playlistNotifier.value = List<String>.unmodifiable(_playlist);
     _savePlaylist();
+    unawaited(_learnSongNames());
+  }
+
+  /// Teach SongNames who the artists are (your edits + the files' own tags +
+  /// names that recur across files), so "A - B" names split the right way
+  /// round and a hidden "Title_Artist" is found.
+  Future<void> _learnSongNames() async {
+    final artists = <String?>[...metadataStore.artists];
+    if (_isMobile) {
+      try {
+        final songs = await SongLibrary.songs();
+        artists.addAll(songs.map((s) => s.artist));
+      } catch (_) {}
+    }
+    SongNames.instance.learn(_playlist, artists: artists);
+    if (mounted) setState(() {});
   }
 
   // Persist the loaded playlist so it survives a full app restart (no re-scan).
@@ -301,7 +317,10 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
             : path;
     final dot = name.lastIndexOf('.');
     final base = dot > 0 ? name.substring(0, dot) : name;
-    return _cleanTrackName(base);
+    // The title part of a smartly read name ("Sean Paul - We Be Burning" →
+    // "We Be Burning"; the artist line gets "Sean Paul").
+    final t = SongNames.instance.parseName(base).title;
+    return t.isEmpty ? _cleanTrackName(base) : t;
   }
 
   String _fmt(Duration d) {

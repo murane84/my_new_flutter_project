@@ -47,6 +47,8 @@ import 'music/player_disc_style.dart';
 import 'listening_audience_sheet.dart';
 import '../services/audio_handler.dart';
 import '../services/metadata_overrides.dart';
+import '../services/song_names.dart';
+import '../services/track_title.dart' show cleanTrackName;
 import '../utils/marquee_text.dart';
 import '../utils/typing_guard.dart';
 import 'api_service.dart';
@@ -92,50 +94,16 @@ String _speedLabel(double s) {
   return '$t×';
 }
 
-/// Cleans junk that downloaders bake into filenames, e.g.
-/// "Two of us- Downloaded from clipzag.com" → "Two of us".
-String _cleanTrackName(String raw) {
-  var n = raw;
-  // Ringtone / caller-tune promo spam common on East-African music files, e.g.
-  // "… sms skiza 7301521 to 811" — drop everything from that phrase onward.
-  n = n.replaceAll(RegExp(r'\bsms\s*skiza\b.*', caseSensitive: false), ' ');
-  n = n.replaceAll(RegExp(r'\bskiza\b.*', caseSensitive: false), ' ');
-  // Downloader tags, e.g. "… Downloaded from clipzag.com".
-  n = n.replaceAll(
-      RegExp(r'[-_(\[ ]*downloaded\s*from[^)\]]*', caseSensitive: false), ' ');
-  n = n.replaceAll(
-      RegExp(r'\b(clipzag|y2mate|ytmp3|mp3juice|tubidy|savefrom|snaptube)\S*',
-          caseSensitive: false),
-      ' ');
-  // Bare website / domain noise (e.g. "mdundo.com", "www.something.net").
-  n = n.replaceAll(
-      RegExp(r'\b(www\.)?\S+\.(com|net|co|info|xyz|me|tz)\b',
-          caseSensitive: false),
-      ' ');
-  // Video/audio tags: "(Official Lyrics Video)", "[Official Music Video]",
-  // "(Audio)", "[HD]", "(4K)", "(Visualizer)", "(Dir by …)" …
-  n = n.replaceAll(
-      RegExp(r'[\(\[][^\)\]]*\b(official|lyric|lyrics|video|audio|visuali[sz]er|hd|4k|mv|dir(ected)?\s*by)\b[^\)\]]*[\)\]]?',
-          caseSensitive: false),
-      ' ');
-  // Empty leftover groups "()" / "[]".
-  n = n.replaceAll(RegExp(r'\(\s*\)|\[\s*\]'), ' ');
-  n = n.replaceAll(RegExp(r'\s+'), ' ').trim();
-  // Strip stray leading/trailing separators and unbalanced brackets / pipes
-  // (kills the leftover "Goon Flavour )" style closer).
-  n = n.replaceAll(RegExp(r'^[\s\-_|)\]\(\[]+|[\s\-_|)\]\(\[]+$'), '').trim();
-  return n.isEmpty ? raw.trim() : n;
-}
+/// Cleans junk that downloaders bake into filenames — the ONE cleaner the
+/// whole app uses (lib/services/track_title.dart), so a song reads the same
+/// everywhere.
+String _cleanTrackName(String raw) => cleanTrackName(raw);
 
-/// Splits a cleaned name into (title, artist) when it looks like "Title - Artist".
-(String, String?) _titleArtist(String cleaned) {
-  final parts = cleaned
-      .split(RegExp(r'\s*-\s*'))
-      .map((p) => p.trim())
-      .where((p) => p.isNotEmpty)
-      .toList();
-  if (parts.length < 2) return (cleaned, null);
-  return (parts.first, parts.sublist(1).join(' · '));
+/// Title + artist from a song's file name (see SongNames): the artist side
+/// is the one Aluta knows, "Feat X" → "(feat. X)", junk gone.
+(String, String?) _titleArtistOf(String path) {
+  final p = SongNames.instance.parse(path);
+  return (p.title, p.artist.isEmpty ? null : p.artist);
 }
 
 // =============================================================================
@@ -1567,7 +1535,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _switching = true;
 
     final initTitle = metadataStore.title(path, _nameFromPath(path));
-    final initArtist = _cleanArtist(metadataStore.artist(path, ''));
+    final initArtist = _cleanArtist(
+        metadataStore.artist(path, SongNames.instance.parse(path).artist));
     // Aluta learns what you play (on-device only) → gentle music nudges.
     SongInsights.instance.recordPlay(initTitle, artist: initArtist);
     setState(() {
@@ -1658,12 +1627,22 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           .firstWhere((s) => s?.data == path, orElse: () => null);
       if (m != null && mounted) {
         // User overrides win over the file's own tags.
+        // MediaStore's "title" for an untagged file is just its raw file
+        // name ("Sean_Paul_-_…(mp3.pm") — read that smartly instead.
+        final base = path.split(RegExp(r'[\\/]')).last.replaceFirst(
+            RegExp(r'\.[^.]+$'), '');
+        final tagged = m.title.isNotEmpty && m.title.trim() != base.trim();
         final t = metadataStore.title(
-            path, m.title.isNotEmpty ? m.title : _nameFromPath(path));
+            path, tagged ? m.title : _nameFromPath(path));
         // "<unknown>" (no artist tag) → the album name, else nothing — the
         // card never shows the raw "<unknown>".
         final a = _cleanArtist(
-            metadataStore.artist(path, m.artist ?? ''), m.album);
+            metadataStore.artist(
+                path,
+                _blankTag(m.artist)
+                    ? SongNames.instance.parse(path).artist
+                    : m.artist!),
+            m.album);
         setState(() {
           _trackName = t;
           _artistName = a;
@@ -1901,7 +1880,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       final idx = _playlist.indexOf(path);
       if (idx < 0) return; // track no longer in the playlist — skip
       final initTitle = metadataStore.title(path, _nameFromPath(path));
-      final initArtist = _cleanArtist(metadataStore.artist(path, ''));
+      final initArtist = _cleanArtist(
+        metadataStore.artist(path, SongNames.instance.parse(path).artist));
       if (!mounted) return;
       setState(() {
         _currentIndex = idx;

@@ -108,6 +108,13 @@ class MetadataStore extends ChangeNotifier {
     return (t != null && t.trim().isNotEmpty) ? t.trim() : fallback;
   }
 
+  /// Every artist the user has typed — Aluta treats these as known artists
+  /// when reading other songs' names (SongNames).
+  Iterable<String> get artists => _m.values
+      .map((m) => m.artist)
+      .whereType<String>()
+      .where((a) => a.trim().isNotEmpty);
+
   /// Effective artist with fallback.
   String artist(String path, String fallback) {
     final a = _m[path]?.artist;

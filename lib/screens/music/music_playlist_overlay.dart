@@ -561,12 +561,12 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   }
 
   String _effTitle(String path) {
-    final ta = _titleArtist(_name(path));
+    final ta = _titleArtistOf(path);
     return metadataStore.title(path, ta.$1);
   }
 
   String _effArtist(String path) {
-    final ta = _titleArtist(_name(path));
+    final ta = _titleArtistOf(path);
     return metadataStore.artist(path, ta.$2 ?? '');
   }
 
@@ -1212,7 +1212,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   Future<void> _showEditDetails(BuildContext context, String path) async {
     final scheme = Theme.of(context).colorScheme;
     final o = metadataStore.of(path);
-    final ta = _titleArtist(_name(path));
+    final ta = _titleArtistOf(path);
     final titleC = TextEditingController(text: o?.title ?? ta.$1);
     final artistC = TextEditingController(text: o?.artist ?? (ta.$2 ?? ''));
     final albumC = TextEditingController(text: o?.album ?? '');
@@ -1835,7 +1835,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   /// one tap (no composer). A new music status replaces my previous one.
   Future<void> _shareAsStatus(String path) async {
     final o = metadataStore.of(path);
-    final ta = _titleArtist(_name(path));
+    final ta = _titleArtistOf(path);
     final title = (o?.title?.trim().isNotEmpty ?? false) ? o!.title! : ta.$1;
     final artist =
         (o?.artist?.trim().isNotEmpty ?? false) ? o!.artist : ta.$2;

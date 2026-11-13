@@ -1,4 +1,5 @@
 import 'metadata_overrides.dart';
+import 'song_names.dart';
 
 /// Cleans junk that downloaders bake into filenames, e.g.
 /// "Two of us- Downloaded from clipzag.com" → "Two of us".
@@ -49,7 +50,9 @@ String cleanedNameFromPath(String path) {
 /// rename from [metadataStore] when set, otherwise the cleaned file name.
 /// Native (Windows/Android) paths only — web uses its own queue titles.
 String displayTitleForPath(String path) {
-  final fallback = cleanedNameFromPath(path);
+  // The smartly read title ("Sean Paul - We Be Burning" → "We Be Burning").
+  final smart = SongNames.instance.parse(path).title;
+  final fallback = smart.isEmpty ? cleanedNameFromPath(path) : smart;
   final t = metadataStore.title(path, fallback);
   final out = t.trim();
   return out.isEmpty ? 'Live song' : out;

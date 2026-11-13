@@ -757,9 +757,11 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       _reactionFeed.insert(
           0,
           _ReactionLog(_nameOfId(by), '💞', DateTime.now(),
-              text: to == widget.myUserId
-                  ? 'is ready when you are'
-                  : 'is ready when ${_nameOfId(to) == 'You' ? 'you are' : '${_nameOfId(to)} is'}',
+              text: mine
+                  ? 'are ready when ${_nameOfId(to)} is'
+                  : to == widget.myUserId
+                      ? 'is ready when you are'
+                      : 'is ready when ${_nameOfId(to)} is',
               mine: mine,
               avatar: _avatarFor(by)));
     });

@@ -781,10 +781,9 @@ class LiveSessionController {
   /// beat for all. Already playing (or counting) → plain play.
   Future<void> resumeWithCountdown(int? by) async {
     if (role != LiveRole.host) return;
-    if (player.playing || _countingDown) {
-      unawaited(player.play());
-      return;
-    }
+    // A second press while counting would skip the 3·2·1 for everyone.
+    if (_countingDown) return;
+    if (player.playing) return;
     _countingDown = true;
     _sendControl({'type': 'countdown', 'by': ?by, 'secs': 3});
     onEvent?.call({'type': 'countdown', 'by': ?by, 'secs': 3, 'local': true});

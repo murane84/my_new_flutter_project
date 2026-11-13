@@ -2288,6 +2288,10 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         dense: true,
         visualDensity: const VisualDensity(vertical: -3),
         minVerticalPadding: 0,
+        // Every row the same height, artist line or not — a one-line song
+        // (no artist) used to be shorter, so rows bunched up unevenly.
+        // The title centres in the same slot instead.
+        minTileHeight: 54,
         horizontalTitleGap: 10,
         selected: isNow || isSel,
         selectedTileColor: isSel

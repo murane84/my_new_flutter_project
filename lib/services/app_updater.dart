@@ -67,7 +67,7 @@ class AppUpdater {
   // build is prompted ONCE when announced. Until it's installed, the app
   // reminds again every 6 hours (the cycle below), then goes quiet until
   // the server announces the next one. No blind polling.
-  static const _kPending = 'update_pending_v1'; // "<slot>|<build>"
+  static const _kPending = 'update_pending_v1'; // "<slot>|<build>[|<min>]"
   static const _kPrompted = 'update_prompted_v1'; // "<build>|<epoch ms>"
   static const Duration _remindEvery = Duration(hours: 6);
 
@@ -116,12 +116,15 @@ class AppUpdater {
       available.value = null;
       return;
     }
-    await p.setString(_kPending, '$slot|$build');
+    final minB = (v['min_build'] as num?)?.toInt() ?? 0;
+    await p.setString(_kPending, '$slot|$build|$minB');
     // In the background: remember it; the prompt comes on coming back.
     if (!_inFront) return;
     // Once per announced build; the 6-hour cycle does the reminding.
+    // A REQUIRED update (mine < min_build) never waits: every time.
     final s = (p.getString(_kPrompted) ?? '').split('|');
-    final promptedThis = s.length == 2 && s[0] == '$build';
+    final promptedThis =
+        s.length == 2 && s[0] == '$build' && mine >= minB;
     if (promptedThis) {
       if (context.mounted) _remind(context);
       return;
@@ -144,15 +147,18 @@ class AppUpdater {
     }
     final p = await SharedPreferences.getInstance();
     final pend = (p.getString(_kPending) ?? '').split('|');
-    if (pend.length != 2) return;
+    if (pend.length < 2) return;
     final build = int.tryParse(pend[1]) ?? 0;
-    if (build <= await _mine()) {
+    final minB = pend.length > 2 ? int.tryParse(pend[2]) ?? 0 : 0;
+    final mine = await _mine();
+    if (build <= mine) {
       await p.remove(_kPending);
       available.value = null;
       return;
     }
     final s = (p.getString(_kPrompted) ?? '').split('|');
-    final last = s.length == 2 && s[0] == '$build'
+    // Required (mine < min_build): no 6-hour wait — the card comes back.
+    final last = s.length == 2 && s[0] == '$build' && mine >= minB
         ? int.tryParse(s[1]) ?? 0
         : 0;
     if (DateTime.now().millisecondsSinceEpoch - last <
@@ -325,7 +331,8 @@ class AppUpdater {
       if (rel == null) {
         await p.remove(_kPending);
       } else {
-        await p.setString(_kPending, '${await _slot()}|${rel['build']}');
+        await p.setString(_kPending,
+            '${await _slot()}|${rel['build']}|${rel['min_build'] ?? 0}');
         // Shown now → the next reminder is 6 hours from here.
         await p.setString(_kPrompted, '${rel['build']}|$now');
       }

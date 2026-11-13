@@ -2942,11 +2942,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
       AppUpdater.instance.onServerVersions(
           context, Map<String, dynamic>.from(event['versions'] as Map));
     }
-    if (type == 'app_update') {
-      // (an older server's publish announce)
-      AppUpdater.instance.announced(context,
-          (event['build'] as num?)?.toInt() ?? 0, '${event['platform']}');
-    }
+    // (`app_update` is the legacy twin sent for 1.0.4 apps — this build
+    // always gets `app_versions` too, which carries min_build; acting on
+    // the legacy one would overwrite it.)
     if (type == 'bond_ping' && event['kind'] == 'touch') {
       // My person is holding the heart and I'm elsewhere in the app: feel it
       // (the open chat with them shows its own heart instead).

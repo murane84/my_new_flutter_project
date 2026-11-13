@@ -215,17 +215,6 @@ class AppUpdater {
         _kPrompted, '$build|${DateTime.now().millisecondsSinceEpoch}');
   }
 
-  /// Older servers send `app_update` {platform, build}: same as a publish.
-  Future<void> announced(
-      BuildContext context, int build, String platform) async {
-    if (!supported || build <= 0) return;
-    // A Windows build means nothing to a phone, and the other way round.
-    if ((platform == 'windows') != !_android) return;
-    await onServerVersions(context, {
-      platform: {'build': build}
-    });
-  }
-
   void _webToast(BuildContext context, String version) {
     showToast(
       context,

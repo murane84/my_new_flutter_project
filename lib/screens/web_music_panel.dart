@@ -20,8 +20,9 @@ import '../utils/app_config.dart';
 import '../utils/app_reload.dart';
 import '../utils/toast_helper.dart';
 import '../utils/bounce_tap.dart' show Tactile;
+import '../services/song_names.dart';
 import '../services/track_title.dart'
-    show cleanDisplayName, splitTitleArtist;
+    show cleanDisplayName;
 import 'listening_audience_sheet.dart' show PresenceShareButton;
 import '../widgets/genie_menu.dart';
 import '../utils/readable.dart';
@@ -192,13 +193,13 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     String title(String k) {
       final j = _indexOfKey(k);
       if (j == null || j >= _queue.length) return 'Song';
-      return splitTitleArtist(_cleanTitle(_queue[j].name)).$1;
+      return _ta(_queue[j].name).$1;
     }
 
     String artist(String k) {
       final j = _indexOfKey(k);
       if (j == null || j >= _queue.length) return '';
-      return splitTitleArtist(_cleanTitle(_queue[j].name)).$2 ?? '';
+      return _ta(_queue[j].name).$2 ?? '';
     }
 
     showSongShareSheet(
@@ -220,7 +221,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   void _dedicateAt(int i) {
     if (i < 0 || i >= _queue.length) return;
     final t = _queue[i];
-    final ta = splitTitleArtist(_cleanTitle(t.name));
+    final ta = _ta(t.name);
     showSongDedicate(
       context,
       fileName: t.name,
@@ -385,6 +386,15 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
   // ("Downloaded from clipzag.com", skiza spam, "(Official Video)", bare
   // domains …) so it matches how the native app shows the same song.
   String _cleanTitle(String name) => cleanDisplayName(name);
+
+  /// Title + artist from a picked file's name — read the same smart way as
+  /// the phone / Windows playlist (SongNames: the artist side it knows, else
+  /// "Artist - Title"; junk cleaned; "(feat. X)").
+  (String, String?) _ta(String name) {
+    final p = SongNames.instance
+        .parseName(name.replaceFirst(RegExp(r'\.[^.]+$'), ''));
+    return (p.title, p.artist.isEmpty ? null : p.artist);
+  }
 
   String _mimeFor(String name) {
     final n = name.toLowerCase();
@@ -869,7 +879,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
           i,
     ];
     final now = (_index >= 0 && _index < _queue.length)
-        ? splitTitleArtist(_cleanTitle(_queue[_index].name))
+        ? _ta(_queue[_index].name)
         : null;
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
@@ -2408,7 +2418,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
     final isDark = scheme.brightness == Brightness.dark;
     final accent = scheme.primary;
     final current = i == _index;
-    final ta = splitTitleArtist(_cleanTitle(_queue[i].name));
+    final ta = _ta(_queue[i].name);
     final title = ta.$1;
     final artist = ta.$2;
     return Padding(

@@ -710,9 +710,13 @@ class _UpdateCardState extends State<_UpdateCard> {
   bool _cell = false; // on mobile data (Android)
   String? _mineVersion; // "from 1.0.6"
   final _notesScroll = ScrollController();
+  // Joins Wi-Fi (or drops to mobile data) while the card is open → the
+  // data hint follows along without closing and reopening the card.
+  StreamSubscription<List<ConnectivityResult>>? _netSub;
 
   @override
   void dispose() {
+    _netSub?.cancel();
     _notesScroll.dispose();
     super.dispose();
   }
@@ -729,6 +733,10 @@ class _UpdateCardState extends State<_UpdateCard> {
       // Update tapped on the toast: start — unless that would spend mobile
       // data; then the card asks first (Download now / Wait for Wi-Fi).
       if (widget.start && !cell) _update();
+    });
+    _netSub = Connectivity().onConnectivityChanged.listen((_) async {
+      final cell = await widget.updater.onMobileData();
+      if (mounted && cell != _cell) setState(() => _cell = cell);
     });
   }
 

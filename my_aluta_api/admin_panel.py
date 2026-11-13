@@ -40,7 +40,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from jose import JWTError, jwt
 from pydantic import BaseModel
-from sqlalchemy import func as sa_func, or_, text
+from sqlalchemy import bindparam, func as sa_func, or_, text
 from sqlalchemy.orm import Session
 
 from cryptography.exceptions import InvalidSignature
@@ -1545,3 +1545,201 @@ def admin_user_restore(user_id: int, payload: UserActionIn,
            target=f"user:{u.id}", ip=ctx.ip)
     db.commit()
     return {"ok": True, **_acct_state(c)}
+
+
+# ── Phase 3: storage & server tools ─────────────────────────────────────────
+# A health card, and three clean-up tools. Every tool shows a dry-run preview
+# first ("would free 412 files · 1.3 GB"); running one needs a full device +
+# your password and is audited. None of them touches a live shared memory:
+# * Sweep expired files — the same rule as the hourly sweep (relay files past
+#   their 24 h / 7 days, never Our Space keepsakes), run now.
+# * Orphaned files — stored bytes that NOTHING in the database points to any
+#   more (every text column of every table is checked for the file's id),
+#   older than 2 days so a file mid-send is never caught. Only the bytes go;
+#   the row stays as a tombstone.
+# * Tidy the database — VACUUM (ANALYZE) of the biggest tables, so space freed
+#   by purges is reused. (Postgres only.)
+_STARTED_AT = datetime.now(timezone.utc)
+_HEX_ID = r"[0-9a-f]{32}"
+ORPHAN_MIN_AGE = timedelta(days=2)
+
+
+@router.get("/tools/health")
+def admin_tools_health(ctx: AdminCtx = Depends(admin_ctx),
+                       db: Session = Depends(get_db)):
+    import platform
+    from routers.attachments import expired_preview
+    out: dict = {
+        "server": {
+            "started_at": _iso(_STARTED_AT),
+            "uptime_s": int((_now() - _STARTED_AT).total_seconds()),
+            "python": platform.python_version(),
+            "commit": (os.getenv("RAILWAY_GIT_COMMIT_SHA") or "")[:7] or None,
+            "commit_message": (os.getenv("RAILWAY_GIT_COMMIT_MESSAGE")
+                               or "")[:120] or None,
+            "environment": os.getenv("RAILWAY_ENVIRONMENT_NAME") or None,
+        },
+        "errors": {
+            "sentry": bool(os.getenv("SENTRY_DSN")),
+            "link": os.getenv("SENTRY_ISSUES_URL") or None,
+        },
+    }
+    try:
+        from websocket_manager import connected_users
+        out["live_connections"] = sum(1 for v in connected_users.values() if v)
+    except Exception:
+        out["live_connections"] = None
+    live = "data IS NOT NULL AND purged_at IS NULL"
+    row = db.execute(text(
+        f"SELECT COUNT(*), COALESCE(SUM(size),0) FROM media_assets WHERE {live}"
+    )).fetchone()
+    out["media"] = {"files": int(row[0] or 0), "bytes": int(row[1] or 0)}
+    try:
+        out["expired_now"] = expired_preview(db)
+    except Exception:
+        db.rollback()
+        out["expired_now"] = None
+    out["database_bytes"] = int(db.execute(text(
+        "SELECT pg_database_size(current_database())")).scalar() or 0) \
+        if _is_pg(db) else None
+    try:
+        from routers.releases import latest_versions
+        out["apps"] = latest_versions()
+    except Exception:
+        out["apps"] = {}
+    return out
+
+
+class ToolIn(BaseModel):
+    dry_run: bool = True
+    password: Optional[str] = None
+
+
+def _tool_guard(ctx: AdminCtx, payload: ToolIn) -> None:
+    if not payload.dry_run:
+        require_full(ctx)
+        _step_up(ctx, payload.password)
+
+
+@router.post("/tools/sweep-expired")
+def admin_tool_sweep(payload: ToolIn, ctx: AdminCtx = Depends(admin_ctx),
+                     db: Session = Depends(get_db)):
+    from routers.attachments import expired_preview, purge_expired_ephemeral
+    _tool_guard(ctx, payload)
+    before = expired_preview(db)
+    if payload.dry_run:
+        return {"dry_run": True, **before}
+    n = purge_expired_ephemeral(db)
+    _audit(db, "tool_sweep_expired", user_id=ctx.user.id,
+           device_id=ctx.device.id, ip=ctx.ip,
+           detail={"files": n, "bytes_estimate": before["bytes"]})
+    db.commit()
+    return {"dry_run": False, "files": n, "bytes": before["bytes"]}
+
+
+def _referenced_ids(db: Session) -> set:
+    """Every 32-hex id mentioned in any text column of any table except
+    media_assets itself — what something still points to."""
+    from models import Base
+    from sqlalchemy import JSON, String, Text
+    import re as _re
+    pat = _re.compile(_HEX_ID)
+    pg = _is_pg(db)
+    refs: set = set()
+    for table in Base.metadata.sorted_tables:
+        if table.name == "media_assets":
+            continue
+        for col in table.columns:
+            if not isinstance(col.type, (String, Text, JSON)):
+                continue
+            c = f'"{col.name}"'
+            expr = f"{c}::text" if isinstance(col.type, JSON) and pg else c
+            try:
+                if pg:
+                    rows = db.execute(text(
+                        f'SELECT {expr} FROM "{table.name}" '
+                        f"WHERE {expr} ~ '{_HEX_ID}'")).fetchall()
+                else:
+                    rows = db.execute(text(
+                        f'SELECT {expr} FROM "{table.name}" '
+                        f"WHERE {expr} IS NOT NULL")).fetchall()
+            except Exception:
+                db.rollback()  # a table not created yet / odd column
+                continue
+            for (v,) in rows:
+                if v:
+                    refs.update(pat.findall(str(v).lower()))
+    return refs
+
+
+def _orphans(db: Session) -> list:
+    cutoff = _now() - ORPHAN_MIN_AGE
+    rows = db.execute(text(
+        "SELECT id, COALESCE(size, 0) FROM media_assets "
+        "WHERE data IS NOT NULL AND purged_at IS NULL "
+        "AND created_at < :cut"), {"cut": cutoff}).fetchall()
+    if not rows:
+        return []
+    refs = _referenced_ids(db)
+    return [(r[0], int(r[1])) for r in rows if str(r[0]).lower() not in refs]
+
+
+@router.post("/tools/orphans")
+def admin_tool_orphans(payload: ToolIn, ctx: AdminCtx = Depends(admin_ctx),
+                       db: Session = Depends(get_db)):
+    _tool_guard(ctx, payload)
+    found = _orphans(db)
+    total = sum(b for _, b in found)
+    if payload.dry_run:
+        return {"dry_run": True, "files": len(found), "bytes": total,
+                "sample": [i for i, _ in found[:5]]}
+    ids = [i for i, _ in found][:5000]
+    n = 0
+    for k in range(0, len(ids), 500):
+        chunk = ids[k:k + 500]
+        res = db.execute(
+            text("UPDATE media_assets SET data = NULL, purged_at = :now "
+                 "WHERE id IN :ids AND data IS NOT NULL").bindparams(
+                bindparam("ids", expanding=True)),
+            {"now": _now(), "ids": chunk})
+        n += res.rowcount or 0
+    _audit(db, "tool_orphans_purged", user_id=ctx.user.id,
+           device_id=ctx.device.id, ip=ctx.ip,
+           detail={"files": n, "bytes": total})
+    db.commit()
+    return {"dry_run": False, "files": n, "bytes": total}
+
+
+_VACUUM_TABLES = ("media_assets", "messages", "story_views", "stories")
+
+
+@router.post("/tools/vacuum")
+def admin_tool_vacuum(payload: ToolIn, ctx: AdminCtx = Depends(admin_ctx),
+                      db: Session = Depends(get_db)):
+    if not _is_pg(db):
+        return {"dry_run": payload.dry_run, "supported": False, "tables": []}
+    _tool_guard(ctx, payload)
+    rows = db.execute(text(
+        "SELECT relname, n_dead_tup, n_live_tup, "
+        "pg_total_relation_size(relid) FROM pg_stat_user_tables "
+        "WHERE relname = ANY(:t)"), {"t": list(_VACUUM_TABLES)}).fetchall()
+    tables = [{"table": r[0], "dead_rows": int(r[1] or 0),
+               "live_rows": int(r[2] or 0), "bytes": int(r[3] or 0)}
+              for r in rows]
+    if payload.dry_run:
+        return {"dry_run": True, "supported": True, "tables": tables}
+    from database import engine
+    done = []
+    with engine.connect().execution_options(
+            isolation_level="AUTOCOMMIT") as conn:
+        for t in tables:
+            try:
+                conn.execute(text(f'VACUUM (ANALYZE) "{t["table"]}"'))
+                done.append(t["table"])
+            except Exception as e:  # noqa: BLE001
+                print(f"[admin] vacuum {t['table']} failed: {e}")
+    _audit(db, "tool_vacuum", user_id=ctx.user.id, device_id=ctx.device.id,
+           ip=ctx.ip, detail={"tables": done})
+    db.commit()
+    return {"dry_run": False, "supported": True, "tables": tables,
+            "vacuumed": done}

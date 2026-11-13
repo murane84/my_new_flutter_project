@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'admin_api.dart';
+import 'admin_tools.dart';
 import 'admin_widgets.dart';
 
 /// Which metrics page this is. Overview keeps the headline numbers (users,
@@ -140,7 +141,8 @@ class _AdminOverviewState extends State<AdminOverview> {
                     AdminMetricsView.overview => 'How Aluta is doing',
                     AdminMetricsView.usage =>
                       'Platforms, app versions and daily activity',
-                    AdminMetricsView.system => 'Storage and the call relay',
+                    AdminMetricsView.system =>
+                      'Storage, call relay, server health and clean-up',
                   }
                 : 'Updated ${fmtAgo(_loadedAt!.toUtc().toIso8601String())}',
             trailing: IconButton.filledTonal(
@@ -189,6 +191,11 @@ class _AdminOverviewState extends State<AdminOverview> {
           ],
           if (_storage != null) ...[
             _storageBlock(p),
+            const SizedBox(height: 14),
+          ],
+          // System: server health + the clean-up tools (Phase 3).
+          if (widget.view == AdminMetricsView.system) ...[
+            const AdminToolsSection(),
             const SizedBox(height: 14),
           ],
           const SizedBox(height: 24),

@@ -557,6 +557,9 @@ class _AdminAuditPageState extends State<AdminAuditPage> {
     'user_unpaused': 'Un-paused an account',
     'user_delete_scheduled': 'Account set to delete in 7 days',
     'user_restored': 'Restored an account',
+    'tool_sweep_expired': 'Swept expired files',
+    'tool_orphans_purged': 'Freed orphaned files',
+    'tool_vacuum': 'Tidied the database',
   };
 
   (IconData, Color) _iconFor(Map<String, dynamic> e) {
@@ -575,6 +578,9 @@ class _AdminAuditPageState extends State<AdminAuditPage> {
     }
     if (a.startsWith('device')) {
       return (Icons.devices_rounded, const Color(0xFF7C4DFF));
+    }
+    if (a.startsWith('tool_')) {
+      return (Icons.build_circle_rounded, const Color(0xFF2979FF));
     }
     if (a.startsWith('user_')) {
       return (Icons.manage_accounts_rounded, const Color(0xFF00897B));

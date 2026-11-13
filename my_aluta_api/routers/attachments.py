@@ -102,6 +102,39 @@ def _generate_thumb(asset_id: str, data: bytes) -> str | None:
                 pass
 
 
+# Which ephemeral assets are past their life (shared by the hourly sweep and
+# the admin panel's "Sweep expired files now" preview, so they always agree).
+_EXPIRED_WHERE = """
+     m.ephemeral
+ AND m.data IS NOT NULL
+ -- kept in Our Space → the keepsake owns it (capped there)
+ AND NOT EXISTS (
+      SELECT 1 FROM pinned_moments p
+       WHERE p.ref LIKE '%' || m.id)
+ AND (
+      (m.cached_at IS NOT NULL AND m.cached_at < :acked)
+   OR m.created_at < :playlist
+   OR (m.created_at < :ttl AND NOT EXISTS (
+          SELECT 1 FROM playlist_tracks t
+           WHERE t.audio_url LIKE '%' || m.id))
+ )
+"""
+
+
+def _expired_params() -> dict:
+    now = datetime.now(timezone.utc)
+    return {"now": now, "acked": now - ACKED_GRACE,
+            "ttl": now - EPHEMERAL_TTL, "playlist": now - PLAYLIST_TTL}
+
+
+def expired_preview(db: Session) -> dict:
+    """What the sweep would clear right now: {files, bytes} (read-only)."""
+    row = db.execute(text(
+        f"SELECT COUNT(*), COALESCE(SUM(m.size), 0) FROM media_assets m "
+        f"WHERE {_EXPIRED_WHERE}"), _expired_params()).fetchone()
+    return {"files": int(row[0] or 0), "bytes": int(row[1] or 0)}
+
+
 def purge_expired_ephemeral(db: Session) -> int:
     """Null out the bytes of ephemeral assets that are past their life:
       • acked by the recipient more than ACKED_GRACE ago, or
@@ -110,33 +143,10 @@ def purge_expired_ephemeral(db: Session) -> int:
     Set-based SQL (never loads the bytes). Run hourly by the housekeeping loop
     and opportunistically on uploads / acks. Best-effort: never raises."""
     try:
-        now = datetime.now(timezone.utc)
         res = db.execute(
-            text(
-                """
-                UPDATE media_assets m
-                   SET data = NULL, purged_at = :now
-                 WHERE m.ephemeral
-                   AND m.data IS NOT NULL
-                   -- kept in Our Space → the keepsake owns it (capped there)
-                   AND NOT EXISTS (
-                        SELECT 1 FROM pinned_moments p
-                         WHERE p.ref LIKE '%' || m.id)
-                   AND (
-                        (m.cached_at IS NOT NULL AND m.cached_at < :acked)
-                     OR m.created_at < :playlist
-                     OR (m.created_at < :ttl AND NOT EXISTS (
-                            SELECT 1 FROM playlist_tracks t
-                             WHERE t.audio_url LIKE '%' || m.id))
-                   )
-                """
-            ),
-            {
-                "now": now,
-                "acked": now - ACKED_GRACE,
-                "ttl": now - EPHEMERAL_TTL,
-                "playlist": now - PLAYLIST_TTL,
-            },
+            text(f"UPDATE media_assets m SET data = NULL, purged_at = :now "
+                 f"WHERE {_EXPIRED_WHERE}"),
+            _expired_params(),
         )
         db.commit()
         return res.rowcount or 0
@@ -144,7 +154,7 @@ def purge_expired_ephemeral(db: Session) -> int:
         print(f"⚠️ purge_expired_ephemeral failed: {e}")
         try:
             db.rollback()
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
         return 0
 

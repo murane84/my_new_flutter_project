@@ -1,7 +1,7 @@
 name: aluta
 description: "Aluta — Closer, in harmony: music, chat & shared moments"
 publish_to: 'none'
-version: 1.0.4+5
+version: 1.0.5+6
 
 environment:
   sdk: ^3.9.2

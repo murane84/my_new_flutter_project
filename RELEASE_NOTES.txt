@@ -1,6 +1,14 @@
-Put a song moment under your photo status
-Answer a status with a song
-Duo status: post one photo together with your person
-Listen together straight from a music status
-See when you're both in your chat, hold the heart to be felt
-Plan a date and count down together
+Friend menu knows where you stand: online → chat or call in one tap; playing → Tune in
+Our Space in the friend menu shows bonded, request sent, or "asked you"
+Smoother scrolling on 90/120 Hz phones — Aluta adjusts to your phone by itself
+Smooth mouse-wheel scrolling on PC and web
+Status: the photo fills the screen in its own colours
+Status: the song plays as a little spinning record — tap to listen together
+Status: birthdays and special days get a "Send a song" button and confetti
+Status: your reactions float up over the photo
+Your person's status: "Add to our moments" and "Start a duo"
+Status on PC: everyone's statuses down the side — tap to jump between them
+Status stays paused while you pick a GIF or emoji
+You're told the moment a new version is out, with a reminder every 6 hours if you skip it
+On mobile data: choose Download now or Wait for Wi-Fi
+Web: a "Reload" prompt when a new version is live

@@ -27,6 +27,11 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Pinned: Flutter 3.50 (12 Nov 2026) deprecates package:flutter/
+          # material.dart for package:material_ui — every file then "fails"
+          # analyze. Move this pin up together with that migration (and with
+          # the local SDK), never on its own.
+          flutter-version: 3.47.9
           cache: true
       - run: flutter pub get
       - run: flutter analyze
@@ -49,6 +54,11 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Pinned: Flutter 3.50 (12 Nov 2026) deprecates package:flutter/
+          # material.dart for package:material_ui — every file then "fails"
+          # analyze. Move this pin up together with that migration (and with
+          # the local SDK), never on its own.
+          flutter-version: 3.47.9
           cache: true
       # android/gradle.properties pins a WINDOWS JDK path (org.gradle.java.home=
       # C:\jdk-17) for local dev. That path doesn't exist on the Linux runner, so

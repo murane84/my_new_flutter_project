@@ -40,14 +40,14 @@ import 'haptics.dart';
 ///    6 hours until the new build is installed (see "Server-first").
 ///  • web: the same signal, as a "Reload" toast.
 ///
-/// Off on web / iOS / macOS / Linux, and in a store build
-/// (`--dart-define=PLAY_STORE=true`): Play forbids self-updating there.
+/// In-app install: Android and Windows (web reloads). Off on iOS / macOS /
+/// Linux, and in a store build (`--dart-define=PLAY_STORE=true`): Play
+/// forbids self-updating there.
 class AppUpdater {
   AppUpdater._();
   static final AppUpdater instance = AppUpdater._();
 
   static const bool _playStore = bool.fromEnvironment('PLAY_STORE');
-  static const _kChecked = 'update_checked_v1'; // epoch ms of last auto check
   static const _kLaters = 'update_laters_v1'; // "<build>|<times Later>"
   static const kPushed = 'update_pushed_v1'; // build last announced by push
 
@@ -112,6 +112,8 @@ class AppUpdater {
       return;
     }
     await p.setString(_kPending, '$slot|$build');
+    // In the background: remember it; the prompt comes on coming back.
+    if (!_inFront) return;
     // Once per announced build; the 6-hour cycle does the reminding.
     final s = (p.getString(_kPrompted) ?? '').split('|');
     final promptedThis = s.length == 2 && s[0] == '$build';
@@ -128,6 +130,7 @@ class AppUpdater {
   /// The 6-hour reminder: a newer build is waiting and it's been 6 h since
   /// the last prompt → prompt again. Installed → the cycle stops.
   Future<void> _remind(BuildContext context) async {
+    if (!_inFront) return;
     final p = await SharedPreferences.getInstance();
     final pend = (p.getString(_kPending) ?? '').split('|');
     if (pend.length != 2) return;
@@ -149,15 +152,23 @@ class AppUpdater {
   }
 
   Future<void> _prompt(BuildContext context, String version, int build) async {
-    final p = await SharedPreferences.getInstance();
-    await p.setString(
-        _kPrompted, '$build|${DateTime.now().millisecondsSinceEpoch}');
-    if (!context.mounted) return;
     if (kIsWeb) {
-      _webToast(context, version);
+      final p = await SharedPreferences.getInstance();
+      await p.setString(
+          _kPrompted, '$build|${DateTime.now().millisecondsSinceEpoch}');
+      if (context.mounted) _webToast(context, version);
     } else {
-      await check(context, force: true);
+      // check() records the prompt once it's actually shown — a failed
+      // fetch (offline, server busy) is simply retried on the next tick.
+      await check(context);
     }
+  }
+
+  /// Only prompt where it can be seen: a toast shown while Aluta is in the
+  /// background would count as "prompted" and nobody would see it.
+  bool get _inFront {
+    final s = WidgetsBinding.instance.lifecycleState;
+    return s == null || s == AppLifecycleState.resumed;
   }
 
   /// A push came in while Aluta was closed: remember the build so the
@@ -284,8 +295,7 @@ class AppUpdater {
   /// required / put off 3 times / a week old). Called by the server-first
   /// flow and its 6-hour reminders; [manual] (the menu) also says when
   /// everything is up to date.
-  Future<void> check(BuildContext context,
-      {bool manual = false, bool force = false}) async {
+  Future<void> check(BuildContext context, {bool manual = false}) async {
     if (!supported || _busy) {
       if (manual && !supported && context.mounted) {
         showToast(context, 'Updates for this app come from where you got it',
@@ -298,7 +308,6 @@ class AppUpdater {
       final p = await SharedPreferences.getInstance();
       final now = DateTime.now().millisecondsSinceEpoch;
       final rel = await _newer();
-      await p.setInt(_kChecked, now);
       available.value = rel;
       // Whatever found it (server, reminder, the menu), the 6-hour cycle
       // follows this build until it's installed.
@@ -306,9 +315,8 @@ class AppUpdater {
         await p.remove(_kPending);
       } else {
         await p.setString(_kPending, '${await _slot()}|${rel['build']}');
-        if (manual) {
-          await p.setString(_kPrompted, '${rel['build']}|$now');
-        }
+        // Shown now → the next reminder is 6 hours from here.
+        await p.setString(_kPrompted, '${rel['build']}|$now');
       }
       if (!context.mounted) return;
       if (rel == null) {

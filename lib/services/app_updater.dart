@@ -76,6 +76,7 @@ class AppUpdater {
   static const int _webBuilt = int.fromEnvironment('ALUTA_BUILD');
 
   Timer? _cycle;
+  int? _announcing; // the build being prompted from a server event right now
   BuildContext Function()? _homeCtx; // Home's context (outlives any sheet)
   bool get _cycleOn => supported || (kIsWeb && _webBuilt > 0);
 
@@ -129,10 +130,23 @@ class AppUpdater {
       if (context.mounted) _remind(context);
       return;
     }
-    // A little jitter so every open app doesn't hit the server at once.
-    await Future.delayed(
-        Duration(milliseconds: 300 + DateTime.now().microsecond % 3000));
-    if (context.mounted) await _prompt(context, '${v['version'] ?? ''}', build);
+    // The same publish arrives as two events (app_versions + the legacy
+    // app_update) within a second: only the first one prompts.
+    if (_announcing == build) return;
+    _announcing = build;
+    try {
+      // A little jitter so every open app doesn't hit the server at once.
+      await Future.delayed(
+          Duration(milliseconds: 300 + DateTime.now().microsecond % 3000));
+      if (context.mounted) {
+        await _prompt(context, '${v['version'] ?? ''}', build);
+      }
+    } finally {
+      // Kept for a minute so a late duplicate is still ignored.
+      Future.delayed(const Duration(minutes: 1), () {
+        if (_announcing == build) _announcing = null;
+      });
+    }
   }
 
   /// The 6-hour reminder: a newer build is waiting and it's been 6 h since

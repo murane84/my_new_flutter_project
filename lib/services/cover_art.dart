@@ -28,6 +28,9 @@ class CoverArt {
   final Set<String> _queued = {};
   bool _loaded = false, _running = false;
   int _lookupsThisRun = 0;
+  // Server / network trouble → wait before asking again (no hammering on
+  // every rebuild).
+  DateTime _pauseUntil = DateTime.fromMillisecondsSinceEpoch(0);
 
   Future<void> _load() async {
     if (_loaded) return;
@@ -56,6 +59,7 @@ class CoverArt {
     final u = _urls[path];
     if (u != null) return u.isEmpty ? null : u;
     if (kIsWeb || title.trim().isEmpty || artist.trim().isEmpty) return null;
+    if (DateTime.now().isBefore(_pauseUntil)) return null;
     if (_queued.add(path)) {
       _queue.add((path, title, artist));
       _pump();
@@ -73,7 +77,12 @@ class CoverArt {
         _lookupsThisRun++;
         final url = await ApiService().coverFor(title: title, artist: artist);
         if (url == null) {
-          // Offline / server hiccup: forget it for this run, retry later.
+          // Offline / server busy: drop the queue, try again in 10 minutes.
+          _pauseUntil = DateTime.now().add(const Duration(minutes: 10));
+          for (final q in _queue) {
+            _queued.remove(q.$1);
+          }
+          _queue.clear();
           _queued.remove(path);
           break;
         }

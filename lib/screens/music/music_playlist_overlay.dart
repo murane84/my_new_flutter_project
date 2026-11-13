@@ -613,7 +613,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         return (widget.playCounts[e.value] ?? 0) > 0;
       }
       if (_smart == _Smart.ours) {
-        return SongInsights.instance.sharedSong(_effTitle(e.value));
+        return SongInsights.instance.sharedSong(_effTitle(e.value)) ||
+            SongInsights.instance.sharedSong(cleanedNameFromPath(e.value));
       }
       if (_smart == _Smart.rediscover) return _forgotten(e.value);
       if (_favOnly && !widget.favorites.contains(e.value)) return false;
@@ -1062,6 +1063,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
   Future<void> _findRealName(String path) async {
     showToast(context, 'Listening to the song…', type: ToastType.info);
     Map<String, dynamic>? res;
+    var readable = false; // set once the file's bytes are in hand
     try {
       final f = File(path);
       final len = await f.length();
@@ -1083,6 +1085,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       } finally {
         await raf.close();
       }
+      readable = true;
       final ext = lower.split('.').last;
       final mime = ext == 'wav'
           ? 'audio/wav'
@@ -1098,7 +1101,9 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     } catch (_) {}
     if (!mounted) return;
     if (res == null || res['matched'] != true) {
-      final why = res?['error'] == 'not_configured'
+      final why = !readable
+          ? 'Aluta can’t open this file to listen to it'
+          : res?['error'] == 'not_configured'
           ? 'Song recognition isn’t set up on the server yet'
           : res?['error'] == 'service_error'
               ? 'The recognition service is busy — try again later'

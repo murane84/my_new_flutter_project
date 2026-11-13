@@ -52,7 +52,8 @@ import '../services/song_filter.dart';
 import '../services/track_memory.dart';
 import '../services/cover_art.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../services/track_title.dart' show cleanTrackName;
+import '../services/track_title.dart'
+    show cleanTrackName, cleanedNameFromPath;
 import '../utils/marquee_text.dart';
 import '../utils/typing_guard.dart';
 import 'api_service.dart';
@@ -1560,6 +1561,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     final initArtist = _cleanArtist(
         metadataStore.artist(path, SongNames.instance.parse(path).artist));
     // Aluta learns what you play (on-device only) → gentle music nudges.
+    // (History kept under the song's older, file-name title moves over.)
+    SongInsights.instance.adopt(cleanedNameFromPath(path), initTitle);
     SongInsights.instance.recordPlay(initTitle, artist: initArtist);
     setState(() {
       _currentIndex = index;
@@ -1920,9 +1923,11 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       await SongFilter.instance.load();
       // Voice notes / recordings saved by an older version (or hidden by
       // the person since) stay out.
-      final saved = (p.getStringList('music_playlist') ?? const <String>[])
-          .where((x) => !SongFilter.instance.isHidden(x))
-          .toList();
+      // (Only what's certain from the path / your own choices here — tags-
+      // based decisions wait for the sweep below; hidden ones are listed
+      // under "N hidden · Show".)
+      final saved = SongFilter.instance.keepSongs(
+          p.getStringList('music_playlist') ?? const <String>[]);
       if (saved.isNotEmpty) {
         // Load saved paths AS-IS — no per-file existsSync sweep at launch (that
         // device I/O is what we're eliminating). Any file that has since moved or

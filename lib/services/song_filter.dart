@@ -166,8 +166,10 @@ class SongFilter {
     if (_recName.hasMatch(name) && !hasArtist) return true;
     if (_aud.hasMatch(name) || ext == 'opus') {
       // WhatsApp audio / opus: a real song keeps its artist tag, or is a
-      // long mp3 / flac / wav. Otherwise it's someone talking.
-      if (hasArtist) return false;
+      // long mp3 / flac / wav. Otherwise it's someone talking. Without the
+      // file's details (tags, length) we can't tell yet — keep it until a
+      // scan knows more, rather than hide a real song.
+      if (info == null || hasArtist) return false;
       final musicExt = ext == 'mp3' || ext == 'flac' || ext == 'wav';
       return !(musicExt && durMs >= 120000);
     }

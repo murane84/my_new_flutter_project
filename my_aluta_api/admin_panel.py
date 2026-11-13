@@ -1425,6 +1425,25 @@ def _save_control(db: Session, c) -> None:
     db.commit()
     db.refresh(c)
     account_control.refresh(c, c.user_id)
+    _kick(int(c.user_id))
+
+
+def _kick(user_id: int) -> None:
+    """Close the person's live sockets now (their tokens are already
+    refused; this stops an open app from carrying on until it reconnects)."""
+    try:
+        import anyio
+        from websocket_manager import connected_users
+
+        async def go():
+            for ws in list(connected_users.get(user_id, [])):
+                try:
+                    await ws.close(code=4401)
+                except Exception:
+                    pass
+        anyio.from_thread.run(go)
+    except Exception:
+        pass
 
 
 @router.post("/users/{user_id}/reset-signin")

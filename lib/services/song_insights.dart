@@ -519,6 +519,19 @@ class SongInsights {
     return best;
   }
 
+  /// Song names got smarter ("Sean Paul - We Be Burning" → "We Be Burning"
+  /// + artist "Sean Paul"). Move what Aluta learned under the old name to
+  /// the new one, once, so a song's history and "ours" carry on.
+  void adopt(String oldTitle, String newTitle) {
+    final o = _keyOf(oldTitle), n = _keyOf(newTitle);
+    if (o == n || _songs[n] != null) return;
+    final s = _songs.remove(o);
+    if (s == null) return;
+    s['t'] = newTitle;
+    _songs[n] = s;
+    _save();
+  }
+
   /// For the "Our songs" list: marked ours, or first heard with your person
   /// (Listen Together). Light (no ranking) — safe to ask per playlist row.
   bool sharedSong(String title) {

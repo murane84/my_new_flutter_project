@@ -104,6 +104,7 @@ if "%ALUTA_RELEASE_KEY%"=="" (
   echo.
   echo No ALUTA_RELEASE_KEY in this window - opening the uploader page.
   echo Version %NAME%, build %BUILD%. Files are in dist\
+  if "%REQ%"=="1" echo REQUIRED: put %BUILD% in "Lowest build that may keep working" on the page.
   if "%DEPLOY%"=="1" call deploy_web.bat
   start "" "%URL%/admin/release"
   exit /b 0

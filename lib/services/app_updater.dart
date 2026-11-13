@@ -94,6 +94,7 @@ class AppUpdater {
     }
     Future.delayed(const Duration(seconds: 10), tick); // after a restart
     _resumeWifiWait(context); // a "Wait for Wi-Fi" from before
+    _cleanOld(); // update files for builds already installed
     _cycle = Timer.periodic(const Duration(minutes: 15), (_) => tick());
     _life = AppLifecycleListener(onResume: tick);
   }
@@ -135,6 +136,12 @@ class AppUpdater {
   /// the last prompt → prompt again. Installed → the cycle stops.
   Future<void> _remind(BuildContext context) async {
     if (!_inFront) return;
+    final ready = _readyUnseen;
+    if (ready != null) {
+      _readyUnseen = null;
+      _toastReady(context, ready.rel, ready.file);
+      return;
+    }
     final p = await SharedPreferences.getInstance();
     final pend = (p.getString(_kPending) ?? '').split('|');
     if (pend.length != 2) return;
@@ -496,8 +503,50 @@ class AppUpdater {
     _wifiDownload(); // maybe on Wi-Fi already
   }
 
+  Future<bool> _onWifi() async {
+    try {
+      final r = await Connectivity().checkConnectivity();
+      return r.contains(ConnectivityResult.wifi) ||
+          r.contains(ConnectivityResult.ethernet);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Downloaded on Wi-Fi while Aluta was in the background: told on return.
+  ({Map<String, dynamic> rel, File file})? _readyUnseen;
+
+  void _toastReady(BuildContext c, Map<String, dynamic> rel, File file) {
+    Haptics.lightImpact();
+    showToast(
+      c,
+      '✨ Aluta ${rel['version']} is downloaded',
+      type: ToastType.success,
+      duration: const Duration(seconds: 14),
+      detail: 'Got it on Wi-Fi — tap to install',
+      onTap: () => _openInstaller(file),
+      actions: [ToastAction('Install', () => _openInstaller(file))],
+    );
+  }
+
+  /// Old update files (builds I already have) leave the phone's storage.
+  Future<void> _cleanOld() async {
+    if (!_android) return;
+    try {
+      final mine =
+          int.tryParse((await PackageInfo.fromPlatform()).buildNumber) ?? 0;
+      final dir = await getTemporaryDirectory();
+      await for (final f in dir.list()) {
+        final m = RegExp(r'aluta-(\d+)\.apk(\.ok)?$').firstMatch(f.path);
+        if (m != null && (int.tryParse(m.group(1)!) ?? 0) <= mine) {
+          await f.delete().catchError((_) => f);
+        }
+      }
+    } catch (_) {}
+  }
+
   Future<void> _wifiDownload() async {
-    if (_wifiBusy || await onMobileData()) return;
+    if (_wifiBusy || !await _onWifi()) return;
     final p = await SharedPreferences.getInstance();
     final raw = p.getString(_kWifiWait) ?? '';
     if (raw.isEmpty) return;
@@ -514,17 +563,11 @@ class AppUpdater {
       if (file == null || err != null) return; // tries again on next Wi-Fi
       await _stopWifiWait();
       final c = _wifiCtx?.call();
-      if (c == null || !c.mounted) return;
-      Haptics.lightImpact();
-      showToast(
-        c,
-        '✨ Aluta ${rel['version']} is downloaded',
-        type: ToastType.success,
-        duration: const Duration(seconds: 14),
-        detail: 'Got it on Wi-Fi — tap to install',
-        onTap: () => _openInstaller(file),
-        actions: [ToastAction('Install', () => _openInstaller(file))],
-      );
+      if (c == null || !c.mounted || !_inFront) {
+        _readyUnseen = (rel: rel, file: file); // told when they're back
+        return;
+      }
+      _toastReady(c, rel, file);
     } finally {
       _wifiBusy = false;
     }

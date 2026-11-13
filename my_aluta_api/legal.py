@@ -17,8 +17,8 @@ To publish an update:
 """
 
 # Bump this (and the date) whenever the policy or terms materially change.
-CURRENT_POLICY_VERSION = 3
-POLICY_EFFECTIVE_DATE = "27 October 2026"
+CURRENT_POLICY_VERSION = 4
+POLICY_EFFECTIVE_DATE = "13 November 2026"
 
 # The docs are served by the API itself (see main.py), so the client only needs
 # the paths; it prefixes them with the API origin. Kept relative so the same
@@ -52,6 +52,16 @@ POLICY_SUMMARY = {
         "version your app reports; the new Send feedback page; how long shared "
         "files stay on our server (about 24 hours after delivery); Save to "
         "Gallery; and the services we rely on. Please review and accept to "
+        "continue."
+    ),
+    4: (
+        "We've updated Aluta's Privacy Policy and Terms: your app reports its "
+        "version so we can tell you about updates, and while you're on an older "
+        "Aluta your Our Space partner can see that and invite you to update; a "
+        "bond only starts once the other person accepts; Free music (songs "
+        "artists give away through Jamendo and the Internet Archive); song "
+        "identification by AudD and AcoustID; calls now use Aluta's own relay; "
+        "and how updates and app versions work. Please review and accept to "
         "continue."
     ),
 }

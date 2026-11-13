@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:io' show File, Platform;
 import 'dart:ui' as ui;
 

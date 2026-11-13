@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../utils/popup_shell.dart'
     show HeaderActionButton, gPanelBottomY, kAppFooterHeight;
@@ -354,10 +357,6 @@ class _LegalHubState extends State<_LegalHub> {
   }
 }
 
-/// Parses the plain-text policy into styled blocks — numbered section headings,
-/// bullet points, a muted "version / last-updated" caption, and clean wrapped
-/// paragraphs (source line-wraps are re-joined). The redundant first line (the
-/// doc's own title) is dropped since the popup header already shows it.
 /// One document's scrolling body. Its own scroll controller per page on
 /// screen, so two pages crossing in a transition (or under a swipe) never
 /// share one; the PageStorageKey brings each document back where you left it.
@@ -388,12 +387,178 @@ class _DocBodyState extends State<_DocBody> {
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: _legalBody(context, widget.doc.body),
+            children: [
+              // About opens with the live version card (read from the build,
+              // so it can never drift from pubspec like a hard-coded string).
+              if (identical(widget.doc.body, _about)) ...[
+                const _VersionCard(),
+                const SizedBox(height: 14),
+              ],
+              ..._legalBody(context, widget.doc.body),
+            ],
           ),
         ),
       );
 }
 
+// Read once per app run — the version can't change while the app is open.
+final Future<PackageInfo> _packageInfo = PackageInfo.fromPlatform();
+
+/// The build as people know it: the arm64 Android APK's versionCode is
+/// 2000 + build (so it outranks the universal one) — show the plain build.
+String _build(PackageInfo info) {
+  final n = int.tryParse(info.buildNumber);
+  if (n == null) return info.buildNumber;
+  final arm64 = !kIsWeb &&
+      defaultTargetPlatform == TargetPlatform.android &&
+      n > 2000;
+  return '${arm64 ? n - 2000 : n}';
+}
+
+String _platformLabel() {
+  if (kIsWeb) return 'Web';
+  switch (defaultTargetPlatform) {
+    case TargetPlatform.android:
+      return 'Android';
+    case TargetPlatform.windows:
+      return 'Windows';
+    case TargetPlatform.iOS:
+      return 'iOS';
+    case TargetPlatform.macOS:
+      return 'macOS';
+    case TargetPlatform.linux:
+      return 'Linux';
+    case TargetPlatform.fuchsia:
+      return 'Fuchsia';
+  }
+}
+
+/// The About tab's version card: logo, "Version x.y.z · build n", a Beta pill
+/// and the platform. Tap copies a one-line version string for support chats
+/// ("Aluta 1.0.7+8 · Android"), confirmed inline — no toast behind the dialog.
+class _VersionCard extends StatefulWidget {
+  const _VersionCard();
+
+  @override
+  State<_VersionCard> createState() => _VersionCardState();
+}
+
+class _VersionCardState extends State<_VersionCard> {
+  bool _copied = false;
+
+  Future<void> _copy(PackageInfo info) async {
+    await Clipboard.setData(ClipboardData(
+        text: 'Aluta ${info.version}+${_build(info)} · ${_platformLabel()}'));
+    if (!mounted) return;
+    setState(() => _copied = true);
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (mounted) setState(() => _copied = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return FutureBuilder<PackageInfo>(
+      future: _packageInfo,
+      builder: (context, snap) {
+        final info = snap.data;
+        final versionLine = info != null
+            ? 'Version ${info.version} · build ${_build(info)}'
+            : snap.hasError
+                ? 'Version unavailable'
+                : 'Reading version…';
+        final hint = _copied ? 'Copied to clipboard' : 'Tap to copy';
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(Radii.xl),
+            onTap: info == null ? null : () => _copy(info),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: scheme.primary.withAlpha(20),
+                borderRadius: BorderRadius.circular(Radii.xl),
+                border: Border.all(color: scheme.primary.withAlpha(70)),
+              ),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(Radii.md),
+                    child: Image.asset('assets/images/logo.png',
+                        width: 46, height: 46, fit: BoxFit.cover),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text('Aluta',
+                                style: TextStyle(
+                                    fontSize: 16.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: scheme.onSurface)),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: scheme.primary.withAlpha(32),
+                                borderRadius:
+                                    BorderRadius.circular(Radii.xl),
+                              ),
+                              child: Text('Beta',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: accentInk(scheme))),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(versionLine,
+                            style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: scheme.onSurface.withAlpha(225))),
+                        const SizedBox(height: 2),
+                        AnimatedSwitcher(
+                          duration: Motion.quick,
+                          child: Text(
+                            '${_platformLabel()} · $hint',
+                            key: ValueKey(_copied),
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: _copied
+                                    ? accentInk(scheme)
+                                    : scheme.onSurfaceVariant),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    _copied ? Icons.check_rounded : Icons.copy_rounded,
+                    size: 18,
+                    color: _copied ? accentInk(scheme) : scheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Parses the plain-text policy into styled blocks — numbered section headings,
+/// bullet points, a muted "version / last-updated" caption, and clean wrapped
+/// paragraphs (source line-wraps are re-joined). The redundant first line (the
+/// doc's own title) is dropped since the popup header already shows it.
+/// A line starting with "# " is a small un-numbered heading (About's
+/// "What you can do today", "Learn more"…).
 List<Widget> _legalBody(BuildContext context, String raw) {
   final scheme = Theme.of(context).colorScheme;
   final bodyStyle = TextStyle(
@@ -422,6 +587,10 @@ List<Widget> _legalBody(BuildContext context, String raw) {
     }
     if (headingRe.hasMatch(t)) {
       segs.add({'type': 'head', 'text': t});
+      continue;
+    }
+    if (t.startsWith('# ')) {
+      segs.add({'type': 'head', 'text': t.substring(2)});
       continue;
     }
     if (t.startsWith('- ')) {
@@ -509,7 +678,7 @@ List<Widget> _legalBody(BuildContext context, String raw) {
 // the backend CURRENT_POLICY_VERSION is bumped), update this content too.
 const String _privacy = '''
 Aluta — Privacy Policy
-Development / Beta build · Last updated: 27 October 2026
+Development / Beta build · Last updated: 13 November 2026
 
 Aluta is an app in active development, provided for early testing. Features and
 data practices change frequently, and it is not yet intended for public
@@ -522,7 +691,9 @@ information. It is a good-faith draft by the developer, not legal advice.
   profile picture, and — if you enable two-factor authentication — a TOTP secret.
 - Presence: your online status and a "last seen" time, so friends can see when
   you are available. You choose who sees your last seen (your circle, only
-  your Our Space bonds, or nobody); it works both ways.
+  your Our Space bonds, or nobody); it works both ways. Stories, statuses and
+  other two-friend activities only switch on once you and the other person have
+  both saved each other's number — until then you can only message.
 - Messages and shared media: the text, photos, files, voice notes and GIFs you
   send and receive, with metadata such as timestamps, read/delivery status,
   reactions and replies. Media is stored on our server so it can be delivered.
@@ -532,7 +703,9 @@ information. It is a good-faith draft by the developer, not legal advice.
 - Stories: the ephemeral photo, video, text or "now playing" Stories you post and
   a list of which friends viewed them. Stories expire about 24 hours after posting.
 - Shared Spaces and diary ("Our Space"): when you and another person pin a bond,
-  Aluta creates a private Space that the two of you both see. It can hold a shared
+  Aluta creates a private Space that the two of you both see. Nothing about a
+  bond (the Space, partner marks or bond notifications) starts until the other
+  person accepts your bond request. It can hold a shared
   playlist, "pinned moments" (with reactions), your shared listening history, and
   a shared diary of past memories and future plans — including the title, text,
   plan date, reactions and comments you each add. Everything in a Space is visible
@@ -544,13 +717,19 @@ information. It is a good-faith draft by the developer, not legal advice.
 - Device and technical data: a push-notification token (Firebase Cloud Messaging)
   to wake your device for messages and calls, on-device reminder notifications
   that Aluta schedules locally for the plans you pin in a Space (these stay on
-  your device), information about linked devices so you can sign them out, and
-  crash/diagnostic reports via Sentry.
+  your device), information about linked devices so you can sign them out, the
+  app version, platform and device model each device reports (so we can announce
+  updates, support older devices and keep the service healthy), and
+  crash/diagnostic reports via Sentry. While you're on an older Aluta, your
+  version is also shown to your accepted Our Space partner so they can invite
+  you to update — no one else sees it.
 
 2. Calls, music and on-device data
 - Voice and group calls use a direct peer-to-peer connection (WebRTC). We do not
   record or store call audio; our server only relays the signalling needed to
-  connect a call, plus a call-log entry saved to the conversation.
+  connect a call, plus a call-log entry saved to the conversation. When a direct
+  connection isn't possible, the encrypted call audio passes through a TURN
+  relay, which cannot listen to it and keeps nothing.
 - Your music library plays locally from your device and is never uploaded. Song
   details you edit and playback preferences may be backed up to your account. In a
   "Listen Together" session audio is streamed between participants (relayed for
@@ -562,7 +741,8 @@ information. It is a good-faith draft by the developer, not legal advice.
 We use your information only to operate the app: to authenticate you, deliver
 messages and media, place calls, sync music, post and view Stories, run your
 shared Spaces and diary and remind you of plans you pin, show presence, send
-notifications, match contacts (with permission) and diagnose crashes. We do NOT
+notifications, announce new app versions, match contacts (with permission) and
+diagnose crashes. We do NOT
 sell your personal data or use your messages for advertising.
 
 4. Third-party services
@@ -571,9 +751,15 @@ with them under their own policies:
 - Google Firebase (Cloud Messaging) — push notifications.
 - GIPHY — GIF and sticker search.
 - Sentry — crash and error reporting.
-- AudD — the "identify a song" feature.
-- TURN/STUN relays (e.g. Open Relay, Google STUN) — connecting calls behind
-  firewalls/NAT.
+- AudD and AcoustID — the "identify a song" feature.
+- Jamendo and the Internet Archive — the Free music search (our server passes
+  them your search words, never who you are; the songs are ones artists
+  released for free).
+- Ozilane Key (auth.ozilane.com) — optional phone approvals for sign-in and
+  password recovery, if you link it. It receives an anonymous id, never your
+  name, email or phone number.
+- TURN/STUN relays — Aluta's own TURN relay (turn.ozilane.com) and public STUN
+  servers such as Google's — connecting calls behind firewalls/NAT.
 
 We also share content with other users as an inherent part of the product — the
 people you message, call or share a Story with, and the partner you share a Space
@@ -619,7 +805,7 @@ For any privacy questions or requests, use Help & feedback in the app menu
 
 const String _terms = '''
 Aluta — Terms of Service
-Development / Beta build · Last updated: 27 October 2026
+Development / Beta build · Last updated: 13 November 2026
 
 Aluta is in active development, provided for early testing. Features change
 frequently, data may be reset, and the service may be unavailable or contain
@@ -673,12 +859,12 @@ friends) that they viewed — do not assume ephemeral content cannot be captured
 A Space is shared between its two members: everything in it — the playlist, pinned
 moments, and the diary of memories and plans, with your reactions and comments —
 is visible to the other member, so share only what you're comfortable with them
-seeing, and keep it respectful and lawful. Either member can leave or unpin the
-bond.
+seeing, and keep it respectful and lawful. A bond only begins once the other
+person accepts your request, and either member can leave or unpin it at any time.
 
 7. Third-party services
 The Service uses third parties (for example Firebase for notifications, GIPHY,
-Sentry, a song-recognition provider and TURN/STUN relays for calls). Your use of
+Sentry, a song-recognition provider and the TURN/STUN relays used for calls). Your use of
 those features is also subject to those providers' terms and privacy policies.
 
 8. Limitation of liability
@@ -692,12 +878,19 @@ You may stop using Aluta at any time and delete your account from the Profile
 page. We may suspend or terminate access if you breach these Terms, to protect
 users or the Service, or because we are winding down a development build.
 
-10. Governing law
+10. Updates and app versions
+Aluta is not yet in an app store. Android builds are shared directly as an APK,
+so only install Aluta from official sources (the in-app update notice or
+Ozilane's own links). When a new version is released, the app tells you and
+reminds you every few hours until you update. Older versions may lose features
+or stop working as the Service changes, so please keep Aluta up to date.
+
+11. Governing law
 These Terms are governed by the laws of the United Republic of Tanzania, and
 disputes are subject to the courts of Tanzania, unless a mandatory local law that
 applies to you provides otherwise.
 
-11. Changes and contact
+12. Changes and contact
 We may update these Terms; when we do we will change the date shown above, and
 continued use means you accept the updated Terms. Questions about these Terms:
 Help & feedback in the app ("Get help"), or email support@ozilane.com.
@@ -705,7 +898,7 @@ Help & feedback in the app ("Get help"), or email support@ozilane.com.
 
 const String _about = '''
 About Aluta
-Development / Beta build · Last updated: 27 October 2026
+Development / Beta build · Last updated: 13 November 2026
 
 Aluta is a social app that brings your conversations and your music into one
 place — private and group chat, voice and group calls, ephemeral Stories, a
@@ -713,7 +906,7 @@ built-in music player with a shared "Listen Together" mode, and private
 two-person Spaces with a shared diary. It runs on Android, Windows desktop and
 the web.
 
-What you can do today
+# What you can do today
 - Chat and media: one-to-one and group chats with photos, files, voice notes and
   GIFs, reactions, replies, edit and delete, pinned messages, typing indicators
   and read receipts. Messages are not end-to-end encrypted in this beta.
@@ -733,12 +926,14 @@ What you can do today
 - Your account and devices: email sign-up, optional phone number and avatar,
   two-factor authentication, QR device linking with remote sign-out, and an
   optional on-device fingerprint/face lock.
+- Updates: new versions are announced in the app, with a gentle reminder until
+  you update. Tap the version card above to copy your version for support.
 
-Learn more
+# Learn more
 How to use these features in more detail, and the rules for using them, are in the
 Terms of Service. How your information is handled is in the Privacy Policy.
 
-Powered by Ozilane
+# Powered by Ozilane
 Questions, help or feedback: Help & feedback in the app menu — or email
 support@ozilane.com.
 © 2026 Aluta. All rights reserved.

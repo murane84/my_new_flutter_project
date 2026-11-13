@@ -53,7 +53,7 @@
   <header>
     <div class="brand"><span class="dot"></span><strong>Aluta</strong></div>
     <h1>Privacy Policy</h1>
-    <div class="meta">Effective date: 27 October 2026 · Version 0.3 (beta)</div>
+    <div class="meta">Effective date: 13 November 2026 · Version 0.4 (beta)</div>
     <span class="badge">Beta build</span>
   </header>
 
@@ -104,7 +104,9 @@
       <li>Messages you schedule to arrive at a friend's morning, and your time-zone
       offset so “their morning” can be worked out.</li>
       <li><strong>Calls</strong> connect your devices directly (peer-to-peer). We never
-      record or store call audio; we keep a call log entry (who, when, how long, outcome).</li>
+      record or store call audio; we keep a call log entry (who, when, how long, outcome).
+      When a direct connection isn't possible, the encrypted audio passes through a relay
+      (Aluta's own, at turn.ozilane.com), which can't listen to it and keeps nothing.</li>
       <li><strong>Listen Together</strong> sends the song directly between the people in
       the session (peer-to-peer). Our server only passes the small “play / pause /
       position” signals and does not keep the audio.</li>
@@ -118,6 +120,11 @@
       playlist, diary entries and comments, love capsules, dedications, daily-question
       answers, streaks and kept hearts. <strong>Both members of a Space can see all of
       it.</strong></li>
+      <li>A bond only starts when the other person <strong>accepts</strong> your request.
+      Until then nothing you add reaches them, and none of the bond's notifications or
+      partner marks are switched on.</li>
+      <li>“This month in your words” counts a few warm phrases (like “miss you”) in the
+      chat between the two of you, worked out when you open it. The counts aren't stored.</li>
     </ul>
 
     <h3>Presence and status</h3>
@@ -126,6 +133,9 @@
       (e.g. “Busy”), and “tell me when they're online” requests you make.</li>
       <li>What you're listening to right now, shown to friends — or only the people you
       choose — while you play music.</li>
+      <li>Stories, status, presence and the other things two friends share only switch on
+      once you've <strong>both</strong> saved each other's number. Until then you can
+      only send messages.</li>
     </ul>
 
     <h3>Music</h3>
@@ -139,6 +149,8 @@
       listen to.</li>
       <li>“Identify a song” sends a short audio sample to a song-recognition provider,
       only when you use it.</li>
+      <li><strong>Free music</strong> searches libraries of songs that artists give away
+      for free. Our server passes them your search words, never who you are.</li>
     </ul>
 
     <h3>Contacts (only if you allow it)</h3>
@@ -163,6 +175,10 @@
       the web whether it's a phone or computer), operating-system version, app version
       and a random install identifier. We use this to support each device and decide
       which ones to build for.</li>
+      <li>The Aluta version each device runs, reported when it connects, so we can tell
+      you when a new version is ready. While you're on an older Aluta, your version is
+      also shown to your accepted Our Space partner so they can invite you to update.
+      No one else sees it.</li>
       <li>Devices you've linked (for example a computer you linked by QR).</li>
       <li>Network information such as IP address, in server logs and for security
       (for example to warn you about a new sign-in).</li>
@@ -230,8 +246,9 @@
       <tr><td>Zoho ZeptoMail</td><td>Email — password-reset codes and security alerts</td><td>Your email address and the email itself</td></tr>
       <tr><td>Sentry</td><td>Crash and error reports</td><td>Error details, device and app information</td></tr>
       <tr><td>GIPHY</td><td>GIF and sticker search</td><td>Your search words and the GIFs you open</td></tr>
-      <tr><td>AudD</td><td>“Identify a song”</td><td>A short audio sample, only when you use it</td></tr>
-      <tr><td>STUN/TURN relays</td><td>Connecting calls and Listen Together through firewalls</td><td>Network connection data</td></tr>
+      <tr><td>AudD and AcoustID</td><td>“Identify a song”</td><td>A short audio sample (or its fingerprint), only when you use it</td></tr>
+      <tr><td>Jamendo and the Internet Archive</td><td>Free music search</td><td>Your search words, sent by our server (not who you are)</td></tr>
+      <tr><td>STUN/TURN relays — Aluta's own (turn.ozilane.com) and public STUN such as Google's</td><td>Connecting calls and Listen Together through firewalls</td><td>Network connection data; relayed audio stays encrypted</td></tr>
       <tr><td>Ozilane Key (auth.ozilane.com)</td><td>Optional phone approval for sign-in</td><td>A random account identifier, and the sign-in's IP address and browser/device</td></tr>
     </table>
   </section>
@@ -314,7 +331,7 @@
   </section>
 
   <footer>
-    Aluta — Privacy Policy · Version 0.3 · 27 October 2026 · Written in good faith, not legal advice.
+    Aluta — Privacy Policy · Version 0.4 · 13 November 2026 · Written in good faith, not legal advice.
   </footer>
 </div>
 </body>

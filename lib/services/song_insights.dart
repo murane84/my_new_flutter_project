@@ -519,9 +519,9 @@ class SongInsights {
     return best;
   }
 
-  /// One of "our songs": played together in Listen Together, or first heard
-  /// with your person. Light (no ranking) — safe to ask per playlist row.
-  bool isOurs(String title) {
+  /// For the "Our songs" list: marked ours, or first heard with your person
+  /// (Listen Together). Light (no ranking) — safe to ask per playlist row.
+  bool sharedSong(String title) {
     final s = _songs[_keyOf(title)];
     if (s == null) return false;
     return s['ours'] == true ||

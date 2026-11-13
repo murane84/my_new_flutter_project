@@ -549,17 +549,6 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     super.dispose();
   }
 
-  String _name(String path) {
-    final sep = Platform.pathSeparator;
-    final n = path.contains(sep)
-        ? path.substring(path.lastIndexOf(sep) + 1)
-        : path.contains('/')
-            ? path.substring(path.lastIndexOf('/') + 1)
-            : path;
-    final d = n.lastIndexOf('.');
-    return _cleanTrackName(d > 0 ? n.substring(0, d) : n);
-  }
-
   String _effTitle(String path) {
     final ta = _titleArtistOf(path);
     return metadataStore.title(path, ta.$1);
@@ -596,7 +585,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         return (widget.playCounts[e.value] ?? 0) > 0;
       }
       if (_smart == _Smart.ours) {
-        return SongInsights.instance.isOurs(_effTitle(e.value));
+        return SongInsights.instance.sharedSong(_effTitle(e.value));
       }
       if (_smart == _Smart.rediscover) return _forgotten(e.value);
       if (_favOnly && !widget.favorites.contains(e.value)) return false;

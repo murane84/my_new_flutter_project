@@ -37,7 +37,9 @@ class _SmoothWheelPosition extends ScrollPositionWithSingleContext {
 
   @override
   void pointerScroll(double delta) {
-    if (delta == 0.0 || !hasContentDimensions) {
+    // Small deltas are a trackpad / precise wheel (web sends those as
+    // scroll events too): they're already smooth — follow them directly.
+    if (delta.abs() < 30 || !hasContentDimensions) {
       super.pointerScroll(delta);
       return;
     }

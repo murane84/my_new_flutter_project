@@ -52,6 +52,7 @@ import 'utils/motion.dart';
 import 'utils/radii.dart';
 import 'utils/emoji_field.dart' show startPointerTracking;
 import 'utils/depth.dart';
+import 'services/emoji_font.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool _spaceFullHooked = false;
@@ -190,6 +191,8 @@ void main() async {
 Future<void>? _bootstrapFuture;
 Future<void> _bootstrapServices() {
   return _bootstrapFuture ??= () async {
+    // Windows: Aluta's soft emoji (downloaded once, in the background).
+    unawaited(EmojiFont.init());
     // Media session (car / Bluetooth / lock-screen controls + the foreground
     // service that keeps the app alive & online while music plays).
     try {
@@ -246,7 +249,8 @@ class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   ThemeData _buildTheme(ColorScheme scheme) {
-    return ThemeData(
+    // Windows: emoji fall back to Aluta's soft Noto set (see EmojiFont).
+    return EmojiFont.applyTo(ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
       // Android 14+: swiping back from the edge shows the page behind
@@ -382,7 +386,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 
   @override

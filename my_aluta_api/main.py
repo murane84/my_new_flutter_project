@@ -540,6 +540,23 @@ app.openapi = custom_openapi
 _WEBAPP_DIR = os.path.join(os.path.dirname(__file__), "webapp")
 
 
+# ✅ Aluta's emoji font for the Windows app (Google's Noto Color Emoji, SIL
+#    Open Font Licence — assets/fonts/OFL.txt). Not bundled in the app so the
+#    Android APK and web build stay small; Windows fetches it once and keeps
+#    it (lib/services/emoji_font.dart). Public: it's just a font.
+_EMOJI_FONT = os.path.join(os.path.dirname(__file__), "assets", "fonts",
+                           "NotoColorEmoji.ttf")
+
+
+@app.get("/fonts/emoji.ttf", include_in_schema=False)
+async def _emoji_font():
+    if not os.path.isfile(_EMOJI_FONT):
+        return Response(status_code=404)
+    resp = FileResponse(_EMOJI_FONT, media_type="font/ttf")
+    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return resp
+
+
 # ✅ Aluta Admin web app (a separate Flutter web build) at /admin/. Lives in
 #    ./adminapp so copying the main web build into ./webapp never touches it.
 #    Its API is /admin/api/* (routed above, so it always wins over this).

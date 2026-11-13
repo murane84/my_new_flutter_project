@@ -59,7 +59,11 @@ class ActiveLiveSession {
     required this.token,
     required this.myUserId,
     this.isRoom = false,
+    this.peerId,
   });
+
+  /// The friend this 1:1 session is with (host: who I invited).
+  final int? peerId;
 
   final LiveSessionController controller;
   final LiveRole role;

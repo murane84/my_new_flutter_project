@@ -456,6 +456,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       token: widget.token,
       myUserId: widget.myUserId,
       isRoom: widget.isRoom,
+      peerId: widget.receiverId,
     );
     // Broadcast that a live co-listening session is active so ambient UI
     // (the persistent banner / bars) can reflect it. Deferred to a microtask:

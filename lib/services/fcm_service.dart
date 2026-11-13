@@ -11,6 +11,7 @@ import 'contact_names.dart';
 import 'group_meta.dart';
 import 'heartbeat_log.dart';
 import 'app_updater.dart';
+import 'live_session_service.dart' show activeLiveSession;
 import 'notif_service.dart';
 import '../widgets/reply_banner.dart';
 import '../screens/api_service.dart';
@@ -227,6 +228,9 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       // A friend asks to listen along to MY song while Aluta was closed.
       // 'from_id' (FCM reserves 'from'); 'from' kept for older servers.
       final from = (data['from_id'] ?? data['from'] ?? '').toString();
+      // Already listening together with them (the push of an ask I said
+      // yes to, arriving late): nothing to ask any more.
+      if (activeLiveSession?.peerId?.toString() == from) return;
       final who = mine((data['from_name'] ?? 'Your friend').toString());
       final song = (data['title'] ?? '').toString().trim();
       await showAlutaNotification(

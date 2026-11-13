@@ -1050,7 +1050,15 @@ extension _HomePageHelpers1 on HomePageState {
       await Future.delayed(const Duration(milliseconds: 250));
     }
     if (!mounted) return;
-    if (activeLiveSession != null) {
+    final live = activeLiveSession;
+    if (live != null) {
+      // Already listening WITH them (a late banner / notification of the
+      // same ask, tapped after I let them in): just bring the session back —
+      // never end it and start another.
+      if (live.peerId == from) {
+        _reopenLiveSession();
+        return;
+      }
       svc.reply(from, accept: false, reason: 'busy');
       return;
     }
@@ -1136,6 +1144,10 @@ extension _HomePageHelpers1 on HomePageState {
     // rhythm instead of stopping when the first song ends.
     final upNext = _myUpNext(path, 5);
     svc.reply(from, accept: true);
+    // The server also pushes every ask; one landing a moment after I said
+    // yes would leave a stale "wants to tune in" banner behind.
+    Future.delayed(const Duration(seconds: 6),
+        () => cancelAlutaNotification(musicNotifId('$from')));
     // The session carries the music on from here — no double playback.
     playbackBus.onPause?.call();
     Navigator.of(context).push(MaterialPageRoute<void>(

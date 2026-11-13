@@ -1033,6 +1033,164 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     );
   }
 
+  /// ⋮ → "Find real name": identify the song by its sound (the same
+  /// service as "Identify a song", fed a slice of the file itself), then
+  /// offer the title + artist it found as this song's details.
+  Future<void> _findRealName(String path) async {
+    showToast(context, 'Listening to the song…', type: ToastType.info);
+    Map<String, dynamic>? res;
+    try {
+      final f = File(path);
+      final len = await f.length();
+      final lower = path.toLowerCase();
+      final mp3 = lower.endsWith('.mp3');
+      // A ~1.5 MB slice from a quarter in (MP3 frames resync anywhere);
+      // other formats go whole (the service takes up to 6 MB).
+      const slice = 1536 * 1024;
+      const maxWhole = 6 * 1024 * 1024 - 1024;
+      final raf = await f.open();
+      List<int> bytes;
+      try {
+        if (mp3 && len > slice * 2) {
+          await raf.setPosition(len ~/ 4);
+          bytes = await raf.read(slice);
+        } else {
+          bytes = await raf.read(len > maxWhole ? maxWhole : len);
+        }
+      } finally {
+        await raf.close();
+      }
+      final ext = lower.split('.').last;
+      final mime = ext == 'wav'
+          ? 'audio/wav'
+          : (ext == 'm4a' || ext == 'aac')
+              ? 'audio/aac'
+              : ext == 'ogg' || ext == 'opus'
+                  ? 'audio/ogg'
+                  : ext == 'flac'
+                      ? 'audio/flac'
+                      : 'audio/mpeg';
+      res = await ApiService()
+          .recognizeSong(bytes: bytes, filename: 'song.$ext', mime: mime);
+    } catch (_) {}
+    if (!mounted) return;
+    if (res == null || res['matched'] != true) {
+      final why = res?['error'] == 'not_configured'
+          ? 'Song recognition isn’t set up on the server yet'
+          : res?['error'] == 'service_error'
+              ? 'The recognition service is busy — try again later'
+              : 'Couldn’t recognise this one';
+      showToast(context, why, type: ToastType.info);
+      return;
+    }
+    final title = (res['title'] ?? '').toString().trim();
+    final artist = (res['artist'] ?? '').toString().trim();
+    if (title.isEmpty) {
+      showToast(context, 'Couldn’t recognise this one', type: ToastType.info);
+      return;
+    }
+    showToast(
+      context,
+      'It’s “$title”${artist.isEmpty ? '' : ' by $artist'}',
+      type: ToastType.success,
+      duration: const Duration(seconds: 12),
+      detail: 'Use this name for the song?',
+      actions: [
+        ToastAction('No', () {}),
+        ToastAction('Use it', () async {
+          final old = metadataStore.of(path);
+          await metadataStore.set(
+              path,
+              TrackMeta(
+                  title: title,
+                  artist: artist.isEmpty ? old?.artist : artist,
+                  album: old?.album,
+                  genre: old?.genre,
+                  year: old?.year));
+          SongNames.instance.addArtist(artist);
+          if (mounted) setState(() {});
+        }),
+      ],
+    );
+  }
+
+  static const _kTidyDismissed = 'pl_tidy_dismissed_v1';
+
+  /// Untagged songs whose file name reads messy and that you haven't edited.
+  List<String> _messySongs() => widget.playlist
+      .where((p) =>
+          metadataStore.of(p) == null && SongNames.instance.looksMessy(p))
+      .toList();
+
+  /// "23 song names look messy — Tidy them": saves the clean title + artist
+  /// as your song details (they follow your account), with Undo. "Not now"
+  /// hides it until more messy names arrive.
+  Widget _tidyBanner(ColorScheme scheme) {
+    final messy = _messySongs();
+    final dismissed = prefsNow?.getInt(_kTidyDismissed) ?? 0;
+    if (messy.length < 3 || messy.length <= dismissed) {
+      return const SizedBox.shrink();
+    }
+    final n = messy.length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 2, 10, 6),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+        decoration: BoxDecoration(
+          color: scheme.primary.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(Radii.lg),
+          border: Border.all(color: scheme.primary.withValues(alpha: 0.22)),
+        ),
+        child: Row(children: [
+          Icon(Icons.auto_fix_high_rounded, size: 18, color: scheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text('$n song names look messy',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface)),
+          ),
+          TextButton(
+            onPressed: () {
+              prefsNow?.setInt(_kTidyDismissed, n);
+              setState(() {});
+            },
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                shape: const StadiumBorder()),
+            onPressed: () => _tidyAll(messy),
+            child: const Text('Tidy them'),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _tidyAll(List<String> paths) async {
+    final edits = <String, TrackMeta?>{};
+    for (final p in paths) {
+      final n = SongNames.instance.parse(p);
+      edits[p] = TrackMeta(
+          title: n.title, artist: n.artist.isEmpty ? null : n.artist);
+    }
+    await metadataStore.setMany(edits);
+    if (!mounted) return;
+    setState(() {});
+    showToast(context, 'Tidied ${paths.length} song names ✨',
+        type: ToastType.success,
+        duration: const Duration(seconds: 8),
+        actions: [
+          ToastAction('Undo', () async {
+            await metadataStore.setMany({for (final p in paths) p: null});
+            if (mounted) setState(() {});
+          }),
+        ]);
+  }
+
   /// The quiet last line: "12 voice notes & recordings hidden · Show".
   Widget _hiddenLine(ColorScheme scheme) {
     return ValueListenableBuilder<List<String>>(
@@ -1225,6 +1383,13 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 },
                 iconColor: isFav ? Colors.pinkAccent : null,
               ),
+              // No usable name ("Track 07", "AUD…")? Ask the song itself.
+              if (!kIsWeb)
+                _optionTile(scheme, Icons.graphic_eq_rounded,
+                    'Find real name', () {
+                  Navigator.pop(ctx);
+                  _findRealName(path);
+                }),
               // A voice note / recording that slipped in: out, and it never
               // comes back on a rescan ("This is a song" undoes it).
               _optionTile(scheme, Icons.mic_off_rounded, 'Not a song', () {
@@ -1563,6 +1728,9 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 ],
               ),
             ),
+
+          // "23 song names look messy · Tidy them" (only when there are).
+          if (!_selecting) _tidyBanner(scheme),
 
           // Track list.
           Expanded(

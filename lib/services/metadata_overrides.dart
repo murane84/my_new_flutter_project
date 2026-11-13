@@ -88,6 +88,22 @@ class MetadataStore extends ChangeNotifier {
 
   TrackMeta? of(String path) => _m[path];
 
+  /// Many edits at once (e.g. "Tidy all"), saved + backed up once. A null /
+  /// empty meta clears that song's edit (undo).
+  Future<void> setMany(Map<String, TrackMeta?> edits) async {
+    if (edits.isEmpty) return;
+    edits.forEach((path, meta) {
+      if (meta == null || meta.isEmpty) {
+        _m.remove(path);
+      } else {
+        _m[path] = meta;
+      }
+    });
+    notifyListeners();
+    await _persistLocal();
+    if (_synced) _schedulePush();
+  }
+
   Future<void> set(String path, TrackMeta meta) async {
     if (meta.isEmpty) {
       _m.remove(path);

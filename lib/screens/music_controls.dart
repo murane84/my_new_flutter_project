@@ -2537,6 +2537,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         }
       }
       // New WhatsApp voice notes / recordings never arrive as "new songs".
+      await SongFilter.instance.load(); // your "Not a song" choices first
       added = SongFilter.instance.keepSongs(added, infos: infos);
       if (added.isEmpty) return;
       setState(() => _playlist = [..._playlist, ...added]);
@@ -2573,6 +2574,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         final i = _songInfo(s);
         if (s.data.isNotEmpty && i != null) infos[s.data] = i;
       }
+      await SongFilter.instance.load();
       final keep = SongFilter.instance.keepSongs(_playlist, infos: infos);
       if (!mounted || keep.length == _playlist.length) return;
       final cur = _currentIndex >= 0 && _currentIndex < _playlist.length
@@ -2625,6 +2627,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     // A fresh scan gives files marked "can't play" another chance.
     TrackMemory.instance.forgiveAll();
     // Songs only — voice notes and recordings stay out (see SongFilter).
+    await SongFilter.instance.load(); // your "Not a song" choices first
     final paths = SongFilter.instance.keepSongs(
         songs.map((s) => s.data).where((p) => p.isNotEmpty).toList(),
         infos: infos);

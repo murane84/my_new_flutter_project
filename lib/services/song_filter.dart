@@ -35,19 +35,25 @@ class SongFilter {
   /// Set by the music screen: put these paths (back) into the playlist.
   void Function(List<String> paths)? onBringBack;
 
-  Future<void> load() async {
-    if (_loaded) return;
-    _loaded = true;
+  Future<void>? _loading;
+
+  /// Read your saved choices once (every caller awaits the same read).
+  Future<void> load() => _loading ??= _read();
+
+  Future<void> _read() async {
     try {
       final p = await SharedPreferences.getInstance();
       _hidden.addAll(p.getStringList(_kHidden) ?? const []);
       _kept.addAll(p.getStringList(_kKept) ?? const []);
       _auto.addAll(p.getStringList(_kAuto) ?? const []);
     } catch (_) {}
+    _loaded = true;
     _publish();
   }
 
   Future<void> _save() async {
+    // Never write before your saved choices were read (it would wipe them).
+    if (!_loaded) return;
     try {
       final p = await SharedPreferences.getInstance();
       await p.setStringList(_kHidden, _hidden.toList());

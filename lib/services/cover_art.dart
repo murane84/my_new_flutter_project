@@ -26,7 +26,7 @@ class CoverArt {
   final Set<String> _wrong = {};
   final List<(String, String, String)> _queue = []; // path, title, artist
   final Set<String> _queued = {};
-  bool _loaded = false, _running = false;
+  bool _loaded = false, _ready = false, _running = false;
   int _lookupsThisRun = 0;
   // Server / network trouble → wait before asking again (no hammering on
   // every rebuild).
@@ -44,14 +44,15 @@ class CoverArt {
         });
       }
       _wrong.addAll(p.getStringList(_kWrong) ?? const []);
-      version.value++;
     } catch (_) {}
+    _ready = true; // only now is "not looked up yet" really unknown
+    version.value++;
   }
 
   /// The cover to show for [path], or null. Unknown → looked up quietly in
   /// the background (rows rebuild via [version] when it lands).
   String? urlFor(String path, {required String title, required String artist}) {
-    if (!_loaded) {
+    if (!_ready) {
       _load();
       return null;
     }

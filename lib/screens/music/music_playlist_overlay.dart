@@ -390,6 +390,32 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
 
   /// Row leading: the now-playing indicator, the song's embedded cover art when
   /// we can pull it, or a music-note icon — never the raw track number.
+  /// A song's real cover from the web when its file has none (see CoverArt);
+  /// the music-note badge until one lands, or if none matches.
+  Widget _onlineArt(String path, Widget fallback) {
+    return ValueListenableBuilder<int>(
+      valueListenable: CoverArt.instance.version,
+      builder: (context, _, _) {
+        final url = CoverArt.instance.urlFor(path,
+            title: _effTitle(path), artist: _effArtist(path));
+        if (url == null) return fallback;
+        return SizedBox(
+          width: 30,
+          height: 30,
+          child: ClipOval(
+            child: CachedNetworkImage(
+              imageUrl: url,
+              fit: BoxFit.cover,
+              memCacheWidth: 96,
+              placeholder: (_, _) => fallback,
+              errorWidget: (_, _, _) => fallback,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _leadingArt(String path, bool isNow, ColorScheme scheme) {
     final isDark = scheme.brightness == Brightness.dark;
     if (isNow) {
@@ -450,9 +476,11 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
               scheme.primary.withValues(alpha: 0.5),
               scheme.onSurfaceVariant)),
     );
+    // No art in the file → a real cover looked up once (known artist only).
+    final online = _onlineArt(path, fallback);
     final id = _songId[path];
     // Embedded art is only queryable from the device MediaStore (Android/iOS).
-    if (id == null || !(Platform.isAndroid || Platform.isIOS)) return fallback;
+    if (id == null || !(Platform.isAndroid || Platform.isIOS)) return online;
     return SizedBox(
       width: 30,
       height: 30,
@@ -467,7 +495,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
           size: 96,
           artworkFit: BoxFit.cover,
           keepOldArtwork: true,
-          nullArtworkWidget: fallback,
+          nullArtworkWidget: online,
         ),
       ),
     );
@@ -592,6 +620,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       if (groupMembers != null && !groupMembers.contains(e.value)) return false;
       return true;
     }).toList();
+    // The same song saved twice shows once (the best copy plays).
+    entries = _collapseDuplicates(entries);
 
     // Smart lists carry their own ordering (most-recent / most-played first).
     if (_smart == _Smart.recent) {
@@ -1181,6 +1211,98 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     );
   }
 
+  static const _kDupSplit = 'pl_dup_split_v1';
+  // Shown path → the other copies hidden behind it, and its duplicate key.
+  final Map<String, List<String>> _copiesOf = {};
+  final Map<String, String> _dupKeyOf = {};
+
+  static String _dupNorm(String s) => s
+      .toLowerCase()
+      .replaceAll(RegExp(r'\(feat\.[^)]*\)'), ' ')
+      .replaceAll(RegExp(r'[^a-z0-9\u00c0-\u024f]+'), ' ')
+      .trim();
+
+  /// Same title + artist and the same length (± 2 s; or the same file size
+  /// when the length isn't known) = one song. Shows the best copy (not a
+  /// WhatsApp copy, the bigger / higher-quality file) where the first copy
+  /// stood; the rest wait behind ⋮ ("1 more copy"). "These are different
+  /// songs" keeps a title apart for good.
+  List<MapEntry<int, String>> _collapseDuplicates(
+      List<MapEntry<int, String>> es) {
+    _copiesOf.clear();
+    _dupKeyOf.clear();
+    if (es.length < 2) return es;
+    final split = (prefsNow?.getStringList(_kDupSplit) ?? const []).toSet();
+    // cluster: first index in `es`, members
+    final clusters = <String, List<List<MapEntry<int, String>>>>{};
+    final firstPos = <List<MapEntry<int, String>>, int>{};
+    for (var i = 0; i < es.length; i++) {
+      final e = es[i];
+      final t = _dupNorm(_effTitle(e.value));
+      if (t.length < 2) continue;
+      final key = '$t|${_dupNorm(_effArtist(e.value))}';
+      if (split.contains(key)) continue;
+      _dupKeyOf[e.value] = key;
+      final list = clusters.putIfAbsent(key, () => []);
+      List<MapEntry<int, String>>? home;
+      for (final c in list) {
+        if (_sameSong(c.first.value, e.value)) {
+          home = c;
+          break;
+        }
+      }
+      if (home == null) {
+        home = [e];
+        list.add(home);
+        firstPos[home] = i;
+      } else {
+        home.add(e);
+      }
+    }
+    final drop = <String>{};
+    final replace = <int, MapEntry<int, String>>{}; // position → best
+    for (final list in clusters.values) {
+      for (final c in list) {
+        if (c.length < 2) continue;
+        c.sort((a, b) => _copyScore(b.value).compareTo(_copyScore(a.value)));
+        final best = c.first;
+        _copiesOf[best.value] = [for (final x in c.skip(1)) x.value];
+        for (final x in c) {
+          if (x != best) drop.add(x.value);
+        }
+        replace[firstPos[c]!] = best;
+        drop.remove(best.value);
+      }
+    }
+    if (drop.isEmpty) return es;
+    final out = <MapEntry<int, String>>[];
+    final placed = <String>{};
+    for (var i = 0; i < es.length; i++) {
+      final e = replace[i] ?? es[i];
+      if (drop.contains(e.value) || !placed.add(e.value)) continue;
+      out.add(e);
+    }
+    return out;
+  }
+
+  bool _sameSong(String a, String b) {
+    final da = _durMs[a], db = _durMs[b];
+    if (da != null && db != null && da > 0 && db > 0) {
+      return (da - db).abs() <= 2000;
+    }
+    final sa = _sizeB[a], sb = _sizeB[b];
+    return sa != null && sa > 0 && sa == sb;
+  }
+
+  int _copyScore(String p) {
+    final l = p.toLowerCase();
+    var s = (_sizeB[p] ?? 0) ~/ 1024; // bigger file ≈ better quality
+    if (!l.contains('whatsapp')) s += 1 << 30;
+    if (metadataStore.of(p) != null) s += 1 << 20; // the one you edited
+    if (widget.favorites.contains(p)) s += 1 << 21;
+    return s;
+  }
+
   static const _kTidyDismissed = 'pl_tidy_dismissed_v1';
 
   /// Untagged songs whose file name reads messy and that you haven't edited.
@@ -1450,6 +1572,28 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 },
                 iconColor: isFav ? Colors.pinkAccent : null,
               ),
+              if ((_copiesOf[path] ?? const []).isNotEmpty)
+                _optionTile(
+                    scheme,
+                    Icons.call_split_rounded,
+                    '${_copiesOf[path]!.length} more '
+                    'cop${_copiesOf[path]!.length == 1 ? 'y' : 'ies'} · '
+                    'These are different songs', () {
+                  Navigator.pop(ctx);
+                  final k = _dupKeyOf[path];
+                  if (k == null) return;
+                  final s = (prefsNow?.getStringList(_kDupSplit) ?? const [])
+                      .toSet()
+                    ..add(k);
+                  prefsNow?.setStringList(_kDupSplit, s.toList());
+                  setState(() {});
+                }),
+              if (CoverArt.instance.hasCover(path))
+                _optionTile(scheme, Icons.hide_image_outlined, 'Wrong cover',
+                    () {
+                  Navigator.pop(ctx);
+                  CoverArt.instance.markWrong(path);
+                }),
               // No usable name ("Track 07", "AUD…")? Ask the song itself.
               if (!kIsWeb)
                 _optionTile(scheme, Icons.graphic_eq_rounded,

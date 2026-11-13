@@ -2578,6 +2578,26 @@ class ApiService {
 
   /// Is my bond partner on an older Aluta? {behind, partner_version,
   /// latest, note, nudged} — or null (offline / not a live bond).
+  /// A real cover for an untagged song: the URL, '' when nothing matched
+  /// closely enough, or null when the server couldn't be reached (retry).
+  Future<String?> coverFor({required String title, required String artist}) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final uri = Uri.parse('${await _baseUrl}/music/cover').replace(
+          queryParameters: {'title': title, 'artist': artist});
+      final resp = await http
+          .get(uri, headers: _authHeaders(token))
+          .timeout(const Duration(seconds: 12));
+      if (resp.statusCode != 200) return null;
+      final d = jsonDecode(resp.body);
+      final u = d is Map ? d['url'] : null;
+      return u is String ? u : '';
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>?> getPartnerApp(int spaceId) async {
     try {
       final token = await _getToken();

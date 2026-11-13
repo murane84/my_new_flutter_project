@@ -58,6 +58,7 @@ for _name in ("uvicorn.access", "uvicorn.error", "uvicorn"):
     _logging.getLogger(_name).addFilter(_RedactTokens())
 from routers import feedback as feedback_router
 from routers import free_music as free_music_router
+from routers import cover_art as cover_art_router
 from websocket_routes import router as websocket_router
 import websocket_manager
 from sqlalchemy import text
@@ -178,6 +179,7 @@ app.include_router(feedback_router.router)
 # "Free music": search songs that are legally free to download (Jamendo CC +
 # Internet Archive CC / public domain). JAMENDO_CLIENT_ID enables Jamendo.
 app.include_router(free_music_router.router)
+app.include_router(cover_art_router.router)
 # Releases outside the Play Store: /download page, /app/latest (in-app update
 # check), /admin/release uploader. Files on the Railway volume, not Postgres.
 app.include_router(releases_router.router)

@@ -50,6 +50,8 @@ import '../services/metadata_overrides.dart';
 import '../services/song_names.dart';
 import '../services/song_filter.dart';
 import '../services/track_memory.dart';
+import '../services/cover_art.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/track_title.dart' show cleanTrackName;
 import '../utils/marquee_text.dart';
 import '../utils/typing_guard.dart';

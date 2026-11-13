@@ -15,6 +15,7 @@ import 'notif_service.dart';
 import 'call_lock.dart';
 import 'contact_names.dart';
 import 'telecom_service.dart';
+import 'group_call_service.dart' show GroupCallService;
 import 'live_session_service.dart' show activeLiveSession;
 
 /// High-level state of the single active Aluta voice call.
@@ -1013,6 +1014,9 @@ class CallService {
     try {
       await Helper.setSpeakerphoneOn(false);
     } catch (_) {}
+    // Music after the call: stereo media audio again, not call audio.
+    unawaited(TelecomService.instance.resetAudioAfterCall(
+        () => isActive || GroupCallService.instance.isActive));
   }
 
   void _reset() {

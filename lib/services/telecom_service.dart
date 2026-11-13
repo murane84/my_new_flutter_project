@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
+import 'package:audio_session/audio_session.dart';
 
 /// Bridges Aluta's WebRTC voice/group calls to Android's self-managed Telecom
 /// stack, so a car head-unit or Bluetooth device sees each call as a real call
@@ -145,6 +146,22 @@ class TelecomService {
     if (!_android || !_registered) return;
     try {
       await _ch.invokeMethod('endCall', {'callId': callId});
+    } catch (_) {}
+  }
+
+  /// A call just ended: put the phone's audio back to normal media (WebRTC
+  /// leaves it in mono "communication" mode, so music after a call played
+  /// flat, without stereo). Waits a beat for the call to finish closing,
+  /// and skips it if another call is still going ([stillInCall]).
+  Future<void> resetAudioAfterCall(bool Function() stillInCall) async {
+    if (!_android) return;
+    await Future.delayed(const Duration(milliseconds: 700));
+    if (stillInCall()) return;
+    try {
+      await _ch.invokeMethod('resetAudioAfterCall');
+      // …and music's own audio settings again (media, stereo).
+      final s = await AudioSession.instance;
+      await s.configure(const AudioSessionConfiguration.music());
     } catch (_) {}
   }
 }

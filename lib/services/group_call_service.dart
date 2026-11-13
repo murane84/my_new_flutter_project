@@ -9,6 +9,7 @@ import '../state/playback_state.dart' show providerContainer;
 import 'ice_config.dart';
 import 'notif_service.dart';
 import 'telecom_service.dart';
+import 'call_service.dart' show CallService;
 
 /// One participant in a group call (a peer, or a known roster member).
 class GroupParticipant {
@@ -627,6 +628,9 @@ class GroupCallService {
     try {
       await Helper.setSpeakerphoneOn(false);
     } catch (_) {}
+    // Music after the call: stereo media audio again, not call audio.
+    unawaited(TelecomService.instance.resetAudioAfterCall(
+        () => isActive || CallService.instance.isActive));
   }
 
   void _reset() {

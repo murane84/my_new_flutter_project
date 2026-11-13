@@ -527,6 +527,29 @@ class MainActivity : AudioServiceFragmentActivity() {
                     ?.close(DisconnectCause.LOCAL)
                 result.success(true)
             }
+            // The call is over: hand the audio back to music. WebRTC leaves
+            // the phone in "communication" mode (mono, voice-processed, a
+            // Bluetooth headset on its hands-free link) — songs afterwards
+            // played flat with no stereo. Back to normal media audio.
+            "resetAudioAfterCall" -> {
+                try {
+                    val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        try { am.clearCommunicationDevice() } catch (_: Exception) {}
+                    }
+                    @Suppress("DEPRECATION")
+                    try {
+                        if (am.isBluetoothScoOn) {
+                            am.stopBluetoothSco()
+                            am.isBluetoothScoOn = false
+                        }
+                    } catch (_: Exception) {}
+                    @Suppress("DEPRECATION")
+                    try { am.isSpeakerphoneOn = false } catch (_: Exception) {}
+                    try { am.mode = AudioManager.MODE_NORMAL } catch (_: Exception) {}
+                } catch (_: Exception) {}
+                result.success(true)
+            }
             "setAudioRoute" -> {
                 val id = call.argument<String>("callId") ?: ""
                 val route = call.argument<Int>("route") ?: CallAudioState.ROUTE_EARPIECE

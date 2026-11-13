@@ -176,6 +176,71 @@ def create_session(
     return {"session_id": session_id, "host_id": current_user.id, "track": track}
 
 
+class RestoreRequest(BaseModel):
+    # The host brings its session back after a server restart (a deploy wipes
+    # the in-memory sessions): same id, same people, the song that's playing.
+    receiver_id: Optional[int] = None  # 1:1
+    open: bool = False  # a room
+    conversation_id: Optional[int] = None  # a group room
+    track: TrackMeta = TrackMeta()
+
+
+@router.post("/sessions/{session_id}/restore")
+def restore_session(
+    session_id: str,
+    body: RestoreRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Re-create a session the server forgot (restart / deploy) so the host
+    and everyone in it reconnect to the SAME id and carry on. Only the host
+    can do it, with the same checks as creating it; nobody is re-notified —
+    their apps are already reconnecting."""
+    import re
+    if not re.fullmatch(r"[0-9a-f]{32}", session_id or ""):
+        raise HTTPException(status_code=400, detail="Bad session id")
+    existing = MANAGER.get(session_id)
+    if existing is not None:
+        if existing.host_id != current_user.id:
+            raise HTTPException(status_code=409, detail="Taken")
+        return {"session_id": session_id, "restored": False}
+    track = body.track.model_dump()
+    if body.open or body.conversation_id is not None:
+        cid = body.conversation_id
+        group_ids: list = []
+        if cid is not None:
+            rows = (db.query(ConversationMember.user_id)
+                    .filter(ConversationMember.conversation_id == cid).all())
+            group_ids = [int(r[0]) for r in rows]
+            if current_user.id not in group_ids:
+                raise HTTPException(status_code=403,
+                                    detail="Not a member of this group")
+            audience = [u for u in group_ids if u != current_user.id]
+        else:
+            audience = _friend_ids(db, current_user.id)
+        session = MANAGER.create(
+            session_id, host_id=current_user.id, invited_ids=[], track=track,
+            host_username=current_user.username or "", open=True)
+        session.conversation_id = cid
+        session.group_ids = set(group_ids)
+        session.notify_ids = set(audience)
+    else:
+        rid = body.receiver_id
+        if rid is None or rid == current_user.id:
+            raise HTTPException(status_code=400, detail="Who with?")
+        import crud as _crud
+        if _crud.blocked_either(db, current_user.id, rid) or \
+                not _related(db, current_user.id, rid):
+            raise HTTPException(status_code=403, detail="Not available")
+        session = MANAGER.create(
+            session_id, host_id=current_user.id, invited_ids=[rid],
+            track=track, host_username=current_user.username or "")
+        # They were in it: no fresh invite pop-up when they come back.
+        session.joined_ids.add(rid)
+    session.joined_ids.add(current_user.id)
+    return {"session_id": session_id, "restored": True}
+
+
 @router.post("/rooms")
 def create_room(
     body: CreateRoomRequest,

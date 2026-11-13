@@ -2234,8 +2234,42 @@ class LiveSessionController {
   // ---------------------------------------------------------------------------
   // SOCKET
   // ---------------------------------------------------------------------------
+  // ── Surviving a server restart (a deploy wipes the in-memory sessions) ──
+  // HOST: the server says "no such session" → put it back (same id, same
+  // people, the song now), then reconnect as for any blip. LISTENER: keep
+  // reconnecting for a while instead of ending — the host is putting it back.
+  String? _sockToken;
+  DateTime? _goneSince;
+  bool _hostEnded = false;
+  static const Duration _restoreGrace = Duration(seconds: 90);
+
+  Future<bool> _restoreOnServer() async {
+    final sid = sessionId, tok = _sockToken;
+    if (sid == null || tok == null) return false;
+    try {
+      final base = await AppConfig.baseUrl;
+      final res = await http.post(
+        Uri.parse('$base/live/sessions/$sid/restore'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $tok',
+        },
+        body: jsonEncode({
+          if (!_openRoom) 'receiver_id': _logReceiverId,
+          'open': _openRoom,
+          'conversation_id': ?_logConversationId,
+          'track': {'title': currentTitle},
+        }),
+      );
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _openSocket(String sessionId, int myUserId, String token) async {
     _myUserId = myUserId;
+    _sockToken = token;
     final wsBase = await AppConfig.wsBaseUrl; // wss://aluta.ozilane.com (release)
     // The token goes as the FIRST message, never in the address (addresses
     // land in server / proxy logs).
@@ -2268,9 +2302,20 @@ class LiveSessionController {
       // 4401 (auth) are terminal: reconnecting to the same id would just loop,
       // so report 'ended' and let the UI show a clear "session ended" state.
       // Anything else (a real transport drop) stays 'disconnected' → reconnect.
-      onDone: () {
+      onDone: () async {
         final code = ch.closeCode;
-        final terminal = code == 4404 || code == 4403 || code == 4401;
+        var terminal = code == 4404 || code == 4403 || code == 4401;
+        if (code == 4404 && !_hostEnded && !_disposed) {
+          // Gone from the server, not ended by anyone (a restart).
+          _goneSince ??= DateTime.now();
+          final young =
+              DateTime.now().difference(_goneSince!) < _restoreGrace;
+          if (young &&
+              (role == LiveRole.listener || await _restoreOnServer())) {
+            onEnded?.call('disconnected'); // → the normal reconnect loop
+            return;
+          }
+        }
         // A room that's gone / closed to me must not keep a "Join" bar or a
         // ring alive anywhere.
         if (terminal) LiveRoomsRegistry.instance.removeSession(sessionId);
@@ -2337,6 +2382,7 @@ class LiveSessionController {
     // Audio is peer-to-peer now — the socket carries only JSON control. Ignore
     // any stray binary frame so it can never splice into the P2P audio buffer.
     if (message is! String) return;
+    _goneSince = null; // the session answers again (restored / reconnected)
     Map<String, dynamic> msg;
     try {
       msg = jsonDecode(message) as Map<String, dynamic>;
@@ -2644,6 +2690,7 @@ class LiveSessionController {
         }
         break;
       case 'end':
+        _hostEnded = true; // a real end — no "restart" retries after it
         final reason = (msg['reason'] as String?) ?? 'ended';
         // The host ended it → drop its Join bar / ring right away (don't wait
         // for the separate "room ended" notice, which can be missed).

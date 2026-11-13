@@ -20,6 +20,7 @@ import '../../utils/emoji_field.dart'
     show inlineEmojiPicker, emojiFloats, showFloatingCard;
 import '../gif_picker.dart';
 import '../../services/haptics.dart';
+import '../../utils/toast_helper.dart';
 import '../../utils/motion.dart';
 import '../../utils/radii.dart';
 import '../../utils/adaptive_sheet.dart';
@@ -124,6 +125,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   final FocusNode _replyFocus = FocusNode();
   bool _replySending = false;
   bool _replyEmoji = false; // full emoji panel open inside the reply card
+  // An emoji card / GIF picker is open over the status: the reply box loses
+  // focus to it, which used to RESUME the timer — so the status ran on (and
+  // skipped ahead) while you were still choosing. Nothing resumes while set.
+  bool _overlayOpen = false;
 
   StoryGroup get _group => widget.groups[_g];
   StoryItem get _story => _group.stories[_s];
@@ -174,11 +179,13 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     // Desktop: the same floating emoji card as everywhere else.
     if (emojiFloats(context)) {
       _pause();
+      _overlayOpen = true;
       showFloatingCard<void>(context,
               width: 380,
               height: 300,
               builder: (c) => inlineEmojiPicker(c, _replyCtrl))
           .then((_) {
+        _overlayOpen = false;
         if (mounted && _replyCtrl.text.trim().isEmpty && !_replyFocus.hasFocus) {
           _resume();
         }
@@ -200,6 +207,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   /// Reply with a GIF / sticker (same picker as the chat).
   Future<void> _replyWithSticker() async {
     _pause();
+    _overlayOpen = true;
     final url = await showAdaptiveSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -216,6 +224,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         ),
       ),
     );
+    _overlayOpen = false;
     if (!mounted) return;
     if (url == null || url.isEmpty) {
       _resume();
@@ -273,22 +282,22 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     if (!mounted) return;
     setState(() => _replySending = false);
     final name = _displayName();
-    final messenger = ScaffoldMessenger.maybeOf(context);
     if (sent != null) {
       if (gifUrl == null && quick == null) _replyCtrl.clear();
       _replyFocus.unfocus();
       _replyEmoji = false;
-      messenger?.showSnackBar(SnackBar(
-        content: Text('Sent to ${name.isEmpty ? 'them' : name}'),
-        duration: const Duration(milliseconds: 1600),
-        behavior: SnackBarBehavior.floating,
-      ));
-      _resume();
+      Haptics.lightImpact();
+      // Aluta's own toast (not a grey system bar), and a short beat before
+      // the status moves on — so you see it landed.
+      showToast(context, 'Sent to ${name.isEmpty ? 'them' : name} 💞',
+          type: ToastType.success);
+      _pause();
+      Future.delayed(const Duration(milliseconds: 1200), () {
+        if (mounted && !_replyFocus.hasFocus && !_overlayOpen) _resume();
+      });
     } else {
-      messenger?.showSnackBar(const SnackBar(
-        content: Text('Couldn\'t send — check your connection'),
-        behavior: SnackBarBehavior.floating,
-      ));
+      showToast(context, 'Couldn’t send — check your connection',
+          type: ToastType.error);
     }
   }
 
@@ -806,7 +815,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   }
 
   void _resume() {
-    if (!_paused) return;
+    if (!_paused || _overlayOpen) return;
     _paused = false;
     if (mounted) setState(() {}); // GIF resumes with the bar
     // Still loading / waiting for the GIF's first frame: that starts the

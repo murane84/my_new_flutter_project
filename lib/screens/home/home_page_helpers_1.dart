@@ -774,7 +774,9 @@ extension _HomePageHelpers1 on HomePageState {
     if (accept != true) {
       // Explicit Decline (false) → tell the host so they can end or keep
       // waiting. Barrier-dismiss (null) leaves it pending, no notification.
-      if (accept == false) {
+      // (A "rejoin" I don't take is just not now — the host isn't told
+      // I declined a session I was already part of.)
+      if (accept == false && data['rejoin'] != true) {
         ApiService().declineLiveSession(sessionId);
       }
       return;

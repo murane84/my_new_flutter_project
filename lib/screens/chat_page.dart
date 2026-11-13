@@ -6075,6 +6075,12 @@ class _ChatPageState extends State<ChatPage>
                   : _reactionOrder(),
               mine: _myReactionOn(msg),
               onReact: (e) => _addReaction(msg, e),
+              onReply: (tomb || pending || msgId.startsWith('tmp-'))
+                  ? null
+                  : () {
+                      setState(() => _replyTo = msg);
+                      _composerFocus.requestFocus();
+                    },
               child: GestureDetector(
               // Double-tap a text message → ❤️ (again → take it back).
               onDoubleTap: ((msg['message_type'] ?? 'text') == 'text' &&
@@ -9112,16 +9118,19 @@ class _HoverChevron extends StatefulWidget {
     this.reactions = const [],
     this.mine,
     this.onReact,
+    this.onReply,
   });
   final bool enabled;
   final bool isMe;
   final void Function(Offset globalAnchor) onOpen;
   final Widget child;
-  // Desktop quick reactions: a 😊 chip beside the chevron that unfolds the
-  // emoji row on hover — one click reacts.
+  // Desktop hover: one slim glass pill (😊 · ↩ · ⌄) on the bubble's corner;
+  // clicking 😊 unfolds the reaction strip — one click reacts.
   final List<String> reactions;
   final String? mine;
   final ValueChanged<String>? onReact;
+  // ↩ in the pill (null = no reply for this message).
+  final VoidCallback? onReply;
 
   @override
   State<_HoverChevron> createState() => _HoverChevronState();
@@ -9189,7 +9198,7 @@ class _HoverChevronState extends State<_HoverChevron> {
       _below = false;
       return true;
     }
-    const room = 34.0; // chip / row height + gap
+    const room = 26.0; // the pill's height beyond the bubble's edge + gap
     final top = me.localToGlobal(Offset.zero).dy;
     final bottom = top + me.size.height;
     final vTop = sc.localToGlobal(Offset.zero).dy;
@@ -9213,7 +9222,7 @@ class _HoverChevronState extends State<_HoverChevron> {
       setState(() => _closing = false);
     }
     if (!_hover) setState(() => _hover = true);
-    if (_canReact && !_portal.isShowing && _placeChip()) _portal.show();
+    if (!_portal.isShowing && _placeChip()) _portal.show();
   }
 
   /// Fold the chip / row away smoothly (fade + shrink), THEN drop the
@@ -9243,87 +9252,129 @@ class _HoverChevronState extends State<_HoverChevron> {
     });
   }
 
-  Widget _chip(ColorScheme scheme, Widget child) => Container(
-        width: 26,
-        height: 26,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          shape: BoxShape.circle,
-          border:
-              Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.28),
-              blurRadius: Depth.sm,
-              offset: const Offset(0, 2),
+  /// Aluta's glass: see-through, a whisper of an accent edge, a soft shadow
+  /// — no solid white, so it never reads as a block over the chat.
+  Widget _glass(ColorScheme scheme, Widget child,
+      {EdgeInsets padding = EdgeInsets.zero, double? height}) {
+    final dark = scheme.brightness == Brightness.dark;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: dark ? 0.32 : 0.10),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            height: height,
+            padding: padding,
+            decoration: BoxDecoration(
+              color: scheme.surface.withValues(alpha: dark ? 0.45 : 0.55),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                  color: dark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : scheme.primary.withValues(alpha: 0.14)),
             ),
-          ],
+            child: child,
+          ),
         ),
-        child: child,
-      );
+      ),
+    );
+  }
 
   Widget _floating(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final content = _rowOpen
-        ? Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            decoration: BoxDecoration(
-              color: scheme.surface,
-              borderRadius: BorderRadius.circular(Radii.xl),
-              border: Border.all(
-                  color: scheme.outlineVariant.withValues(alpha: 0.55)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.28),
-                  blurRadius: Depth.sm,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+    final ink = scheme.onSurfaceVariant;
+    // The slim pill: 😊 · reply · ⌄ — one object, nothing stacked.
+    final pill = _glass(
+      scheme,
+      height: 22,
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      Row(mainAxisSize: MainAxisSize.min, children: [
+        if (_canReact)
+          _PillButton(
+            index: 0,
+            tooltip: 'React',
+            onTap: (_) => setState(() => _rowOpen = true),
+            child: const Text('😊',
+                style: TextStyle(fontSize: 13, height: 1)),
+          ),
+        if (widget.onReply != null)
+          _PillButton(
+            index: 1,
+            tooltip: 'Reply',
+            onTap: (_) {
+              widget.onReply!();
+              _overFloat = false;
+              setState(() => _hover = false);
+              _fadeOut();
+            },
+            child: Icon(Icons.reply_rounded, size: 14, color: ink),
+          ),
+        _PillButton(
+          index: 2,
+          tooltip: 'More',
+          onTap: (pos) => widget.onOpen(pos),
+          child: Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: ink),
+        ),
+      ]),
+    );
+    final row = _glass(
+      scheme,
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+      Row(mainAxisSize: MainAxisSize.min, children: [
+        for (var i = 0; i < widget.reactions.length; i++)
+          // Each emoji pops in a beat after the one before — the strip
+          // unfolds out of the 😊.
+          TweenAnimationBuilder<double>(
+            key: ValueKey('pop-${widget.reactions[i]}'),
+            tween: Tween(begin: 0, end: 1),
+            duration: Duration(milliseconds: 180 + 35 * i),
+            curve: Curves.easeOutBack,
+            builder: (_, t, child) => Opacity(
+              opacity: t.clamp(0.0, 1.0),
+              child: Transform.scale(scale: 0.3 + 0.7 * t, child: child),
             ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              for (var i = 0; i < widget.reactions.length; i++)
-                // Each emoji pops in a beat after the one before — the row
-                // unrolls out of the 😊 like the volume pill out of its icon.
-                TweenAnimationBuilder<double>(
-                  key: ValueKey('pop-${widget.reactions[i]}'),
-                  tween: Tween(begin: 0, end: 1),
-                  duration: Duration(milliseconds: 160 + 35 * i),
-                  curve: Curves.easeOutBack,
-                  builder: (_, t, child) => Opacity(
-                    opacity: t.clamp(0.0, 1.0),
-                    child: Transform.scale(scale: 0.5 + 0.5 * t, child: child),
-                  ),
-                  child: _HoverEmoji(
-                    emoji: widget.reactions[i],
-                    mine: widget.reactions[i] == widget.mine,
-                    scheme: scheme,
-                    onTap: () {
-                      final e = widget.reactions[i];
-                      widget.onReact?.call(e);
-                      // A little "sent" beat, then the row folds away.
-                      _overFloat = false;
-                      setState(() => _hover = false);
-                      _fadeOut();
-                    },
-                  ),
-                ),
-            ]),
-          )
-        : GestureDetector(
-            onTap: () => setState(() => _rowOpen = true),
-            child: _chip(
-                scheme,
-                const Text('😊', style: TextStyle(fontSize: 14, height: 1))),
-          );
-    // Chip ⇄ row: the pill WIDENS from the chip's corner (AnimatedSize, anchored
-    // to the bubble side) while the two cross-fade; the whole float fades /
-    // grows in on show and shrinks / fades out on hide.
+            child: _HoverEmoji(
+              emoji: widget.reactions[i],
+              mine: widget.reactions[i] == widget.mine,
+              scheme: scheme,
+              onTap: () {
+                final e = widget.reactions[i];
+                widget.onReact?.call(e);
+                // A little "sent" beat, then the strip folds away.
+                _overFloat = false;
+                setState(() => _hover = false);
+                _fadeOut();
+              },
+            ),
+          ),
+        // ＋ → the full menu (every emoji + the message actions).
+        _PillButton(
+          index: widget.reactions.length,
+          tooltip: 'More emoji',
+          size: const Size(30, 30),
+          onTap: (pos) => widget.onOpen(pos),
+          child: Icon(Icons.add_rounded, size: 18, color: ink),
+        ),
+      ]),
+    );
+    // Pill ⇄ strip: it WIDENS sideways out of the 😊 (AnimatedSize anchored
+    // to the bubble's side) while the two cross-fade; the whole float grows
+    // out of the bubble's corner on show and tucks back into it on hide.
     final anchor = _below
         ? (widget.isMe ? Alignment.topRight : Alignment.topLeft)
         : (widget.isMe ? Alignment.bottomRight : Alignment.bottomLeft);
     final morph = AnimatedSize(
-      duration: Motion.quick,
+      duration: const Duration(milliseconds: 260),
       curve: Curves.easeOutCubic,
       alignment: anchor,
       child: AnimatedSwitcher(
@@ -9333,25 +9384,30 @@ class _HoverChevronState extends State<_HoverChevron> {
         layoutBuilder: (cur, prev) => Stack(
             alignment: anchor, children: [...prev, ?cur]),
         child: KeyedSubtree(
-            key: ValueKey(_rowOpen ? 'row' : 'chip'), child: content),
+            key: ValueKey(_rowOpen ? 'row' : 'pill'),
+            child: _rowOpen ? row : pill),
       ),
     );
+    final towardBubble = _below ? -6.0 : 6.0;
     final shown = TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: Motion.quick,
+      duration: const Duration(milliseconds: 320),
       curve: Curves.easeOutBack,
       builder: (_, t, child) => Opacity(
         opacity: t.clamp(0.0, 1.0),
-        child: Transform.scale(
-            scale: 0.6 + 0.4 * t, alignment: anchor, child: child),
+        child: Transform.translate(
+          offset: Offset(0, towardBubble * (1 - t)),
+          child: Transform.scale(
+              scale: 0.45 + 0.55 * t, alignment: anchor, child: child),
+        ),
       ),
       child: AnimatedOpacity(
-        duration: Motion.quick,
+        duration: const Duration(milliseconds: 130),
         opacity: _closing ? 0 : 1,
         child: AnimatedScale(
-          duration: Motion.quick,
+          duration: const Duration(milliseconds: 140),
           curve: Curves.easeIn,
-          scale: _closing ? 0.7 : 1,
+          scale: _closing ? 0.5 : 1,
           alignment: anchor,
           child: morph,
         ),
@@ -9360,7 +9416,7 @@ class _HoverChevronState extends State<_HoverChevron> {
     return CompositedTransformFollower(
       link: _link,
       showWhenUnlinked: false,
-      // Just above the bubble's top corner (outside it — never over the
+      // On the bubble's top corner, half over its edge (never over the
       // text): right corner for my bubbles, left for theirs. Under the
       // bubble instead when it sits at the top edge of the chat.
       targetAnchor: _below
@@ -9369,7 +9425,7 @@ class _HoverChevronState extends State<_HoverChevron> {
       followerAnchor: _below
           ? (widget.isMe ? Alignment.topRight : Alignment.topLeft)
           : (widget.isMe ? Alignment.bottomRight : Alignment.bottomLeft),
-      offset: Offset(widget.isMe ? -8 : 40, _below ? -4 : 4),
+      offset: Offset(widget.isMe ? -6 : 40, _below ? -11 : 11),
       child: Align(
         alignment: _below
             ? (widget.isMe ? Alignment.topRight : Alignment.topLeft)
@@ -9384,7 +9440,6 @@ class _HoverChevronState extends State<_HoverChevron> {
               _outTimer?.cancel();
               setState(() => _closing = false);
             }
-            if (!_rowOpen) setState(() => _rowOpen = true);
           },
           onExit: (_) {
             _overFloat = false;
@@ -9399,7 +9454,6 @@ class _HoverChevronState extends State<_HoverChevron> {
   @override
   Widget build(BuildContext context) {
     if (!widget.enabled) return widget.child;
-    final scheme = Theme.of(context).colorScheme;
     return OverlayPortal(
       controller: _portal,
       overlayChildBuilder: _floating,
@@ -9411,38 +9465,78 @@ class _HoverChevronState extends State<_HoverChevron> {
             if (!_hover) _enterBubble();
           },
           onExit: (_) => _leaveSoon(),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              _HoverScope(hovering: _hover, child: widget.child),
-              Positioned(
-                // Sit ON the bubble's rounded top corner (overlapping
-                // inward), so it hugs the corner. Fades / grows in on hover
-                // and out on leave — no snap.
-                top: 0,
-                left: widget.isMe ? null : 42,
-                right: widget.isMe ? 8 : null,
-                child: IgnorePointer(
-                  ignoring: !_hover,
-                  child: AnimatedOpacity(
-                    duration: Motion.quick,
-                    opacity: _hover ? 1 : 0,
-                    child: AnimatedScale(
-                      duration: Motion.quick,
-                      curve: _hover ? Curves.easeOutBack : Curves.easeIn,
-                      scale: _hover ? 1 : 0.6,
-                      child: GestureDetector(
-                        onTapDown: (d) => widget.onOpen(d.globalPosition),
-                        child: _chip(
-                            scheme,
-                            Icon(Icons.expand_more_rounded,
-                                size: 18, color: accentInk(scheme))),
-                      ),
-                    ),
-                  ),
-                ),
+          // The bubble lifts a hair while the pill is out — the two move
+          // as one.
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(end: _hover ? 1 : 0),
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutBack,
+            builder: (_, t, child) =>
+                Transform.translate(offset: Offset(0, -1.0 * t), child: child),
+            child: _HoverScope(hovering: _hover, child: widget.child),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A button in the hover pill / reaction strip: no fill until the pointer
+/// is on it (then a soft tint), staggered in after the pill appears.
+class _PillButton extends StatefulWidget {
+  const _PillButton({
+    required this.child,
+    required this.onTap,
+    required this.tooltip,
+    this.index = 0,
+    this.size = const Size(21, 20),
+  });
+  final Widget child;
+  final void Function(Offset globalPos) onTap;
+  final String tooltip;
+  final int index;
+  final Size size;
+  @override
+  State<_PillButton> createState() => _PillButtonState();
+}
+
+class _PillButtonState extends State<_PillButton> {
+  bool _on = false;
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 200 + 40 * widget.index),
+      curve: Curves.easeOutBack,
+      builder: (_, t, child) => Opacity(
+        opacity: t.clamp(0.0, 1.0),
+        child: Transform.translate(
+            offset: Offset(0, 4 * (1 - t)), child: child),
+      ),
+      child: Tooltip(
+        message: widget.tooltip,
+        waitDuration: const Duration(milliseconds: 600),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _on = true),
+          onExit: (_) => setState(() => _on = false),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (d) => widget.onTap(d.globalPosition),
+            child: AnimatedContainer(
+              duration: Motion.instant,
+              width: widget.size.width,
+              height: widget.size.height,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: _on
+                    ? scheme.primary.withValues(alpha: 0.10)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(999),
               ),
-            ],
+              child: widget.child,
+            ),
           ),
         ),
       ),
@@ -9480,13 +9574,16 @@ class _HoverEmojiState extends State<_HoverEmoji> {
           duration: Motion.instant,
           scale: _on ? 1.35 : 1,
           child: Container(
-            padding: const EdgeInsets.all(4),
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
             decoration: widget.mine
                 ? BoxDecoration(
                     color: widget.scheme.primary.withValues(alpha: 0.18),
                     shape: BoxShape.circle)
                 : null,
-            child: Text(widget.emoji, style: const TextStyle(fontSize: 19)),
+            child: Text(widget.emoji,
+                style: const TextStyle(fontSize: 19, height: 1)),
           ),
         ),
       ),

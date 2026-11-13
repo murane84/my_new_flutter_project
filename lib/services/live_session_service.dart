@@ -321,6 +321,18 @@ class LiveSessionController {
   bool _receivingPrefetch = false;
   final BytesBuilder _prefetchBuf = BytesBuilder(copy: false);
   String? _prefetchHash;
+  // Listener, after a trimmed fast-join: the host back-fills the head it
+  // skipped (`head_start` → bytes → `head_eos`), so a repeat or a jump back
+  // has the whole song to play. [_fullSong] = head + tail, swapped into the
+  // player only when it's needed (no hiccup mid-listen); [_headCacheHash]
+  // files the complete song in the cache. [_waitingForHost]: the host is
+  // somewhere we don't hold yet — we wait silently instead of replaying the
+  // first second of our buffer over and over.
+  bool _receivingHead = false;
+  final BytesBuilder _headBuf = BytesBuilder(copy: false);
+  Uint8List? _fullSong;
+  String? _headCacheHash;
+  bool _waitingForHost = false;
   // Listener's view of the host's transport, tracked from session_state / play /
   // pause / position so that when a freshly-buffered track's `eos` fires we
   // resume at the host's position and DON'T autoplay if the host is paused.
@@ -859,7 +871,9 @@ class LiveSessionController {
         if (player.playing) player.pause(); // only my ears
       } else if (isRoomSession && _hostPlaying && _listenerStarted) {
         // Room played on: back in at the live spot, no countdown.
-        _listenerSeekReal(_hostPositionMs).then((_) => player.play());
+        _listenerSeekReal(_hostPositionMs).then((ok) {
+          if (ok) player.play();
+        });
       }
       // 1:1: the host resumes for both with a 3·2·1 (see _onPeerCall).
     }
@@ -873,7 +887,9 @@ class LiveSessionController {
       return false;
     }
     if (player.playing) return true;
-    _listenerSeekReal(_hostPositionMs).then((_) => player.play());
+    _listenerSeekReal(_hostPositionMs).then((ok) {
+      if (ok) player.play();
+    });
     return true;
   }
 
@@ -1392,6 +1408,28 @@ class LiveSessionController {
         'playing': player.playing,
       })));
       _log('host: sent eos');
+      // Fast-join back-fill: now send the head we skipped, so the listener
+      // holds the whole song — a repeat / jump back then plays from 0:00
+      // instead of sticking at the spot they joined.
+      if (startByte > 0 && p.takesHead) {
+        ch.send(RTCDataChannelMessage(
+            jsonEncode({'t': 'head_start', 'bytes': startByte})));
+        sinceYield = 0;
+        for (var offset = 0; offset < startByte; offset += chunkSize) {
+          if (p.streamEpoch != epoch) return; // superseded by a newer track
+          final end =
+              (offset + chunkSize < startByte) ? offset + chunkSize : startByte;
+          ch.send(RTCDataChannelMessage.fromBinary(
+              Uint8List.sublistView(bytes, offset, end)));
+          if (++sinceYield >= framesPerBurst) {
+            sinceYield = 0;
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+          }
+        }
+        if (p.streamEpoch != epoch) return;
+        ch.send(RTCDataChannelMessage(jsonEncode({'t': 'head_eos'})));
+        _log('host: back-filled the head ($startByte bytes)');
+      }
     } catch (e) {
       _log('host: stream error: $e');
       onError?.call(e);
@@ -1424,7 +1462,9 @@ class LiveSessionController {
     try {
       final hashes = LiveAudioCache.instance.knownKeys();
       ch.send(RTCDataChannelMessage(
-          jsonEncode({'t': 'manifest', 'hashes': hashes})));
+          // 'head': this build takes the skipped head after a fast-join
+          // (older builds would mix those bytes into their buffer).
+          jsonEncode({'t': 'manifest', 'hashes': hashes, 'caps': ['head']})));
     } catch (_) {}
   }
 
@@ -1643,6 +1683,8 @@ class LiveSessionController {
           // The listener told us which songs it can play instantly → fold into
           // the set the picker consults. Advisory only.
           _ingestManifest(j);
+          final caps = j['caps'];
+          if (caps is List && caps.contains('head')) p.takesHead = true;
           break;
       }
     } catch (_) {}
@@ -1764,6 +1806,8 @@ class LiveSessionController {
         // audio for the current track.
         if (_receivingPrefetch) {
           _prefetchBuf.add(m.binary);
+        } else if (_receivingHead) {
+          _headBuf.add(m.binary); // the skipped head, arriving after the tail
         } else {
           _incoming.add(m.binary);
         }
@@ -1787,6 +1831,7 @@ class LiveSessionController {
             // full-from-start transfer.
             final base = j['base_ms'];
             _listenerBaseMs = (base is int && base > 0) ? base : 0;
+            _resetHead();
             _incoming.clear();
             _listenerStarted = false;
             try {
@@ -1808,8 +1853,18 @@ class LiveSessionController {
             if (h != null && _listenerBaseMs == 0 && full.isNotEmpty) {
               unawaited(LiveAudioCache.instance.put(h, full));
             }
+            // A trimmed tail: the head follows — the complete song is cached
+            // once it's here (see head_eos).
+            _headCacheHash = _listenerBaseMs > 0 ? h : null;
             _pendingCacheHash = null;
             await _startListenerPlayback(autoplay: true);
+            break;
+          case 'head_start':
+            _receivingHead = true;
+            _headBuf.clear();
+            break;
+          case 'head_eos':
+            await _onHeadArrived();
             break;
           case 'prefetch_offer':
             {
@@ -1894,6 +1949,7 @@ class LiveSessionController {
       await player.stop();
     } catch (_) {}
     try {
+      _resetHead(); // a full cached copy: nothing to back-fill
       await _setPlayerBytes(bytes, mime);
       if (_hostPositionMs > 0) {
         await _listenerSeekReal(_hostPositionMs);
@@ -2191,12 +2247,79 @@ class LiveSessionController {
       player.position.inMilliseconds + _listenerBaseMs;
 
   /// Seek the listener's player to a REAL host position, translated onto the
-  /// (possibly trimmed) local buffer timeline.
-  Future<void> _listenerSeekReal(int realMs) async {
+  /// (possibly trimmed) local buffer timeline. Returns false when that spot
+  /// isn't on this device yet (the host repeated / jumped back before the
+  /// skipped head arrived): we then wait silently — never replaying the
+  /// first second of our buffer in a loop — and pick up as soon as the host
+  /// reaches audio we hold, or the head arrives. Callers only press play on
+  /// true.
+  Future<bool> _listenerSeekReal(int realMs) async {
+    if (realMs < _listenerBaseMs) {
+      if (_fullSong != null) {
+        await _useFullSong(); // the whole song is here: play from anywhere
+      } else {
+        _waitingForHost = true;
+        try {
+          await player.pause();
+          await player.seek(Duration.zero);
+        } catch (_) {}
+        return false;
+      }
+    }
+    _waitingForHost = false;
     final local = realMs - _listenerBaseMs;
     try {
       await player.seek(Duration(milliseconds: local < 0 ? 0 : local));
     } catch (_) {}
+    return true;
+  }
+
+  void _resetHead() {
+    _receivingHead = false;
+    _headBuf.clear();
+    _fullSong = null;
+    _headCacheHash = null;
+    _waitingForHost = false;
+  }
+
+  /// The skipped head is here: head + tail = the whole song. Cache it, and
+  /// keep it ready — swapped in only when needed (or right away if we were
+  /// waiting for exactly this).
+  Future<void> _onHeadArrived() async {
+    _receivingHead = false;
+    final head = _headBuf.toBytes();
+    _headBuf.clear();
+    final tail = _incoming.toBytes();
+    if (head.isEmpty || tail.isEmpty || _listenerBaseMs == 0) return;
+    final full = Uint8List(head.length + tail.length)
+      ..setRange(0, head.length, head)
+      ..setRange(head.length, head.length + tail.length, tail);
+    _fullSong = full;
+    final h = _headCacheHash;
+    _headCacheHash = null;
+    if (h != null) unawaited(LiveAudioCache.instance.put(h, full));
+    _log('listener: whole song here (${full.length} bytes)');
+    if (_waitingForHost && _listenerStarted) {
+      await _useFullSong();
+      await _listenerSeekReal(_hostPositionMs);
+      if (_hostPlaying && !_onCall) unawaited(player.play());
+    }
+  }
+
+  /// Swap the trimmed tail for the whole song (base back to 0).
+  Future<void> _useFullSong() async {
+    final full = _fullSong;
+    if (full == null) return;
+    _fullSong = null;
+    _incoming.clear();
+    _incoming.add(full);
+    _listenerBaseMs = 0;
+    _waitingForHost = false;
+    try {
+      await _setPlayerBytes(full, _incomingMime);
+    } catch (e) {
+      _log('listener: whole-song swap failed: $e');
+    }
   }
 
   Future<void> _startListenerPlayback({bool autoplay = true}) async {
@@ -2218,10 +2341,13 @@ class LiveSessionController {
       // mid-track, lands us in sync instead of blasting from 0:00. Translated
       // onto the local buffer timeline (a no-op when the buffer is full-from-0,
       // an offset when the host trimmed the already-played head).
+      var ok = true;
       if (_hostPositionMs > _listenerBaseMs) {
-        await _listenerSeekReal(_hostPositionMs);
+        ok = await _listenerSeekReal(_hostPositionMs);
       }
-      if (autoplay && _hostPlaying && !_onCall) unawaited(player.play());
+      if (ok && autoplay && _hostPlaying && !_onCall) {
+        unawaited(player.play());
+      }
     } catch (e) {
       // A playback failure was previously silent — surface it so the listener
       // screen can show an error instead of sitting mute at 00:00.
@@ -2665,8 +2791,9 @@ class LiveSessionController {
         if (!_listenerStarted) break;
         // On a call: keep up with the position, but stay quiet till it ends.
         if (_onCall) break;
-        if (playPos is int) await _listenerSeekReal(playPos);
-        unawaited(player.play()); // future resolves on track END — don't await
+        final ok = playPos is int ? await _listenerSeekReal(playPos) : true;
+        // (Not on this device yet → we wait; position updates resume us.)
+        if (ok) unawaited(player.play()); // resolves on track END — don't await
         break;
       case 'pause':
         _hostPlaying = false;
@@ -2682,10 +2809,22 @@ class LiveSessionController {
         if (pos is int) {
           _hostPositionMs = pos;
           if (_listenerStarted) {
+            if (_waitingForHost) {
+              // Waiting at the spot we joined: the host just reached audio we
+              // hold → back in, in sync. (Still before it → keep waiting.)
+              if (pos >= _listenerBaseMs || _fullSong != null) {
+                final ok = await _listenerSeekReal(pos);
+                if (ok && _hostPlaying && !_onCall) unawaited(player.play());
+              }
+              break;
+            }
             // Only correct if we've drifted noticeably (>1.5s) to avoid stutter.
             // Compare on the REAL timeline (buffer may be trimmed).
             final drift = (_listenerRealPositionMs - pos).abs();
-            if (drift > 1500) await _listenerSeekReal(pos);
+            if (drift > 1500) {
+              final ok = await _listenerSeekReal(pos);
+              if (!ok) break; // waiting silently for the host
+            }
           }
         }
         break;
@@ -2888,6 +3027,7 @@ class LiveSessionController {
     _prefetchBuf.clear();
     _prefetchHash = null;
     _pendingCacheHash = null;
+    _resetHead();
     _peerInstantHashes.clear();
     try {
       await player.stop();
@@ -2925,6 +3065,9 @@ class _Peer {
   // True while a LIVE track transfer to this peer is in progress, so a prefetch
   // never starts mid-stream and interleave-corrupts the audio on the channel.
   bool liveStreaming = false;
+  // This listener's build accepts the fast-join head back-fill (its manifest
+  // says so); older builds don't get it.
+  bool takesHead = false;
   // Cache offer in flight for this peer: the hash we offered and an epoch that a
   // have/need reply (or a newer offer) supersedes, cancelling the stream-anyway
   // fallback timer.

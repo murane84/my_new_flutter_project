@@ -766,6 +766,36 @@ class LiveSessionController {
   /// Listener → host transport request. The host executes it and broadcasts
   /// the result so playback stays in sync. Actions: playpause / play / pause /
   /// next / prev / seek (with positionMs) / play_index (with index).
+  /// Listener side: who's hosting me (for "save our spot" DMs).
+  int? get hostUserId => _lHostId;
+
+  /// A small note to everyone in the session (pause reason, "ready when you
+  /// are", …). The server fans it out; this device handles its own copy.
+  void sendNote(String type, [Map<String, dynamic> extra = const {}]) {
+    _sendControl({'type': type, 'by': ?_myUserId, ...extra});
+  }
+
+  bool _countingDown = false;
+
+  /// HOST: play after a 3·2·1 everyone sees, so the music drops on the same
+  /// beat for all. Already playing (or counting) → plain play.
+  Future<void> resumeWithCountdown(int? by) async {
+    if (role != LiveRole.host) return;
+    if (player.playing || _countingDown) {
+      unawaited(player.play());
+      return;
+    }
+    _countingDown = true;
+    _sendControl({'type': 'countdown', 'by': ?by, 'secs': 3});
+    onEvent?.call({'type': 'countdown', 'by': ?by, 'secs': 3, 'local': true});
+    await Future.delayed(const Duration(seconds: 3));
+    _countingDown = false;
+    if (_disposed) return;
+    _ctlBy = by;
+    _ctlAt = DateTime.now();
+    unawaited(player.play()); // completes on track END — don't await
+  }
+
   void requestControl(String action, {int? positionMs, int? index}) {
     _sendControl({
       'type': 'ctl',
@@ -2253,10 +2283,12 @@ class LiveSessionController {
         }
         switch (action) {
           case 'playpause':
-            player.playing ? player.pause() : player.play();
+            player.playing
+                ? player.pause()
+                : resumeWithCountdown(_asInt(msg['by']));
             break;
           case 'play':
-            player.play();
+            resumeWithCountdown(_asInt(msg['by']));
             break;
           case 'pause':
             player.pause();
@@ -2671,7 +2703,10 @@ class LiveSessionController {
     }
   }
 
+  bool _disposed = false;
+
   Future<void> dispose() async {
+    _disposed = true;
     await _teardown();
     await player.dispose();
   }

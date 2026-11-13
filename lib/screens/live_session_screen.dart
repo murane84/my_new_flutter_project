@@ -44,6 +44,7 @@ import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../utils/adaptive_sheet.dart';
 import '../utils/depth.dart';
+import 'live/live_pause_fx.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
 /// Presented with `showDialog(...)` so it floats over the chat instead of
@@ -603,7 +604,8 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       case 'host_reconnecting':
         // Listener side: the host had a network glitch. Show a waiting state
         // (playback was paused by the controller) until they come back.
-        setState(() => _status = '${widget.peerName} reconnecting…');
+        setState(() => _status =
+            '${widget.peerName}’s connection is catching up…');
         break;
       case 'meta':
       case 'track_change':
@@ -649,7 +651,134 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       case 'pause':
         _onPlayPauseBy(e['type'] == 'play', (e['by'] as num?)?.toInt());
         break;
+      case 'countdown':
+        _startCountdown((e['secs'] as num?)?.toInt() ?? 3);
+        break;
+      case 'pause_reason':
+        _onPauseReason((e['by'] as num?)?.toInt(), '${e['reason']}');
+        break;
+      case 'ready_nudge':
+        _onReadyNudge((e['by'] as num?)?.toInt(), (e['to'] as num?)?.toInt());
+        break;
     }
+  }
+
+  // ── Pauses, the human way ────────────────────────────────────────────────
+  int? _pausedBy; // who paused (null: playing / unknown)
+  String? _pauseReason; // 'brb' | 'call' | 'love'
+  bool _showReasons = false; // I just paused → the three chips
+  Timer? _reasonsTimer;
+  bool _offerLater = false; // paused 10+ min → "pick it up later"
+  Timer? _laterTimer;
+  int? _countdown; // 3 · 2 · 1 before the music drops
+  Timer? _countTimer;
+  DateTime? _nudgedAt;
+
+  String _nameOfId(int? id) {
+    if (id == null) return 'Someone';
+    if (id == widget.myUserId) return 'You';
+    final i = _participants.indexWhere((x) => x.id == id);
+    return i != -1 ? _participants[i].name : widget.peerName;
+  }
+
+  String _pauseLine() {
+    final who = _nameOfId(_pausedBy);
+    final r = pauseReasons[_pauseReason];
+    return '⏸ $who paused${r == null ? ' the song' : ' · $r'}';
+  }
+
+  void _startCountdown(int secs) {
+    if (!mounted) return;
+    _countTimer?.cancel();
+    Haptics.selectionClick();
+    setState(() {
+      _countdown = secs;
+      _showReasons = false;
+      _offerLater = false;
+    });
+    _countTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return t.cancel();
+      final n = (_countdown ?? 1) - 1;
+      setState(() => _countdown = n <= 0 ? null : n);
+      if (n <= 0) {
+        t.cancel();
+        Haptics.lightImpact();
+      } else {
+        Haptics.selectionClick();
+      }
+    });
+  }
+
+  void _sendPauseReason(String key) {
+    Haptics.selectionClick();
+    _c.sendNote('pause_reason', {'reason': key});
+    _onPauseReason(widget.myUserId, key);
+  }
+
+  void _onPauseReason(int? by, String key) {
+    if (!mounted || !pauseReasons.containsKey(key)) return;
+    if (_pausedBy != null && by != _pausedBy) return; // not this pause
+    setState(() {
+      _pauseReason = key;
+      _showReasons = false;
+      _status = _pauseLine();
+      _reactionFeed.insert(
+          0,
+          _ReactionLog(_nameOfId(by), '⏸', DateTime.now(),
+              text: 'paused · ${pauseReasons[key]}',
+              mine: by == widget.myUserId,
+              avatar: _avatarFor(by)));
+    });
+  }
+
+  void _sendReadyNudge() {
+    final to = _pausedBy;
+    if (to == null) return;
+    final now = DateTime.now();
+    if (_nudgedAt != null &&
+        now.difference(_nudgedAt!) < const Duration(seconds: 30)) {
+      _snack('They know — give them a moment 💞');
+      return;
+    }
+    _nudgedAt = now;
+    Haptics.lightImpact();
+    _c.sendNote('ready_nudge', {'to': to});
+    _onReadyNudge(widget.myUserId, to);
+  }
+
+  void _onReadyNudge(int? by, int? to) {
+    if (!mounted) return;
+    final mine = by == widget.myUserId;
+    if (to == widget.myUserId && !mine) {
+      Haptics.mediumImpact();
+      _snack('💞 ${_nameOfId(by)} is ready when you are');
+    }
+    setState(() {
+      _reactionFeed.insert(
+          0,
+          _ReactionLog(_nameOfId(by), '💞', DateTime.now(),
+              text: to == widget.myUserId
+                  ? 'is ready when you are'
+                  : 'is ready when ${_nameOfId(to) == 'You' ? 'you are' : '${_nameOfId(to)} is'}',
+              mine: mine,
+              avatar: _avatarFor(by)));
+    });
+  }
+
+  /// Paused a long while → save the spot as a note in our chat.
+  Future<void> _saveOurSpot() async {
+    final peer = _isHost ? widget.receiverId : _c.hostUserId;
+    if (peer == null) return;
+    final ms = _c.livePosition.inMilliseconds;
+    final at = '${ms ~/ 60000}:${((ms ~/ 1000) % 60).toString().padLeft(2, '0')}';
+    final sent = await ApiService().sendMessage(peer,
+        '⏸ We paused “$_title” at $at — let’s pick it up later together 🎧');
+    if (!mounted) return;
+    setState(() => _offerLater = false);
+    _snack(sent != null
+        ? 'Saved in your chat — pick it up whenever you’re both ready 💞'
+        : 'Couldn’t save it — try again',
+        type: sent != null ? ToastType.success : ToastType.error);
   }
 
   // Who paused / resumed — so a pause reads as a person, never as the
@@ -663,11 +792,27 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       final i = _participants.indexWhere((x) => x.id == by);
       who = i != -1 ? _participants[i].name : widget.peerName;
     }
+    _reasonsTimer?.cancel();
+    _laterTimer?.cancel();
+    _pausedBy = playing ? null : by;
+    _pauseReason = null;
+    _showReasons = !playing && me;
+    _offerLater = false;
+    if (_showReasons) {
+      _reasonsTimer = Timer(const Duration(seconds: 12), () {
+        if (mounted) setState(() => _showReasons = false);
+      });
+    }
+    if (!playing && by != null && !(widget.isRoom)) {
+      _laterTimer = Timer(const Duration(minutes: 10), () {
+        if (mounted && _pausedBy != null) setState(() => _offerLater = true);
+      });
+    }
     final line = by == null
         ? (playing ? 'Playing' : 'Paused')
         : playing
             ? (me ? '▶ You resumed the song' : '▶ $who resumed the song')
-            : (me ? '⏸ You paused the song' : '⏸ $who paused the song');
+            : _pauseLine();
     setState(() {
       _status = line;
       if (by != null) {
@@ -1410,6 +1555,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     _awayTimer?.cancel();
     _discSpin.dispose();
     _byTimer?.cancel();
+    _reasonsTimer?.cancel();
+    _laterTimer?.cancel();
+    _countTimer?.cancel();
     _stagePlaying.dispose();
     _stageCheer.dispose();
     _commentCtrl.dispose();
@@ -1676,7 +1824,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                     ? null
                     : () {
                         if (_isHost) {
-                          playing ? _c.player.pause() : _c.player.play();
+                          playing
+                              ? _c.player.pause()
+                              : _c.resumeWithCountdown(widget.myUserId);
                         } else {
                           _c.requestControl(playing ? 'pause' : 'play');
                         }
@@ -2273,6 +2423,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                         size: 12, color: accentInk(scheme)),
                   ),
                 ),
+              // Paused, not gone: everyone here keeps a breathing dot.
+              if (_pausedBy != null)
+                const Positioned(top: -1, left: -1, child: StillHereDot()),
               if (p.lastReaction != null)
                 Positioned(
                   top: -8,
@@ -2439,6 +2592,44 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     );
   }
 
+  /// Under the status line while paused: my "why" chips, a "ready when you
+  /// are" for everyone else, and after a long pause "pick it up later".
+  Widget _pauseExtras(ColorScheme scheme) {
+    Widget chip(String label, VoidCallback onTap) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3),
+          child: ActionChip(
+            visualDensity: VisualDensity.compact,
+            label: Text(label, style: const TextStyle(fontSize: 12.5)),
+            onPressed: onTap,
+          ),
+        );
+    final kids = <Widget>[
+      if (_showReasons)
+        Wrap(alignment: WrapAlignment.center, children: [
+          for (final r in pauseReasons.entries)
+            chip(r.value, () => _sendPauseReason(r.key)),
+        ]),
+      if (_pausedBy != null &&
+          _pausedBy != widget.myUserId &&
+          _countdown == null)
+        chip('Ready when you are 💞', _sendReadyNudge),
+      if (_offerLater && _pausedBy != null)
+        chip('⏳ Pick it up later', _saveOurSpot),
+    ];
+    return AnimatedSize(
+      duration: Motion.quick,
+      child: kids.isEmpty
+          ? const SizedBox(width: double.infinity)
+          : Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Wrap(
+                  alignment: WrapAlignment.center,
+                  runSpacing: 4,
+                  children: kids),
+            ),
+    );
+  }
+
   // Now-Playing-style disc hero: the user's chosen player style, spinning while
   // audio plays, tap to restyle — plus the track title and who you're with.
   // The session's song progress (0..1, on the REAL timeline even when a
@@ -2465,6 +2656,16 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       builder: (ctx, snap) {
         final playing = snap.data?.playing ?? false;
         _syncDiscSpin(playing);
+        // Network, not a person: the music should be moving but isn't
+        // (buffering / reconnecting) → a pulsing ring, and say whose.
+        final ps = snap.data?.processingState;
+        final catching = _countdown == null &&
+            _pausedBy == null &&
+            (_reconnecting ||
+                _lostConnection ||
+                ((ps == ProcessingState.buffering ||
+                        ps == ProcessingState.loading) &&
+                    _ready));
         return AnimatedBuilder(
           animation: PlayerStyleController.instance,
           builder: (ctx2, _) {
@@ -2476,7 +2677,11 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                   child: SizedBox(
                     width: side,
                     height: side,
-                    child: PlayerDisc(
+                    child: Stack(
+                      alignment: Alignment.center,
+                      clipBehavior: Clip.none,
+                      children: [
+                        Positioned.fill(child: PlayerDisc(
                       style: style,
                       side: side,
                       accent: accent,
@@ -2491,6 +2696,12 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                             size: d * 0.4,
                             color: col ?? Colors.white.withValues(alpha: 0.9)),
                       ),
+                    )),
+                        if (catching)
+                          CatchingUpRing(color: accent, size: side),
+                        if (_countdown != null)
+                          CountdownBadge(value: _countdown!, color: accent),
+                      ],
                     ),
                   ),
                 ),
@@ -2507,12 +2718,19 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _isHost ? 'You’re the DJ · $_status' : _status,
+                  _countdown != null
+                      ? 'Starting together in $_countdown…'
+                      : catching && !_isHost && !_reconnecting
+                          ? 'Your connection is catching up…'
+                          : _isHost
+                              ? 'You’re the DJ · $_status'
+                              : _status,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.hintColor),
                 ),
+                _pauseExtras(scheme),
                 // Partner offline while I wait → one tap to be pinged.
                 if (_peerAway && !_peerJoined && widget.receiverId != null)
                   ListenableBuilder(
@@ -2708,7 +2926,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                 diameter: 58,
                 onTap: !_canControl
                     ? null
-                    : () => playing ? _c.player.pause() : _c.player.play(),
+                    : () => playing
+                        ? _c.player.pause()
+                        : _c.resumeWithCountdown(widget.myUserId),
               ),
             ),
             btn(Icons.forward_10_rounded,

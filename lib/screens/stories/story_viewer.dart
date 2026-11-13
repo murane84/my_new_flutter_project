@@ -1,4 +1,9 @@
+import 'dart:convert';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
@@ -19,6 +24,8 @@ import '../../utils/anim_art.dart';
 import '../../utils/emoji_field.dart'
     show inlineEmojiPicker, emojiFloats, showFloatingCard;
 import '../gif_picker.dart';
+import '../../widgets/story_ring.dart';
+import 'story_fx.dart';
 import '../../services/haptics.dart';
 import '../../utils/toast_helper.dart';
 import '../../utils/motion.dart';
@@ -129,6 +136,13 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   // focus to it, which used to RESUME the timer — so the status ran on (and
   // skipped ahead) while you were still choosing. Nothing resumes while set.
   bool _overlayOpen = false;
+
+  // Reactions floating up over the status, and an occasion's confetti.
+  final List<({int key, String emoji, double x, double size, int delayMs})>
+      _floaters = [];
+  int _fxKey = 0;
+  bool _confetti = false;
+  bool _duoBusy = false;
 
   StoryGroup get _group => widget.groups[_g];
   StoryItem get _story => _group.stories[_s];
@@ -270,6 +284,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     final to = _group.authorId;
     setState(() => _replySending = true);
     final content = '> ${_statusQuote(item)}\n\n$text';
+    // See it go: the reaction floats up over their status (and an occasion
+    // gets its confetti).
+    if (quick != null) _floatUp(quick);
+    if (_occasionOf(item) != null && (quick != null || text.isNotEmpty)) {
+      setState(() => _confetti = true);
+    }
     // A quick reaction also shows beside my name in their "Viewed by".
     if (quick != null) ApiService().reactToStory(item.id, quick);
     final sent = gifUrl != null
@@ -906,6 +926,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     final canPrev = many && _s > 0;
     final canNext = many && _s < _group.stories.length - 1;
     final wide = MediaQuery.sizeOf(context).width >= 700;
+    // Room for the people rail (and it's worth it: someone else posted too).
+    final rail = MediaQuery.sizeOf(context).width >= 1100 &&
+        widget.groups.length > 1;
     Widget arrow(IconData icon, String tip, VoidCallback onTap) => Tooltip(
           message: tip,
           child: Material(
@@ -987,6 +1010,29 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 children: [
                   _progressBars(),
                   _topBar(),
+                  if ((item.songTitle ?? '').trim().isNotEmpty)
+                    _songPill(item),
+                  // Paused (holding, typing, a picker open): say so.
+                  AnimatedOpacity(
+                    opacity: _paused && !_loading ? 1 : 0,
+                    duration: Motion.quick,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          borderRadius: BorderRadius.circular(Radii.lg),
+                        ),
+                        child: const Text('⏸  Paused',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  ),
                   const Spacer(),
                   // Text stories already show the caption as the full-screen
                   // content, so skip the bottom caption bar for them.
@@ -1010,11 +1056,48 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
               ),
             if (canNext)
               Positioned(
-                right: wide ? 16 : 6,
+                right: rail ? 250 : (wide ? 16 : 6),
                 top: 0,
                 bottom: 0,
                 child: Center(
                     child: arrow(Icons.chevron_right_rounded, 'Next status', _next)),
+              ),
+            if (rail)
+              Positioned(right: 0, top: 0, bottom: 0, child: _upNextRail()),
+            // Reactions floating up, and an occasion's confetti.
+            for (final f in _floaters)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: RisingReaction(
+                    key: ValueKey('fx${f.key}'),
+                    emoji: f.emoji,
+                    x: f.x,
+                    size: f.size,
+                    delay: Duration(milliseconds: f.delayMs),
+                    onDone: () {
+                      if (mounted) {
+                        setState(() => _floaters.removeWhere((e) => e.key == f.key));
+                      }
+                    },
+                  ),
+                ),
+              ),
+            if (_confetti)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: ConfettiBurst(
+                    colors: [
+                      Theme.of(context).colorScheme.primary,
+                      const Color(0xFFFFD166),
+                      const Color(0xFFFF8AA0),
+                      const Color(0xFF7BDFF2),
+                      Colors.white,
+                    ],
+                    onDone: () {
+                      if (mounted) setState(() => _confetti = false);
+                    },
+                  ),
+                ),
               ),
           ],
         ),
@@ -1031,12 +1114,16 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     if (item.isVideo) {
       final v = _video;
       if (v != null && v.value.isInitialized) {
-        return Center(
-          child: AspectRatio(
-            aspectRatio: v.value.aspectRatio == 0 ? 9 / 16 : v.value.aspectRatio,
-            child: VideoPlayer(v),
+        return Stack(fit: StackFit.expand, children: [
+          _ambient(_thumbOf(item)),
+          Center(
+            child: AspectRatio(
+              aspectRatio:
+                  v.value.aspectRatio == 0 ? 9 / 16 : v.value.aspectRatio,
+              child: VideoPlayer(v),
+            ),
           ),
-        );
+        ]);
       }
       if (_videoError) {
         return Center(
@@ -1070,25 +1157,37 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       if (_loading) return const SizedBox.shrink(); // the spinner covers it
       final ready = _photoFile;
       if (ready != null) {
-        return Center(child: Image.file(ready, fit: BoxFit.contain));
+        final img = FileImage(ready);
+        return Stack(fit: StackFit.expand, children: [
+          _ambient(img),
+          Center(child: Image(image: img, fit: BoxFit.contain)),
+        ]);
       }
       if (kIsWeb) {
-        return Center(
-          child:
-              authNetworkImage(url: url, headers: headers, fit: BoxFit.contain),
-        );
+        return Stack(fit: StackFit.expand, children: [
+          _ambient(authNetworkImageProvider(url, headers)),
+          Center(
+            child: authNetworkImage(
+                url: url, headers: headers, fit: BoxFit.contain),
+          ),
+        ]);
       }
-      return Center(
-        child: FutureBuilder<File?>(
-          future: MediaStore.instance.getFile(url, headers),
-          builder: (ctx, snap) {
-            if (snap.data != null) {
-              return Image.file(snap.data!, fit: BoxFit.contain);
-            }
-            return authNetworkImage(
-                url: url, headers: headers, fit: BoxFit.contain);
-          },
-        ),
+      return FutureBuilder<File?>(
+        future: MediaStore.instance.getFile(url, headers),
+        builder: (ctx, snap) {
+          final f = snap.data;
+          return Stack(fit: StackFit.expand, children: [
+            _ambient(f != null
+                ? FileImage(f)
+                : authNetworkImageProvider(url, headers)),
+            Center(
+              child: f != null
+                  ? Image.file(f, fit: BoxFit.contain)
+                  : authNetworkImage(
+                      url: url, headers: headers, fit: BoxFit.contain),
+            ),
+          ]);
+        },
       );
     }
     return const SizedBox.shrink();
@@ -1380,7 +1479,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                     // My own status: how long it has left.
                     _group.isMe && _story.expiresAt != null
                         ? '${_ago(when)} · ${_left(_story.expiresAt!)}'
-                        : _ago(when),
+                        : _postedLine(when, _story.expiresAt),
                     style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.75),
                         fontSize: 11),
@@ -1816,6 +1915,19 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   }
 
   /// "5h left" / "40m left" for my own status.
+  /// A friend's status: "Posted 7:12 AM · fades in 19h".
+  String _postedLine(DateTime when, DateTime? expires) {
+    final at = MaterialLocalizations.of(context)
+        .formatTimeOfDay(TimeOfDay.fromDateTime(when.toLocal()));
+    final today = DateUtils.isSameDay(when.toLocal(), DateTime.now());
+    final head = today ? 'Posted $at' : 'Posted yesterday, $at';
+    if (expires == null) return head;
+    final d = expires.difference(DateTime.now());
+    if (d.isNegative) return head;
+    final left = d.inMinutes < 60 ? '${d.inMinutes}m' : '${d.inHours}h';
+    return '$head · fades in $left';
+  }
+
   String _left(DateTime expires) {
     final d = expires.difference(DateTime.now());
     if (d.inMinutes < 1) return 'ending';
@@ -1840,15 +1952,30 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         item.isSticker ||
         ((item.isPhoto || item.isVideo) && item.mediaUrl != null) ||
         (item.isText && (item.caption ?? '').trim().isNotEmpty);
-    final songTitle = (item.songTitle ?? '').trim();
+    final occasion = _occasionOf(item);
+    final partner = !mine &&
+        StoryHooks.myPartner?.call()?.id == author;
     final chips = <Widget>[
-      // The song under this status: tap to mute / unmute it.
-      if (songTitle.isNotEmpty)
-        _actionChip(_songMuted ? '🔇' : '🎵',
-            songTitle.length > 28 ? '${songTitle.substring(0, 27)}…' : songTitle,
-            () {
-          setState(() => _songMuted = !_songMuted);
-          _song?.setVolume(_songMuted ? 0 : 1);
+      // An occasion in the caption → answer it with a song (and confetti).
+      if (!mine && occasion != null && StoryHooks.answerWithSong != null)
+        _actionChip(
+            switch (occasion) {
+              'birthday' => '🎂',
+              'anniversary' => '💍',
+              'wedding' => '💒',
+              _ => '🎓',
+            },
+            switch (occasion) {
+              'birthday' => 'Send a birthday song',
+              'anniversary' => 'Send an anniversary song',
+              'wedding' => 'Bless them with a song',
+              _ => 'Celebrate with a song',
+            }, () async {
+          _pause();
+          setState(() => _confetti = true);
+          await StoryHooks.answerWithSong!(context, author, name,
+              occasion == 'birthday' ? 'your birthday 🎂' : _statusLabel(item));
+          if (mounted) _resume();
         }),
       if (live && StoryHooks.tuneIn != null)
         _actionChip('🎧', 'Tune in', () {
@@ -1859,13 +1986,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       if (!mine && music && StoryHooks.playOnMine != null && !kIsWeb)
         _actionChip('▶', 'Play on mine', () {
           final ok = StoryHooks.playOnMine!(title);
-          ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-            content: Text(ok
-                ? 'Playing “$title” 🎶'
-                : '“$title” isn’t in your loaded songs yet'),
-            duration: const Duration(milliseconds: 1800),
-            behavior: SnackBarBehavior.floating,
-          ));
+          showToast(
+              context,
+              ok
+                  ? 'Playing “$title” 🎶'
+                  : '“$title” isn’t in your loaded songs yet',
+              type: ok ? ToastType.success : ToastType.info);
         }),
       // A music status → listen to it together, in sync.
       if (music && StoryHooks.listenTogether != null && !_group.isMe)
@@ -1874,24 +2000,33 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           StoryHooks.listenTogether!(context, author, title);
         }),
       // Answer any status with a song ("this reminds me of…").
-      if (!_group.isMe && StoryHooks.answerWithSong != null)
+      if (!_group.isMe && occasion == null && StoryHooks.answerWithSong != null)
         _actionChip('🎵', 'Answer with a song', () async {
           _pause();
           await StoryHooks.answerWithSong!(
               context, author, name, _statusLabel(item));
           if (mounted) _resume();
         }),
+      // My person's photo → send my half back for a duo.
+      if (partner && item.isPhoto && item.mediaUrl != null)
+        _actionChip('📸', _duoBusy ? 'Sending…' : 'Start a duo',
+            () => _startDuo(item)),
       if (bonded && keepable)
-        _actionChip('💞', 'Keep', () async {
+        _actionChip('💞', partner ? 'Add to our moments' : 'Keep', () async {
           _pause();
           final err = await ApiService().keepStoryInSpace(item.id);
           if (!mounted) return;
-          ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-            content: Text(err ?? 'Kept in your Space 💞'),
-            duration: const Duration(milliseconds: 1800),
-            behavior: SnackBarBehavior.floating,
-          ));
-          _resume();
+          if (err == null) _floatUp('💞');
+          showToast(
+              context,
+              err ??
+                  (partner
+                      ? 'Added to your moments together 💞'
+                      : 'Kept in your Space 💞'),
+              type: err == null ? ToastType.success : ToastType.error);
+          Future.delayed(const Duration(milliseconds: 900), () {
+            if (mounted) _resume();
+          });
         }),
     ];
     if (chips.isEmpty) return const SizedBox.shrink();
@@ -1937,6 +2072,407 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
                   fontSize: 13.5)),
+        ),
+      ),
+    );
+  }
+
+  // ── Moments: reactions you see, occasions, the song, duo, up next ────────
+
+  void _floatUp(String emoji) {
+    final r = math.Random();
+    setState(() {
+      for (var i = 0; i < 3; i++) {
+        _floaters.add((
+          key: ++_fxKey,
+          emoji: emoji,
+          x: 0.5 + (r.nextDouble() - 0.5) * 0.3,
+          size: i == 0 ? 52.0 : 30.0 + r.nextDouble() * 8,
+          delayMs: i * 140,
+        ));
+      }
+    });
+  }
+
+  /// A birthday / anniversary / wedding / graduation in the caption.
+  String? _occasionOf(StoryItem item) {
+    final c = (item.caption ?? '').toLowerCase();
+    if (c.isEmpty) return null;
+    if (RegExp(r'birthday|b-?day|siku ya kuzaliwa|kuzaliwa|🎂').hasMatch(c)) {
+      return 'birthday';
+    }
+    if (RegExp(r'anniversary|kumbukumbu ya ndoa|miaka \d+ ya').hasMatch(c)) {
+      return 'anniversary';
+    }
+    if (RegExp(r'wedding|harusi|married|ndoa yetu|💍|💒').hasMatch(c)) {
+      return 'wedding';
+    }
+    if (RegExp(r'graduat|mahafali|🎓').hasMatch(c)) return 'graduation';
+    return null;
+  }
+
+  String _nameOf(StoryGroup g) {
+    final phone = (g.phone ?? '').trim();
+    if (phone.isNotEmpty) {
+      final saved = ContactNames.instance.nameFor(phone);
+      if (saved != null && saved.isNotEmpty) return saved;
+    }
+    return g.isMe
+        ? 'Your story'
+        : (g.username.isNotEmpty ? g.username : 'Friend');
+  }
+
+  void _jumpToGroup(int i) {
+    if (i == _g || i < 0 || i >= widget.groups.length) return;
+    Haptics.selectionClick();
+    setState(() {
+      _g = i;
+      _s = _firstUnseen(widget.groups[i]);
+    });
+    _startStory();
+  }
+
+  /// The status itself, softly blurred to fill the screen behind it — so a
+  /// portrait photo on a wide window sits in its own colours, not black bars.
+  Widget _ambient(ImageProvider? p) {
+    if (p == null) return const SizedBox.shrink();
+    return Positioned.fill(
+      child: RepaintBoundary(
+        child: Stack(fit: StackFit.expand, children: [
+          ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+            child: Image(image: p, fit: BoxFit.cover, gaplessPlayback: true),
+          ),
+          ColoredBox(color: Colors.black.withValues(alpha: 0.5)),
+        ]),
+      ),
+    );
+  }
+
+  ImageProvider? _thumbOf(StoryItem item) {
+    final t = item.thumb;
+    if (t == null || !t.startsWith('data:')) return null;
+    try {
+      return MemoryImage(UriData.parse(t).contentAsBytes());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The status's song as a small player under the name: a record that
+  /// spins while it plays, the title, mute — tap for Listen together.
+  Widget _songPill(StoryItem item) {
+    final title = (item.songTitle ?? '').trim();
+    final scheme = Theme.of(context).colorScheme;
+    final playing = _songOn && !_paused && !_songMuted;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapUp: (_) {},
+      onLongPressStart: (_) {},
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Material(
+            color: Colors.black.withValues(alpha: 0.42),
+            shape: StadiumBorder(
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.22))),
+            child: InkWell(
+              customBorder: const StadiumBorder(),
+              onTap: () => _songMenu(item),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(6, 5, 4, 5),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  SpinningDisc(
+                      spinning: playing, size: 28, accent: scheme.primary),
+                  const SizedBox(width: 9),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 240),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13)),
+                        Text(
+                            _songMuted
+                                ? 'Muted · tap for more'
+                                : _group.isMe
+                                    ? 'Your song moment'
+                                    : 'Their song moment · tap for more',
+                            style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                                fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: _songMuted ? 'Unmute' : 'Mute',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                        _songMuted
+                            ? Icons.volume_off_rounded
+                            : Icons.volume_up_rounded,
+                        color: Colors.white,
+                        size: 20),
+                    onPressed: () {
+                      Haptics.selectionClick();
+                      setState(() => _songMuted = !_songMuted);
+                      _song?.setVolume(_songMuted ? 0 : 1);
+                    },
+                  ),
+                ]),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _songMenu(StoryItem item) async {
+    final title = (item.songTitle ?? '').trim();
+    final author = _group.authorId;
+    final mine = _group.isMe;
+    _pause();
+    _overlayOpen = true;
+    final pick = await showAdaptiveSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF1B1B1F),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
+      ),
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: SpinningDisc(
+                spinning: false,
+                size: 34,
+                accent: Theme.of(c).colorScheme.primary),
+            title: Text(title,
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.w800)),
+            subtitle: Text('A song moment from ${_displayName()}',
+                style: const TextStyle(color: Colors.white60)),
+          ),
+          const Divider(color: Colors.white12, height: 1),
+          if (!mine && StoryHooks.listenTogether != null)
+            ListTile(
+              leading: const Icon(Icons.headphones_rounded, color: Colors.white),
+              title: const Text('Listen together',
+                  style: TextStyle(color: Colors.white)),
+              subtitle: const Text('The whole song, in sync, in your chat',
+                  style: TextStyle(color: Colors.white60)),
+              onTap: () => Navigator.pop(c, 'together'),
+            ),
+          if (StoryHooks.playOnMine != null && !kIsWeb)
+            ListTile(
+              leading: const Icon(Icons.play_circle_rounded, color: Colors.white),
+              title: const Text('Play the whole song on mine',
+                  style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(c, 'mine'),
+            ),
+          ListTile(
+            leading: Icon(
+                _songMuted ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                color: Colors.white),
+            title: Text(_songMuted ? 'Unmute' : 'Mute',
+                style: const TextStyle(color: Colors.white)),
+            onTap: () => Navigator.pop(c, 'mute'),
+          ),
+          const SizedBox(height: 6),
+        ]),
+      ),
+    );
+    _overlayOpen = false;
+    if (!mounted) return;
+    switch (pick) {
+      case 'together':
+        StoryHooks.listenTogether!(context, author, title);
+        return; // the chat takes over; the status stays paused
+      case 'mine':
+        final ok = StoryHooks.playOnMine!(title);
+        showToast(
+            context,
+            ok
+                ? 'Playing “$title” 🎶'
+                : '“$title” isn’t in your loaded songs yet',
+            type: ok ? ToastType.success : ToastType.info);
+      case 'mute':
+        setState(() => _songMuted = !_songMuted);
+        _song?.setVolume(_songMuted ? 0 : 1);
+    }
+    _resume();
+  }
+
+  /// My person's photo status → send my half back; it becomes a duo when
+  /// they add it (the same "Add your half" flow as a duo from Create).
+  Future<void> _startDuo(StoryItem item) async {
+    if (_duoBusy) return;
+    final partner = StoryHooks.myPartner?.call();
+    if (partner == null) return;
+    _pause();
+    _overlayOpen = true;
+    XFile? x;
+    try {
+      x = await ImagePicker()
+          .pickImage(source: ImageSource.gallery, imageQuality: 88);
+    } catch (_) {}
+    _overlayOpen = false;
+    if (!mounted) return;
+    if (x == null) {
+      _resume();
+      return;
+    }
+    setState(() => _duoBusy = true);
+    final bytes = await x.readAsBytes();
+    final mime = x.mimeType ?? 'image/jpeg';
+    final up = await ApiService()
+        .uploadMedia(bytes: bytes, filename: x.name, mime: mime);
+    final sent = up == null || up['url'] == null
+        ? null
+        : await ApiService().sendMessage(partner.id,
+            '> ${_statusQuote(item)}\n\n📸 Duo — add your half 💞',
+            messageType: 'image',
+            mediaUrl: up['url'].toString(),
+            mediaName: (up['name'] ?? x.name).toString(),
+            mediaMime: (up['mime'] ?? mime).toString(),
+            mediaSize: (up['size'] as num?)?.toInt() ?? bytes.length,
+            meta: jsonEncode({'duo': 1}));
+    if (!mounted) return;
+    setState(() => _duoBusy = false);
+    final first = _displayName().split(RegExp(r'\s+')).first;
+    if (sent == null) {
+      showToast(context, 'Couldn’t send it — try again',
+          type: ToastType.error);
+    } else {
+      _floatUp('💞');
+      showToast(context, 'Sent to $first — a duo goes live when they add theirs',
+          type: ToastType.success);
+    }
+    _resume();
+  }
+
+  /// Wide windows: everyone else's statuses down the right, rings and all,
+  /// so you can move between people without closing.
+  Widget _upNextRail() {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 220,
+      margin: const EdgeInsets.fromLTRB(0, 70, 14, 20),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(Radii.xl),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+      ),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapUp: (_) {},
+        onLongPressStart: (_) {},
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+              child: Text('STATUS',
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.6),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.4)),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.only(bottom: 8),
+                itemCount: widget.groups.length,
+                itemBuilder: (_, i) {
+                  final g = widget.groups[i];
+                  final now = i == _g;
+                  final unseen = g.stories.where((s) => !s.viewed).length;
+                  final av = (g.avatarUrl ?? '').isNotEmpty
+                      ? _absUrl(g.avatarUrl!)
+                      : null;
+                  return InkWell(
+                    onTap: () => _jumpToGroup(i),
+                    child: Container(
+                      color: now
+                          ? scheme.primary.withValues(alpha: 0.18)
+                          : Colors.transparent,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 7),
+                      child: Row(children: [
+                        SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: CustomPaint(
+                            painter: StoryRingPainter(
+                              seen: [for (final s in g.stories) s.viewed],
+                              colors: [
+                                scheme.primary,
+                                const Color(0xFFFF8AA0),
+                                scheme.primary
+                              ],
+                              seenColor: Colors.white24,
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: CircleAvatar(
+                                backgroundColor: Colors.white12,
+                                backgroundImage: av != null
+                                    ? authNetworkImageProvider(
+                                        av, mediaAuthHeaders(av))
+                                    : null,
+                                child: av == null
+                                    ? Text(_nameOf(g).isEmpty
+                                        ? '?'
+                                        : _nameOf(g)[0].toUpperCase(),
+                                        style: const TextStyle(
+                                            color: Colors.white))
+                                    : null,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(_nameOf(g),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: now || unseen > 0
+                                          ? FontWeight.w800
+                                          : FontWeight.w500,
+                                      fontSize: 13.5)),
+                              Text(
+                                  now
+                                      ? 'Watching now'
+                                      : unseen > 0
+                                          ? '$unseen new'
+                                          : 'Seen',
+                                  style: TextStyle(
+                                      color: now
+                                          ? const Color(0xFFFF8AA0)
+                                          : Colors.white54,
+                                      fontSize: 11.5)),
+                            ],
+                          ),
+                        ),
+                      ]),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );

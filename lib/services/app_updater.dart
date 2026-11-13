@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -55,6 +56,75 @@ class AppUpdater {
       ValueNotifier<Map<String, dynamic>?>(null);
 
   AppLifecycleListener? _life;
+
+  // ── Web: an open tab keeps running the code it loaded ───────────────────
+  // deploy_web.bat builds the number in (ALUTA_BUILD); the live site's
+  // version.json says what's deployed now. Newer → "Reload" toast.
+  static const int _webBuilt = int.fromEnvironment('ALUTA_BUILD');
+  Timer? _webTimer;
+  AppLifecycleListener? _webLife;
+  bool _webToasted = false;
+
+  /// From Home once on web: check now, every 20 min, and on coming back.
+  void watchWeb(BuildContext Function() context) {
+    if (!kIsWeb || _webTimer != null || _webLife != null || _webBuilt <= 0) {
+      return;
+    }
+    Future.delayed(const Duration(seconds: 20), () {
+      final c = context();
+      if (c.mounted) checkWeb(c);
+    });
+    _webTimer = Timer.periodic(const Duration(minutes: 20), (_) {
+      final c = context();
+      if (c.mounted) checkWeb(c);
+    });
+    _webLife = AppLifecycleListener(onResume: () {
+      final c = context();
+      if (c.mounted) checkWeb(c);
+    });
+  }
+
+  Future<void> checkWeb(BuildContext context, {bool manual = false}) async {
+    if (!kIsWeb) return;
+    try {
+      // Cache-busting query: past the browser cache and Flutter's worker.
+      final r = await http
+          .get(Uri.parse('${Uri.base.origin}/version.json'
+              '?t=${DateTime.now().millisecondsSinceEpoch}'))
+          .timeout(const Duration(seconds: 12));
+      if (r.statusCode != 200) throw Exception('HTTP ${r.statusCode}');
+      final j = Map<String, dynamic>.from(jsonDecode(r.body) as Map);
+      final live = int.tryParse('${j['build_number']}') ?? 0;
+      final ver = '${j['version'] ?? ''}';
+      if (!context.mounted) return;
+      if (_webBuilt > 0 && live > _webBuilt) {
+        if (_webToasted && !manual) return; // once per tab, unless asked
+        _webToasted = true;
+        showToast(
+          context,
+          '✨ Aluta $ver is ready',
+          type: ToastType.info,
+          duration: const Duration(seconds: 14),
+          detail: 'Reload to get the new version — your chats stay',
+          onTap: reloadWeb,
+          actions: [ToastAction('Reload', reloadWeb)],
+        );
+      } else if (manual) {
+        showToast(context, 'You have the latest Aluta ($ver) 💞',
+            type: ToastType.success);
+      }
+    } catch (_) {
+      if (manual && context.mounted) {
+        showToast(context, 'Couldn’t check for updates — try again',
+            type: ToastType.error);
+      }
+    }
+  }
+
+  /// Load the page again (the new build comes with it).
+  void reloadWeb() {
+    launchUrl(Uri.base, webOnlyWindowName: '_self');
+  }
 
   /// From Home once: check again whenever Aluta comes back to the front
   /// (still at most every 6 h — people who never close the app get it too).
@@ -150,15 +220,19 @@ class AppUpdater {
       final now = DateTime.now().millisecondsSinceEpoch;
       if (!manual && !force) {
         final last = p.getInt(_kChecked) ?? 0;
-        if (now - last < const Duration(hours: 6).inMilliseconds) return;
+        if (now - last < const Duration(hours: 3).inMilliseconds) return;
       }
-      await p.setInt(_kChecked, now);
       final rel = await _newer();
+      // Only a check that got an answer counts — a failed one (offline,
+      // server deploying) used to silence checks for 6 hours.
+      await p.setInt(_kChecked, now);
       available.value = rel;
       if (!context.mounted) return;
       if (rel == null) {
         if (manual) {
-          showToast(context, 'You have the latest Aluta 💞',
+          final v = (await PackageInfo.fromPlatform()).version;
+          if (!context.mounted) return;
+          showToast(context, 'You have the latest Aluta ($v) 💞',
               type: ToastType.success);
         }
         return;

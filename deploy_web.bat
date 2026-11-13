@@ -23,7 +23,11 @@ echo == flutter pub get ==
 call flutter pub get || goto :err
 
 echo == building web (release) ==
-call flutter build web --release --dart-define=PROD_URL=https://aluta.ozilane.com || goto :err
+REM The build number goes INTO the code, so an open tab can tell that the
+REM site has moved on to a newer build (and offer a reload).
+for /f "delims=" %%v in ('node tools\bump_version.js show') do set ALUTA_VER=%%v
+for /f "tokens=2 delims=+" %%b in ("%ALUTA_VER%") do set ALUTA_BUILD=%%b
+call flutter build web --release --dart-define=PROD_URL=https://aluta.ozilane.com --dart-define=ALUTA_BUILD=%ALUTA_BUILD% || goto :err
 
 echo == replacing my_aluta_api\webapp with the fresh build ==
 if exist my_aluta_api\webapp rmdir /s /q my_aluta_api\webapp

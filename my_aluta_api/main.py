@@ -577,6 +577,12 @@ async def _serve_admin_app(full_path: str):
     return Response("Admin app not deployed yet", status_code=404)
 
 
+_WEB_SHELL = {
+    "index.html", "flutter_bootstrap.js", "flutter_service_worker.js",
+    "flutter.js", "main.dart.js", "version.json", "manifest.json",
+}
+
+
 @app.get("/{full_path:path}", include_in_schema=False)
 async def _serve_web_app(full_path: str):
     if os.path.isdir(_WEBAPP_DIR):
@@ -586,10 +592,18 @@ async def _serve_web_app(full_path: str):
         if (full_path
                 and candidate.startswith(_WEBAPP_DIR)
                 and os.path.isfile(candidate)):
-            return FileResponse(candidate)
+            resp = FileResponse(candidate)
+            # The app's "shell" must always be re-checked, or a browser keeps
+            # running last week's Aluta after a deploy. (Hashed assets and
+            # big files keep normal caching.)
+            if os.path.basename(candidate) in _WEB_SHELL:
+                resp.headers["Cache-Control"] = "no-cache"
+            return resp
         index = os.path.join(_WEBAPP_DIR, "index.html")
         if os.path.isfile(index):
-            return FileResponse(index)
+            resp = FileResponse(index)
+            resp.headers["Cache-Control"] = "no-cache"
+            return resp
     return Response(status_code=404)
 
 

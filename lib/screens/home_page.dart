@@ -899,6 +899,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // …and each time Aluta comes back to the front (same 6 h gate), so a
     // phone that never closes the app still hears about a new build.
     AppUpdater.instance.watchResume(() => context);
+    // Web: an open tab hears about a newer deploy (Reload toast).
+    AppUpdater.instance.watchWeb(() => context);
     // 90/120 Hz where the phone can keep up — decided by the app itself.
     SmoothMotion.instance.init();
 

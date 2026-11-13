@@ -163,6 +163,12 @@ extension _HomeMenu on HomePageState {
                 icon: Icons.shield_outlined,
                 label: 'Legal & About',
                 onTap: () => showLegalMenu(context)),
+            if (kIsWeb)
+              GenieMenuEntry(
+                  icon: Icons.system_update_rounded,
+                  label: 'Check for updates',
+                  onTap: () =>
+                      AppUpdater.instance.checkWeb(context, manual: true)),
             if (AppUpdater.instance.supported)
               GenieMenuEntry(
                   icon: Icons.system_update_rounded,

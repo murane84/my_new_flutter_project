@@ -649,7 +649,17 @@ extension _HomeSpaceActions on HomePageState {
               // ── Them, right now ────────────────────────────────────────
               if (online) {
                 rows.add(ListTile(
-                  leading: _sheetIcon(scheme, Icons.circle),
+                  leading: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.14),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Center(
+                      child: Icon(Icons.circle, size: 13, color: Colors.green),
+                    ),
+                  ),
                   title: Text('$first is online now'),
                   subtitle: const Text('Say hi, or call'),
                   trailing: Row(mainAxisSize: MainAxisSize.min, children: [

@@ -82,7 +82,11 @@ class SmoothMotion with WidgetsBindingObserver {
   static const _need = 600; // ~5 s of real motion at 120 Hz
 
   void _startProbe() {
-    SchedulerBinding.instance.addTimingsCallback(_onTimings);
+    // Start-up frames (first images, shader warm-up) are slow on every phone:
+    // judge only once the app has settled.
+    Future.delayed(const Duration(seconds: 12), () {
+      SchedulerBinding.instance.addTimingsCallback(_onTimings);
+    });
   }
 
   void _onTimings(List<FrameTiming> timings) {

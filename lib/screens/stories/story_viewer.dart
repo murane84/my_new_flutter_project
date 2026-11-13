@@ -143,6 +143,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   int _fxKey = 0;
   bool _confetti = false;
   bool _duoBusy = false;
+  // The on-device copy lookup for the photo on screen — made once per
+  // status, not on every rebuild (reactions / pause rebuild a lot).
+  Future<File?>? _photoFuture;
+  String? _photoFutureFor;
 
   StoryGroup get _group => widget.groups[_g];
   StoryItem get _story => _group.stories[_s];
@@ -890,6 +894,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       }
       if (!mounted || gen != _gen) return;
       _songOn = true;
+      if (mounted) setState(() {}); // the pill's record starts spinning
       // Never await play(): its future completes when the clip ENDS.
       if (!_paused) p.play();
     } catch (_) {}
@@ -1172,8 +1177,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           ),
         ]);
       }
+      if (_photoFutureFor != url) {
+        _photoFutureFor = url;
+        _photoFuture = MediaStore.instance.getFile(url, headers);
+      }
       return FutureBuilder<File?>(
-        future: MediaStore.instance.getFile(url, headers),
+        future: _photoFuture,
         builder: (ctx, snap) {
           final f = snap.data;
           return Stack(fit: StackFit.expand, children: [
@@ -1648,9 +1657,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
             });
             if (ok) remember();
             if (!ok) {
-              ScaffoldMessenger.maybeOf(ctx)?.showSnackBar(const SnackBar(
-                  content: Text('Couldn\'t send — check your connection'),
-                  behavior: SnackBarBehavior.floating));
+              showToast(ctx, 'Couldn’t send — check your connection',
+                  type: ToastType.error);
             }
           }
 

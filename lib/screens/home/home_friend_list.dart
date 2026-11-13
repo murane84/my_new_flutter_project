@@ -208,8 +208,8 @@ extension _HomeFriendListView on HomePageState {
                       );
                       if (wide) return Stack(children: [backdrop, switched]);
                       // Phones: the whole chat screen is one swipe path that
-                      // follows the finger (see _SwipePath).
-                      return Stack(children: [backdrop, _SwipePath(
+                      // follows the finger (see SectionSwipePath).
+                      return Stack(children: [backdrop, SectionSwipePath(
                         current: switched,
                         hasNeighbor: (fwd) => _pathStep(fwd) != null,
                         neighbor: (fwd) {
@@ -297,7 +297,7 @@ extension _HomeFriendListView on HomePageState {
                             child: const GlowFeed(),
                           ),
                         );
-                        // (On phones, swiping is the _SwipePath around it.)
+                        // (On phones, swiping is the SectionSwipePath around it.)
                         return feed;
                       }
                       if (wide) {

@@ -6,6 +6,8 @@ import '../utils/readable.dart' show accentInk;
 import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../utils/depth.dart';
+import '../widgets/section_swipe_path.dart';
+import '../widgets/section_switch.dart';
 
 // Height of the Aluta app header (toolbar). The full-page legal views start
 // just under it, so the "Aluta" title + overflow (⋮) menu stay visible above.
@@ -93,42 +95,30 @@ class _LegalHubState extends State<_LegalHub> {
   // there's no earlier tab left, matching the app-wide "back = previous page,
   // then minimise" rule (same contract Our Space and the home stack use).
   final List<int> _history = [];
-  // Swipe left / right between the documents (the footer pills still work).
-  late final PageController _pages = PageController(initialPage: _index);
-  // True while WE animate the pages (a pill tap / back), so the pages the
-  // animation passes through don't count as the user's swipes.
-  bool _jumping = false;
+  // Privacy · Terms · About change like Circle's sections: the user's
+  // transition (Appearance → Section transitions), from the side the new
+  // one sits on — and on phones a swipe follows the finger.
+  bool _forward = true;
+  double? _rippleFrom; // the tapped pill's centre (0..1) for the ripple
 
-  Future<void> _goTo(int i) async {
-    if (!_pages.hasClients) return;
-    _jumping = true;
-    await _pages.animateToPage(i,
-        duration: Motion.emphasized,
-        curve: Curves.easeOutCubic);
-    _jumping = false;
-  }
-
-  void _onSwiped(int i) {
-    if (_jumping) return;
-    _selectTab(i);
-  }
-
-  @override
-  void dispose() {
-    _pages.dispose();
-    super.dispose();
-  }
-
-  void _selectTab(int i) {
-    if (i == _index) return;
+  void _selectTab(int i, {bool tapped = false}) {
+    if (i == _index || i < 0 || i >= _kLegalDocs.length) return;
     setState(() {
+      _forward = i > _index;
+      _rippleFrom = tapped ? (i + 0.5) / _kLegalDocs.length : null;
       _history.add(_index);
       _index = i;
     });
-    if (_pages.hasClients && (_pages.page?.round() ?? _index) != i) {
-      _goTo(i);
-    }
   }
+
+  Widget _page(int i, bool isWide) => isWide
+      ? Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: _body(_kLegalDocs[i], i),
+          ),
+        )
+      : _body(_kLegalDocs[i], i);
 
   @override
   Widget build(BuildContext context) {
@@ -145,8 +135,11 @@ class _LegalHubState extends State<_LegalHub> {
       onPopInvokedWithResult: (didPop, result) {
         if (didPop || _history.isEmpty) return;
         final back = _history.removeLast();
-        setState(() => _index = back);
-        _goTo(back);
+        setState(() {
+          _forward = back > _index;
+          _rippleFrom = null;
+          _index = back;
+        });
       },
       // Same place and shape as Profile and the other pages: ends on the
       // line the chat / music panels end on (above the now-playing bar when
@@ -225,21 +218,7 @@ class _LegalHubState extends State<_LegalHub> {
               // Body — width-capped + centred on desktop, full-bleed on phone.
               // Scrolls BETWEEN the title above and the footer tab bar below.
               // Swipe left / right to move between Privacy · Terms · About.
-              Expanded(
-                child: PageView.builder(
-                  controller: _pages,
-                  itemCount: _kLegalDocs.length,
-                  onPageChanged: _onSwiped,
-                  itemBuilder: (_, i) => isWide
-                      ? Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 720),
-                            child: _body(_kLegalDocs[i], i),
-                          ),
-                        )
-                      : _body(_kLegalDocs[i], i),
-                ),
-              ),
+              Expanded(child: _switcher(isWide)),
               // PERSISTENT switcher — pinned to the FOOTER as equal-width pills.
               _footerTabs(scheme, isWide),
             ],
@@ -250,20 +229,40 @@ class _LegalHubState extends State<_LegalHub> {
     );
   }
 
-  // The scrollable document body. Keyed by index so switching tabs starts the
-  // new document from the top rather than inheriting the previous scroll.
-  Widget _body(_LegalDoc doc, int i) {
-    return Scrollbar(
-      child: SingleChildScrollView(
-        key: PageStorageKey('legal_$i'),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: _legalBody(context, doc.body),
-        ),
+  // The current document in the user's section transition; on phones the
+  // swipe to the next / previous one follows the finger (like Circle).
+  Widget _switcher(bool isWide) {
+    final switched = SectionSwitch(
+      forward: _forward,
+      rippleFrom: _rippleFrom,
+      child: KeyedSubtree(
+        key: ValueKey('legal-$_index'),
+        child: _page(_index, isWide),
       ),
     );
+    if (isWide) return switched;
+    int? step(bool fwd) {
+      final i = _index + (fwd ? 1 : -1);
+      return i >= 0 && i < _kLegalDocs.length ? i : null;
+    }
+
+    return SectionSwipePath(
+      current: switched,
+      hasNeighbor: (fwd) => step(fwd) != null,
+      neighbor: (fwd) {
+        final i = step(fwd);
+        return i == null ? null : _page(i, false);
+      },
+      commit: (fwd) {
+        final i = step(fwd);
+        if (i != null) _selectTab(i);
+      },
+    );
   }
+
+  // The scrollable document body. Keyed by index so switching tabs starts the
+  // new document from the top rather than inheriting the previous scroll.
+  Widget _body(_LegalDoc doc, int i) => _DocBody(doc: doc, index: i);
 
   // The persistent switcher, pinned to the FOOTER as three EQUAL-WIDTH pills so
   // the row is balanced across the width. Its own top border + surface tint set
@@ -310,7 +309,7 @@ class _LegalHubState extends State<_LegalHub> {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(Radii.xl),
-        onTap: selected ? null : () => _selectTab(i),
+        onTap: selected ? null : () => _selectTab(i, tapped: true),
         child: AnimatedContainer(
           duration: Motion.quick,
           curve: Curves.easeOut,
@@ -359,6 +358,42 @@ class _LegalHubState extends State<_LegalHub> {
 /// bullet points, a muted "version / last-updated" caption, and clean wrapped
 /// paragraphs (source line-wraps are re-joined). The redundant first line (the
 /// doc's own title) is dropped since the popup header already shows it.
+/// One document's scrolling body. Its own scroll controller per page on
+/// screen, so two pages crossing in a transition (or under a swipe) never
+/// share one; the PageStorageKey brings each document back where you left it.
+class _DocBody extends StatefulWidget {
+  const _DocBody({required this.doc, required this.index});
+  final _LegalDoc doc;
+  final int index;
+
+  @override
+  State<_DocBody> createState() => _DocBodyState();
+}
+
+class _DocBodyState extends State<_DocBody> {
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scrollbar(
+        controller: _scroll,
+        child: SingleChildScrollView(
+          key: PageStorageKey('legal_${widget.index}'),
+          controller: _scroll,
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: _legalBody(context, widget.doc.body),
+          ),
+        ),
+      );
+}
+
 List<Widget> _legalBody(BuildContext context, String raw) {
   final scheme = Theme.of(context).colorScheme;
   final bodyStyle = TextStyle(

@@ -904,6 +904,9 @@ class LiveSessionController {
     if (_countingDown) return;
     // The host is on a call: the music waits (a listener can't start it).
     if (_onCall && by != _myUserId) return;
+    // Starting again (the host chose to, or the listener is back) ends any
+    // wait for a listener's call — even if they left the session meanwhile.
+    _pausedForPeerCall = false;
     if (player.playing) return;
     _countingDown = true;
     final back = _resumingFromCall;

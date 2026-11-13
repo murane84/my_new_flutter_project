@@ -348,6 +348,15 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                 None, fire_online_watches, uid)
         except Exception:
             pass
+    # Server-first updates: every (re)connect hears the latest published
+    # builds, so someone offline at publish time is told the moment they
+    # come back (the app prompts once per build, then re-reminds every 6 h).
+    try:
+        from routers.releases import latest_versions
+        await websocket.send_json({"type": "app_versions",
+                                   "versions": latest_versions()})
+    except Exception:
+        pass
     # Messages held for this user's morning whose time has come.
     try:
         from morning import release_for

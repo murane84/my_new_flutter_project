@@ -34,9 +34,11 @@ import 'haptics.dart';
 ///  • a toast "✨ Aluta 1.0.3 is ready" — Update starts it, a tap shows
 ///    what's new, Later hides that build for a day;
 ///  • after three Laters (or a build a week old) the card itself comes up;
-///  • checks at start-up and whenever the app comes back to the front
-///    (at most every 6 h), and at once when the server announces a
-///    publish (socket `app_update`, or a push while Aluta is closed).
+///  • the SERVER starts it: a publish reaches every open app at once
+///    (socket `app_versions`), closed Android phones by push, and anyone
+///    offline the moment they reconnect; then the app re-reminds every
+///    6 hours until the new build is installed (see "Server-first").
+///  • web: the same signal, as a "Reload" toast.
 ///
 /// Off on web / iOS / macOS / Linux, and in a store build
 /// (`--dart-define=PLAY_STORE=true`): Play forbids self-updating there.
@@ -45,7 +47,6 @@ class AppUpdater {
   static final AppUpdater instance = AppUpdater._();
 
   static const bool _playStore = bool.fromEnvironment('PLAY_STORE');
-  static const _kSnooze = 'update_snooze_v1'; // "<build>|<epoch ms>"
   static const _kChecked = 'update_checked_v1'; // epoch ms of last auto check
   static const _kLaters = 'update_laters_v1'; // "<build>|<times Later>"
   static const kPushed = 'update_pushed_v1'; // build last announced by push
@@ -57,33 +58,145 @@ class AppUpdater {
 
   AppLifecycleListener? _life;
 
-  // ── Web: an open tab keeps running the code it loaded ───────────────────
-  // deploy_web.bat builds the number in (ALUTA_BUILD); the live site's
-  // version.json says what's deployed now. Newer → "Reload" toast.
-  static const int _webBuilt = int.fromEnvironment('ALUTA_BUILD');
-  Timer? _webTimer;
-  AppLifecycleListener? _webLife;
-  bool _webToasted = false;
+  // ── Server-first ─────────────────────────────────────────────────────────
+  // The SERVER starts every update prompt: when a build is published it
+  // tells every open app at once (socket `app_versions`) and closed Android
+  // phones by push; anyone offline hears it the moment their socket
+  // reconnects (the server sends `app_versions` on every connect). Each
+  // build is prompted ONCE when announced. Until it's installed, the app
+  // reminds again every 6 hours (the cycle below), then goes quiet until
+  // the server announces the next one. No blind polling.
+  static const _kPending = 'update_pending_v1'; // "<slot>|<build>"
+  static const _kPrompted = 'update_prompted_v1'; // "<build>|<epoch ms>"
+  static const Duration _remindEvery = Duration(hours: 6);
 
-  /// From Home once on web: check now, every 20 min, and on coming back.
-  void watchWeb(BuildContext Function() context) {
-    if (!kIsWeb || _webTimer != null || _webLife != null || _webBuilt <= 0) {
+  // Web: an open tab keeps running the code it loaded; deploy_web.bat
+  // builds the number in (ALUTA_BUILD) to compare with what's deployed.
+  static const int _webBuilt = int.fromEnvironment('ALUTA_BUILD');
+
+  Timer? _cycle;
+  bool get _cycleOn => supported || (kIsWeb && _webBuilt > 0);
+
+  Future<int> _mine() async => kIsWeb
+      ? _webBuilt
+      : int.tryParse((await PackageInfo.fromPlatform()).buildNumber) ?? 0;
+
+  /// From Home once: the 6-hour reminder cycle (it only acts while a newer
+  /// build the server announced is still not installed).
+  void startCycle(BuildContext Function() context) {
+    if (!_cycleOn || _cycle != null || _life != null) return;
+    void tick() {
+      final c = context();
+      if (c.mounted) _remind(c);
+    }
+    Future.delayed(const Duration(seconds: 10), tick); // after a restart
+    _cycle = Timer.periodic(const Duration(minutes: 15), (_) => tick());
+    _life = AppLifecycleListener(onResume: tick);
+  }
+
+  /// `app_versions` from the server (on connect, and on every publish).
+  Future<void> onServerVersions(
+      BuildContext context, Map<String, dynamic> versions) async {
+    if (!_cycleOn) return;
+    final slot = kIsWeb ? 'web' : await _slot();
+    var v = versions[slot];
+    if (v == null && slot == 'android-universal') v = versions['android'];
+    if (v is! Map) return;
+    final build = (v['build'] as num?)?.toInt() ?? 0;
+    final mine = await _mine();
+    final p = await SharedPreferences.getInstance();
+    if (build <= mine) {
+      // Up to date (or just updated): the cycle stops.
+      await p.remove(_kPending);
+      available.value = null;
       return;
     }
-    Future.delayed(const Duration(seconds: 20), () {
-      final c = context();
-      if (c.mounted) checkWeb(c);
-    });
-    _webTimer = Timer.periodic(const Duration(minutes: 20), (_) {
-      final c = context();
-      if (c.mounted) checkWeb(c);
-    });
-    _webLife = AppLifecycleListener(onResume: () {
-      final c = context();
-      if (c.mounted) checkWeb(c);
+    await p.setString(_kPending, '$slot|$build');
+    // Once per announced build; the 6-hour cycle does the reminding.
+    final s = (p.getString(_kPrompted) ?? '').split('|');
+    final promptedThis = s.length == 2 && s[0] == '$build';
+    if (promptedThis) {
+      if (context.mounted) _remind(context);
+      return;
+    }
+    // A little jitter so every open app doesn't hit the server at once.
+    await Future.delayed(
+        Duration(milliseconds: 300 + DateTime.now().microsecond % 3000));
+    if (context.mounted) await _prompt(context, '${v['version'] ?? ''}', build);
+  }
+
+  /// The 6-hour reminder: a newer build is waiting and it's been 6 h since
+  /// the last prompt → prompt again. Installed → the cycle stops.
+  Future<void> _remind(BuildContext context) async {
+    final p = await SharedPreferences.getInstance();
+    final pend = (p.getString(_kPending) ?? '').split('|');
+    if (pend.length != 2) return;
+    final build = int.tryParse(pend[1]) ?? 0;
+    if (build <= await _mine()) {
+      await p.remove(_kPending);
+      available.value = null;
+      return;
+    }
+    final s = (p.getString(_kPrompted) ?? '').split('|');
+    final last = s.length == 2 && s[0] == '$build'
+        ? int.tryParse(s[1]) ?? 0
+        : 0;
+    if (DateTime.now().millisecondsSinceEpoch - last <
+        _remindEvery.inMilliseconds) {
+      return;
+    }
+    if (context.mounted) await _prompt(context, '', build);
+  }
+
+  Future<void> _prompt(BuildContext context, String version, int build) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(
+        _kPrompted, '$build|${DateTime.now().millisecondsSinceEpoch}');
+    if (!context.mounted) return;
+    if (kIsWeb) {
+      _webToast(context, version);
+    } else {
+      await check(context, force: true);
+    }
+  }
+
+  /// A push came in while Aluta was closed: remember the build so the
+  /// cycle knows about it the next time the app runs.
+  static Future<void> rememberPushed(int build) async {
+    if (build <= 0) return;
+    final p = await SharedPreferences.getInstance();
+    final slot = defaultTargetPlatform == TargetPlatform.windows
+        ? 'windows'
+        : 'android';
+    await p.setString(_kPending, '$slot|$build');
+    await p.setString(
+        _kPrompted, '$build|${DateTime.now().millisecondsSinceEpoch}');
+  }
+
+  /// Older servers send `app_update` {platform, build}: same as a publish.
+  Future<void> announced(
+      BuildContext context, int build, String platform) async {
+    if (!supported || build <= 0) return;
+    // A Windows build means nothing to a phone, and the other way round.
+    if ((platform == 'windows') != !_android) return;
+    await onServerVersions(context, {
+      platform: {'build': build}
     });
   }
 
+  void _webToast(BuildContext context, String version) {
+    showToast(
+      context,
+      version.isEmpty ? '✨ A new Aluta is ready' : '✨ Aluta $version is ready',
+      type: ToastType.info,
+      duration: const Duration(seconds: 14),
+      detail: 'Reload to get the new version — your chats stay',
+      onTap: reloadWeb,
+      actions: [ToastAction('Reload', reloadWeb)],
+    );
+  }
+
+  /// Menu → Check for updates on the web: ask the live site now.
   Future<void> checkWeb(BuildContext context, {bool manual = false}) async {
     if (!kIsWeb) return;
     try {
@@ -98,17 +211,7 @@ class AppUpdater {
       final ver = '${j['version'] ?? ''}';
       if (!context.mounted) return;
       if (_webBuilt > 0 && live > _webBuilt) {
-        if (_webToasted && !manual) return; // once per tab, unless asked
-        _webToasted = true;
-        showToast(
-          context,
-          '✨ Aluta $ver is ready',
-          type: ToastType.info,
-          duration: const Duration(seconds: 14),
-          detail: 'Reload to get the new version — your chats stay',
-          onTap: reloadWeb,
-          actions: [ToastAction('Reload', reloadWeb)],
-        );
+        _webToast(context, ver);
       } else if (manual) {
         showToast(context, 'You have the latest Aluta ($ver) 💞',
             type: ToastType.success);
@@ -124,32 +227,6 @@ class AppUpdater {
   /// Load the page again (the new build comes with it).
   void reloadWeb() {
     launchUrl(Uri.base, webOnlyWindowName: '_self');
-  }
-
-  /// From Home once: check again whenever Aluta comes back to the front
-  /// (still at most every 6 h — people who never close the app get it too).
-  void watchResume(BuildContext Function() context) {
-    if (!supported || _life != null) return;
-    _life = AppLifecycleListener(onResume: () {
-      final c = context();
-      if (c.mounted) check(c);
-    });
-  }
-
-  /// The server just published [build] (socket event): check now, past the
-  /// 6 h gate, if it's newer than mine. A little jitter so every open app
-  /// doesn't hit the server in the same second.
-  Future<void> announced(
-      BuildContext context, int build, String platform) async {
-    if (!supported || build <= 0) return;
-    // A Windows build means nothing to a phone, and the other way round.
-    if ((platform == 'windows') != !_android) return;
-    final mine =
-        int.tryParse((await PackageInfo.fromPlatform()).buildNumber) ?? 0;
-    if (build <= mine) return;
-    await Future.delayed(
-        Duration(milliseconds: 500 + DateTime.now().microsecond % 4000));
-    if (context.mounted) check(context, force: true);
   }
 
   bool get _android => defaultTargetPlatform == TargetPlatform.android;
@@ -203,8 +280,10 @@ class AppUpdater {
     return data;
   }
 
-  /// At start-up: at most every 6 hours, quietly. [manual]: from the menu —
-  /// always checks and says when everything is up to date.
+  /// Fetch the newest release's details and prompt (toast, or the card when
+  /// required / put off 3 times / a week old). Called by the server-first
+  /// flow and its 6-hour reminders; [manual] (the menu) also says when
+  /// everything is up to date.
   Future<void> check(BuildContext context,
       {bool manual = false, bool force = false}) async {
     if (!supported || _busy) {
@@ -218,15 +297,19 @@ class AppUpdater {
     try {
       final p = await SharedPreferences.getInstance();
       final now = DateTime.now().millisecondsSinceEpoch;
-      if (!manual && !force) {
-        final last = p.getInt(_kChecked) ?? 0;
-        if (now - last < const Duration(hours: 3).inMilliseconds) return;
-      }
       final rel = await _newer();
-      // Only a check that got an answer counts — a failed one (offline,
-      // server deploying) used to silence checks for 6 hours.
       await p.setInt(_kChecked, now);
       available.value = rel;
+      // Whatever found it (server, reminder, the menu), the 6-hour cycle
+      // follows this build until it's installed.
+      if (rel == null) {
+        await p.remove(_kPending);
+      } else {
+        await p.setString(_kPending, '${await _slot()}|${rel['build']}');
+        if (manual) {
+          await p.setString(_kPrompted, '${rel['build']}|$now');
+        }
+      }
       if (!context.mounted) return;
       if (rel == null) {
         if (manual) {
@@ -239,16 +322,6 @@ class AppUpdater {
       }
       final mine = rel['__mine'] as int;
       final required = mine < ((rel['min_build'] as num?)?.toInt() ?? 0);
-      // "Later" on this build → quiet for a day (a required one always asks).
-      if (!manual && !required) {
-        final s = (p.getString(_kSnooze) ?? '').split('|');
-        if (s.length == 2 &&
-            s[0] == '${rel['build']}' &&
-            now - (int.tryParse(s[1]) ?? 0) <
-                const Duration(days: 1).inMilliseconds) {
-          return;
-        }
-      }
       if (manual || required || _escalate(p, rel)) {
         await _offer(context, rel, required: required);
       } else {
@@ -314,7 +387,9 @@ class AppUpdater {
     final s = (p.getString(_kLaters) ?? '').split('|');
     final n = (s.length == 2 && s[0] == b ? int.tryParse(s[1]) ?? 0 : 0) + 1;
     await p.setString(_kLaters, '$b|$n');
-    await p.setString(_kSnooze, '$b|${DateTime.now().millisecondsSinceEpoch}');
+    // Later → the next reminder comes 6 hours from now.
+    await p.setString(
+        _kPrompted, '$b|${DateTime.now().millisecondsSinceEpoch}');
   }
 
   /// The download page in the browser — the way out if the in-app

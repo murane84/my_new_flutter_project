@@ -330,6 +330,8 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         return;
       }
       await p.setInt(AppUpdater.kPushed, build);
+      // The cycle picks it up next time Aluta runs (6-hour reminders).
+      await AppUpdater.rememberPushed(build);
       final note = (data['note'] ?? '').toString().trim();
       await showAlutaNotification(
         channel: alutaTeamChannel,

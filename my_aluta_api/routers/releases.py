@@ -469,6 +469,28 @@ async def publish(
             **meta}
 
 
+def latest_versions() -> dict:
+    """{slot: {"version", "build", "min_build"}} for every published app,
+    plus "web" (the deployed web build). Sent to each socket on connect and
+    to everyone on publish — the server is what starts an update prompt."""
+    out: dict = {}
+    for slot in PLATFORMS:
+        m = _meta(slot)
+        if m:
+            out[slot] = {"version": m.get("version"), "build": m.get("build"),
+                         "min_build": m.get("min_build") or 0}
+    try:
+        vj = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                          "webapp", "version.json")
+        with open(vj, encoding="utf-8") as f:
+            w = json.load(f)
+        out["web"] = {"version": w.get("version"),
+                      "build": int(w.get("build_number") or 0), "min_build": 0}
+    except Exception:
+        pass
+    return out
+
+
 # The universal APK is the same build as the arm64 one — announcing both
 # would ping every phone twice. Windows apps hear it over their socket.
 _ANNOUNCE = ("android", "windows")
@@ -484,10 +506,9 @@ def _announce(meta: dict) -> int:
     if meta["platform"] not in _ANNOUNCE:
         return 0
     evt = {
-        "type": "app_update",
-        "platform": meta["platform"],
-        "version": meta["version"],
-        "build": meta["build"],
+        "type": "app_versions",
+        "versions": latest_versions(),
+        "announce": meta["platform"],  # what was just published
     }
     told = 0
     try:
@@ -503,7 +524,9 @@ def _announce(meta: dict) -> int:
         first = next((l.strip(" -•*\t") for l in meta["notes"].splitlines()
                       if l.strip(" -•*\t")), "")
         threading.Thread(target=_push_android, daemon=True, args=(
-            {**evt, "note": first[:120]},)).start()
+            {"type": "app_update", "platform": "android",
+             "version": meta["version"], "build": meta["build"],
+             "note": first[:120]},)).start()
     return told
 
 

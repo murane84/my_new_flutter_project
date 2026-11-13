@@ -893,14 +893,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     DownloadManager.instance.init();
     // Android outside the Play Store: is a newer Aluta published? (quietly,
     // at most every 6 h; a few seconds in so it never competes with start-up)
-    Future.delayed(const Duration(seconds: 8), () {
-      if (mounted) AppUpdater.instance.check(context);
-    });
-    // …and each time Aluta comes back to the front (same 6 h gate), so a
-    // phone that never closes the app still hears about a new build.
-    AppUpdater.instance.watchResume(() => context);
-    // Web: an open tab hears about a newer deploy (Reload toast).
-    AppUpdater.instance.watchWeb(() => context);
+    // Updates are server-first (the socket's app_versions starts a prompt);
+    // this is only the 6-hour reminder while a new build waits.
+    AppUpdater.instance.startCycle(() => context);
     // 90/120 Hz where the phone can keep up — decided by the app itself.
     SmoothMotion.instance.init();
 
@@ -2942,8 +2937,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
       }
       // (the open chat handles its own bubbles — don't swallow the event)
     }
+    if (type == 'app_versions' && event['versions'] is Map) {
+      // Server-first updates: sent on every connect and on every publish.
+      AppUpdater.instance.onServerVersions(
+          context, Map<String, dynamic>.from(event['versions'] as Map));
+    }
     if (type == 'app_update') {
-      // Just published (server announce) → check now, toast if newer.
+      // (an older server's publish announce)
       AppUpdater.instance.announced(context,
           (event['build'] as num?)?.toInt() ?? 0, '${event['platform']}');
     }

@@ -515,7 +515,15 @@ def _announce(meta: dict) -> int:
         from websocket_manager import broadcast_event, connected_users
         uids = list(connected_users.keys())
         told = len(uids)
-        t = asyncio.get_running_loop().create_task(broadcast_event(uids, evt))
+        # 1.0.4 apps only understand the older `app_update` event: send
+        # both until everyone is on the server-first build.
+        legacy = {"type": "app_update", "platform": meta["platform"],
+                  "version": meta["version"], "build": meta["build"]}
+
+        async def _both():
+            await broadcast_event(uids, evt)
+            await broadcast_event(uids, legacy)
+        t = asyncio.get_running_loop().create_task(_both())
         _tasks.add(t)
         t.add_done_callback(_tasks.discard)
     except Exception as e:  # noqa: BLE001

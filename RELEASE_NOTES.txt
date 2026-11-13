@@ -1,12 +1,16 @@
-Update card redesigned — see what's new and your download progress at a glance
-Long "What's new" lists now scroll inside the update card instead of stretching it
-Bring them along — see when your bonded partner is on an older Aluta and invite them to update with one tap
-Get a little "they're here ✨" when the partner you invited updates
-Music sounds full and in stereo again right after a call — no more flat, mono sound
-Privacy, Terms and About now switch with your chosen transition, and a swipe follows your finger
-About now shows your Aluta version — tap it to copy for support
-Privacy Policy and Terms refreshed to match today's Aluta features
-You'll be asked once to review and accept the updated Privacy Policy and Terms
-Desktop chat: one slim glass pill (😊 · reply · more) appears on a message when you hover — no more stacked buttons
-Desktop chat: reactions open only when you click 😊, then unfold in a soft strip — reply straight from the pill
-Windows: emoji now look the same soft way as on Android
+Playlist rows now line up evenly, whether a song has an artist line or not
+Listen Together: joining halfway through a song no longer gets stuck on repeat — you hear it from the start together
+Song names look clean — no more underscores or download-site junk
+Aluta finds the artist hidden in a song's name
+Tidy all messy song names in one tap
+Find a song's real name by its sound
+Voice notes and recordings no longer show up as songs in your playlist
+Duplicate songs now show once — the best copy plays
+Songs without artwork get their real cover
+"Our songs" — the songs you share with your person, gathered for you
+Long mixes pick up where you left off
+Files that can't play are skipped instead of stopping your music
+Rediscover favourites you haven't played in a while
+Expired and leftover files are cleared away, so Aluta stays light on storage
+Behind-the-scenes tidy-ups keep chats and media loading quickly
+We can now spot and fix server problems faster, keeping Aluta running smoothly

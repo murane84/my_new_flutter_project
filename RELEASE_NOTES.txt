@@ -1,18 +1,23 @@
-Song covers now show everywhere — the mini-player, Up next, the Now Playing disc and the music bar, not just your playlist
-The "back to latest" button in chats is now a small glass pill that doesn't compete with the mic
-Group mentions look softer: tags show in your theme colour, a mention of you stands out as a pill, and a tag deletes in one tap of backspace
-In your chat list, mentions show in your theme colour and chats where you're tagged get an @ up front; song previews use the clean name
-Songs shared in chat show their cover
-Now Playing takes each song cover's colour — or keep your theme colour (Player style → Colours)
-The lock screen and notification show the song's cover
-Listen Together shows the song's cover for everyone listening
-The "back to latest" pill shows who wrote while you were scrolled up, and turns into @ when someone tags you
-Tap a @mention to see who it is, with Message and Call
-The tag list puts the people talking right now first
-Opening a group where you were tagged takes you straight to that message
-See who's online in your status viewers before you nudge them
-Music statuses now carry the song — friends hear 15 seconds of it
-On a music status with sound, tap "Playing" to mute it
-The lock screen and notification now show a ❤ to save the song you're playing
-A smart line on the music card: sleep timer, "Our song", "On repeat today" or where you are in your playlist
-Listen Together shows the real song, its cover and who you're listening with on the music card
+Messages now show two grey ticks as soon as they reach your friend's phone — even when their Aluta is closed
+Cards on computer can now be dragged closed from the grab line at the top
+Player style shows your playing song in every sample, and the chosen look spins with the music
+Delivered ticks now show more reliably when the app is closed
+Four new player looks: Polaroid, Aura, Sunset and Boombox
+Listening together turns the player into Duet with your person on the second record
+Polaroid look signs songs sent to you: "from Sam ♡"
+Hold a player look to try it before you pick
+Favourite your looks, and get a new look each song
+Match my day: Sunset in the evening, Aura late at night, Boombox on weekend afternoons
+The locked Anniversary Vinyl shows how many days you have left
+Listen Together: pauses, calls and "ready" nudges now show briefly under the player instead of filling the room's chat
+Song pickers in Our Space, chats and listening rooms now show the same clean names and covers as your playlist
+Our Space: switching sections no longer flashes a grey box
+"Listen together" and "Dedicate" buttons stay neat on one line
+Our Playlist and Listen Together now show the same clean song names as your playlist
+Aluta plans: every feature is open to everyone, with more room on Together and Together Plus
+Pay with M-Pesa: send, type the code from your message, and we switch your plan on
+Bigger Our Space: 1 GB of keepsakes for the two of you — a gift one of you can give
+When a plan ends nothing is deleted — your extra Spaces simply rest until you renew
+Calls, Listen Together rooms, file sizes and song recognition now follow your plan
+@mentions show the name you saved for each person
+Group calls: the caller's plan sets the length for everyone, with a one-minute heads-up before it ends

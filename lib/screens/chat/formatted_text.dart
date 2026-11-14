@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:linkify/linkify.dart' show linkify;
 import '../../utils/loose_url_linkifier.dart';
+import '../../utils/readable.dart' show accentInk;
 
 /// Renders a chat message with lightweight, WhatsApp/Telegram-style formatting:
 ///   *bold*  _italic_  ~strike~  __underline__  `code`  ==highlight==  ||spoiler||
@@ -147,18 +148,21 @@ List<InlineSpan> _mentionize(
       out.add(TextSpan(text: s.substring(cursor, m.start), style: base));
     }
     final tok = m.group(0)!;
-    final c = mentionStyle.color ?? base.color ?? Colors.blue;
     final key = tok.substring(1).replaceAll('\u00A0', ' ').toLowerCase();
     final shown = key == 'all' ? null : MentionSelf.names[key];
-    out.add(TextSpan(
-      text: shown == null ? tok : '@$shown',
-      // Chip only when the run has no background of its own (==highlight==).
-      style: _isSelfMention(tok) &&
-              mentionStyle.backgroundColor == null &&
-              mentionStyle.background == null
-          ? mentionStyle.copyWith(background: Paint()..color = c.withValues(alpha: 0.18))
-          : mentionStyle,
-    ));
+    final label = shown == null ? tok : '@$shown';
+    // Inside ==highlight== (a background of its own): plain accent text.
+    if (mentionStyle.backgroundColor != null ||
+        mentionStyle.background != null) {
+      out.add(TextSpan(text: label, style: mentionStyle));
+    } else {
+      out.add(WidgetSpan(
+        alignment: PlaceholderAlignment.baseline,
+        baseline: TextBaseline.alphabetic,
+        child: _MentionChip(
+            label: label, base: base, mine: _isSelfMention(tok)),
+      ));
+    }
     cursor = m.end;
   }
   if (cursor < s.length) {
@@ -633,8 +637,38 @@ class FormattingTextController extends TextEditingController {
         codeBg: onColor.withValues(alpha: 0.12),
         highlightBg: const Color(0x66FFC107),
         spoilerBg: scheme.primary.withValues(alpha: 0.16),
+        mention: accentInk(scheme),
       ),
     );
+  }
+
+  /// A finished tag ("@all", "@Juma") goes in one backspace — like a chip —
+  /// instead of letter by letter. A tag still being typed edits normally.
+  @override
+  set value(TextEditingValue v) {
+    super.value = _wholeTagDelete(super.value, v) ?? v;
+  }
+
+  static TextEditingValue? _wholeTagDelete(
+      TextEditingValue old, TextEditingValue v) {
+    if (v.text.length != old.text.length - 1) return null;
+    if (!old.selection.isCollapsed || !v.selection.isCollapsed) return null;
+    final p = v.selection.baseOffset;
+    if (p < 0 || old.selection.baseOffset != p + 1) return null;
+    if (old.text.substring(0, p) + old.text.substring(p + 1) != v.text) {
+      return null;
+    }
+    for (final m in _mentionRe.allMatches(old.text)) {
+      if (m.end != p + 1) continue;
+      final key =
+          m.group(0)!.substring(1).replaceAll('\u00A0', ' ').toLowerCase();
+      if (key != 'all' && !MentionSelf.names.containsKey(key)) return null;
+      return TextEditingValue(
+        text: old.text.replaceRange(m.start, m.end, ''),
+        selection: TextSelection.collapsed(offset: m.start),
+      );
+    }
+    return null;
   }
 }
 
@@ -645,6 +679,7 @@ List<InlineSpan> _composerSpans(
   required Color codeBg,
   required Color highlightBg,
   required Color spoilerBg,
+  Color? mention,
 }) {
   List<InlineSpan> recurse(String inner, TextStyle st) => _composerSpans(
         inner, st,
@@ -652,7 +687,27 @@ List<InlineSpan> _composerSpans(
         codeBg: codeBg,
         highlightBg: highlightBg,
         spoilerBg: spoilerBg,
+        mention: mention,
       );
+
+  // Plain text, with any @-tag shown in the accent ink (the text itself is
+  // untouched — the composer must keep every character where it is).
+  List<InlineSpan> plain(String t, TextStyle st) {
+    if (mention == null || !t.contains('@')) {
+      return [TextSpan(text: t, style: st)];
+    }
+    final spans = <InlineSpan>[];
+    var c = 0;
+    for (final m in _mentionRe.allMatches(t)) {
+      if (m.start > c) spans.add(TextSpan(text: t.substring(c, m.start), style: st));
+      spans.add(TextSpan(
+          text: m.group(0),
+          style: st.copyWith(color: mention, fontWeight: FontWeight.w700)));
+      c = m.end;
+    }
+    if (c < t.length) spans.add(TextSpan(text: t.substring(c), style: st));
+    return spans;
+  }
 
   final out = <InlineSpan>[];
   var cursor = 0;
@@ -672,11 +727,11 @@ List<InlineSpan> _composerSpans(
       break;
     }
     if (found == null) {
-      out.add(TextSpan(text: s.substring(cursor), style: base));
+      out.addAll(plain(s.substring(cursor), base));
       break;
     }
     if (found.start > cursor) {
-      out.add(TextSpan(text: s.substring(cursor, found.start), style: base));
+      out.addAll(plain(s.substring(cursor, found.start), base));
     }
     final tok = found.marker.token;
     final markerStyle = base.copyWith(color: marker);
@@ -954,3 +1009,35 @@ const Map<String, IconData> _previewIcons = {
   '📊': Icons.poll_rounded,
   '👤': Icons.person_rounded,
 };
+
+/// An @-mention in a bubble, the Aluta way: the name in the accent ink; when
+/// it's me (or @all) a soft rounded accent pill around it — not a flat
+/// highlighter box.
+class _MentionChip extends StatelessWidget {
+  const _MentionChip(
+      {required this.label, required this.base, required this.mine});
+  final String label;
+  final TextStyle base;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final ink = accentInk(scheme);
+    final text = Text(label,
+        style: base.copyWith(
+            color: ink, fontWeight: FontWeight.w700, height: 1.15));
+    if (!mine) return text;
+    final dark = scheme.brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0.5),
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: dark ? 0.24 : 0.13),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+            color: scheme.primary.withValues(alpha: dark ? 0.40 : 0.24)),
+      ),
+      child: text,
+    );
+  }
+}

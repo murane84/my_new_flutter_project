@@ -243,75 +243,156 @@ extension _ChatMentions on _ChatPageState {
           if (!ticked.remove(id)) ticked.add(id);
         });
 
+    final picking = ticked.isNotEmpty;
+    final ink = accentInk(scheme);
+
     Widget row(Map<String, dynamic> m) {
       final id = (m['user_id'] as num?)?.toInt();
       final name = _memberName(m);
       final user = _memberUsername(m);
       final on = id != null && ticked.contains(id);
-      return InkWell(
-        // Tap = tag this person now. Once you've started ticking, a tap
-        // toggles instead, and the button below tags them all.
-        onTap: id == null
-            ? null
-            : () => ticked.isEmpty ? _commitMentions([m]) : toggle(id),
-        onLongPress: id == null ? null : () => toggle(id),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
-          child: Row(
-            children: [
-              avatarFor(m, name),
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        child: Material(
+          color: on
+              ? scheme.primary.withValues(alpha: isDark ? 0.18 : 0.09)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(Radii.lg),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(Radii.lg),
+            // Tap = tag this person now. Hold = pick several; while picking,
+            // a tap toggles and "Tag N" tags them all.
+            onTap: id == null
+                ? null
+                : () => picking ? toggle(id) : _commitMentions([m]),
+            onLongPress: id == null ? null : () => toggle(id),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 6, 10, 6),
+              child: Row(
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: on ? scheme.primary : Colors.transparent,
+                          width: 2),
+                    ),
+                    child: avatarFor(m, name),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: scheme.onSurface)),
+                        if (user.isNotEmpty && user != name)
+                          Text('@$user',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 11.5, color: ink)),
+                      ],
+                    ),
+                  ),
+                  // Ticks only appear once you're picking several.
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 160),
+                    transitionBuilder: (c, a) =>
+                        ScaleTransition(scale: a, child: c),
+                    child: !picking
+                        ? const SizedBox.shrink()
+                        : Icon(
+                            on
+                                ? Icons.check_circle_rounded
+                                : Icons.radio_button_unchecked_rounded,
+                            key: ValueKey(on),
+                            size: 20,
+                            color: on
+                                ? scheme.primary
+                                : scheme.outlineVariant),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Everyone: a soft accent pill row at the top.
+    final everyone = Padding(
+      padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
+      child: Material(
+        color: scheme.primary.withValues(alpha: isDark ? 0.16 : 0.08),
+        borderRadius: BorderRadius.circular(Radii.lg),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(Radii.lg),
+          onTap: () => _commitMentions(const [], all: true),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
+            child: Row(children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color.lerp(scheme.primary, Colors.white, 0.25)!,
+                      scheme.primary,
+                    ],
+                  ),
+                ),
+                child: Icon(Icons.groups_rounded,
+                    size: 18, color: scheme.onPrimary),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.w600)),
-                    if (user.isNotEmpty && user != name)
-                      Text('@$user',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              fontSize: 11.5,
-                              color: scheme.onSurfaceVariant)),
+                    Text('Everyone',
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: scheme.onSurface)),
+                    Text('@all · notify the whole group',
+                        style: TextStyle(fontSize: 11.5, color: ink)),
                   ],
                 ),
               ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                tooltip: on ? 'Untick' : 'Select several',
-                onPressed: id == null ? null : () => toggle(id),
-                icon: Icon(
-                  on
-                      ? Icons.check_circle_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  color: on ? scheme.primary : scheme.outlineVariant,
-                  size: 22,
-                ),
-              ),
-            ],
+            ]),
           ),
         ),
-      );
-    }
+      ),
+    );
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-      constraints: BoxConstraints(maxHeight: maxH, maxWidth: 560),
+      margin: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+      constraints: BoxConstraints(maxHeight: maxH, maxWidth: 520),
       decoration: BoxDecoration(
-        color: scheme.surface,
+        color: Color.alphaBlend(
+            scheme.primary.withValues(alpha: isDark ? 0.06 : 0.03),
+            scheme.surface),
         borderRadius: BorderRadius.circular(Radii.xl),
         border: Border.all(
-            color: scheme.primary.withValues(alpha: isDark ? 0.30 : 0.16)),
+            color: scheme.primary.withValues(alpha: isDark ? 0.28 : 0.16)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.40 : 0.10),
-            blurRadius: Depth.lg,
-            offset: const Offset(0, 4),
+            color: scheme.primary.withValues(alpha: isDark ? 0.18 : 0.10),
+            blurRadius: 22,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -320,31 +401,47 @@ extension _ChatMentions on _ChatPageState {
         mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 8, 6, 6),
+            padding: const EdgeInsets.fromLTRB(12, 8, 4, 4),
             child: Row(
               children: [
-                Icon(Icons.alternate_email_rounded,
-                    size: 16, color: accentInk(scheme)),
-                const SizedBox(width: 7),
-                Text(
-                    ticked.isEmpty
-                        ? 'Tag members'
-                        : '${ticked.length} selected',
+                Container(
+                  width: 22,
+                  height: 22,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: scheme.primary.withValues(alpha: 0.14),
+                  ),
+                  child: Icon(Icons.alternate_email_rounded,
+                      size: 13, color: ink),
+                ),
+                const SizedBox(width: 8),
+                Text(picking ? '${ticked.length} picked' : 'Tag someone',
                     style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w800,
                         color: scheme.onSurface)),
+                if (!picking) ...[
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text('· hold to pick several',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                  ),
+                ],
                 const Spacer(),
-                if (ticked.isNotEmpty)
-                  TextButton.icon(
-                    style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact),
+                if (picking)
+                  FilledButton.tonal(
+                    style: FilledButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        shape: const StadiumBorder()),
                     onPressed: () => _commitMentions(_groupMembers
-                        .where((m) => ticked
-                            .contains((m['user_id'] as num?)?.toInt()))
+                        .where((m) =>
+                            ticked.contains((m['user_id'] as num?)?.toInt()))
                         .toList()),
-                    icon: const Icon(Icons.check_rounded, size: 17),
-                    label: Text('Tag ${ticked.length}'),
+                    child: Text('Tag ${ticked.length}'),
                   ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
@@ -356,7 +453,6 @@ extension _ChatMentions on _ChatPageState {
               ],
             ),
           ),
-          const Divider(height: 1),
           Flexible(
             child: _groupMembers.isEmpty
                 ? const Padding(
@@ -367,53 +463,17 @@ extension _ChatMentions on _ChatPageState {
                         child: CircularProgressIndicator(strokeWidth: 2.4)),
                   )
                 : ListView(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    padding: const EdgeInsets.only(bottom: 6),
                     shrinkWrap: true,
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.manual,
                     children: [
-                      if (showAll)
-                        InkWell(
-                          onTap: () => _commitMentions(const [], all: true),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 17,
-                                  backgroundColor:
-                                      scheme.primary.withValues(alpha: 0.16),
-                                  child: Icon(Icons.groups_rounded,
-                                      size: 18, color: accentInk(scheme)),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text('@all',
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                              color: accentInk(scheme))),
-                                      Text('Notify everyone in this group',
-                                          style: TextStyle(
-                                              fontSize: 11.5,
-                                              color:
-                                                  scheme.onSurfaceVariant)),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                      if (showAll && !picking) everyone,
                       if (candidates.isEmpty && !showAll)
                         Padding(
                           padding: const EdgeInsets.all(16),
                           child: Center(
-                            child: Text('No members match "@$_mentionQuery"',
+                            child: Text('No one here matches "@$_mentionQuery"',
                                 style: TextStyle(
                                     color: scheme.onSurfaceVariant)),
                           ),

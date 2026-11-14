@@ -370,7 +370,7 @@ class PlanIn(BaseModel):
     active: Optional[bool] = None
 
 
-@router.put("/plans/{code}")
+@router.post("/plans/{code}")
 def edit_plan(code: str, payload: PlanIn, ctx: AdminCtx = Depends(admin_ctx),
               db: Session = Depends(get_db)):
     """Change a plan's price / length deal / storage. Only new payments use
@@ -412,7 +412,7 @@ class SettingsIn(BaseModel):
     instructions: Optional[str] = None
 
 
-@router.put("/settings")
+@router.post("/settings")
 def edit_settings(payload: SettingsIn, ctx: AdminCtx = Depends(admin_ctx),
                   db: Session = Depends(get_db)):
     _guard(ctx, payload.password)

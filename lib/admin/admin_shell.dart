@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../widgets/genie_menu.dart';
 
 import 'admin_api.dart';
+import 'admin_billing.dart';
 import 'admin_devices.dart';
 import 'admin_feedback.dart';
 import 'admin_install.dart';
@@ -44,6 +45,7 @@ class _AdminGroup {
 
 int _pendingBadge(_AdminShellState s) => s._pending;
 int _feedbackBadge(_AdminShellState s) => s._newFeedback;
+int _paymentsBadge(_AdminShellState s) => s._newPayments;
 
 const _groups = <_AdminGroup>[
   _AdminGroup('Insights', Icons.insights_outlined, Icons.insights_rounded, [
@@ -59,6 +61,17 @@ const _groups = <_AdminGroup>[
         Icons.rate_review_rounded,
         badge: _feedbackBadge,
         badgeWord: 'new'),
+  ]),
+  _AdminGroup('Money', Icons.payments_outlined, Icons.payments_rounded, [
+    _AdminPage('money', 'Overview', Icons.payments_outlined,
+        Icons.payments_rounded),
+    _AdminPage('payments', 'Payments', Icons.receipt_outlined,
+        Icons.receipt_rounded,
+        badge: _paymentsBadge,
+        badgeWord: 'to check'),
+    _AdminPage('subscribers', 'Subscribers',
+        Icons.workspace_premium_outlined, Icons.workspace_premium_rounded),
+    _AdminPage('prices', 'Prices', Icons.sell_outlined, Icons.sell_rounded),
   ]),
   _AdminGroup('Security', Icons.shield_outlined, Icons.shield_rounded, [
     _AdminPage('devices', 'Devices', Icons.devices_outlined,
@@ -78,7 +91,7 @@ const _groups = <_AdminGroup>[
   ]),
 ];
 
-/// Signed-in frame: the page groups (Insights · People · Security ·
+/// Signed-in frame: the page groups (Insights · People · Money · Security ·
 /// System), plus the always-there "Lock admin" (Not me), the dark/light
 /// switch and sign-out.
 class AdminShell extends StatefulWidget {
@@ -96,6 +109,7 @@ class _AdminShellState extends State<AdminShell> {
   final Map<int, int> _pageIn = <int, int>{};
   int get _pending => (_me?['pending_requests'] as num?)?.toInt() ?? 0;
   int get _newFeedback => (_me?['new_feedback'] as num?)?.toInt() ?? 0;
+  int get _newPayments => (_me?['pending_payments'] as num?)?.toInt() ?? 0;
 
   int _pageOf(int g) =>
       (_pageIn[g] ?? 0).clamp(0, _groups[g].pages.length - 1);
@@ -132,6 +146,13 @@ class _AdminShellState extends State<AdminShell> {
         'devices' => AdminDevicesPage(onChanged: _loadMe),
         'feedback' => AdminFeedbackPage(onChanged: _loadMe),
         'people' => const AdminUsersPage(),
+        'money' => AdminBillingPage(onChanged: _loadMe),
+        'payments' => AdminBillingPage(
+            view: AdminBillingView.payments, onChanged: _loadMe),
+        'subscribers' => AdminBillingPage(
+            view: AdminBillingView.subscribers, onChanged: _loadMe),
+        'prices' => AdminBillingPage(
+            view: AdminBillingView.prices, onChanged: _loadMe),
         'log' => const AdminAuditPage(),
         _ => const SizedBox.shrink(),
       };

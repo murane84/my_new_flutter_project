@@ -729,12 +729,15 @@ def admin_me(ctx: AdminCtx = Depends(admin_ctx), db: Session = Depends(get_db)):
         AdminRecoveryCode.used_at.is_(None)).count()
     from models import Feedback
     new_fb = db.query(Feedback).filter(Feedback.status == "new").count()
+    from models import Payment
+    new_pay = db.query(Payment).filter(Payment.status == "pending").count()
     return {"owner": {"id": ctx.user.id, "username": ctx.user.username,
                       "email": ctx.user.email},
             "device": _device_out(ctx.device, ctx.device.id),
             "pending_requests": pending,
             "recovery_codes_left": left,
-            "new_feedback": new_fb}
+            "new_feedback": new_fb,
+            "pending_payments": new_pay}
 
 
 @router.post("/logout")
@@ -1323,6 +1326,14 @@ def _acct_state(c) -> dict:
     return {"status": "active"}
 
 
+def _plan_of(u: User) -> str:
+    try:
+        import billing
+        return billing.tier_of(u)
+    except Exception:
+        return getattr(u, "plan_tier", None) or "free"
+
+
 def _user_row(u: User, c) -> dict:
     # "Online" = a live socket right now (users.is_online can be left stale
     # by a dropped connection).
@@ -1337,7 +1348,7 @@ def _user_row(u: User, c) -> dict:
         "online": live,
         "last_seen": _iso(_aware(u.last_seen)),
         "created_at": _iso(_aware(getattr(u, "created_at", None))),
-        "plan": getattr(u, "plan_tier", None) or "free",
+        "plan": _plan_of(u),
         **_acct_state(c),
     }
 

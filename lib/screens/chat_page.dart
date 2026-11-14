@@ -5672,7 +5672,9 @@ class _ChatPageState extends State<ChatPage>
         context,
         when == null
             ? 'Only you can see this until it opens'
-            : 'Only you can see this until ${heartOpensLabel(when, prefix: '')}',
+            : isTogetherSeal(when)
+                ? 'Only you can see this until you’re both here'
+                : 'Only you can see this until ${heartOpensLabel(when, prefix: '')}',
         type: ToastType.info);
     return true;
   }

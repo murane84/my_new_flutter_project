@@ -62,7 +62,11 @@ class _SongBed {
       }
       if (gen != _gen) return false;
       // Start at the chosen part ("start at the chorus").
-      final from = (bed['start'] as num?)?.toInt() ?? 0;
+      var from = (bed['start'] as num?)?.toInt() ?? 0;
+      // A start past the song's end (a short song) would play silence →
+      // from the top instead.
+      final dur = p.duration;
+      if (dur != null && from > dur.inSeconds - 8) from = 0;
       if (from > 0) await p.seek(Duration(seconds: from));
       if (gen != _gen) return false;
       await p.setVolume(0);

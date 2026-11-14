@@ -4775,6 +4775,8 @@ class HomePageState extends rp.ConsumerState<HomePage>
     final scheme = Theme.of(context).colorScheme;
     final full = _avatarFull(_activeFriendAvatar);
     final show = _avatarExpanded && full != null;
+    final profile = (_activeFriendName ?? '').trim();
+    final shown = _contactDisplayName(_activeFriendPhone, profile);
     return AnimatedSize(
       duration: Motion.standard,
       curve: Curves.easeOutCubic,
@@ -4797,17 +4799,30 @@ class HomePageState extends rp.ConsumerState<HomePage>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       InitialsAvatar(
-                        name: _activeFriendName ?? '',
+                        name: shown,
                         radius: 78,
                         isOnline: false,
                         imageUrl: full,
                       ),
                       const SizedBox(height: 12),
+                      // My saved name for them (same as the header), with
+                      // their own Aluta name small underneath when it differs.
                       Text(
-                        _activeFriendName ?? '',
+                        shown,
                         style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 16),
                       ),
+                      if (profile.isNotEmpty &&
+                          profile.toLowerCase() != shown.toLowerCase() &&
+                          RegExp(r'[A-Za-z]').hasMatch(profile)) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          '~$profile',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: scheme.onSurfaceVariant),
+                        ),
+                      ],
                       const SizedBox(height: 6),
                       Row(
                         mainAxisSize: MainAxisSize.min,

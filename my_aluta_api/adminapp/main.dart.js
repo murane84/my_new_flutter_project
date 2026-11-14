@@ -48494,6 +48494,7 @@ TF(a,b){var s
 A.bH(a)
 s=a==null?null:B.d.ci(a)
 if(s==null)s=0
+if(b==="on/off")return s===0?"Off":"On"
 if(s===-1)return"Unlimited"
 return""+s+" "+b},
 qP(a,b){return this.acJ(a,b)},
@@ -48514,25 +48515,30 @@ o=g?"":""+m
 l=$.ai()
 k=new A.cR(new A.c8(o,B.bw,B.aj),l)
 h.a=g
-g=p.c
-g.toString
-s=3
-return A.u(A.hk(!0,new A.arc(h,b,a,k,m),g,t.S),$async$qP)
-case 3:j=d
-k.O$=l
+g=J.ak(a)
+s=J.c(g.h(a,"unit"),"on/off")?3:5
+break
+case 3:j=m===0?1:0
+s=4
+break
+case 5:o=p.c
+o.toString
+s=6
+return A.u(A.hk(!0,new A.arc(h,b,a,k,m),o,t.S),$async$qP)
+case 6:j=d
+case 4:k.O$=l
 k.I$=0
 if(j==null||p.c==null){s=1
 break}h=p.c
 h.toString
-g=J.ak(a)
 o=p.TF(j,A.k(g.h(a,"unit")))
-s=4
+s=7
 return A.u(A.hZ(h,"Save","Applies at once for everyone on "+A.k(B.mt.h(0,b))+".","Change it to "+o+"?"),$async$qP)
-case 4:i=d
+case 7:i=d
 if(i==null){s=1
-break}s=5
+break}s=8
 return A.u(p.jr("/admin/api/billing/limits",A.aw(["password",i,"level",b,"meter",g.h(a,"key"),"value",j],t.N,t.z),"Saved"),$async$qP)
-case 5:case 1:return A.G(q,r)}})
+case 8:case 1:return A.G(q,r)}})
 return A.H($async$qP,r)},
 aix(){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d=this,c=null,b=d.c
 b.toString

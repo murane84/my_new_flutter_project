@@ -1017,7 +1017,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 children: [
                   _progressBars(),
                   _topBar(),
-                  if ((item.songTitle ?? '').trim().isNotEmpty)
+                  // (A music status shows its song on the card itself.)
+                  if ((item.songTitle ?? '').trim().isNotEmpty &&
+                      !item.isMusic)
                     _songPill(item),
                   // Paused (holding, typing, a picker open): say so.
                   AnimatedOpacity(
@@ -1389,17 +1391,45 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 ),
               ],
               const SizedBox(height: 10),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.graphic_eq_rounded,
-                      color: ink.withValues(alpha: 0.7), size: 18),
-                  const SizedBox(width: 6),
-                  Text('Now playing',
-                      style: TextStyle(
+              // The song is heard (it carries a clip) → this line is its
+              // mute switch; a title-only status just says "Now playing".
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (_) {},
+                onTap: (item.songUrl ?? '').isEmpty
+                    ? null
+                    : () {
+                        Haptics.selectionClick();
+                        setState(() => _songMuted = !_songMuted);
+                        _song?.setVolume(_songMuted ? 0 : 1);
+                      },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                          (item.songUrl ?? '').isEmpty
+                              ? Icons.graphic_eq_rounded
+                              : (_songMuted
+                                  ? Icons.volume_off_rounded
+                                  : Icons.volume_up_rounded),
                           color: ink.withValues(alpha: 0.7),
-                          fontSize: 12)),
-                ],
+                          size: 18),
+                      const SizedBox(width: 6),
+                      Text(
+                          (item.songUrl ?? '').isEmpty
+                              ? 'Now playing'
+                              : (_songMuted
+                                  ? 'Muted · tap to hear it'
+                                  : 'Playing · tap to mute'),
+                          style: TextStyle(
+                              color: ink.withValues(alpha: 0.7),
+                              fontSize: 12)),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),

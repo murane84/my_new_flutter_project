@@ -7933,7 +7933,7 @@ class _ChatPageState extends State<ChatPage>
                     // "↩ Back to reply" / "👀 … is showing you a message"
                     if (_pill != null)
                       Positioned(
-                        bottom: _hasNewMsg ? 52 : 8,
+                        bottom: _hasNewMsg && !_farFromBottom ? 52 : 8,
                         left: 16,
                         right: 16,
                         child: Center(
@@ -7983,8 +7983,9 @@ class _ChatPageState extends State<ChatPage>
                           ),
                         ),
                       ),
-                    // New messages chip
-                    if (_hasNewMsg)
+                    // New messages chip — only near the bottom; further up
+                    // the pill already shows who's waiting.
+                    if (_hasNewMsg && !_farFromBottom)
                       Positioned(
                         bottom: 8,
                         left: 0,

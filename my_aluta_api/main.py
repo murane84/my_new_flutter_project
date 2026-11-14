@@ -182,6 +182,9 @@ app.include_router(wallpapers_router.router)
 app.include_router(ozilane_router.router)
 # Aluta Admin (backoffice) API — device-authorized, signed requests only.
 app.include_router(admin_panel.router)
+# Admin Phase 4: plans, payments, subscribers.
+import admin_billing
+app.include_router(admin_billing.router)
 # "Send feedback" from the app (worked through in the admin panel).
 app.include_router(feedback_router.router)
 # "Free music": search songs that are legally free to download (Jamendo CC +

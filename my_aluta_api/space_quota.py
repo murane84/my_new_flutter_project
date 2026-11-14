@@ -62,9 +62,21 @@ def _bytes_of(db: Session, ids: set) -> int:
     return int(total or 0)
 
 
+def cap_for(db: Session, pair_key) -> int:
+    """This bond's cap: the free size, or Bigger Our Space while it's paid
+    (billing). When it lapses the cap drops back — nothing is deleted; the
+    pair just can't add more until they're under it or renew."""
+    try:
+        import billing
+        return billing.space_cap_bytes(db, pair_key)
+    except Exception:
+        return SPACE_CAP_BYTES
+
+
 def usage(db: Session, space_ids: list, pair_key) -> dict:
     used = _bytes_of(db, bond_asset_ids(db, space_ids, pair_key))
-    return {"used_bytes": used, "cap_bytes": SPACE_CAP_BYTES}
+    return {"used_bytes": used, "cap_bytes": cap_for(db, pair_key),
+            "free_cap_bytes": SPACE_CAP_BYTES}
 
 
 def check_room(db: Session, space_ids: list, pair_key, uploader_id: int,
@@ -79,7 +91,7 @@ def check_room(db: Session, space_ids: list, pair_key, uploader_id: int,
     fresh = new - have
     if not fresh:
         return
-    if _bytes_of(db, have) + _bytes_of(db, fresh) <= SPACE_CAP_BYTES:
+    if _bytes_of(db, have) + _bytes_of(db, fresh) <= cap_for(db, pair_key):
         return
     for aid in fresh:
         used_in_chat = (

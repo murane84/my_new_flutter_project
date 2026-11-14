@@ -13,7 +13,8 @@ populate them. We deliberately do NOT stand up an always-on listen-logging
 pipeline before a live surface needs it.
 """
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import (APIRouter, Depends, HTTPException, Request, status,
+                     UploadFile, File)
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from typing import Optional
@@ -41,7 +42,45 @@ try:
 except Exception:  # pragma: no cover - push optional
     send_push_to_user = None
 
-router = APIRouter(prefix="/spaces", tags=["Our Space"])
+# A Together lapse never deletes: extra Spaces (beyond the free one) stay, but
+# new keepsakes can't be added to them until Together is renewed. Reacting,
+# commenting and reading all keep working.
+_LAPSE_BLOCK = re.compile(
+    r"/spaces/(\d+)/(moments|playlist|dedications|capsules|diary|background)/?$")
+
+
+async def _lapse_guard(request: Request, db: Session = Depends(get_db)):
+    if request.method != "POST":
+        return
+    m = _LAPSE_BLOCK.search(request.url.path)
+    if not m:
+        return
+    auth = request.headers.get("authorization") or ""
+    if not auth.lower().startswith("bearer "):
+        return
+    try:
+        from auth import _resolve_user_from_token
+        user = _resolve_user_from_token(auth[7:].strip(), db)
+    except HTTPException:
+        return  # the route itself answers 401
+    import billing
+    if billing.tier_of(user, db) == "together":
+        return
+    ids = [sid for (sid,) in (
+        db.query(RelationshipSpace.id)
+        .filter(RelationshipSpace.owner_id == user.id)
+        .order_by(RelationshipSpace.is_primary.desc(),
+                  RelationshipSpace.created_at, RelationshipSpace.id)
+        .all())]
+    if int(m.group(1)) in ids[FREE_SPACE_CAP:]:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="This Our Space is read-only until Together is renewed "
+                   "— everything in it is safe.")
+
+
+router = APIRouter(prefix="/spaces", tags=["Our Space"],
+                   dependencies=[Depends(_lapse_guard)])
 
 
 class _LoveCapsuleBody(BaseModel):
@@ -3456,7 +3495,8 @@ def current_user_plan(user: User) -> str:
     """The user's plan tier ('free' | 'together'), read from the entitlement on
     the User row. A dev/trial toggle (routers/plan.py) sets it today; a real
     billing webhook will set the same field later, so this hook never changes."""
-    return (getattr(user, "plan_tier", None) or "free")
+    import billing
+    return billing.tier_of(user)
 
 
 # ── Custom photo background (per-user) ────────────────────────────────────────

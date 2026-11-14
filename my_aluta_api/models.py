@@ -1388,3 +1388,79 @@ class AccountControl(Base):
     disabled_at = Column(DateTime(timezone=True), nullable=True)
     delete_after = Column(DateTime(timezone=True), nullable=True)
     signed_out_at = Column(DateTime(timezone=True), nullable=True)
+
+
+# ── Subscriptions (Admin Phase 4) ───────────────────────────────────────────
+# Plans are sold per PERSON (Together) or per PAIR (Bigger Our Space, keyed by
+# the bond's pair_key "lo:hi"). A paid month is an Entitlement row with a
+# start and an end; renewing adds a row that starts where the last one ends.
+# A lapse never deletes anything — the gates just fall back to the free rules
+# (read-only beyond them) until renewed. Auto-created by create_all; no ALTER.
+class BillingPlan(Base):
+    __tablename__ = "billing_plans"
+
+    code = Column(String, primary_key=True)          # 'together' | 'space_plus'
+    name = Column(String, nullable=False)
+    scope = Column(String, nullable=False)           # 'person' | 'pair'
+    price_tzs = Column(Integer, nullable=False, default=0)   # per month
+    # 12 months cost this many months' price (e.g. 10 → two months free).
+    year_months = Column(Integer, nullable=False, default=10)
+    space_mb = Column(Integer, nullable=True)        # space_plus: the pair's cap
+    active = Column(Boolean, nullable=False, default=True)
+    sort = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(),
+                        onupdate=func.now())
+
+
+class Entitlement(Base):
+    __tablename__ = "entitlements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    plan_code = Column(String, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                     nullable=True, index=True)      # person plans
+    pair_key = Column(String, nullable=True, index=True)  # pair plans
+    starts_at = Column(DateTime(timezone=True), nullable=False)
+    ends_at = Column(DateTime(timezone=True), nullable=True)  # null = no end
+    source = Column(String, nullable=False, default="admin")  # payment|admin|legacy
+    payment_id = Column(Integer, nullable=True)
+    granted_by = Column(Integer, nullable=True)
+    note = Column(String, nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(),
+                        nullable=False)
+
+
+class Payment(Base):
+    """A mobile-money payment the person reported (their transaction code),
+    waiting for the owner to check it and confirm."""
+    __tablename__ = "payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                     nullable=False, index=True)
+    plan_code = Column(String, nullable=False)
+    months = Column(Integer, nullable=False, default=1)
+    amount_tzs = Column(Integer, nullable=False, default=0)
+    network = Column(String, nullable=False, default="M-Pesa")
+    txn_code = Column(String, nullable=False, unique=True, index=True)
+    payer_phone = Column(String, nullable=True)
+    pair_key = Column(String, nullable=True)
+    partner_id = Column(Integer, nullable=True)
+    status = Column(String, nullable=False, default="pending", index=True)
+    note = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(),
+                        nullable=False)
+    decided_at = Column(DateTime(timezone=True), nullable=True)
+    decided_by = Column(Integer, nullable=True)
+
+
+class BillingSettings(Base):
+    """Where people send money (one row, id=1), set in the admin panel."""
+    __tablename__ = "billing_settings"
+
+    id = Column(Integer, primary_key=True)
+    pay_network = Column(String, nullable=True)   # e.g. 'M-Pesa'
+    pay_number = Column(String, nullable=True)    # e.g. a Lipa number / phone
+    pay_name = Column(String, nullable=True)      # the name the payer sees
+    instructions = Column(Text, nullable=True)

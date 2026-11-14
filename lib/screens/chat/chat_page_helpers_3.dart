@@ -2372,6 +2372,18 @@ extension _ChatPageHelpers3 on _ChatPageState {
     // Structured cards store JSON in `content`; show a friendly label instead.
     if (type == 'location') return '📍 Location';
     if (type == 'contact') return '👤 Contact';
+    // Logs store a bare outcome word in `content` ("listened", "missed") —
+    // quote them the way their bubble reads.
+    if (type == 'live') {
+      final song = (msg['media_name'] as String?)?.trim() ?? '';
+      if (caption == 'listened') {
+        return song.isEmpty
+            ? '🎧 Listened together'
+            : '🎧 Listened together · ♪ $song';
+      }
+      return '🎧 Listen together';
+    }
+    if (type == 'call') return '📞 Call';
     return caption;
   }
 

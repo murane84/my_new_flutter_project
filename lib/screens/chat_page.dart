@@ -6861,22 +6861,33 @@ class _ChatPageState extends State<ChatPage>
     } else if (msgType == 'poll') {
       typeIcon = Icons.poll_rounded;
       label = 'Poll: ${(msg['content'] ?? '').toString()}';
+    } else if (msgType == 'live') {
+      // Not the raw outcome word ("listened") — what the bubble says.
+      typeIcon = Icons.headphones_rounded;
+      label = _replyQuoteText(msg).replaceFirst('🎧 ', '');
+    } else if (msgType == 'call') {
+      typeIcon = Icons.call_rounded;
+      label = _replyQuoteText(msg).replaceFirst('📞 ', '');
     }
 
+    // The quote sits in its own softly tinted box inside the composer, so
+    // "what I'm replying to" never reads as part of what I'm typing.
+    final dark = scheme.brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+      margin: const EdgeInsets.fromLTRB(8, 8, 8, 2),
+      padding: const EdgeInsets.fromLTRB(10, 7, 2, 7),
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-              color: scheme.outlineVariant.withValues(alpha: 0.45)),
-        ),
+        color: scheme.primary.withValues(alpha: dark ? 0.13 : 0.07),
+        borderRadius: BorderRadius.circular(Radii.md),
+        border: Border.all(
+            color: scheme.primary.withValues(alpha: dark ? 0.22 : 0.14)),
       ),
       child: Row(
           children: [
             // Accent bar.
             Container(
               width: 3.5,
-              height: 40,
+              height: 36,
               decoration: BoxDecoration(
                 color: scheme.primary,
                 borderRadius: BorderRadius.circular(3),

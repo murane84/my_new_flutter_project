@@ -3333,6 +3333,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   // ── Auto-reconnect (WhatsApp style) ──────────────────────────────────────
 
   bool _reconnecting = false;
+  DateTime? _lastBackOnline;
 
   Future<void> _autoReconnect() async {
     if (_reconnecting || !mounted) return;
@@ -3349,7 +3350,14 @@ class HomePageState extends rp.ConsumerState<HomePage>
           _serverReachable = true;
         });
         await _fetchFriends(quiet: true);
-        if (wasOffline && mounted) {
+        // Once, quietly — not on every flap of a shaky link.
+        final now = DateTime.now();
+        if (wasOffline &&
+            mounted &&
+            (_lastBackOnline == null ||
+                now.difference(_lastBackOnline!) >
+                    const Duration(minutes: 1))) {
+          _lastBackOnline = now;
           showToast(context, 'Back online',
               type: ToastType.success,
               duration: const Duration(seconds: 2));

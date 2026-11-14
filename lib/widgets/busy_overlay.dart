@@ -16,8 +16,14 @@ import '../utils/radii.dart';
 /// style for the time of day ([AlutaMood.loaderStyle]). It never flashes —
 /// it waits ~300ms to appear and, once up, stays at least ~450ms — rises in
 /// softly, and on finishing closes its ring with a little heart before
-/// fading. A long wait earns a caption (what's happening, or a mood line
-/// after ~2s; an honest "slow connection" line after ~8s).
+/// fading. A wait earns a caption after ~2s (what's happening, or a mood
+/// line).
+///
+/// A SLOW network never holds the middle of the screen: past ~6s (or at once
+/// for a reconnect) the loader steps aside — one slim pill at the top edge for
+/// a couple of seconds, then nothing while the work carries on in the
+/// background. It stays quiet for the rest of that slow spell (retries and
+/// flaps don't bring it back) until the app has been idle ~10s.
 ///
 /// Non-blocking (taps pass straight through). Mounted once, app-wide, from
 /// MaterialApp.builder; hidden while a full-screen splash is up.
@@ -38,6 +44,16 @@ class _BusyOverlayState extends State<BusyOverlay> {
   String? _caption;
   DateTime _shownAt = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _delay, _capTimer, _slowTimer, _hideTimer;
+
+  // Slow-network spell: once the loader stepped aside, stay out of the way
+  // until things have been calm for a while.
+  bool _quiet = false;
+  Timer? _calmTimer, _pillTimer, _reconnectTimer;
+  String? _pill; // the slim top-edge hint, or null
+  bool _pillUp = false;
+
+  static bool _isReconnect(String? label) =>
+      (label ?? '').toLowerCase().contains('reconnect');
 
   bool get _busy => appBusy.major.value > 0 &&
       splashOnScreen.value == 0 &&
@@ -66,8 +82,60 @@ class _BusyOverlayState extends State<BusyOverlay> {
     }
   }
 
+  /// One slim hint at the top edge, ~2.5 s, then gone. Taps pass through.
+  void _flashPill(String text) {
+    _pillTimer?.cancel();
+    setState(() {
+      _pill = text;
+      _pillUp = true;
+    });
+    _pillTimer = Timer(const Duration(milliseconds: 2500), () {
+      if (!mounted) return;
+      setState(() => _pillUp = false);
+      _pillTimer = Timer(const Duration(milliseconds: 300), () {
+        if (mounted) setState(() => _pill = null);
+      });
+    });
+  }
+
+  /// The loader steps aside: hide it (no heart — the work isn't done), one
+  /// top-edge hint, then quiet for the rest of this slow spell.
+  void _stepAside() {
+    if (!mounted) return;
+    _quiet = true;
+    _delay?.cancel();
+    _delay = null;
+    _capTimer?.cancel();
+    _slowTimer?.cancel();
+    _hideTimer?.cancel();
+    if (_phase != _Phase.hidden) {
+      setState(() => _visible = false);
+      _hideTimer = Timer(const Duration(milliseconds: 220), () {
+        if (mounted && _quiet) {
+          setState(() {
+            _phase = _Phase.hidden;
+            _caption = null;
+          });
+        }
+      });
+    }
+    _flashPill(AlutaMood.slowCaption());
+  }
+
   void _onBusy() {
     if (_busy) {
+      _calmTimer?.cancel();
+      _calmTimer = null;
+      if (_quiet) return; // already stepped aside this spell
+      if (_isReconnect(appBusy.majorLabel.value) && _phase == _Phase.hidden) {
+        // Reconnecting never takes the middle of the screen: a quick one
+        // finishes unseen; a slow one gets the top-edge hint, once.
+        _reconnectTimer ??= Timer(const Duration(seconds: 2), () {
+          _reconnectTimer = null;
+          if (mounted && _busy && !_quiet) _stepAside();
+        });
+        return;
+      }
       _hideTimer?.cancel();
       if (_phase == _Phase.closing) {
         // Work resumed while saying goodbye → simply stay.
@@ -94,15 +162,23 @@ class _BusyOverlayState extends State<BusyOverlay> {
                 AlutaMood.waitCaption(appBusy.majorLabel.value));
           }
         });
-        _slowTimer = Timer(const Duration(seconds: 8), () {
-          if (mounted && _phase == _Phase.shown) {
-            setState(() => _caption = AlutaMood.slowCaption());
-          }
+        _slowTimer = Timer(const Duration(seconds: 6), () {
+          if (mounted && _phase == _Phase.shown && _busy) _stepAside();
         });
       });
     } else {
       _delay?.cancel();
       _delay = null;
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
+      if (_quiet) {
+        // Calm for ~10 s in a row → the spell is over.
+        _calmTimer ??= Timer(const Duration(seconds: 10), () {
+          _calmTimer = null;
+          _quiet = false;
+        });
+        return;
+      }
       if (_phase != _Phase.shown) return;
       final left = const Duration(milliseconds: 450) -
           DateTime.now().difference(_shownAt);
@@ -132,7 +208,15 @@ class _BusyOverlayState extends State<BusyOverlay> {
 
   @override
   void dispose() {
-    for (final t in [_delay, _capTimer, _slowTimer, _hideTimer]) {
+    for (final t in [
+      _delay,
+      _capTimer,
+      _slowTimer,
+      _hideTimer,
+      _calmTimer,
+      _pillTimer,
+      _reconnectTimer,
+    ]) {
       t?.cancel();
     }
     appBusy.major.removeListener(_onBusy);
@@ -145,9 +229,33 @@ class _BusyOverlayState extends State<BusyOverlay> {
 
   @override
   Widget build(BuildContext context) {
+    final top = MediaQuery.paddingOf(context).top;
     return Stack(
       children: [
         widget.child,
+        if (_pill != null)
+          Positioned(
+            top: top + 8,
+            left: 16,
+            right: 16,
+            child: IgnorePointer(
+              child: Center(
+                child: AnimatedSlide(
+                  offset: _pillUp ? Offset.zero : const Offset(0, -0.6),
+                  duration: Motion.standard,
+                  curve: Curves.easeOutCubic,
+                  child: AnimatedOpacity(
+                    opacity: _pillUp ? 1 : 0,
+                    duration: Motion.standard,
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: _captionPill(context, _pill!),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         if (_phase != _Phase.hidden)
           Positioned.fill(
             child: IgnorePointer(

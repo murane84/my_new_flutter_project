@@ -209,6 +209,28 @@ class MainActivity : AudioServiceFragmentActivity() {
                     // The device's API level, so Dart can request the legacy
                     // storage permission only on Android 9 and below.
                     "sdkInt" -> result.success(Build.VERSION.SDK_INT)
+                    // The update card: room for the download + the install?
+                    "freeBytes" -> {
+                        try {
+                            val p = call.argument<String>("path") ?: cacheDir.path
+                            result.success(android.os.StatFs(p).availableBytes)
+                        } catch (_: Exception) {
+                            result.success(-1L)
+                        }
+                    }
+                    // Quiet overnight update: only on Wi-Fi + charging.
+                    "power" -> {
+                        try {
+                            val bm = getSystemService(Context.BATTERY_SERVICE)
+                                as android.os.BatteryManager
+                            result.success(mapOf(
+                                "charging" to bm.isCharging,
+                                "level" to bm.getIntProperty(
+                                    android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)))
+                        } catch (_: Exception) {
+                            result.success(null)
+                        }
+                    }
                     // Secret hearts: block screenshots + the recents thumbnail
                     // while a heart / love letter is open (HeartLock.dart).
                     "setSecure" -> {

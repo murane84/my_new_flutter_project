@@ -7,6 +7,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -14,10 +15,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../screens/api_service.dart';
 import '../utils/adaptive_sheet.dart';
 import '../utils/app_config.dart';
 import '../utils/radii.dart';
 import '../utils/toast_helper.dart';
+import 'contact_names.dart';
 import 'haptics.dart';
 
 /// Updates for the Android and Windows apps while Aluta lives outside the
@@ -76,6 +79,7 @@ class AppUpdater {
   static const int _webBuilt = int.fromEnvironment('ALUTA_BUILD');
 
   Timer? _cycle;
+  StreamSubscription<List<ConnectivityResult>>? _netWatch;
   int? _announcing; // the build being prompted from a server event right now
   BuildContext Function()? _homeCtx; // Home's context (outlives any sheet)
   bool get _cycleOn => supported || (kIsWeb && _webBuilt > 0);
@@ -110,11 +114,18 @@ class AppUpdater {
     void tick() {
       final c = context();
       if (c.mounted) _remind(c);
+      _wifiDownload(); // a queued one waiting for the charger
+      _prefetch(); // Wi-Fi + charging → ready by morning
     }
     Future.delayed(const Duration(seconds: 10), tick); // after a restart
     _resumeWifiWait(context); // a "Wait for Wi-Fi" from before
     _cleanOld(); // update files for builds already installed
     _cycle = Timer.periodic(const Duration(minutes: 15), (_) => tick());
+    if (_android) {
+      _netWatch = Connectivity().onConnectivityChanged.listen((_) {
+        _prefetch();
+      });
+    }
     _life = AppLifecycleListener(onResume: tick);
   }
 
@@ -372,7 +383,8 @@ class AppUpdater {
       if (manual || required || _escalate(p, rel)) {
         await _offer(context, rel, required: required);
       } else {
-        _nudge(context, rel);
+        final have = await downloaded(rel);
+        if (context.mounted) _nudge(context, rel, ready: have.ready);
       }
     } catch (e) {
       if (manual && context.mounted) {
@@ -401,7 +413,8 @@ class AppUpdater {
   }
 
   /// The gentle way: a toast that doesn't stop what they're doing.
-  void _nudge(BuildContext context, Map<String, dynamic> rel) {
+  void _nudge(BuildContext context, Map<String, dynamic> rel,
+      {bool ready = false}) {
     Haptics.lightImpact();
     final note = (rel['notes'] ?? '')
         .toString()
@@ -419,7 +432,11 @@ class AppUpdater {
       '✨ Aluta ${rel['version']} is ready',
       type: ToastType.info,
       duration: const Duration(seconds: 12),
-      detail: note.isEmpty ? 'Tap to see what’s new' : note,
+      detail: ready
+          ? 'Already downloaded — installs in seconds'
+          : note.isEmpty
+              ? 'Tap to see what’s new'
+              : note,
       onTap: open,
       actions: [
         ToastAction('Later', () => _later(rel)),
@@ -565,7 +582,7 @@ class AppUpdater {
           int.tryParse((await PackageInfo.fromPlatform()).buildNumber) ?? 0;
       final dir = await getTemporaryDirectory();
       await for (final f in dir.list()) {
-        final m = RegExp(r'aluta-(\d+)\.apk(\.ok)?$').firstMatch(f.path);
+        final m = RegExp(r'aluta-(\d+)\.apk(\.ok|\.part|\.etag)?$').firstMatch(f.path);
         if (m != null && (int.tryParse(m.group(1)!) ?? 0) <= mine) {
           await f.delete().catchError((_) => f);
         }
@@ -575,6 +592,10 @@ class AppUpdater {
 
   Future<void> _wifiDownload() async {
     if (_wifiBusy || !await _onWifi()) return;
+    // Low battery and not charging → wait for the charger (the cycle
+    // checks again every 15 minutes).
+    final pw = await _power();
+    if (pw != null && !pw.charging && pw.level < 20) return;
     final p = await SharedPreferences.getInstance();
     final raw = p.getString(_kWifiWait) ?? '';
     if (raw.isEmpty) return;
@@ -609,51 +630,245 @@ class AppUpdater {
     waitingForWifi.value = false;
   }
 
+  // ── Download: resumable, space-checked, shared ────────────────────────
+  // A broken download keeps what it got (aluta-<build>.apk.part + the
+  // server's ETag); the next try asks only for the rest (Range + If-Range —
+  // if the file changed on the server it simply starts over). The SHA-256
+  // check covers the whole file either way. Only one download runs at a
+  // time: tapping Update during the quiet overnight one joins it.
+
+  static const _dlCh = MethodChannel('aluta/downloads');
+
+  ({File apk, File ok, File part, File tag}) _filesIn(
+      Directory dir, Map<String, dynamic> rel) {
+    final apk = File('${dir.path}/aluta-${rel['build']}.apk');
+    return (
+      apk: apk,
+      ok: File('${apk.path}.ok'), // written only after a good check
+      part: File('${apk.path}.part'),
+      tag: File('${apk.path}.etag'),
+    );
+  }
+
+  /// What's already on the phone for this build: the whole verified file
+  /// (→ installs in seconds), or the bytes kept from a broken download.
+  Future<({bool ready, int partial})> downloaded(
+      Map<String, dynamic> rel) async {
+    if (!_android) return (ready: false, partial: 0);
+    try {
+      final f = _filesIn(await getTemporaryDirectory(), rel);
+      if (await f.apk.exists() && await f.ok.exists()) {
+        return (ready: true, partial: 0);
+      }
+      if (await f.part.exists() && await f.tag.exists()) {
+        return (ready: false, partial: await f.part.length());
+      }
+    } catch (_) {}
+    return (ready: false, partial: 0);
+  }
+
+  /// MB to free before this update fits (what's left to download, room for
+  /// the install, a margin) — 0 when it fits or the phone won't say.
+  Future<int> spaceShort(Map<String, dynamic> rel) async {
+    if (!_android) return 0;
+    try {
+      final size = (rel['size'] as num?)?.toInt() ?? 0;
+      if (size <= 0) return 0;
+      final dir = await getTemporaryDirectory();
+      final free = await _dlCh
+              .invokeMethod<int>('freeBytes', {'path': dir.path}) ??
+          -1;
+      if (free < 0) return 0; // unknown → never block on a guess
+      final have = await downloaded(rel);
+      final left = have.ready ? 0 : size - have.partial;
+      final need = left + size + 50 * 1048576;
+      return free >= need ? 0 : ((need - free) / 1048576).ceil();
+    } catch (_) {
+      return 0; // an older build without the channel method
+    }
+  }
+
+  /// Charging / battery % (Android), or null if unknown.
+  Future<({bool charging, int level})?> _power() async {
+    if (!_android) return null;
+    try {
+      final m = await _dlCh.invokeMapMethod<String, dynamic>('power');
+      if (m == null) return null;
+      return (
+        charging: m['charging'] == true,
+        level: (m['level'] as num?)?.toInt() ?? 100,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ── Quiet overnight update ───────────────────────────────────────────────
+  // On Wi-Fi AND charging (typically overnight) a pending update downloads
+  // quietly while Aluta is still running in the background — no toast, no
+  // data. In the morning the card says "ready · installs in seconds".
+  bool _prefetching = false;
+
+  Future<void> _prefetch() async {
+    if (!_android || !supported || _prefetching || _dl != null) return;
+    _prefetching = true;
+    try {
+      final p = await SharedPreferences.getInstance();
+      final pend = (p.getString(_kPending) ?? '').split('|');
+      if (pend.length < 2) return;
+      final build = int.tryParse(pend[1]) ?? 0;
+      if (build <= await _mine()) return;
+      final dir = await getTemporaryDirectory();
+      if (await File('${dir.path}/aluta-$build.apk.ok').exists()) return;
+      if (!await _onWifi()) return;
+      final pw = await _power();
+      if (pw == null || !pw.charging) return;
+      final rel = await _newer();
+      if (rel == null) return;
+      await _download(rel, quiet: true);
+    } catch (_) {
+      // Best-effort: the next tick tries again.
+    } finally {
+      _prefetching = false;
+    }
+  }
+
+  /// "Continuing" — bytes a resumed download started from (the card's
+  /// label); 0 for a fresh one.
+  final ValueNotifier<int> resumedFrom = ValueNotifier<int>(0);
+
+  Future<(File?, String?)>? _dl; // the download running now
+  bool _loud = false; // someone is watching it (the card's progress)
+  double _dlFrac = 0;
+
   /// Download (with progress) + SHA-256 check. A copy already downloaded
   /// and verified (e.g. on Wi-Fi) is reused. → (file, null) or (null, why).
   Future<(File?, String?)> _download(Map<String, dynamic> rel,
       {bool quiet = false}) async {
+    final running = _dl;
+    if (running != null) {
+      // Join it; show its progress if this caller is the card.
+      if (!quiet) {
+        _loud = true;
+        progress.value = _dlFrac;
+      }
+      return running;
+    }
+    _loud = !quiet;
+    _dlFrac = 0;
+    final run = _downloadOnce(rel);
+    _dl = run;
+    try {
+      return await run;
+    } finally {
+      _dl = null;
+      if (_loud && progress.value != 1) progress.value = null;
+      _loud = false;
+    }
+  }
+
+  Future<(File?, String?)> _downloadOnce(Map<String, dynamic> rel,
+      {bool again = false}) async {
     final base = await AppConfig.baseUrl;
     final url = '$base${rel['url'] ?? '/download/aluta.apk'}';
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/aluta-${rel['build']}.apk');
-    final ok = File('${file.path}.ok'); // written only after a good check
-    if (await file.exists() && await ok.exists()) return (file, null);
-    if (!quiet) progress.value = 0;
+    final f = _filesIn(await getTemporaryDirectory(), rel);
+    if (await f.apk.exists() && await f.ok.exists()) return (f.apk, null);
+    final short = await spaceShort(rel);
+    if (short > 0) {
+      return (
+        null,
+        'Your phone is nearly full — free up about $short MB, then try again'
+      );
+    }
+    if (_loud) progress.value = 0;
+    resumedFrom.value = 0;
     final client = http.Client();
+    IOSink? sink;
     try {
-      final resp = await client.send(http.Request('GET', Uri.parse(url)));
-      if (resp.statusCode != 200) return (null, 'The download isn’t available');
-      final total = resp.contentLength ?? (rel['size'] as num?)?.toInt() ?? 0;
-      final sink = file.openWrite();
+      var have = await f.part.exists() ? await f.part.length() : 0;
+      final tag =
+          have > 0 && await f.tag.exists() ? (await f.tag.readAsString()).trim() : '';
+      if (tag.isEmpty) have = 0; // can't prove the part is the same file
+      final req = http.Request('GET', Uri.parse(url));
+      if (have > 0) {
+        req.headers['Range'] = 'bytes=$have-';
+        req.headers['If-Range'] = tag;
+      }
+      final resp = await client.send(req);
+      if (resp.statusCode == 416 && !again) {
+        // The kept part doesn't fit the file any more → start clean.
+        await _dropPart(f);
+        await resp.stream.drain<void>();
+        client.close();
+        return _downloadOnce(rel, again: true);
+      }
+      final resuming = have > 0 && resp.statusCode == 206;
+      if (!resuming && resp.statusCode != 200) {
+        return (null, 'The download isn’t available');
+      }
       final hasher = Sha256().newHashSink();
-      var got = 0;
+      if (resuming) {
+        await for (final c in f.part.openRead()) {
+          hasher.add(c);
+        }
+        resumedFrom.value = have;
+      } else {
+        have = 0;
+        final et = resp.headers['etag'] ?? '';
+        if (et.isNotEmpty) {
+          await f.tag.writeAsString(et);
+        } else {
+          await f.tag.delete().catchError((_) => f.tag);
+        }
+      }
+      sink = f.part.openWrite(
+          mode: resuming ? FileMode.writeOnlyAppend : FileMode.writeOnly);
+      final rest = resp.contentLength ?? 0;
+      final total =
+          rest > 0 ? have + rest : (rel['size'] as num?)?.toInt() ?? 0;
+      var got = have;
       await for (final chunk in resp.stream) {
         sink.add(chunk);
         hasher.add(chunk);
         got += chunk.length;
-        if (!quiet && total > 0) progress.value = got / total;
+        if (total > 0) {
+          _dlFrac = got / total;
+          if (_loud) progress.value = _dlFrac;
+        }
       }
       await sink.close();
+      sink = null;
       hasher.close();
       final want = (rel['sha256'] ?? '').toString();
       if (want.isNotEmpty) {
         final h = (await hasher.hash()).bytes;
         final hex = h.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
         if (hex != want) {
-          await file.delete().catchError((_) => file);
+          await _dropPart(f);
           return (null, 'The download was damaged — try again');
         }
       }
-      await ok.writeAsString('ok');
-      if (!quiet) progress.value = 1;
-      return (file, null);
+      await f.part.rename(f.apk.path);
+      await f.tag.delete().catchError((_) => f.tag);
+      await f.ok.writeAsString('ok');
+      if (_loud) progress.value = 1;
+      return (f.apk, null);
     } catch (_) {
-      return (null, 'The download stopped — check your connection');
+      return (
+        null,
+        'The download stopped — tap again to continue where it left off'
+      );
     } finally {
+      try {
+        await sink?.close();
+      } catch (_) {}
       client.close();
-      if (!quiet && progress.value != 1) progress.value = null;
     }
+  }
+
+  Future<void> _dropPart(({File apk, File ok, File part, File tag}) f) async {
+    await f.part.delete().catchError((_) => f.part);
+    await f.tag.delete().catchError((_) => f.tag);
   }
 
   Future<String?> _openInstaller(File file) async {
@@ -713,10 +928,17 @@ class _UpdateCardState extends State<_UpdateCard> {
   // Joins Wi-Fi (or drops to mobile data) while the card is open → the
   // data hint follows along without closing and reopening the card.
   StreamSubscription<List<ConnectivityResult>>? _netSub;
+  bool _wifiJoined = false; // "On Wi-Fi now" for a few seconds
+  Timer? _joinedT;
+  bool _ready = false; // already downloaded (Wi-Fi / overnight)
+  int _partial = 0; // bytes kept from a broken download
+  int _short = 0; // MB to free before it fits
+  String? _together; // "💞 Wifey is already on 1.0.9 — updated yesterday"
 
   @override
   void dispose() {
     _netSub?.cancel();
+    _joinedT?.cancel();
     _notesScroll.dispose();
     super.dispose();
   }
@@ -727,17 +949,92 @@ class _UpdateCardState extends State<_UpdateCard> {
     PackageInfo.fromPlatform().then((i) {
       if (mounted) setState(() => _mineVersion = i.version);
     });
-    widget.updater.onMobileData().then((cell) {
-      if (!mounted) return;
-      setState(() => _cell = cell);
-      // Update tapped on the toast: start — unless that would spend mobile
-      // data; then the card asks first (Download now / Wait for Wi-Fi).
-      if (widget.start && !cell) _update();
-    });
+    _init();
+    _loadTogether();
     _netSub = Connectivity().onConnectivityChanged.listen((_) async {
       final cell = await widget.updater.onMobileData();
-      if (mounted && cell != _cell) setState(() => _cell = cell);
+      if (!mounted || cell == _cell) return;
+      final joined = _cell && !cell && !_ready && !_working;
+      setState(() {
+        _cell = cell;
+        _wifiJoined = joined;
+      });
+      _joinedT?.cancel();
+      if (joined) {
+        Haptics.lightImpact();
+        _joinedT = Timer(const Duration(seconds: 4), () {
+          if (mounted) setState(() => _wifiJoined = false);
+        });
+      }
     });
+  }
+
+  Future<void> _init() async {
+    final cell = await widget.updater.onMobileData();
+    final have = await widget.updater.downloaded(widget.rel);
+    final short = await widget.updater.spaceShort(widget.rel);
+    if (!mounted) return;
+    setState(() {
+      _cell = cell;
+      _ready = have.ready;
+      _partial = have.partial;
+      _short = short;
+    });
+    // Update tapped on the toast: start — unless that would spend mobile
+    // data (then the card asks first: Download now / Wait for Wi-Fi) or the
+    // phone is too full (the card says how much to free).
+    if (widget.start && (!cell || have.ready) && short == 0) _update();
+  }
+
+  Future<void> _recheckSpace() async {
+    Haptics.selectionClick();
+    final short = await widget.updater.spaceShort(widget.rel);
+    if (!mounted) return;
+    setState(() => _short = short);
+    if (short == 0) {
+      showToast(context, 'There’s room now 💞', type: ToastType.success);
+    }
+  }
+
+  /// Bonded partners already on this version — updating = joining them.
+  Future<void> _loadTogether() async {
+    final v = '${widget.rel['version'] ?? ''}';
+    if (v.isEmpty) return;
+    final list = await ApiService().getPartnersOn(v);
+    if (list.isEmpty) return;
+    try {
+      await ContactNames.instance.ensureLoaded();
+    } catch (_) {}
+    final names = [
+      for (final m in list)
+        ContactNames.instance
+            .displayName(of: m, registered: '${m['name'] ?? ''}')
+            .trim(),
+    ].where((n) => n.isNotEmpty).toList();
+    if (names.isEmpty || !mounted) return;
+    String line;
+    if (names.length == 1) {
+      line = '${names.first} is already on $v';
+      final since = DateTime.tryParse('${list.first['since'] ?? ''}');
+      if (since != null) {
+        final now = DateTime.now();
+        final d = DateTime(now.year, now.month, now.day)
+            .difference(DateTime(since.toLocal().year, since.toLocal().month,
+                since.toLocal().day))
+            .inDays;
+        if (d == 0) {
+          line += ' — updated today';
+        } else if (d == 1) {
+          line += ' — updated yesterday';
+        } else if (d > 1 && d < 7) {
+          line += ' — updated $d days ago';
+        }
+      }
+    } else {
+      final head = names.sublist(0, names.length - 1).join(', ');
+      line = '$head and ${names.last} are already on $v';
+    }
+    setState(() => _together = line);
   }
 
   Future<void> _waitWifi() async {
@@ -757,10 +1054,13 @@ class _UpdateCardState extends State<_UpdateCard> {
       _error = null;
     });
     final err = await widget.updater.install(widget.rel);
+    final have = await widget.updater.downloaded(widget.rel);
     if (!mounted) return;
     setState(() {
       _working = false;
       _error = err;
+      _ready = have.ready;
+      _partial = have.partial;
     });
     // Installer open → the sheet can go (a required one stays until the
     // new build replaces this one).
@@ -781,6 +1081,11 @@ class _UpdateCardState extends State<_UpdateCard> {
         .toList();
     final size = (rel['size'] as num?)?.toInt() ?? 0;
     final mb = size > 0 ? (size / 1048576).toStringAsFixed(0) : null;
+    // What this download still costs (a broken one continues).
+    final leftMb = size > 0 && _partial > 0
+        ? ((size - _partial).clamp(0, size) / 1048576).ceil().toString()
+        : mb;
+    final cellCost = _cell && !_ready; // nothing to spend once downloaded
     final windows = defaultTargetPlatform == TargetPlatform.windows;
     final deep = Color.alphaBlend(Colors.black.withValues(alpha: 0.35),
         scheme.primary);
@@ -875,7 +1180,12 @@ class _UpdateCardState extends State<_UpdateCard> {
                       Text(
                           [
                             if (_mineVersion != null) 'from $_mineVersion',
-                            ?(mb == null ? null : '$mb MB'),
+                            if (_ready)
+                              'ready · installs in seconds'
+                            else if (_partial > 0 && leftMb != null)
+                              '$leftMb MB left'
+                            else
+                              ?(mb == null ? null : '$mb MB'),
                             'your chats stay',
                           ].join(' · '),
                           style: TextStyle(
@@ -893,6 +1203,17 @@ class _UpdateCardState extends State<_UpdateCard> {
                     'This version can’t keep up with the new server — '
                     'update to keep chatting.',
                     style: TextStyle(color: scheme.onSurfaceVariant)),
+              ),
+
+            // ── Together: they're already on it ─────────────────────────
+            if (_together != null)
+              note(
+                Icons.favorite_rounded,
+                Text('💞 $_together',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurface)),
               ),
 
             // ── What's new: clean rows, text wraps under itself ──────────
@@ -968,25 +1289,63 @@ class _UpdateCardState extends State<_UpdateCard> {
             ],
 
             // ── Notes: mobile data · Windows · something went wrong ──────
-            if (_cell && !_working)
-              ValueListenableBuilder<bool>(
-                valueListenable: widget.updater.waitingForWifi,
-                builder: (_, waiting, _) => note(
-                  waiting
-                      ? Icons.wifi_rounded
-                      : Icons.signal_cellular_alt_rounded,
-                  Text(
-                      waiting
-                          ? 'Waiting for Wi-Fi to download it — or get it now'
-                          : 'You’re on mobile data${mb == null ? '' : ' — this uses $mb MB'}',
-                      style: TextStyle(fontSize: 12.5, color: scheme.onSurface)),
-                  // (a required update can't wait)
-                  action: waiting || widget.required
-                      ? null
-                      : TextButton(
-                          onPressed: _waitWifi,
-                          child: const Text('Wait for Wi-Fi')),
-                ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: _working
+                    ? const SizedBox.shrink(key: ValueKey('none'))
+                    : cellCost
+                        ? ValueListenableBuilder<bool>(
+                            key: const ValueKey('cell'),
+                            valueListenable: widget.updater.waitingForWifi,
+                            builder: (_, waiting, _) => note(
+                              waiting
+                                  ? Icons.wifi_rounded
+                                  : Icons.signal_cellular_alt_rounded,
+                              Text(
+                                  waiting
+                                      ? 'Waiting for Wi-Fi to download it — or get it now'
+                                      : 'You’re on mobile data${leftMb == null ? '' : ' — this uses $leftMb MB'}',
+                                  style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: scheme.onSurface)),
+                              // (a required update can't wait)
+                              action: waiting || widget.required
+                                  ? null
+                                  : TextButton(
+                                      onPressed: _waitWifi,
+                                      child: const Text('Wait for Wi-Fi')),
+                            ),
+                          )
+                        : _wifiJoined
+                            ? KeyedSubtree(
+                                key: const ValueKey('joined'),
+                                child: note(
+                                  Icons.wifi_rounded,
+                                  Text('On Wi-Fi now — no mobile data used ✓',
+                                      style: TextStyle(
+                                          fontSize: 12.5,
+                                          color: scheme.onSurface)),
+                                  tint: const Color(0xFF2E7D32),
+                                ),
+                              )
+                            : const SizedBox.shrink(key: ValueKey('none')),
+              ),
+            ),
+            if (_short > 0 && !_ready && !_working)
+              note(
+                Icons.sd_storage_rounded,
+                Text(
+                    'Your phone is nearly full — free up about $_short MB '
+                    'so Aluta can update',
+                    style: TextStyle(fontSize: 12.5, color: scheme.onSurface)),
+                tint: const Color(0xFFEF6C00),
+                action: TextButton(
+                    onPressed: _recheckSpace,
+                    child: const Text('Check again')),
               ),
             if (windows)
               note(
@@ -1020,14 +1379,17 @@ class _UpdateCardState extends State<_UpdateCard> {
                 valueListenable: widget.updater.progress,
                 builder: (_, v, _) {
                   final f = (v ?? 0).clamp(0.0, 1.0);
+                  final verb = widget.updater.resumedFrom.value > 0
+                      ? 'Continuing'
+                      : 'Downloading';
                   final got = size > 0 ? (size * f / 1048576).round() : null;
                   final label = f >= 1
                       ? 'Opening the installer…'
                       : v == null || v <= 0
                           ? 'Starting the download…'
                           : got != null && mb != null
-                              ? 'Downloading ${(f * 100).round()}% · $got of $mb MB'
-                              : 'Downloading ${(f * 100).round()}%';
+                              ? '$verb ${(f * 100).round()}% · $got of $mb MB'
+                              : '$verb ${(f * 100).round()}%';
                   return ClipRRect(
                     borderRadius: BorderRadius.circular(Radii.xxl),
                     child: SizedBox(
@@ -1081,11 +1443,15 @@ class _UpdateCardState extends State<_UpdateCard> {
                       icon: Icon(windows
                           ? Icons.download_rounded
                           : Icons.system_update_rounded),
-                      label: Text(_cell
-                          ? 'Download now'
-                          : windows
-                              ? 'Download'
-                              : 'Update now'),
+                      label: Text(_ready
+                          ? 'Install now'
+                          : _partial > 0
+                              ? 'Continue download'
+                              : cellCost
+                                  ? 'Download now'
+                                  : windows
+                                      ? 'Download'
+                                      : 'Update now'),
                     ),
                   ),
                 ),

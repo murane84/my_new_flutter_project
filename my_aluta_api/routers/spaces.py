@@ -908,6 +908,49 @@ _HEARTBEAT_GAP = timedelta(seconds=8)
 
 
 # ── endpoints ────────────────────────────────────────────────────────────────
+@router.get("/partners-on")
+def partners_on(
+    version: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The update card's "💞 Wifey is already on 1.0.9": which of my
+    ACCEPTED, mutual bond partners already run [version] (or newer), and
+    since when. Bond-only like partner-app — nobody else ever learns which
+    version someone runs. (Declared before /{space_id} so it isn't taken
+    for an id.)"""
+    from models import AppInstall
+    from app_installs import vtuple
+    want = vtuple(version)
+    if not want:
+        return {"partners": []}
+    out, seen = [], set()
+    spaces = db.query(RelationshipSpace).filter(
+        RelationshipSpace.owner_id == current_user.id).all()
+    for space in spaces:
+        partner = _active_partner(db, space, current_user.id)
+        if partner is None or partner in seen:
+            continue
+        seen.add(partner)
+        if not crud.are_mutual(db, current_user.id, partner):
+            continue
+        inst = db.get(AppInstall, int(partner))
+        if inst is None or vtuple(inst.version) < want:
+            continue
+        u = db.get(User, int(partner))
+        if u is None:
+            continue
+        out.append({
+            "user_id": u.id,
+            "name": u.username,
+            "phone": u.phone,
+            "version": inst.version,
+            "since": inst.updated_at.isoformat() if inst.updated_at else None,
+        })
+    out.sort(key=lambda m: m["since"] or "", reverse=True)
+    return {"partners": out[:3]}
+
+
 @router.get("")
 def list_spaces(
     db: Session = Depends(get_db),

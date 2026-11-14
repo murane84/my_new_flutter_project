@@ -2619,6 +2619,37 @@ class ApiService {
     }
   }
 
+  /// The update card's "💞 they're already on 1.0.9": my accepted, mutual
+  /// bond partners who already run [version] ({user_id, name, phone,
+  /// version, since}). Empty on any failure — it's only a warm extra.
+  Future<List<Map<String, dynamic>>> getPartnersOn(String version) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return const [];
+      final resp = await http
+          .get(
+            Uri.parse('${await _baseUrl}/spaces/partners-on'
+                '?version=${Uri.encodeQueryComponent(version)}'),
+            headers: _authHeaders(token),
+          )
+          .timeout(const Duration(seconds: 8));
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final d = jsonDecode(resp.body);
+        final list = d is Map ? d['partners'] : null;
+        if (list is List) {
+          return [
+            for (final m in list)
+              if (m is Map) Map<String, dynamic>.from(m),
+          ];
+        }
+      }
+      return const [];
+    } catch (e) {
+      _logger.w('getPartnersOn failed: $e');
+      return const [];
+    }
+  }
+
   /// "Bring them along" — invite my partner to the newest Aluta (once per
   /// version). [msg] says why it didn't go, in plain words.
   Future<({bool ok, String msg})> sendUpdateNudge(int spaceId) async {

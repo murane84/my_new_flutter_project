@@ -6,6 +6,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   SharedPreferences.setMockInitialValues({});
+  // Mid-morning, whenever CI runs: the late-night nudge stays out of the
+  // way of the "on repeat" checks.
+  AlutaMood.clockForTests = () {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day, 10);
+  };
   final si = SongInsights.instance;
 
   group('SongInsights guardrails', () {

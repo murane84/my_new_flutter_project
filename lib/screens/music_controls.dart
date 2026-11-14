@@ -2505,8 +2505,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     // same toast offers their Undo (back to the label they were sent with).
     final fromChat = <String, String>{
       for (final p in added)
-        if (!tidied.contains(p))
-          if (SongNames.instance.autoTidyRaw(p) case final raw?) p: raw,
+        if (!tidied.contains(p)) p: ?SongNames.instance.autoTidyRaw(p),
     };
     if (fromChat.isNotEmpty) {
       await SongNames.instance.forgetAutoTidy(fromChat.keys);

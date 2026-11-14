@@ -19,8 +19,12 @@ class AlutaMood {
   static final Map<String, String> _lastLine = {};
   static LoaderStyle? _lastStyle;
 
+  /// Tests pin the clock here (CI runs at any hour — a midnight run made
+  /// the late-night nudge win over "on repeat"). Null in the app.
+  static DateTime Function()? clockForTests;
+
   static AlutaMoment momentAt([DateTime? at]) {
-    final h = (at ?? DateTime.now()).hour;
+    final h = (at ?? clockForTests?.call() ?? DateTime.now()).hour;
     if (h >= 5 && h < 8) return AlutaMoment.dawn;
     if (h >= 8 && h < 12) return AlutaMoment.morning;
     if (h >= 12 && h < 17) return AlutaMoment.afternoon;

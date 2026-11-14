@@ -583,6 +583,13 @@ class _ChatPageState extends State<ChatPage>
   int _emojiTab = 0;
   bool _isAtBottom = true;
   bool _hasNewMsg = false;
+  // Who wrote while I was scrolled up (newest last) — the "back to latest"
+  // pill shows the newest one's face and how many are waiting.
+  final List<Map<String, dynamic>> _newWhileUp = <Map<String, dynamic>>[];
+  set _newMsgFlag(bool v) {
+    _hasNewMsg = v;
+    if (!v) _newWhileUp.clear();
+  }
   // Scrolled well up (e.g. after jumping to a quoted message) → show the
   // round "back to latest" button.
   bool _farFromBottom = false;
@@ -1512,7 +1519,12 @@ class _ChatPageState extends State<ChatPage>
       if (_isAtBottom) {
         if (gotNew) _scrollToBottom();
       } else if (gotNew) {
-        setState(() => _hasNewMsg = true);
+        setState(() {
+          _hasNewMsg = true;
+          _newWhileUp.addAll(merged.where((m) =>
+              !had.contains(m['id'].toString()) &&
+              m['sender_id']?.toString() != _myId));
+        });
       }
     }
 
@@ -1635,7 +1647,10 @@ class _ChatPageState extends State<ChatPage>
                 ApiService().markMessagesAsReadPatch(widget.friendId);
               }
             } else {
-              setState(() => _hasNewMsg = true);
+              setState(() {
+                _hasNewMsg = true;
+                _newWhileUp.add(msg);
+              });
             }
           }
         }
@@ -2078,7 +2093,7 @@ class _ChatPageState extends State<ChatPage>
         _farFromBottom = far;
       });
     }
-    if (atBottom && _hasNewMsg) setState(() => _hasNewMsg = false);
+    if (atBottom && _hasNewMsg) setState(() => _newMsgFlag = false);
     if (atBottom) _markSeenUpToNewest();
     if (_isGroup && _pendingMentions.isNotEmpty) _clearVisibleMentions();
   }
@@ -2098,7 +2113,7 @@ class _ChatPageState extends State<ChatPage>
       duration: Motion.emphasized,
       curve: Curves.easeOutCubic,
     );
-    setState(() => _hasNewMsg = false);
+    setState(() => _newMsgFlag = false);
   }
 
   void _onChatPointerDown(PointerDownEvent e) => _starDownPos = e.position;
@@ -2119,7 +2134,7 @@ class _ChatPageState extends State<ChatPage>
         duration: Motion.standard,
         curve: Curves.easeOut,
       );
-      setState(() => _hasNewMsg = false);
+      setState(() => _newMsgFlag = false);
     });
   }
 
@@ -8008,12 +8023,12 @@ class _ChatPageState extends State<ChatPage>
                         ),
                       ),
                     // "@" stepper: unread mentions of me, stacked above ⇊.
-                    if (_isGroup)
-                      AnimatedPositioned(
-                        duration: Motion.standard,
-                        curve: Curves.easeOutCubic,
+                    // (Far up, the "back to latest" pill below carries the
+                    // "@" itself — one quiet control, not two.)
+                    if (_isGroup && !_farFromBottom)
+                      Positioned(
                         right: 10,
-                        bottom: _farFromBottom ? 48 : 10,
+                        bottom: 10,
                         child: _buildMentionChip(scheme),
                       ),
                     // "Back to latest" pill, bottom-right, whenever you're a
@@ -8033,45 +8048,7 @@ class _ChatPageState extends State<ChatPage>
                             // The Aluta glass pill (same as the message
                             // hover pill): small and quiet, so it never
                             // competes with the round mic button below it.
-                            child: GestureDetector(
-                              onTap: _jumpToLatest,
-                              child: Tooltip(
-                                message: 'Back to latest',
-                                child: _glass(
-                                  scheme,
-                                  height: 28,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 9),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (_hasNewMsg) ...[
-                                        // New messages waiting: a soft
-                                        // accent heart-dot leads the way.
-                                        Container(
-                                          width: 7,
-                                          height: 7,
-                                          decoration: BoxDecoration(
-                                            color: scheme.primary,
-                                            shape: BoxShape.circle,
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: scheme.primary
-                                                    .withValues(alpha: 0.5),
-                                                blurRadius: 6,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 5),
-                                      ],
-                                      Icon(Icons.keyboard_arrow_down_rounded,
-                                          color: accentInk(scheme), size: 20),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
+                            child: _latestPill(scheme),
                           ),
                         ),
                       ),

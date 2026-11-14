@@ -58,6 +58,90 @@ extension _ChatMentionsSeen on _ChatPageState {
     if (changed) rebuildWith(() {});
   }
 
+  /// The "back to latest" glass pill. Quiet (just a chevron) until there's
+  /// a reason to look: someone wrote while I was up here → their face and a
+  /// count ("🙂 3 ⌄"); a message tags me → an accent "@" that takes me to
+  /// it first. Small either way, so it never competes with the mic.
+  Widget _latestPill(ColorScheme scheme) {
+    final mentions = _isGroup ? _pendingMentions.length : 0;
+    final waiting = _newWhileUp.length;
+    final ink = accentInk(scheme);
+    Widget face() {
+      final m = _newWhileUp.last;
+      final sm = (m['sender'] as Map?) ?? const {};
+      final rel = _isGroup
+          ? (sm['avatar_url'] ?? '').toString()
+          : _friendAvatar;
+      final name = _isGroup
+          ? (sm['username'] ?? '').toString()
+          : widget.friendName;
+      final url = rel.isEmpty ? null : fullMediaUrl(rel);
+      return CircleAvatar(
+        radius: 9,
+        backgroundColor: scheme.primary.withValues(alpha: 0.18),
+        backgroundImage: url == null
+            ? null
+            : authNetworkImageProvider(url, mediaAuthHeaders(url)),
+        child: url != null
+            ? null
+            : Text(name.isEmpty ? '•' : name[0].toUpperCase(),
+                style: TextStyle(
+                    fontSize: 9.5, fontWeight: FontWeight.w800, color: ink)),
+      );
+    }
+
+    final String tip;
+    final List<Widget> kids;
+    if (mentions > 0) {
+      tip = mentions == 1 ? 'You were mentioned' : '$mentions mentions';
+      kids = [
+        Text('@',
+            style: TextStyle(
+                fontSize: 15,
+                height: 1,
+                fontWeight: FontWeight.w900,
+                color: ink)),
+        if (mentions > 1) ...[
+          const SizedBox(width: 3),
+          Text('$mentions',
+              style: TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w800, color: ink)),
+        ],
+      ];
+    } else if (waiting > 0) {
+      tip = waiting == 1 ? '1 new message' : '$waiting new messages';
+      kids = [
+        face(),
+        const SizedBox(width: 5),
+        Text(waiting > 99 ? '99+' : '$waiting',
+            style: TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w800, color: ink)),
+        const SizedBox(width: 1),
+        Icon(Icons.keyboard_arrow_down_rounded, color: ink, size: 18),
+      ];
+    } else {
+      tip = 'Back to latest';
+      kids = [Icon(Icons.keyboard_arrow_down_rounded, color: ink, size: 20)];
+    }
+    return GestureDetector(
+      onTap: mentions > 0 ? _jumpToNextMention : _jumpToLatest,
+      child: Tooltip(
+        message: tip,
+        child: AnimatedSize(
+          duration: Motion.quick,
+          curve: Curves.easeOutCubic,
+          child: _glass(
+            scheme,
+            height: 28,
+            padding: EdgeInsets.symmetric(
+                horizontal: (mentions > 0 || waiting > 0) ? 7 : 9),
+            Row(mainAxisSize: MainAxisSize.min, children: kids),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _jumpToNextMention() {
     final p = _pendingMentions;
     if (p.isEmpty) return;

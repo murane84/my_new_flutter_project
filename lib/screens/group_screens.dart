@@ -28,6 +28,7 @@ import 'stories/story_viewer.dart' show StoryHooks;
 import '../widgets/pill_search.dart';
 import '../utils/radii.dart';
 import '../widgets/skeleton.dart';
+import '../utils/keyboard.dart';
 
 // Groups are presented as CARD POPUPS (AppPopupShell) — not full-window routes —
 // so on desktop they never hide the music/chat panels. Selecting or creating a
@@ -336,6 +337,7 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
             child: TextField(
+              onTapOutside: unfocusOnTapOutside,
               controller: _search,
               decoration: InputDecoration(
                 // Pill, like every search box (theme borders are 12 px boxes).
@@ -1130,6 +1132,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: TextField(
+                  onTapOutside: unfocusOnTapOutside,
                   onChanged: (v) => setState(() => _memberQuery = v),
                   decoration: InputDecoration(
                     // Pill, like every search box (theme borders are 12 px boxes).

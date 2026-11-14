@@ -158,6 +158,7 @@ import '../widgets/skeleton.dart';
 import '../utils/adaptive_sheet.dart';
 import '../utils/depth.dart';
 import '../widgets/avatar_flight.dart';
+import '../utils/keyboard.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
@@ -6752,6 +6753,7 @@ class _WebQueueSheetState extends State<_WebQueueSheet> {
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
             child: TextField(
+              onTapOutside: unfocusOnTapOutside,
               controller: _searchCtrl,
               style: const TextStyle(fontSize: 14),
               decoration: InputDecoration(

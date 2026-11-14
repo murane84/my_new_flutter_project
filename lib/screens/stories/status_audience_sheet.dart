@@ -9,6 +9,7 @@ import '../../services/haptics.dart';
 import '../../utils/radii.dart';
 import '../../widgets/skeleton.dart';
 import '../../utils/adaptive_sheet.dart';
+import '../../utils/keyboard.dart';
 
 /// "Who can see my status": My circle / Bonds only, plus friends to hide it
 /// from either way. Saved to the account; the server applies it.
@@ -148,6 +149,7 @@ class _StatusAudienceSheetState extends State<_StatusAudienceSheet> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
                 child: TextField(
+                  onTapOutside: unfocusOnTapOutside,
                   onChanged: (v) => setState(() => _q = v.trim().toLowerCase()),
                   decoration: InputDecoration(
                     // Pill, like every search box (theme borders are 12 px boxes).

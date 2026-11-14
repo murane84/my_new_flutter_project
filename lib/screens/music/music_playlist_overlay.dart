@@ -1917,6 +1917,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 children: [
                   Expanded(
                     child: TextField(
+                      onTapOutside: unfocusOnTapOutside,
                       controller: _searchCtrl,
                       onChanged: (v) => setState(() => _search = v),
                       decoration: InputDecoration(
@@ -1961,6 +1962,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
                 : displayed.isEmpty
                     ? _emptyView(scheme)
                     : ListView.builder(
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
                         controller: _listCtrl,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 4),

@@ -20,6 +20,7 @@ import '../../utils/readable.dart' show accentInk;
 import '../../widgets/pill_search.dart';
 import '../../services/haptics.dart';
 import '../../utils/radii.dart';
+import '../../utils/keyboard.dart';
 
 /// Free music: search songs artists released to be downloaded for free —
 /// Jamendo (Creative Commons) and the Internet Archive (CC / public domain).
@@ -321,6 +322,7 @@ class _FreeMusicPanelState extends State<FreeMusicPanel> {
         Padding(
           padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
           child: TextField(
+            onTapOutside: unfocusOnTapOutside,
             controller: _q,
             onChanged: _onChanged,
             onSubmitted: _search,

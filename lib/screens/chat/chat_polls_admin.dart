@@ -736,6 +736,7 @@ extension _ChatPollsAdmin on _ChatPageState {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                     child: TextField(
+                      onTapOutside: unfocusOnTapOutside,
                       onChanged: (v) => setC(() => query = v),
                       decoration: InputDecoration(
                         // Pill, like every search box (theme borders are 12 px boxes).

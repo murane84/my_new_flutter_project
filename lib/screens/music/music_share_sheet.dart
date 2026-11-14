@@ -582,6 +582,7 @@ class _SongPickSheetState extends State<_SongPickSheet> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
               child: TextField(
+                onTapOutside: unfocusOnTapOutside,
                 onChanged: (v) => setState(() => _q = v.trim()),
                 decoration: InputDecoration(
                   // Pill, like every search box (theme borders are 12 px boxes).

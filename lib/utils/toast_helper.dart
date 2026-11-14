@@ -208,8 +208,9 @@ class _ToastOverlayState extends State<_ToastOverlay>
         : Colors.black.withAlpha(35);
 
     return Positioned(
-      // 44 px footer + gap
-      bottom: 60,
+      // 44 px footer + gap — and always above the keyboard when it's open
+      // (a toast hidden behind it was a toast nobody saw).
+      bottom: 60 + MediaQuery.viewInsetsOf(context).bottom,
       left: 0,
       right: 0,
       child: FadeTransition(

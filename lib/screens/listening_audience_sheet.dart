@@ -12,6 +12,7 @@ import '../utils/radii.dart';
 import '../widgets/skeleton.dart';
 import '../utils/adaptive_sheet.dart';
 import '../utils/depth.dart';
+import '../utils/keyboard.dart';
 
 /// The music-player toggle for broadcasting "listening now" to friends.
 /// Tap flips sharing on/off; long-press opens the audience sheet (who can see).
@@ -351,6 +352,7 @@ class _ListeningAudienceSheetState extends State<_ListeningAudienceSheet> {
                   child: SizedBox(
                     height: 38,
                     child: TextField(
+                      onTapOutside: unfocusOnTapOutside,
                       onChanged: (v) =>
                           setState(() => _query = v.trim().toLowerCase()),
                       style: const TextStyle(fontSize: 13.5),

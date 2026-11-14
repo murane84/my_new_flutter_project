@@ -642,6 +642,7 @@ class _DedicateFriendPickerState extends State<_DedicateFriendPicker> {
                     child: SizedBox(
                       height: 38,
                       child: TextField(
+                        onTapOutside: unfocusOnTapOutside,
                         onChanged: (v) =>
                             setState(() => _q = v.trim().toLowerCase()),
                         style: const TextStyle(fontSize: 13.5),

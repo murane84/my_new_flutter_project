@@ -42,6 +42,7 @@ import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../utils/adaptive_sheet.dart';
 import '../utils/depth.dart';
+import '../utils/keyboard.dart';
 
 /// Web-only replacement for the native [MusicControls] panel.
 ///
@@ -1053,6 +1054,7 @@ class _WebMusicPanelState extends State<WebMusicPanel> {
               child: SizedBox(
                 height: 38,
                 child: TextField(
+                  onTapOutside: unfocusOnTapOutside,
                   onChanged: (v) =>
                       setState(() => _sheetQuery = v.trim().toLowerCase()),
                   style: const TextStyle(fontSize: 13.5),

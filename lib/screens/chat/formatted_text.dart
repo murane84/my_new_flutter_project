@@ -96,6 +96,10 @@ class MentionSelf {
   /// from the group's members. The message TEXT keeps the canonical
   /// "@username" (same for everyone); only the rendering is personal.
   static final Map<String, String> names = {};
+
+  /// Tapping a tag in a bubble (the open group chat sets this): gets the
+  /// lower-case username ("all" for @all).
+  static void Function(String key)? onTap;
 }
 
 // An @-mention token. The picker inserts the member's Aluta USERNAME (the same
@@ -161,7 +165,10 @@ List<InlineSpan> _mentionize(
         alignment: PlaceholderAlignment.baseline,
         baseline: TextBaseline.alphabetic,
         child: _MentionChip(
-            label: label, base: base, mine: _isSelfMention(tok)),
+            label: label,
+            base: base,
+            mine: _isSelfMention(tok),
+            tapKey: key),
       ));
     }
     cursor = m.end;
@@ -1065,10 +1072,14 @@ const Map<String, IconData> _previewIcons = {
 /// highlighter box.
 class _MentionChip extends StatelessWidget {
   const _MentionChip(
-      {required this.label, required this.base, required this.mine});
+      {required this.label,
+      required this.base,
+      required this.mine,
+      required this.tapKey});
   final String label;
   final TextStyle base;
   final bool mine;
+  final String tapKey;
 
   @override
   Widget build(BuildContext context) {
@@ -1077,9 +1088,18 @@ class _MentionChip extends StatelessWidget {
     final text = Text(label,
         style: base.copyWith(
             color: ink, fontWeight: FontWeight.w700, height: 1.15));
-    if (!mine) return text;
+    final tap = MentionSelf.onTap;
+    Widget tappable(Widget w) => tap == null
+        ? w
+        : MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => tap(tapKey),
+                child: w));
+    if (!mine) return tappable(text);
     final dark = scheme.brightness == Brightness.dark;
-    return Container(
+    return tappable(Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0.5),
       decoration: BoxDecoration(
         color: scheme.primary.withValues(alpha: dark ? 0.24 : 0.13),
@@ -1088,6 +1108,6 @@ class _MentionChip extends StatelessWidget {
             color: scheme.primary.withValues(alpha: dark ? 0.40 : 0.24)),
       ),
       child: text,
-    );
+    ));
   }
 }

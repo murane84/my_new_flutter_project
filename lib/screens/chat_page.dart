@@ -885,6 +885,7 @@ class _ChatPageState extends State<ChatPage>
 
   @override
   void dispose() {
+    if (MentionSelf.onTap == _mentionTap) MentionSelf.onTap = null;
     unawaited(_SongBed.stop(fadeMs: 300)); // a song bed never outlives the chat
     pendingVoiceReply.removeListener(_onPendingVoice);
     pendingListenTogether.removeListener(_onPendingListen);
@@ -1262,6 +1263,8 @@ class _ChatPageState extends State<ChatPage>
     if (_isGroup) {
       await _loadCachedGroupMembers();
       unawaited(_loadGroupMembers());
+      // Tap a tag in a bubble → a little card for that member.
+      MentionSelf.onTap = _mentionTap;
     }
     await _loadCachedMessages(); // show cached messages instantly (clears loader)
     // + what arrived on the home socket since that cache was written — the
@@ -2518,6 +2521,9 @@ class _ChatPageState extends State<ChatPage>
       ]);
     } catch (_) {}
   }
+
+  /// (A real method, so dispose can tell it's still ours.)
+  void _mentionTap(String key) => _peekMention(key);
 
   void _markMediaSaved(String? key) {
     final ref = _pendingSavedRef;

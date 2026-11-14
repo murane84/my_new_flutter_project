@@ -149,10 +149,32 @@ extension _ChatMentions on _ChatPageState {
         contains.add(m);
       }
     }
-    int byName(Map<String, dynamic> a, Map<String, dynamic> b) =>
-        _memberName(a).toLowerCase().compareTo(_memberName(b).toLowerCase());
-    prefix.sort(byName);
-    contains.sort(byName);
+    // Who's most likely meant: whoever spoke most recently here (and, among
+    // equals, more often), then the rest by name — so "@" + one tap is
+    // usually the right person.
+    final lastAt = <String, int>{};
+    final count = <String, int>{};
+    var i = 0;
+    for (final msg in _messages) {
+      if (i++ >= 300) break;
+      final sid = msg['sender_id']?.toString();
+      if (sid == null || sid == _myId) continue;
+      lastAt.putIfAbsent(sid, () => i);
+      count[sid] = (count[sid] ?? 0) + 1;
+    }
+    int rank(Map<String, dynamic> a, Map<String, dynamic> b) {
+      final ia = a['user_id']?.toString() ?? '', ib = b['user_id']?.toString() ?? '';
+      final la = lastAt[ia] ?? 1 << 30, lb = lastAt[ib] ?? 1 << 30;
+      // Spoke within the last ~40 messages → by recency; otherwise by
+      // how often, then the name.
+      final ra = la <= 40 ? la : 1000, rb = lb <= 40 ? lb : 1000;
+      if (ra != rb) return ra.compareTo(rb);
+      final ca = count[ia] ?? 0, cb = count[ib] ?? 0;
+      if (ca != cb) return cb.compareTo(ca);
+      return _memberName(a).toLowerCase().compareTo(_memberName(b).toLowerCase());
+    }
+    prefix.sort(rank);
+    contains.sort(rank);
     return [...prefix, ...contains];
   }
 
@@ -204,6 +226,158 @@ extension _ChatMentions on _ChatPageState {
       if (id != null && u.isNotEmpty && tokens.contains(u)) ids.add(id);
     }
     return (ids: ids, all: all);
+  }
+
+  /// Tapped "@Juma" in a bubble → a small card: who it is (the name I saved,
+  /// their @username, admin), and Message / Call. Only what the group already
+  /// shares. "@all" shows how many it reached.
+  void _peekMention(String key) {
+    if (!mounted) return;
+    final scheme = Theme.of(context).colorScheme;
+    final ink = accentInk(scheme);
+    Haptics.selectionClick();
+    if (key == 'all') {
+      final n = _groupMembers.where((m) => !_isMe(m)).length;
+      showToast(context,
+          n > 0 ? '@all tags everyone here — $n people' : '@all tags everyone here',
+          type: ToastType.info);
+      return;
+    }
+    Map<String, dynamic>? m;
+    for (final g in _groupMembers) {
+      if (_memberUsername(g).toLowerCase() == key) {
+        m = g;
+        break;
+      }
+    }
+    if (m == null) {
+      showToast(context, 'They’re no longer in this group',
+          type: ToastType.info);
+      return;
+    }
+    final member = m;
+    if (_isMe(member)) {
+      showToast(context, 'That’s you 💞', type: ToastType.info);
+      return;
+    }
+    final id = (member['user_id'] as num?)?.toInt();
+    final name = _memberName(member);
+    final user = _memberUsername(member);
+    final phone = (member['phone'] ?? '').toString();
+    final rel = (member['avatar_url'] ?? '').toString();
+    final url = rel.isNotEmpty ? fullMediaUrl(rel) : null;
+    final admin = member['role']?.toString() == 'admin';
+    // Calling: only someone saved in my phone book (I know them).
+    final known = phone.isNotEmpty && ContactNames.instance.hasRealName(phone);
+    showAdaptiveSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: scheme.primary.withValues(alpha: 0.5), width: 2),
+              ),
+              child: CircleAvatar(
+                radius: 34,
+                backgroundColor: scheme.primaryContainer,
+                backgroundImage: url != null
+                    ? authNetworkImageProvider(url, mediaAuthHeaders(url))
+                    : null,
+                child: url == null
+                    ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                        style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            color: scheme.onPrimaryContainer))
+                    : null,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(name,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: scheme.onSurface)),
+            const SizedBox(height: 2),
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              if (user != name)
+                Text('@$user', style: TextStyle(fontSize: 13, color: ink)),
+              if (admin) ...[
+                if (user != name) const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text('admin',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: ink)),
+                ),
+              ],
+            ]),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                      shape: const StadiumBorder(),
+                      padding: const EdgeInsets.symmetric(vertical: 12)),
+                  onPressed: id == null
+                      ? null
+                      : () {
+                          Navigator.of(ctx).pop();
+                          _openDmWith(id, user, phone, rel);
+                        },
+                  icon: const Icon(Icons.chat_bubble_rounded, size: 18),
+                  label: const Text('Message'),
+                ),
+              ),
+              if (known) ...[
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                        shape: const StadiumBorder(),
+                        padding: const EdgeInsets.symmetric(vertical: 12)),
+                    onPressed: id == null
+                        ? null
+                        : () async {
+                            Navigator.of(ctx).pop();
+                            final ok = await CallService.instance.startCall(
+                              peerId: id,
+                              peerName: name,
+                              peerAvatar: rel,
+                              myName:
+                                  _myName.isNotEmpty ? _myName : 'Aluta user',
+                              myAvatar: _myAvatar,
+                              fallbackPhone: phone,
+                            );
+                            if (!ok && mounted) {
+                              showToast(context, 'You’re already in a call',
+                                  type: ToastType.info);
+                            }
+                          },
+                    icon: const Icon(Icons.call_rounded, size: 18),
+                    label: const Text('Call'),
+                  ),
+                ),
+              ],
+            ]),
+          ]),
+        ),
+      ),
+    );
   }
 
   /// The inline "Tag members" card shown above the composer while typing "@".

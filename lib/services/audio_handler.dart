@@ -41,6 +41,20 @@ class AlutaAudioHandler extends BaseAudioHandler {
     await super.stop();
   }
 
+  // Song → its cover (the file's own, or the one found online), so the lock
+  // screen shows the same picture as the player. Kept small.
+  final Map<String, Uri> _artFor = <String, Uri>{};
+
+  /// The cover for song [id]; applied now if it's the song showing.
+  void setArt(String id, Uri art) {
+    if (_artFor.length > 64) _artFor.remove(_artFor.keys.first);
+    _artFor[id] = art;
+    final mi = mediaItem.value;
+    if (mi != null && mi.id == id && mi.artUri != art) {
+      mediaItem.add(mi.copyWith(artUri: art));
+    }
+  }
+
   /// Push the player's current state so the media notification / car display
   /// stays accurate and its buttons keep working. Called by MusicControls.
   void updateFromPlayer({
@@ -59,9 +73,9 @@ class AlutaAudioHandler extends BaseAudioHandler {
         title: title.isEmpty ? 'Aluta' : title,
         artist: artist.isEmpty ? 'Aluta' : artist,
         duration: duration,
-        // Show the Aluta logo as the lock-screen / notification artwork instead
-        // of Android's generic music-note placeholder.
-        artUri: _notificationArtUri,
+        // The song's cover when we know it (see [setArt]); else the Aluta
+        // logo instead of Android's generic music-note placeholder.
+        artUri: _artFor[id] ?? _notificationArtUri,
       ));
     } else if (duration != null && mediaItem.value?.duration != duration) {
       final mi = mediaItem.value;

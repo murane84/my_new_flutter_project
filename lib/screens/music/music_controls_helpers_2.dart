@@ -19,6 +19,11 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
         size: 200,
       );
       if (bytes == null || bytes.isEmpty) return;
+      // The file has a cover → the lock screen shows it too.
+      if (_currentIndex >= 0 && _currentIndex < _playlist.length) {
+        audioHandler?.setArt(_playlist[_currentIndex],
+            Uri.parse('content://media/external/audio/media/$id/albumart'));
+      }
       final palette = await PaletteGenerator.fromImageProvider(
         MemoryImage(bytes),
         size: const Size(120, 120),
@@ -74,6 +79,8 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
   }
 
   Future<void> _accentFromUrl(String path, String url) async {
+    // The lock screen / notification shows the online cover too.
+    audioHandler?.setArt(path, Uri.parse(url));
     try {
       final palette = await PaletteGenerator.fromImageProvider(
         CachedNetworkImageProvider(url, maxWidth: 160),

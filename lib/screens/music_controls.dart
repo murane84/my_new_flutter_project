@@ -33,6 +33,7 @@ import '../widgets/song_art.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/now_glow.dart';
 import 'stories/quick_status_sheet.dart';
+import 'stories/song_moment.dart' show SongMoment, uploadSongMoment;
 import '../utils/file_bytes.dart';
 import '../utils/on_accent.dart';
 import '../services/vocal_map.dart';

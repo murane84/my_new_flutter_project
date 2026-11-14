@@ -178,11 +178,11 @@ def create_story(
         if not (payload.music_title or payload.caption):
             raise HTTPException(status_code=400, detail="Nothing to post")
 
-    # A song moment: the clip must be my own upload; only under a photo /
-    # text / sticker status.
+    # A song moment: the clip must be my own upload; under a photo / text /
+    # sticker status, or a music status (the song itself, heard).
     song_id = (payload.song_asset_id or "").strip() or None
     if song_id:
-        if kind not in ("photo", "text", "sticker"):
+        if kind not in ("photo", "text", "sticker", "music"):
             song_id = None
         else:
             sa = db.query(MediaAsset).filter(MediaAsset.id == song_id).first()

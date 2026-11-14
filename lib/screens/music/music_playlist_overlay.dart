@@ -2306,18 +2306,47 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     // Right away: it's on its way ("Your story" shows a posting ring too).
     showToast(context, 'Posting “$title” as your status…',
         type: ToastType.info);
+    // The song itself travels with it — a 15-second moment friends HEAR
+    // when they open the status. The playing song starts where I am in it;
+    // another starts a third of the way in (past the intro).
+    final dur = _durMs[path] ??
+        (widget.currentIndex >= 0 &&
+                widget.currentIndex < widget.playlist.length &&
+                widget.playlist[widget.currentIndex] == path
+            ? widget.player.duration?.inMilliseconds
+            : null) ??
+        0;
+    final isNow = widget.currentIndex >= 0 &&
+        widget.currentIndex < widget.playlist.length &&
+        widget.playlist[widget.currentIndex] == path;
+    var start = isNow
+        ? widget.player.position.inMilliseconds
+        : (dur > 60000 ? (dur * 0.33).round() : 0);
+    if (dur > 0 && start > dur - 16000) start = (dur - 16000).clamp(0, dur);
+    final clip = await uploadSongMoment(SongMoment(
+      title: title,
+      fileName: path.split(RegExp(r'[\\/]')).last,
+      load: () => readFileBytes(path),
+      startMs: start,
+      durationMs: dur,
+    ));
     final res = await ApiService().createStory(
         kind: 'music',
         musicTitle: title,
         musicArtist: artist,
         background: pick.background,
-        caption: pick.text.isEmpty ? null : pick.text);
+        caption: pick.text.isEmpty ? null : pick.text,
+        songAssetId: clip?.$1,
+        songTitle: clip == null ? null : title,
+        songStartMs: clip?.$2);
     if (!mounted) return;
     showToast(
         context,
-        res != null
-            ? 'Posted 🎶 — tap “Your story” in Circle to see it'
-            : 'Couldn’t post it — check your connection and try again',
+        res == null
+            ? 'Couldn’t post it — check your connection and try again'
+            : clip == null
+                ? 'Posted 🎶 — the song’s sound couldn’t be added, its name is there'
+                : 'Posted 🎶 — friends hear it when they open your status',
         type: res != null ? ToastType.success : ToastType.error);
   }
 

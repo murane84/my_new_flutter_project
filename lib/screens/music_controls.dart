@@ -2482,7 +2482,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   Future<void> _announceFreshTidied(List<String> added) async {
     var tidied = <String>[];
     try {
-      await _learnSongNames(); // know the artists before reading names
+      // Know the artists before reading names — but a big library's tag
+      // query never holds the "Added" toast back for long.
+      await _learnSongNames()
+          .timeout(const Duration(seconds: 3), onTimeout: () {});
       tidied = added
           .where((p) =>
               metadataStore.of(p) == null &&

@@ -505,6 +505,12 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     // Ambient controls (now-playing bar, car/lock-screen buttons) drive the
     // local player — or the LIVE session when one is active (live-aware).
     playbackBus.onToggle = _transportPlayPause;
+    // The ❤ on the media notification: save / unsave what's playing.
+    playbackBus.onToggleLike = () {
+      if (_liveActive) return;
+      if (_currentIndex < 0 || _currentIndex >= _playlist.length) return;
+      _toggleFavorite(_playlist[_currentIndex], burst: false);
+    };
     playbackBus.onNext = _transportNext;
     playbackBus.onPrev = _transportPrev;
     playbackBus.onSeekFraction = (f) {
@@ -599,6 +605,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     // Only clear the bus if we're still the registered owner.
     if (playbackBus.onToggle == _transportPlayPause) {
       playbackBus.onToggle = null;
+      playbackBus.onToggleLike = null;
       playbackBus.onNext = null;
       playbackBus.onPrev = null;
       playbackBus.onSeekFraction = null;
@@ -2385,11 +2392,13 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _applyVolume();
       setState(() => _sleepRemaining = null);
       _sleepVN.value = null;
+      _pushMediaState();
       _snack('Sleep timer off');
       return;
     }
     setState(() => _sleepRemaining = d);
     _sleepVN.value = d;
+    _pushMediaState();
     _snack('Sleep in ${d.inMinutes} min');
     _sleepTimer = Timer(d, () async {
       await _player.pause();
@@ -2408,6 +2417,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         }
       });
       _sleepVN.value = _sleepRemaining;
+      // The lock-screen card's "Stops in N min" follows, once a minute.
+      if ((_sleepRemaining?.inSeconds ?? 0) % 60 == 0) _pushMediaState();
       // The last 30s: ease the music away instead of a sudden stop.
       final r = _sleepRemaining?.inSeconds ?? 99;
       final f = r >= 30 ? 1.0 : (r / 30).clamp(0.0, 1.0);
@@ -2420,16 +2431,17 @@ class _MusicControlsState extends ConsumerState<MusicControls>
 
   // ── Favorites ──────────────────────────────────────────────────────────────
 
-  void _toggleFavorite(String path) {
+  void _toggleFavorite(String path, {bool burst = true}) {
     final liking = !_favorites.contains(path);
     setState(() => _favorites.contains(path)
         ? _favorites.remove(path)
         : _favorites.add(path));
     // Instagram-style: a fountain of hearts shoots up from wherever the
     // like came from (double-tap on the record, a heart button, the bar).
-    if (liking && mounted) HeartBurst.at(context, gLastTapDownGlobal);
+    if (burst && liking && mounted) HeartBurst.at(context, gLastTapDownGlobal);
     _saveFavorites();
     _syncFavoriteAmbient();
+    _pushMediaState(); // the ❤ on the lock-screen card follows
   }
 
   // ── File picking ───────────────────────────────────────────────────────────

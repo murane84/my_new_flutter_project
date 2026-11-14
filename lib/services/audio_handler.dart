@@ -27,6 +27,26 @@ class AlutaAudioHandler extends BaseAudioHandler {
   @override
   Future<void> skipToPrevious() async => playbackBus.onPrev?.call();
 
+  // The ❤ on the card.
+  @override
+  Future<dynamic> customAction(String name,
+      [Map<String, dynamic>? extras]) async {
+    if (name == 'like') playbackBus.onToggleLike?.call();
+  }
+
+  static const MediaControl _like = MediaControl(
+    androidIcon: 'drawable/ic_np_fav',
+    label: 'Like',
+    action: MediaAction.custom,
+    customAction: CustomMediaAction(name: 'like'),
+  );
+  static const MediaControl _liked = MediaControl(
+    androidIcon: 'drawable/ic_np_fav_on',
+    label: 'Unlike',
+    action: MediaAction.custom,
+    customAction: CustomMediaAction(name: 'like'),
+  );
+
   @override
   Future<void> seek(Duration position) async =>
       playbackBus.onSeekTo?.call(position);
@@ -65,6 +85,8 @@ class AlutaAudioHandler extends BaseAudioHandler {
     required Duration position,
     Duration? duration,
     bool buffering = false,
+    String? line, // the one smart line under the artist (album slot)
+    bool? liked, // null → no ❤ (e.g. a Listen Together song)
   }) {
     if (id != _lastId) {
       _lastId = id;
@@ -72,14 +94,27 @@ class AlutaAudioHandler extends BaseAudioHandler {
         id: id,
         title: title.isEmpty ? 'Aluta' : title,
         artist: artist.isEmpty ? 'Aluta' : artist,
+        album: line,
         duration: duration,
         // The song's cover when we know it (see [setArt]); else the Aluta
         // logo instead of Android's generic music-note placeholder.
         artUri: _artFor[id] ?? _notificationArtUri,
       ));
-    } else if (duration != null && mediaItem.value?.duration != duration) {
+    } else {
       final mi = mediaItem.value;
-      if (mi != null) mediaItem.add(mi.copyWith(duration: duration));
+      if (mi != null &&
+          ((duration != null && mi.duration != duration) ||
+              (mi.album ?? '') != (line ?? '') ||
+              mi.title != (title.isEmpty ? 'Aluta' : title) ||
+              mi.artist != (artist.isEmpty ? 'Aluta' : artist))) {
+        mediaItem.add(mi.copyWith(
+          duration: duration ?? mi.duration,
+          // (copyWith keeps a null; '' clears a line that no longer applies)
+          album: line ?? '',
+          title: title.isEmpty ? 'Aluta' : title,
+          artist: artist.isEmpty ? 'Aluta' : artist,
+        ));
+      }
     }
 
     playbackState.add(playbackState.value.copyWith(
@@ -87,6 +122,7 @@ class AlutaAudioHandler extends BaseAudioHandler {
         MediaControl.skipToPrevious,
         if (playing) MediaControl.pause else MediaControl.play,
         MediaControl.skipToNext,
+        if (liked != null) liked ? _liked : _like,
       ],
       systemActions: const {MediaAction.seek},
       androidCompactActionIndices: const [0, 1, 2],

@@ -15,6 +15,8 @@ part of '../home_page.dart';
 // on dispose.
 class PlaybackBus {
   VoidCallback? onToggle;
+  // The media notification's ❤ (save / unsave the playing song).
+  VoidCallback? onToggleLike;
   VoidCallback? onNext;
   VoidCallback? onPrev;
   // Seek to a fraction (0..1) of the current track's duration.

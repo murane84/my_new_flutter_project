@@ -49,15 +49,31 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
         ? (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0)
         : 0.0;
     playClockNotifier.value = PlayClock(pos, dur ?? Duration.zero);
-    // Also drive the car / lock-screen media notification with the live track.
-    audioHandler?.updateFromPlayer(
-      id: 'live-session',
-      title: _liveTitle(),
-      artist: 'Live',
-      playing: playing,
-      position: pos,
-      duration: dur,
-    );
+    // Also drive the car / lock-screen media notification with the live
+    // track: the real title + artist, its cover, and who I'm with.
+    final h = audioHandler;
+    if (h != null) {
+      final raw = _liveTitle();
+      final n = SongNames.instance.parseName(raw);
+      final t = n.title.isEmpty ? raw : n.title;
+      final a = n.artist;
+      final id = 'live:${t.toLowerCase()}|${a.toLowerCase()}';
+      if (a.isNotEmpty) {
+        final url = CoverArt.instance
+            .urlFor(SongArt.keyFor(t, a), title: t, artist: a);
+        if (url != null) h.setArt(id, Uri.parse(url));
+      }
+      final peer = (activeLiveSession?.peerName ?? '').trim();
+      h.updateFromPlayer(
+        id: id,
+        title: t,
+        artist: a.isEmpty ? 'Listen Together' : a,
+        playing: playing,
+        position: pos,
+        duration: dur,
+        line: peer.isEmpty ? '🎧 Listening together' : '🎧 with $peer · in sync',
+      );
+    }
   }
 
   void _transportSeekBy(int seconds) {
@@ -191,6 +207,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
   void _pushMediaState({bool buffering = false}) {
     final h = audioHandler;
     if (h == null) return;
+    if (_liveActive) return _pushLiveToAmbient(); // the live card owns it
     final hasTrack = _currentIndex >= 0 && _currentIndex < _playlist.length;
     h.updateFromPlayer(
       id: hasTrack ? _playlist[_currentIndex] : 'aluta',
@@ -200,7 +217,33 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
       position: _player.position,
       duration: _player.duration,
       buffering: buffering,
+      line: hasTrack ? _mediaLine() : null,
+      liked: hasTrack ? _favorites.contains(_playlist[_currentIndex]) : null,
     );
+  }
+
+  /// The ONE line under the artist on the lock-screen card — whichever fact
+  /// matters right now, never a list: the sleep timer, our song, on repeat,
+  /// else where I am in the playlist.
+  String? _mediaLine() {
+    final left = _sleepRemaining;
+    if (left != null && left.inSeconds > 0) {
+      final m = (left.inSeconds / 60).ceil();
+      return m <= 1 ? 'Stops in a minute' : 'Stops in $m min';
+    }
+    final t = _trackName;
+    if (t.isNotEmpty &&
+        (SongInsights.instance.isOurs(t) ||
+            SongInsights.instance.sharedSong(t))) {
+      return '💞 Our song';
+    }
+    if (t.isNotEmpty && SongInsights.instance.playsToday(t) >= 3) {
+      return 'On repeat today';
+    }
+    if (_playlist.length > 1) {
+      return '${_currentIndex + 1} of ${_playlist.length} in your playlist';
+    }
+    return null;
   }
 
   // ── Playback ───────────────────────────────────────────────────────────────

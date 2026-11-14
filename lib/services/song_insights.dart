@@ -496,6 +496,13 @@ class SongInsights {
   /// Whether this song is already in Our Playlist with my partner.
   bool isOurs(String title) => _songs[_keyOf(title)]?['ours'] == true;
 
+  /// How many times [title] has played today (the notification's
+  /// "On repeat today").
+  int playsToday(String title) {
+    final s = _songs[_keyOf(title)];
+    return s == null ? 0 : _playsOn(s, _today);
+  }
+
   SongFeel? feelOf(String title) =>
       SongFeel.of(_songs[_keyOf(title)]?['f'] as String?);
 

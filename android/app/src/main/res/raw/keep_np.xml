@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The media notification's heart icons are looked up by NAME at runtime
+     (audio_service), so resource shrinking must keep them. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_np_fav,@drawable/ic_np_fav_on" />

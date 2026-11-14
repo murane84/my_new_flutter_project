@@ -65,6 +65,25 @@ extension _ChatUnread on _ChatPageState {
       count++;
     }
     if (anchor == null) return;
+    // A message since my last visit tags me → open right there (lit up),
+    // not at the bottom: that's why I came. Once per visit; a notification's
+    // own jump still wins.
+    if (_isGroup && !_openedAtMention && widget.initialJumpMessageId == null) {
+      final tagged = _pendingMentions;
+      if (tagged.isNotEmpty) {
+        _openedAtMention = true;
+        final id = tagged.first;
+        rebuildWith(() {
+          _unreadAnchorId = anchor;
+          _unreadCount = count;
+          _clearMention(id);
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _jumpToMessage(id);
+        });
+        return;
+      }
+    }
     // Placed early (cache + live inbox) and re-checked after the fetch: only
     // scroll when the anchor actually moved, so it never jumps twice.
     final moved = anchor != _unreadAnchorId;

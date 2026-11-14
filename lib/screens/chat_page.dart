@@ -607,6 +607,8 @@ class _ChatPageState extends State<ChatPage>
   bool _searchDeepLoaded = false;
   // ── "@" stepper + seen avatar (see chat/chat_mentions_seen.dart) ───────
   int? _mentionBase;
+  // This visit already opened at the message that tagged me (once only).
+  bool _openedAtMention = false;
   // Group settings mirrored from the server (chat/chat_polls_admin.dart).
   bool _adminsOnly = false;
   // Rituals (chat/chat_rituals.dart): already shown/used today.

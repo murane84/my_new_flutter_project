@@ -246,8 +246,6 @@ class GroupCallService {
     }
     phase = GroupCallPhase.active;
     connectedAt = DateTime.now();
-    // My plan sets how long I stay (free: 10 min).
-    PlanLimits.instance.startCallClock(connectedAt!, () => unawaited(leave()));
     _starter = true; // I started this call → I post the call-log entry.
     clearOngoing(room);
     _publish();
@@ -280,8 +278,6 @@ class GroupCallService {
     }
     phase = GroupCallPhase.active;
     connectedAt = DateTime.now();
-    // My plan sets how long I stay (free: 10 min).
-    PlanLimits.instance.startCallClock(connectedAt!, () => unawaited(leave()));
     clearOngoing(room);
     _publish();
     onShowUI?.call();
@@ -323,8 +319,6 @@ class GroupCallService {
     cancelCallNotification();
     phase = GroupCallPhase.active;
     connectedAt = DateTime.now();
-    // My plan sets how long I stay (free: 10 min).
-    PlanLimits.instance.startCallClock(connectedAt!, () => unawaited(leave()));
     clearOngoing(room!);
     _publish();
     TelecomService.instance.setActive(_telecomId);
@@ -411,8 +405,27 @@ class GroupCallService {
       case 'group_ice':
         await _onIce(msg);
         break;
+      case 'group_call_time_note':
+        // The starter's plan sets the call's length for everyone.
+        if (isActive && _asInt(msg['room']) == room) {
+          final who = (msg['starter_name'] ?? '').toString();
+          PlanLimits.instance.callNote.value = _starter
+              ? '1 minute left — your plan’s group calls last '
+                  '${msg['minutes']} min'
+              : '1 minute left — the call’s length comes from '
+                  '${who.isEmpty ? 'the caller' : who}’s plan';
+        }
+        break;
       case 'group_call_ended':
         final er = _asInt(msg['room']);
+        if (msg['reason'] == 'time_up' && isActive && (er == null || er == room)) {
+          final next = PlanLimits.instance.nextLevelName;
+          PlanLimits.instance.callNote.value = _starter
+              ? 'Call ended — your plan’s group calls last ${msg['minutes']} '
+                  'min${next.isEmpty ? '' : '. $next gives longer calls'}'
+              : 'Call ended — the time on the caller’s plan is up. They can '
+                  'ring everyone again';
+        }
         if (er != null) {
           clearOngoing(er);
           if (isActive && room == er) await leave();

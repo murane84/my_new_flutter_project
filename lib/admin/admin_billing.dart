@@ -753,11 +753,11 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
                 (_settings['sandbox'] == true
                         ? 'TEST MODE — no real money (any code works)\n'
                         : '') +
-                (_settings['pay_number'] ?? '').toString().isEmpty
-                    ? 'Not set yet — the app can’t show people where to pay.'
-                    : '${_settings['pay_network']} · ${_settings['pay_number']}'
-                        '${(_settings['pay_name'] ?? '').toString().isEmpty ? '' : ' · ${_settings['pay_name']}'}'
-                        '${(_settings['instructions'] ?? '').toString().isEmpty ? '' : '\n${_settings['instructions']}'}',
+                    ((_settings['pay_number'] ?? '').toString().isEmpty
+                        ? 'Not set yet — the app can’t show people where to pay.'
+                        : '${_settings['pay_network']} · ${_settings['pay_number']}'
+                            '${(_settings['pay_name'] ?? '').toString().isEmpty ? '' : ' · ${_settings['pay_name']}'}'
+                            '${(_settings['instructions'] ?? '').toString().isEmpty ? '' : '\n${_settings['instructions']}'}'),
                 style: TextStyle(color: c.muted)),
           ),
         ]);

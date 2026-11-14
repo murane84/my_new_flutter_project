@@ -34,7 +34,7 @@ extension _HomeMenu on HomePageState {
           icon: _isTogether
               ? Icons.workspace_premium_rounded
               : Icons.favorite_border_rounded,
-          label: _isTogether ? 'Together ✓' : 'Aluta Together',
+          label: _isTogether ? 'My plan ✓' : 'Aluta plans',
           onTap: _openTogether,
         ),
         // Quick status — "Free to talk" / Busy / Driving / Sleeping, ends itself.

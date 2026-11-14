@@ -42,8 +42,8 @@ try:
 except Exception:  # pragma: no cover - push optional
     send_push_to_user = None
 
-# A Together lapse never deletes: extra Spaces (beyond the free one) stay, but
-# new keepsakes can't be added to them until Together is renewed. Reacting,
+# A lapse never deletes: Spaces beyond the plan's amount stay, but new
+# keepsakes can't be added to them until the plan is renewed. Reacting,
 # commenting and reading all keep working.
 _LAPSE_BLOCK = re.compile(
     r"/spaces/(\d+)/(moments|playlist|dedications|capsules|diary|background)/?$")
@@ -74,7 +74,7 @@ async def _lapse_guard(request: Request, db: Session = Depends(get_db)):
     if cap != billing.UNLIMITED and int(m.group(1)) in ids[cap:]:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="This Our Space is read-only until Together is renewed "
+            detail="This Our Space is read-only until your plan is renewed "
                    "— everything in it is safe.")
 
 
@@ -348,6 +348,15 @@ def _space_owned_with(db: Session, owner_id: int, partner_id: int):
         if {m.user_id for m in c.members} == {owner_id, partner_id}:
             return c
     return None
+
+
+def _space_limit_detail(db: Session, user: User, accepting: bool = False) -> str:
+    import billing
+    cap = billing.limit(db, user, "spaces")
+    hint = billing.upgrade_hint(db, user)
+    head = (f"Your plan keeps {cap} Our Spaces"
+            + (" — unpin one to accept this bond" if accepting else "") + ".")
+    return f"{head} {hint}".strip()
 
 
 def _has_space_room(db: Session, user: User) -> bool:
@@ -1121,8 +1130,7 @@ def request_bond(
     if not _has_space_room(db, current_user):
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=("The free plan keeps one Our Space. Upgrade to Together to "
-                    "pin more of the people who matter."))
+            detail=_space_limit_detail(db, current_user))
     req = BondRequest(
         from_user_id=current_user.id,
         to_user_id=partner,
@@ -1189,8 +1197,7 @@ def accept_bond(
         if not _has_space_room(db, current_user):
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail=("You've reached your Space limit. Free up one or upgrade "
-                        "to Together to accept this bond."))
+                detail=_space_limit_detail(db, current_user, accepting=True))
         my_space = _create_bond_space(db, current_user.id, requester)
     # The requester's mirror (best-effort — if they're now at their cap we still
     # keep mine; their side forms when they have room / re-open).

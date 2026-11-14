@@ -1,5 +1,6 @@
 # websocket_routes.py
 import asyncio
+import time
 
 _REINVITE_TASKS: set = set()  # delayed "rejoin" invites in flight
 import json
@@ -110,6 +111,57 @@ _GROUP_RELAY = {"group_offer", "group_answer", "group_ice"}
 # only relays signaling here, never audio.
 _group_rooms: dict[int, set[int]] = {}
 
+# The starter's plan sets how long a group call runs, for everyone in it:
+# room_id -> {"starter", "ends_at" (epoch s, None = unlimited), "task"}.
+# A minute before the end everyone gets a heads-up; at the end the call
+# closes for all (group_call_ended, reason "time_up") — the starter can ring
+# everyone again in a new call.
+_group_meta: dict[int, dict] = {}
+
+
+def _call_minutes_of(uid: int) -> int:
+    db = SessionLocal()
+    try:
+        import billing
+        u = db.query(User).filter(User.id == uid).first()
+        return billing.limit(db, u, "call_minutes") if u else 10
+    except Exception:
+        return -1  # never cut a call because the plan lookup failed
+    finally:
+        db.close()
+
+
+async def _group_clock(room_id: int, minutes: int, starter_name: str):
+    try:
+        total = minutes * 60
+        if total > 60:
+            await asyncio.sleep(total - 60)
+            for x in list(_group_rooms.get(room_id, set())):
+                try:
+                    await notify_user(x, {
+                        "type": "group_call_time_note", "room": room_id,
+                        "seconds_left": 60, "minutes": minutes,
+                        "starter_name": starter_name,
+                    })
+                except Exception:
+                    pass
+            await asyncio.sleep(60)
+        else:
+            await asyncio.sleep(total)
+        if room_id in _group_rooms:
+            _group_rooms.pop(room_id, None)
+            _group_meta.pop(room_id, None)
+            await _broadcast_group_ended(room_id, reason="time_up",
+                                         minutes=minutes,
+                                         starter_name=starter_name)
+    except asyncio.CancelledError:
+        pass
+
+
+def _group_ends_at(room_id: int):
+    m = _group_meta.get(room_id)
+    return m.get("ends_at") if m else None
+
 
 def _to_int(v):
     try:
@@ -141,7 +193,19 @@ async def _group_start(room_id: int, uid: int, caller_name: str):
     members, title = _room_members_and_title(room_id)
     if uid not in members:
         return  # only members may start a call in their group
+    fresh = not _group_rooms.get(room_id)
     _group_rooms.setdefault(room_id, set()).add(uid)
+    if fresh:
+        old = _group_meta.pop(room_id, None)
+        if old and old.get("task"):
+            old["task"].cancel()
+        mins = await asyncio.to_thread(_call_minutes_of, uid)
+        meta = {"starter": uid, "ends_at": None, "task": None}
+        if mins > 0:
+            meta["ends_at"] = time.time() + mins * 60
+            meta["task"] = asyncio.create_task(
+                _group_clock(room_id, mins, caller_name))
+        _group_meta[room_id] = meta
     for m in members:
         if m == uid:
             continue
@@ -149,6 +213,7 @@ async def _group_start(room_id: int, uid: int, caller_name: str):
             await notify_user(m, {
                 "type": "group_call_incoming", "room": room_id,
                 "from": uid, "caller_name": caller_name, "title": title,
+                "ends_at": _group_ends_at(room_id),
             })
         except Exception:
             pass
@@ -174,6 +239,7 @@ async def _group_join(room_id: int, uid: int):
         await notify_user(uid, {
             "type": "group_call_participants", "room": room_id,
             "users": [{"id": x} for x in existing],
+            "ends_at": _group_ends_at(room_id),
         })
     except Exception:
         pass
@@ -192,7 +258,8 @@ def _group_is_active(room_id: int) -> bool:
     return bool(_group_rooms.get(room_id))
 
 
-async def _broadcast_group_ended(room_id: int):
+async def _broadcast_group_ended(room_id: int, reason: str = "empty",
+                                 minutes: int = 0, starter_name: str = ""):
     """Tell EVERY member of the conversation the call is over, so any 'call in
     progress · Join' banner clears everywhere (not just for the participants)."""
     members, _ = _room_members_and_title(room_id)
@@ -200,6 +267,8 @@ async def _broadcast_group_ended(room_id: int):
         try:
             await notify_user(m, {
                 "type": "group_call_ended", "room": room_id,
+                "reason": reason, "minutes": minutes,
+                "starter_name": starter_name,
             })
         except Exception:
             pass
@@ -222,6 +291,9 @@ async def _group_leave(room_id: int, uid: int):
             pass
     if not room:
         _group_rooms.pop(room_id, None)
+        meta = _group_meta.pop(room_id, None)
+        if meta and meta.get("task"):
+            meta["task"].cancel()
         # Room is empty — the call is over. Clear the Join banner for everyone.
         await _broadcast_group_ended(room_id)
 

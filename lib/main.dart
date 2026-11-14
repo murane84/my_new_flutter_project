@@ -868,7 +868,7 @@ class SplashScreenState extends State<SplashScreen>
         final open = SessionEvents.instance.openPlans;
         if (ctx != null) {
           showToast(ctx,
-              'This Our Space is read-only until Together is renewed — '
+              'This Our Space is read-only until your plan is renewed — '
               'everything in it is safe',
               type: ToastType.info,
               duration: const Duration(seconds: 6),

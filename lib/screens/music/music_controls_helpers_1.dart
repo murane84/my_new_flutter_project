@@ -236,23 +236,27 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
           color: noteColor ?? Colors.white.withValues(alpha: 0.95),
           size: (d * 0.42).clamp(14.0, 96.0)),
     );
-    if (_currentArtId == null || !_isMobile) {
-      return SizedBox(width: d, height: d, child: note);
-    }
+    // The song's art — the cover in the file, else the one found online
+    // (the same picture its playlist row shows). A Listen Together song
+    // I'm listening to keeps the note: my playlist's index isn't theirs.
+    final path = (!_liveActive || _isLiveHost) &&
+            _currentIndex >= 0 &&
+            _currentIndex < _playlist.length
+        ? _playlist[_currentIndex]
+        : null;
+    if (path == null) return SizedBox(width: d, height: d, child: note);
+    final ta = _effTA(path);
     return SizedBox(
       width: d,
       height: d,
-      child: ClipOval(
-        child: QueryArtworkWidget(
-          id: _currentArtId!,
-          type: ArtworkType.AUDIO,
-          artworkWidth: 360,
-          artworkHeight: 360,
-          artworkFit: BoxFit.cover,
-          keepOldArtwork: true,
-          nullArtworkWidget: note,
-        ),
-      ),
+      child: SongArt(
+          path: path,
+          title: ta.$1,
+          artist: ta.$2,
+          size: d,
+          fallback: note,
+          mediaId: _currentArtId,
+          decode: 360),
     );
   }
 
@@ -1136,7 +1140,7 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
     final artist = metadataStore.artist(path, '');
     // Small accent-tinted disc per row (a glowing one for the playing track) —
     // built from the main player's own helpers, no overlay-state dependency.
-    final leading = Container(
+    final disc = Container(
       width: 34,
       height: 34,
       alignment: Alignment.center,
@@ -1180,6 +1184,17 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
               color: Color.alphaBlend(
                   accent.withValues(alpha: 0.5), scheme.onSurfaceVariant)),
     );
+    // Up next shows each song's art too (as its playlist row does).
+    final ta = _effTA(path);
+    final leading = isNow
+        ? disc
+        : SongArt(
+            path: path,
+            title: ta.$1,
+            artist: ta.$2,
+            size: 34,
+            fallback: disc,
+            decode: 102);
     final row = Material(
       color: isNow
           ? accent.withValues(alpha: isDark ? 0.20 : 0.12)

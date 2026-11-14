@@ -29,6 +29,7 @@ import '../utils/toast_helper.dart';
 import '../utils/smooth_wheel.dart';
 import '../utils/prefs_now.dart';
 import '../utils/keyboard.dart';
+import '../widgets/song_art.dart';
 import '../widgets/now_glow.dart';
 import 'stories/quick_status_sheet.dart';
 import '../utils/file_bytes.dart';
@@ -52,7 +53,6 @@ import '../services/song_names.dart';
 import '../services/song_filter.dart';
 import '../services/track_memory.dart';
 import '../services/cover_art.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../services/track_title.dart'
     show cleanTrackName, cleanedNameFromPath;
 import '../utils/marquee_text.dart';
@@ -110,6 +110,16 @@ String _cleanTrackName(String raw) => cleanTrackName(raw);
 (String, String?) _titleArtistOf(String path) {
   final p = SongNames.instance.parse(path);
   return (p.title, p.artist.isEmpty ? null : p.artist);
+}
+
+/// Title + artist as the player shows them (your edits first) — what the
+/// online cover lookup is keyed on.
+(String, String) _effTA(String path) {
+  final ta = _titleArtistOf(path);
+  return (
+    metadataStore.title(path, ta.$1),
+    metadataStore.artist(path, ta.$2 ?? ''),
+  );
 }
 
 // =============================================================================
@@ -1576,6 +1586,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _artAccentForId = null; // re-derive the artwork accent for the new track
       _artAccentVN.value = null;
     });
+    SongArt.now.value = (path: path, title: initTitle);
     ref.read(nowPlayingProvider.notifier).update(
         track: initTitle, artist: initArtist, playing: true);
     _syncFavoriteAmbient();
@@ -1750,6 +1761,8 @@ class _MusicControlsState extends ConsumerState<MusicControls>
           _artistName = a;
           _currentArtId = m.id; // enables embedded album art on the disc
         });
+        SongArt.ids[path] = m.id;
+        SongArt.now.value = (path: path, title: t);
         _resolveArtAccent(m.id);
         // Use the real player state — a late metadata fetch must not re-mark a
         // paused track as playing.
@@ -1999,6 +2012,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         _artistName = initArtist;
         _currentArtId = null;
       });
+      SongArt.now.value = (path: path, title: initTitle);
       ref.read(nowPlayingProvider.notifier).update(
           track: initTitle, artist: initArtist, playing: false);
       _syncFavoriteAmbient();

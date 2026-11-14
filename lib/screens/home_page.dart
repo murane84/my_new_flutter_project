@@ -158,6 +158,7 @@ import '../widgets/skeleton.dart';
 import '../utils/adaptive_sheet.dart';
 import '../utils/depth.dart';
 import '../widgets/avatar_flight.dart';
+import '../widgets/song_art.dart';
 import '../utils/keyboard.dart';
 
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
@@ -6169,24 +6170,40 @@ class HomePageState extends rp.ConsumerState<HomePage>
                       // A little record that turns while music plays.
                       SpinArt(
                         spinning: np.playing,
-                        child: Container(
-                          width: 34,
-                          height: 34,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: RadialGradient(colors: [
-                              Color.lerp(a, Colors.white, 0.25)!,
-                              a,
-                              Color.lerp(a, Colors.black, 0.45)!,
-                            ], stops: const [0.0, 0.45, 1.0]),
-                            border:
-                                Border.all(color: Colors.white.withAlpha(60)),
+                        // The song's own picture (as in the playlist), else
+                        // the little accent record.
+                        child: ValueListenableBuilder<
+                            ({String path, String title})?>(
+                          valueListenable: SongArt.now,
+                          builder: (context, now, record) =>
+                              now == null || now.title != np.track
+                                  ? record!
+                                  : SongArt(
+                                      path: now.path,
+                                      title: np.track,
+                                      artist: np.artist,
+                                      size: 34,
+                                      fallback: record!,
+                                      decode: 102),
+                          child: Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(colors: [
+                                Color.lerp(a, Colors.white, 0.25)!,
+                                a,
+                                Color.lerp(a, Colors.black, 0.45)!,
+                              ], stops: const [0.0, 0.45, 1.0]),
+                              border: Border.all(
+                                  color: Colors.white.withAlpha(60)),
+                            ),
+                            child: Icon(Icons.music_note_rounded,
+                                size: 16,
+                                color: a.computeLuminance() > 0.5
+                                    ? const Color(0xFF111111)
+                                    : Colors.white),
                           ),
-                          child: Icon(Icons.music_note_rounded,
-                              size: 16,
-                              color: a.computeLuminance() > 0.5
-                                  ? const Color(0xFF111111)
-                                  : Colors.white),
                         ),
                       ),
                       const SizedBox(width: 8),

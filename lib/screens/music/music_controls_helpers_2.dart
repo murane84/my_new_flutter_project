@@ -263,6 +263,12 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
       try {
         final songs = await SongLibrary.songs();
         artists.addAll(songs.map((s) => s.artist));
+        // Their media-library ids too: every place that shows a song's
+        // picture (Up next, the disc) finds the cover inside the file.
+        for (final s in songs) {
+          final dynamic id = s.id;
+          if (id is int && id > 0 && s.data.isNotEmpty) SongArt.ids[s.data] = id;
+        }
       } catch (_) {}
     }
     SongNames.instance.learn(_playlist, artists: artists);

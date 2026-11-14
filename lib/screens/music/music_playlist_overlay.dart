@@ -386,36 +386,12 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       _sizeB = size;
       _songId = ids;
     });
+    SongArt.ids.addAll(ids); // Up next / the disc find the same covers
   }
 
-  /// Row leading: the now-playing indicator, the song's embedded cover art when
-  /// we can pull it, or a music-note icon — never the raw track number.
-  /// A song's real cover from the web when its file has none (see CoverArt);
-  /// the music-note badge until one lands, or if none matches.
-  Widget _onlineArt(String path, Widget fallback) {
-    return ValueListenableBuilder<int>(
-      valueListenable: CoverArt.instance.version,
-      builder: (context, _, _) {
-        final url = CoverArt.instance.urlFor(path,
-            title: _effTitle(path), artist: _effArtist(path));
-        if (url == null) return fallback;
-        return SizedBox(
-          width: 30,
-          height: 30,
-          child: ClipOval(
-            child: CachedNetworkImage(
-              imageUrl: url,
-              fit: BoxFit.cover,
-              memCacheWidth: 96,
-              placeholder: (_, _) => fallback,
-              errorWidget: (_, _, _) => fallback,
-            ),
-          ),
-        );
-      },
-    );
-  }
-
+  /// Row leading: the now-playing indicator, else the song's art (the cover
+  /// in the file, else the real cover found online — see SongArt), else a
+  /// music-note badge — never the raw track number.
   Widget _leadingArt(String path, bool isNow, ColorScheme scheme) {
     final isDark = scheme.brightness == Brightness.dark;
     if (isNow) {
@@ -476,29 +452,15 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
               scheme.primary.withValues(alpha: 0.5),
               scheme.onSurfaceVariant)),
     );
-    // No art in the file → a real cover looked up once (known artist only).
-    final online = _onlineArt(path, fallback);
-    final id = _songId[path];
-    // Embedded art is only queryable from the device MediaStore (Android/iOS).
-    if (id == null || !(Platform.isAndroid || Platform.isIOS)) return online;
-    return SizedBox(
-      width: 30,
-      height: 30,
-      child: ClipOval(
-        child: QueryArtworkWidget(
-          id: id,
-          type: ArtworkType.AUDIO,
-          artworkWidth: 30,
-          artworkHeight: 30,
-          // Decode only what a 30 px circle needs (default 200 px) — lighter
-          // rows, smoother flings.
-          size: 96,
-          artworkFit: BoxFit.cover,
-          keepOldArtwork: true,
-          nullArtworkWidget: online,
-        ),
-      ),
-    );
+    // Decode only what a 30 px circle needs — lighter rows, smoother flings.
+    return SongArt(
+        path: path,
+        title: _effTitle(path),
+        artist: _effArtist(path),
+        size: 30,
+        fallback: fallback,
+        mediaId: _songId[path],
+        decode: 96);
   }
 
   /// A larger rounded-square cover for the mini-player: embedded art on mobile,
@@ -532,26 +494,17 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
               scheme.primary.withValues(alpha: 0.55),
               scheme.onSurfaceVariant)),
     );
-    final id = _songId[path];
-    if (id == null || !(Platform.isAndroid || Platform.isIOS)) return fallback;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(Radii.md),
-      child: SizedBox(
-        width: 40,
-        height: 40,
-        child: QueryArtworkWidget(
-          id: id,
-          type: ArtworkType.AUDIO,
-          artworkWidth: 40,
-          artworkHeight: 40,
-          size: 128,
-          artworkFit: BoxFit.cover,
-          artworkBorder: BorderRadius.circular(Radii.md),
-          keepOldArtwork: true,
-          nullArtworkWidget: fallback,
-        ),
-      ),
-    );
+    // Same art as the row (file cover, else the online one) — it spins
+    // while the song plays.
+    return SongArt(
+        path: path,
+        title: _effTitle(path),
+        artist: _effArtist(path),
+        size: 40,
+        radius: Radii.md,
+        fallback: fallback,
+        mediaId: _songId[path],
+        decode: 128);
   }
 
   // Raw file name (with extension) for the "File name" sort — distinct from the

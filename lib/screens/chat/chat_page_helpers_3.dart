@@ -1556,7 +1556,13 @@ extension _ChatPageHelpers3 on _ChatPageState {
       // heart → "❤️ Secret heart · 23 Oct, 9:12 PM", text → its text).
       final label = _replyQuoteText(m).trim();
       if (label.isEmpty) continue;
-      if (label == q) {
+      // Older replies quoted these by their raw content ("listened", the
+      // song's label as sent) — still found.
+      final t = (m['message_type'] ?? '').toString();
+      final legacy = t == 'live' || t == 'call' || t == 'song'
+          ? _stripQuote((m['content'] as String?) ?? '').trim()
+          : '';
+      if (label == q || (legacy.isNotEmpty && legacy == q)) {
         exact.add(m);
       } else if (_quoteKey(label) == qFirst ||
           (heartQuote && (m['message_type'] ?? '').toString() == 'heart')) {
@@ -2387,6 +2393,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
     final caption = _stripQuote((msg['content'] as String?) ?? '').trim();
     final isMedia =
         type != 'text' && (msg['media_url'] as String? ?? '').isNotEmpty;
+    // A song quotes as its bubble reads (tidy title — artist).
+    if (type == 'song' && isMedia) return '🎵 ${_songLabel(msg)}';
     if (isMedia && caption.isEmpty) {
       switch (type) {
         case 'image':

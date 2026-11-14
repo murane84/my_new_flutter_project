@@ -6938,6 +6938,11 @@ class _ChatPageState extends State<ChatPage>
           typeIcon = Icons.mic_rounded;
           label = caption.isNotEmpty ? caption : 'Voice message';
           break;
+        case 'song':
+          // The same tidy "Title — Artist" the bubble shows.
+          typeIcon = Icons.music_note_rounded;
+          label = _songLabel(msg);
+          break;
         default:
           typeIcon = Icons.insert_drive_file_rounded;
           label = caption.isNotEmpty

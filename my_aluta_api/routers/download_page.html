@@ -103,38 +103,91 @@ background:var(--glass);border:1px solid var(--edge);text-decoration:none;transi
 .shots h3{font-size:16px;margin:0 0 12px}
 .strip{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 2px 12px;scrollbar-width:thin}
 .phone{flex:none;scroll-snap-align:start;width:196px}
+/* Each phone is drawn at one size (196 px) and zoomed to fit its column,
+   so the screens look the same everywhere — never squeezed or re-wrapped. */
+.scr{width:196px}
 .scr{aspect-ratio:196/360;border-radius:30px;padding:10px;background:#0b0709;border:1px solid #ffffff22;box-shadow:0 16px 40px #0009}
 .in{height:100%;border-radius:22px;overflow:hidden;background:#fff5f7;color:var(--ink);font-size:11px;position:relative;
 display:flex;flex-direction:column}
 .phone figcaption{text-align:center;color:var(--soft);font-size:13px;margin-top:8px}
-.top{display:flex;align-items:center;gap:7px;padding:12px 10px 8px;background:#fff;border-bottom:1px solid #f3dfe4;font-weight:800}
-.av{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#ffb1c1,#e0103a);flex:none}
+/* Phone 1 — a chat (app bar, day chip, bubbles, a song bubble, composer). */
+.in{--t:#e0103a;--tint:#ffe3e8;--line:#f1dfe3}
+.ab{display:flex;align-items:center;gap:6px;padding:9px 8px 7px;background:#fff;border-bottom:1px solid var(--line)}
+.bk{width:16px;height:16px;border-radius:5px;background:#f1eaec;display:grid;place-items:center;font-size:10px;color:#555;flex:none}
+.av{width:24px;height:24px;border-radius:50%;flex:none;position:relative;
+background:linear-gradient(135deg,#ffb1c1,#e0103a);box-shadow:0 0 0 1.5px #fff,0 0 0 3px #ffb7c5}
 .av.b{background:linear-gradient(135deg,#9bd3ff,#3b6cff)}
-.msgs{flex:1;padding:10px;display:flex;flex-direction:column;gap:7px;justify-content:flex-end}
-.m{max-width:78%;padding:7px 10px;border-radius:14px;background:#fff;box-shadow:0 1px 2px #0001;line-height:1.3}
-.m.me{align-self:flex-end;background:linear-gradient(#ff3a60,#e0103a);color:#fff}
-.song{display:flex;gap:8px;align-items:center}
-.vin{width:28px;height:28px;border-radius:50%;flex:none;background:radial-gradient(circle,#e0103a 0 22%,#222 24% 100%);
-box-shadow:inset 0 0 0 3px #333}
-.tick{font-size:9px;opacity:.85;text-align:right;margin-top:2px}
-.lt{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
-background:radial-gradient(circle at 50% 30%,#ffd9e1,#fff5f7 70%)}
-.disc{width:104px;height:104px;border-radius:50%;background:radial-gradient(circle,#e0103a 0 18%,#1c1114 19% 100%);
-box-shadow:0 10px 24px #0004,inset 0 0 0 10px #241519,inset 0 0 0 22px #1c1114,inset 0 0 0 23px #3a2a2f;animation:spin 6s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.wave{display:flex;gap:2px;align-items:center;height:22px}
-.wave i{width:3px;border-radius:2px;background:#e0103a}
-.wave i:nth-child(n+12){background:#e7c9d0}
-.who{display:flex;align-items:center;gap:4px;font-weight:700;color:#7a6a6e}
-.who .av{width:18px;height:18px;margin-right:-8px;border:2px solid #fff}
-.hero{margin:10px;padding:12px;border-radius:16px;color:#fff;background:linear-gradient(135deg,#ff3a60,#a00024)}
-.hero b{display:block;font-size:14px}.hero small{opacity:.85}
-.count{margin:0 10px;padding:9px 10px;border-radius:12px;background:#fff;font-weight:700;display:flex;justify-content:space-between}
-.count em{font-style:normal;color:#e0103a}
-.grid{flex:1;margin:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.grid i{border-radius:10px;background:linear-gradient(135deg,#ffd0da,#ffe9ee)}
-.grid i:nth-child(2){background:linear-gradient(135deg,#ffe2b8,#ffd0da)}
-.grid i:nth-child(3){background:linear-gradient(135deg,#d7e3ff,#ffd9e6)}
+.av.on:after{content:'';position:absolute;right:-1px;bottom:-1px;width:7px;height:7px;border-radius:50%;background:#22a45d;border:1.5px solid #fff}
+.who2{min-width:0;line-height:1.15}.who2 b{display:block;font-size:11px}
+.who2 small{display:block;font-size:7.5px;color:#22a45d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acts{margin-left:auto;display:flex;gap:6px;white-space:nowrap;flex:none;padding:4px 7px;border-radius:999px;border:1px solid #f5c9d2;font-size:9px;color:#444}
+.chat{flex:1;padding:8px 8px 6px;display:flex;flex-direction:column;gap:6px;justify-content:flex-end;
+background:radial-gradient(circle at 50% 45%,#ffe9ed,#fff8f9 70%)}
+.day{align-self:center;font-size:8px;font-weight:700;color:#666;background:#fff;border:1px solid #eadde0;border-radius:999px;padding:2px 8px}
+.bb{max-width:80%;padding:6px 8px 4px;border-radius:12px 12px 12px 3px;background:#fff;box-shadow:0 1px 2px #0000000f;line-height:1.3;font-size:9.5px}
+.bb.me{align-self:flex-end;border-radius:12px 12px 3px 12px;background:var(--tint);box-shadow:inset 0 0 0 1px #f8c7d1}
+.bb i{display:block;font-style:normal;font-size:7px;color:#8a7a7e;margin-top:1px}
+.bb.me i{text-align:right}.bb.me i:after{content:' ✓✓';color:#3b6cff}
+.sb{display:flex;align-items:center;gap:7px}
+.pl{width:24px;height:24px;border-radius:50%;flex:none;display:grid;place-items:center;background:#ffd9e1;box-shadow:inset 0 0 0 1.5px #f39aae}
+.pl:before{content:'';border-left:7px solid var(--t);border-top:4.5px solid transparent;border-bottom:4.5px solid transparent;margin-left:2px}
+.sb b{font-size:9px;display:block}.bar2{height:2px;border-radius:2px;background:#d9cfd2;margin-top:5px;position:relative}
+.bar2:before{content:'';position:absolute;left:0;top:-2px;width:6px;height:6px;border-radius:50%;background:var(--t)}
+.lt2{font-weight:700}.lt2 small{display:block;font-weight:600;color:#9a3a4e;font-size:8px}
+.cmp{display:flex;align-items:center;gap:5px;padding:6px 8px 8px;background:#fff8f9}
+.cmp div{flex:1;display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:999px;background:#fff;box-shadow:0 2px 6px #00000014;color:#9a8c90;font-size:9px}
+.cmp div span:last-child{margin-left:auto;color:#555}
+.mic{width:22px;height:22px;border-radius:50%;flex:none;display:grid;place-items:center;background:#ffe3e8;box-shadow:inset 0 0 0 1px #f39aae;font-size:9px}
+/* Phone 2 — Now Playing (the app's sheet: sunburst art, Feels like…, controls). */
+.np{flex:1;display:flex;flex-direction:column;gap:6px;padding:8px;background:linear-gradient(#ffe6ea,#fff1f3)}
+.nph{display:flex;align-items:center;gap:6px;font-weight:800;font-size:11px}
+.nph .bk{background:#efe2e5}.nph em{font-style:normal;color:var(--t)}
+.npc{border-radius:16px;padding:8px;background:#ffd6de;box-shadow:inset 0 0 0 1px #f9b3c2,0 6px 14px #e0103a22;
+display:flex;flex-direction:column;align-items:center;position:relative}
+.npc .cnt{position:absolute;left:7px;top:7px;font-size:7.5px;font-weight:800;color:#6a4a52;background:#ffc3cf;border-radius:999px;padding:2px 6px}
+.npc .ic{position:absolute;right:8px;top:6px;font-size:9px;color:var(--t);letter-spacing:4px}
+.sun{width:86px;height:86px;margin-top:10px;border-radius:50%;display:grid;place-items:center;
+background:repeating-conic-gradient(from 0deg,#ff6f8c 0 3deg,transparent 3deg 10deg);
+-webkit-mask:radial-gradient(circle,#000 0 70%,transparent 71%);mask:radial-gradient(circle,#000 0 70%,transparent 71%)}
+.sunw{position:relative;display:grid;place-items:center}
+.core{position:absolute;width:46px;height:46px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:18px;
+background:radial-gradient(circle at 40% 35%,#ff5a7a,#e0103a 60%,#b0002a);box-shadow:0 0 0 4px #ffd6de,0 0 0 5px #ff9fb3,0 6px 16px #e0103a66}
+.npc h4{margin:6px 0 0;font-size:12px}.npc p{margin:0;font-size:9px;color:#7a6a6e}
+.feel{display:flex;align-items:center;gap:3px;margin-top:6px;width:100%;font-size:7.5px;font-weight:800;color:#6a4a52}
+.feel span{margin-left:auto}.feel span,.feel i{font-style:normal}
+.feel i{width:15px;height:15px;border-radius:50%;display:grid;place-items:center;background:#ffe9ed;box-shadow:inset 0 0 0 1px #f6b9c6;font-size:8px}
+.npk{border-radius:16px;padding:7px;background:#fff6f8;box-shadow:inset 0 0 0 1px #f6d3db}
+.wv{display:flex;align-items:center;gap:4px;font-size:7px;color:#6a5a5e}
+.wave{flex:1;display:flex;gap:1.5px;align-items:center;height:18px}
+.wave i{flex:1;border-radius:2px;background:var(--t)}
+.wave i.r{background:#f4b5c3}
+.ctl{display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding:4px 5px;border-radius:999px;background:#ffdbe2}
+.ctl i{width:16px;height:16px;border-radius:50%;display:grid;place-items:center;background:#fff;box-shadow:0 1px 3px #0002;font-style:normal;font-size:7px;color:#333}
+.ctl i.sq{border-radius:5px;background:#fff;box-shadow:inset 0 0 0 1px #f39aae;color:var(--t)}
+.ctl i.on{border-radius:5px;background:var(--t);color:#fff}
+.ctl i.pp{width:26px;height:26px;background:radial-gradient(circle at 40% 35%,#ff5a7a,#e0103a);color:#fff;font-size:10px;box-shadow:0 0 0 3px #ffc3cf,0 4px 10px #e0103a55}
+/* Phone 3 — Our Space (hero, your words, listen together, today's question). */
+.os{flex:1;display:flex;flex-direction:column;gap:6px;padding:8px;background:#fff6f4}
+.osh{display:flex;align-items:center;gap:6px;font-weight:800;font-size:11px}
+.osh span{width:18px;height:18px;border-radius:6px;display:grid;place-items:center;background:#ffe1e7;color:var(--t);font-size:10px}
+.ohero{border-radius:14px;padding:8px;color:#fff;background:linear-gradient(135deg,#ff4d6d,#c4002e);box-shadow:0 6px 14px #e0103a44}
+.ohero .avs{display:flex}.ohero .avs .av{width:20px;height:20px;box-shadow:0 0 0 2px #fff}
+.ohero .avs .av+.av{margin-left:-6px}
+.ohero b{display:block;font-size:12px;margin-top:3px}.ohero small{font-size:7.5px;opacity:.9}
+.pills{display:flex;gap:4px;margin-top:5px}
+.pills span{white-space:nowrap;font-size:7px;font-weight:700;padding:2px 6px;border-radius:999px;background:#ffffff2e;box-shadow:inset 0 0 0 1px #ffffff55}
+.oc{border-radius:12px;padding:6px 7px;background:#fff;box-shadow:inset 0 0 0 1px #f5d2d9}
+.oc .k{font-size:6.5px;font-weight:800;letter-spacing:.06em;color:var(--t)}
+.oc b{display:block;font-size:9px;margin-top:1px}
+.orow{display:flex;align-items:center;gap:6px}
+.orow .hp{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;background:#ffe1e7;font-size:8px;flex:none}
+.row small{display:block;font-size:7px;color:#7a6a6e}
+.orow .go{margin-left:auto;width:16px;height:16px;border-radius:50%;background:var(--t);display:grid;place-items:center;flex:none}
+.orow .go:before{content:'';border-left:5px solid #fff;border-top:3.5px solid transparent;border-bottom:3.5px solid transparent;margin-left:1px}
+.chips{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
+.chips span{font-size:7px;padding:2px 5px;border-radius:999px;background:#fff;box-shadow:inset 0 0 0 1px #f2c9d2}
+.fab{position:absolute;right:8px;bottom:8px;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:#fff;
+font-size:13px;background:radial-gradient(circle at 40% 35%,#ff5a7a,#c4002e);box-shadow:0 4px 10px #e0103a66}
 .how{margin-top:28px;color:var(--soft);font-size:14px;padding:18px;border-radius:var(--r-xl);border:1px dashed var(--edge)}
 .how h3{color:#fff;font-size:16px;margin:0 0 8px}.how li{margin:5px 0}.how p{margin:10px 0 0}
 .os-ios .how,.os-windows .how{display:none}
@@ -172,7 +225,7 @@ box-shadow:0 20px 60px #000a;animation:rise var(--emph) var(--enter) both}
 font-weight:800;font-size:13px;background:#f6eef0;color:var(--accent)}
 .sheet li.hot{background:#fff0f3;box-shadow:inset 0 0 0 1px #ffc6d2}
 .sheet li.hot:before{background:var(--accent);color:#fff}
-.sheet .row{display:flex;gap:10px;align-items:center}
+.sheet .orow{display:flex;gap:10px;align-items:center}
 .sheet .again{color:var(--muted);font-size:13px}
 .sheet .ok{margin-left:auto;border:0;border-radius:999px;padding:10px 18px;font-weight:800;color:#fff;
 background:linear-gradient(#ff3a60,var(--accent) 55%,#a00024)}
@@ -261,23 +314,43 @@ background:linear-gradient(#ff3a60,var(--accent) 55%,#a00024)}
 <section class="more">
   <div class="shots rise d3"><h3 data-i18n="shots">A look inside</h3><div class="strip">
     <figure class="phone" style="margin:0"><div class="scr"><div class="in">
-      <div class="top"><span class="av"></span>Neema 💞</div>
-      <div class="msgs">
-        <div class="m">Good morning ☀️</div>
-        <div class="m me">Morning love — this one's for you</div>
-        <div class="m me song"><span class="vin"></span><span><b>Our song</b><br>tap to play together</span></div>
-        <div class="m">🥹❤️</div>
-      </div></div></div><figcaption data-i18n="cap1">Chats with your songs in them</figcaption></figure>
+      <div class="ab"><span class="bk">‹</span><span class="av on"></span>
+        <div class="who2"><b>Neema</b><small>Online · 🔥 in tune</small></div>
+        <span class="acts">♫ ✆</span></div>
+      <div class="chat">
+        <span class="day">Today</span>
+        <div class="bb">Good morning ☀️<i>7:02 AM</i></div>
+        <div class="bb me">This one's for you 🎶<i>7:04 AM</i></div>
+        <div class="bb me"><div class="sb"><span class="pl"></span><div style="flex:1;min-width:0"><b>♪ Our song</b><small style="font-size:7.5px;color:#7a6a6e">Q-Jay</small></div></div><div class="bar2"></div><i>7:04 AM</i></div>
+        <div class="bb lt2">🎧 Listened together · 3:59<small>♪ Sifai — Q-Jay</small><i>7:31 AM</i></div>
+      </div>
+      <div class="cmp"><div><span>☺</span><span>♡</span><span>Message</span><span>+</span></div><span class="mic">🎙</span></div>
+      </div></div><figcaption data-i18n="cap1">Chats with your songs in them</figcaption></figure>
     <figure class="phone" style="margin:0"><div class="scr"><div class="in">
-      <div class="top">🎧 <span data-i18n="ft1">Listen together</span></div>
-      <div class="lt"><div class="disc"></div><b>Sifai · Q-Jay</b>
-        <div class="wave"><i style="height:8px"></i><i style="height:16px"></i><i style="height:11px"></i><i style="height:20px"></i><i style="height:9px"></i><i style="height:15px"></i><i style="height:22px"></i><i style="height:12px"></i><i style="height:17px"></i><i style="height:8px"></i><i style="height:14px"></i><i style="height:19px"></i><i style="height:10px"></i><i style="height:16px"></i><i style="height:7px"></i><i style="height:13px"></i><i style="height:18px"></i><i style="height:9px"></i></div>
-        <div class="who"><span class="av"></span><span class="av b"></span>&nbsp;&nbsp; 2 · in sync</div></div>
+      <div class="np">
+        <div class="nph"><span class="bk">⌄</span><em>♪</em> Now Playing</div>
+        <div class="npc"><span class="cnt">34 / 77</span><span class="ic">((•)) ♡</span>
+          <div class="sunw"><div class="sun"></div><div class="core">♪</div></div>
+          <h4>Sifai</h4><p>Q-Jay</p>
+          <div class="feel">Feels like…<span></span><i>😍</i><i>🥹</i><i>💪</i><i>😌</i><i>💔</i></div></div>
+        <div class="npk">
+          <div class="wv">1:26<div class="wave"><i style="height:10px"></i><i style="height:7px"></i><i style="height:11px"></i><i style="height:15px"></i><i style="height:5px"></i><i style="height:6px"></i><i style="height:18px"></i><i style="height:13px"></i><i style="height:6px"></i><i style="height:10px"></i><i style="height:14px"></i><i style="height:5px"></i><i class=r style="height:13px"></i><i class=r style="height:8px"></i><i class=r style="height:5px"></i><i class=r style="height:6px"></i><i class=r style="height:11px"></i><i class=r style="height:11px"></i><i class=r style="height:6px"></i><i class=r style="height:8px"></i><i class=r style="height:6px"></i><i class=r style="height:13px"></i><i class=r style="height:11px"></i><i class=r style="height:5px"></i><i class=r style="height:18px"></i><i class=r style="height:14px"></i><i class=r style="height:6px"></i><i class=r style="height:8px"></i><i class=r style="height:15px"></i><i class=r style="height:15px"></i><i class=r style="height:14px"></i><i class=r style="height:5px"></i><i class=r style="height:14px"></i><i class=r style="height:14px"></i></div>4:20</div>
+          <div class="ctl"><i class="sq">⤨</i><i>⏮</i><i class="pp">❚❚</i><i>⏭</i><i class="on">↻</i></div>
+          <div class="who" style="justify-content:center;margin-top:6px;font-size:8px;display:flex;align-items:center;gap:5px;color:#7a6a6e;font-weight:700"><span class="av" style="width:13px;height:13px"></span><span class="av b" style="width:13px;height:13px;margin-left:-8px"></span>2 · in sync</div>
+        </div>
+      </div>
       </div></div><figcaption data-i18n="cap2">The same song, at the same second</figcaption></figure>
     <figure class="phone" style="margin:0"><div class="scr"><div class="in">
-      <div class="hero"><small>OUR SPACE</small><b>Me &amp; You</b><small>Close since August · 10 moments</small></div>
-      <div class="count"><span>📅 Date night</span><em>in 3 days</em></div>
-      <div class="grid"><i></i><i></i><i></i><i></i></div>
+      <div class="os">
+        <div class="osh"><span>♥</span>Our Space</div>
+        <div class="ohero"><div class="avs"><span class="av"></span><span class="av b"></span></div>
+          <b>Me &amp; You</b><small>Together since August</small>
+          <div class="pills"><span>🔥 4-day streak</span><span>🎧 in a song</span></div></div>
+        <div class="oc orow"><span class="hp">📅</span><div><b style="margin:0">Date night</b><small>in 3 days</small></div></div>
+        <div class="oc orow"><span class="hp">🎧</span><div><b style="margin:0">Listen together</b><small>Share a song in sync</small></div><span class="go"></span></div>
+        <div class="oc"><span class="k">😊 TODAY'S QUESTION</span><b>In one feeling — how is your day?</b>
+          <div class="chips"><span>😊 happy</span><span>😌 calm</span><span>🤗 grateful</span></div></div>
+      </div><span class="fab">+</span>
       </div></div><figcaption data-i18n="cap3">A space for just the two of you</figcaption></figure>
   </div></div>
   <div class="how rise d4"><h3 data-i18n="how_t">How to install on Android</h3><ol>
@@ -387,6 +460,18 @@ if(bar&&btn&&'IntersectionObserver' in window){
     if(e.isIntersecting)seen=true;
     bar.classList.toggle('show',seen&&!e.isIntersecting&&e.boundingClientRect.top<0)})}).observe(btn);
 }
+})();
+
+// Phones: drawn at 196 px, zoomed to fill their column (wide desktops).
+(function(){
+  function fit(){
+    document.querySelectorAll('.phone').forEach(function(f){
+      var sc=f.querySelector('.scr'); if(!sc) return;
+      var z=Math.max(.6,Math.min(1.5,f.clientWidth/196));
+      sc.style.zoom=Math.abs(z-1)<.02?'':String(z);
+    });
+  }
+  fit(); addEventListener('resize',fit);
 })();
 </script>
 </body></html>

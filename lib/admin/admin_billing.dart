@@ -354,11 +354,11 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
                       'until ${e['ends_at'] == null ? 'no end' : _day(e['ends_at'] as String?)}',
                       style: TextStyle(color: c.muted, fontSize: 12.5)),
                   Text(
-                      switch (src) {
-                        'payment' => 'Paid',
-                        'legacy' => 'Trial carried over',
-                        _ => 'Given by admin',
-                      } +
+                      (switch (src) {
+                            'payment' => 'Paid',
+                            'legacy' => 'Trial carried over',
+                            _ => 'Given by admin',
+                          }) +
                           (e['note'] != null ? ' · ${e['note']}' : ''),
                       style: TextStyle(color: c.faint, fontSize: 11.5)),
                 ]),

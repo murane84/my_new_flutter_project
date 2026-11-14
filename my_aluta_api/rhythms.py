@@ -92,7 +92,9 @@ def open_together_hearts(uid: int, online: Iterable[int]) -> int:
         rows = (db.query(Message)
                 .filter(Message.sealed_content.isnot(None),
                         Message.receiver_id.isnot(None),
-                        Message.meta.isnot(None))
+                        Message.meta.isnot(None),
+                        # Held back by a block → never "together".
+                        Message.visible_to_receiver.isnot(False))
                 .filter(((Message.sender_id == uid)
                          & Message.receiver_id.in_(here))
                         | ((Message.receiver_id == uid)

@@ -122,9 +122,12 @@ extension _ChatRituals on _ChatPageState {
     return h >= 21 || h < 2;
   }
 
-  DateTime _nextMorning() {
+  /// Their next wake-up: their usual time when Aluta knows it, else 7 AM.
+  DateTime _nextMorning([DateTime? wake]) {
     final now = DateTime.now();
-    var at = DateTime(now.year, now.month, now.day, 7);
+    final w = wake ?? _ChatHeartComposer._wakeCache[widget.friendId]?.$1;
+    var at = DateTime(now.year, now.month, now.day, w?.hour ?? 7,
+        w == null ? 0 : w.minute);
     if (!at.isAfter(now.add(const Duration(minutes: 30)))) {
       at = at.add(const Duration(days: 1));
     }
@@ -144,7 +147,17 @@ extension _ChatRituals on _ChatPageState {
           text: note, selection: TextSelection.collapsed(offset: note.length));
     });
     _markRitual('gn_done_${widget.friendId}');
-    showToast(context, 'Sealed till 7 AM — they wake up to it 🌅');
+    final sealedAt = _heartUnlockAt;
+    showToast(
+        context,
+        'Sealed till ${DateFormat('h:mm a').format(sealedAt ?? _nextMorning())}'
+        ' — they wake up to it 🌅');
+    // Their usual wake-up (when known) beats a fixed 7 AM — unless I've
+    // already changed the time myself.
+    _partnerWake().then((w) {
+      if (w == null || !mounted || _heartUnlockAt != sealedAt) return;
+      rebuildWith(() => _heartUnlockAt = _nextMorning(w));
+    });
     // A lullaby from Our Playlist rides inside it (20 s, plays as it
     // opens); the chip above the composer lets me change or drop it.
     _ourSongBed(clip: 20).then((bed) {

@@ -484,7 +484,8 @@ extension _ChatSongMemories on _ChatPageState {
               section('CALM FOR TONIGHT'),
               ...calm.map(row)
             ],
-            if (top.isNotEmpty || calm.isNotEmpty) section('ALL OUR SONGS'),
+            if ((top.isNotEmpty || calm.isNotEmpty) && rest.isNotEmpty)
+              section('ALL OUR SONGS'),
             ...rest.map(row),
             const SizedBox(height: 8),
             FilledButton.icon(

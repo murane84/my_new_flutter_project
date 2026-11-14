@@ -720,9 +720,9 @@ information. It is a good-faith draft by the developer, not legal advice.
   your device), information about linked devices so you can sign them out, the
   app version, platform and device model each device reports (so we can announce
   updates, support older devices and keep the service healthy), and
-  crash/diagnostic reports via Sentry. While you're on an older Aluta, your
-  version is also shown to your accepted Our Space partner so they can invite
-  you to update — no one else sees it.
+  crash/diagnostic reports via Sentry. Your version is also shown to your
+  accepted Our Space partner — so they can invite you to update, or so you can
+  see they're already on the new one. No one else sees it.
 
 2. Calls, music and on-device data
 - Voice and group calls use a direct peer-to-peer connection (WebRTC). We do not

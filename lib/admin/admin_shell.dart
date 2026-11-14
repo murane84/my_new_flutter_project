@@ -23,11 +23,12 @@ import '../utils/depth.dart';
 /// One page of the admin.
 class _AdminPage {
   const _AdminPage(this.id, this.label, this.icon, this.iconSel,
-      {this.badge = _noBadge});
+      {this.badge = _noBadge, this.badgeWord = ''});
   final String id;
   final String label;
   final IconData icon, iconSel;
   final int Function(_AdminShellState s) badge;
+  final String badgeWord; // "Devices · 1 waiting", "Feedback · 2 new"
   static int _noBadge(_AdminShellState s) => 0;
 }
 
@@ -56,12 +57,14 @@ const _groups = <_AdminGroup>[
         Icons.people_alt_rounded),
     _AdminPage('feedback', 'Feedback', Icons.rate_review_outlined,
         Icons.rate_review_rounded,
-        badge: _feedbackBadge),
+        badge: _feedbackBadge,
+        badgeWord: 'new'),
   ]),
   _AdminGroup('Security', Icons.shield_outlined, Icons.shield_rounded, [
     _AdminPage('devices', 'Devices', Icons.devices_outlined,
         Icons.devices_rounded,
-        badge: _pendingBadge),
+        badge: _pendingBadge,
+        badgeWord: 'waiting'),
     _AdminPage('log', 'Activity log', Icons.receipt_long_outlined,
         Icons.receipt_long_rounded),
   ]),
@@ -363,7 +366,8 @@ class _AdminShellState extends State<AdminShell> {
                         GenieMenuEntry(
                           icon: pg.iconSel,
                           label: pg.badge(this) > 0
-                              ? '${pg.label} · ${pg.badge(this)}'
+                              ? '${pg.label} · ${pg.badge(this)} ${pg.badgeWord}'
+                                  .trim()
                               : pg.label,
                           onTap: () => _go(pg.id),
                         ),

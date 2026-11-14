@@ -1000,7 +1000,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
           isMe: isMe,
           accent: scheme.primary,
           onColor: textColor,
-          onDownload: () => _saveMediaToDevice(msg),
+          onDownload: _songDownload(msg),
         );
       case 'video':
         return _videoBubble(url, msg, scheme, caption: caption);

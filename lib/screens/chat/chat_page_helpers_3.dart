@@ -198,24 +198,11 @@ extension _ChatPageHelpers3 on _ChatPageState {
               ),
               )
             else if (owned)
-              // Owned content → the file-open mark (always on the sender's
-              // own bubble; on the receiver's once downloaded). Still tappable
-              // to save again to a chosen location.
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                tooltip: isMine ? 'Your file' : 'Saved — tap to save again',
-                // "It's here — open it": the file-open glyph in the brand
-                // colour (was the Aluta logo, which read as branding, not
-                // state).
-                // A STATE mark, not another file glyph (the tile on the left
-                // already says "file"): a tick over a tray = it's on this
-                // device. Tap to save another copy.
-                icon: Icon(Icons.download_done_rounded,
-                    size: 22, color: accentInk(scheme)),
-                onPressed: () => _downloadMediaWithProgress(msg),
-              )
+              // Saved (or my own file) → the arrow simply goes. No "it's on
+              // your phone" mark: the file may be deleted later, and a mark
+              // would then mislead (the arrow comes back when it's gone).
+              // Long-press → Save to device still saves another copy.
+              const SizedBox(width: 4)
             else
               IconButton(
                 visualDensity: VisualDensity.compact,
@@ -357,6 +344,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
         if (res.file != null && res.file!.path != file.path) {
           await res.file!.copy(file.path);
         }
+        await _captureSavedRef(file.path); // deleted later → arrow returns
         _markMediaSaved(msg['media_url'] as String?);
         if (!mounted) {
           // Finished while you were elsewhere in the app: offer to open it
@@ -715,6 +703,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
             'mimeType': null,
           });
           if (where != null) {
+            await _captureSavedRef();
             // Public Downloads (MediaStore) — the path the device library
             // scan will report for it.
             await _rememberSavedSong(
@@ -763,6 +752,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       final where = await _saveToDownloads(data, fname);
       if (where != null) {
+        await _captureSavedRef();
         await _rememberSavedSong(
             '/storage/emulated/0/Download/${fname.replaceAll(RegExp(r'[\\/]+'), '_').trim()}',
             meta);
@@ -780,6 +770,9 @@ extension _ChatPageHelpers3 on _ChatPageState {
       );
       // A null result is a user cancel, not an error.
       if (saved != null) {
+        // A real path on desktop (checked later); a content uri / nothing
+        // on mobile pickers isn't a file path → not remembered.
+        if (!_isMobile) await _captureSavedRef(saved);
         await _rememberSavedSong(saved, meta);
         if (mounted) {
           showToast(context, 'Saved to device', type: ToastType.success);

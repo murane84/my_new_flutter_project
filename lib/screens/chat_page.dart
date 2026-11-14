@@ -2402,23 +2402,102 @@ class _ChatPageState extends State<ChatPage>
         _savedMediaKeys.addAll(list);
         if (mounted) setState(() {});
       }
+      for (final e in prefs.getStringList('chat_saved_media_refs') ??
+          const <String>[]) {
+        final i = e.indexOf('\u0001');
+        if (i > 0) _savedMediaRefs[e.substring(0, i)] = e.substring(i + 1);
+      }
+    } catch (_) {}
+    unawaited(_verifySavedMedia());
+  }
+
+  /// The song bubble's download arrow: gone once this device saved it (or
+  /// it's my own song). Long-press → "Save to device" still saves a copy.
+  VoidCallback? _songDownload(Map<String, dynamic> msg) {
+    final key = msg['media_url'] as String?;
+    final mine = msg['sender_id']?.toString() == _myId;
+    if (mine || _savedMediaKeys.contains(key)) return null;
+    return () async {
+      final ok = await _saveMediaToDevice(msg);
+      if (ok) _markMediaSaved(key);
+    };
+  }
+
+  // Where each saved attachment landed (content uri / file path), when the
+  // platform tells us — checked when the chat opens: a file deleted from
+  // the phone gets its download arrow back (no stale "you have it").
+  final Map<String, String> _savedMediaRefs = <String, String>{};
+  String? _pendingSavedRef; // set by the savers, taken by _markMediaSaved
+
+  /// After a successful save to Downloads: ask the native side where it
+  /// landed (Android); desktop passes the chosen path directly.
+  Future<void> _captureSavedRef([String? path]) async {
+    if (path != null && path.isNotEmpty) {
+      _pendingSavedRef = path;
+      return;
+    }
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      _pendingSavedRef =
+          await _downloadsCh.invokeMethod<String>('lastSavedRef');
+    } catch (_) {}
+  }
+
+  /// Saved files that have since been deleted from the phone → forgotten,
+  /// so their download arrow comes back.
+  Future<void> _verifySavedMedia() async {
+    if (kIsWeb || _savedMediaRefs.isEmpty) return;
+    final gone = <String>[];
+    for (final e in _savedMediaRefs.entries.toList()) {
+      bool ok;
+      try {
+        ok = defaultTargetPlatform == TargetPlatform.android
+            ? (await _downloadsCh
+                    .invokeMethod<bool>('refExists', {'ref': e.value}) ??
+                true)
+            : await File(e.value).exists();
+      } catch (_) {
+        ok = true; // an older build without the check: leave it be
+      }
+      if (!ok) gone.add(e.key);
+    }
+    if (gone.isEmpty || !mounted) return;
+    setState(() {
+      _savedMediaKeys.removeAll(gone);
+      for (final k in gone) {
+        _savedMediaRefs.remove(k);
+      }
+    });
+    await _persistSavedMedia();
+  }
+
+  Future<void> _persistSavedMedia() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keep = _savedMediaKeys.toList();
+      await prefs.setStringList(
+          'chat_saved_media',
+          keep.length > 500 ? keep.sublist(keep.length - 500) : keep);
+      final kept = keep.toSet();
+      await prefs.setStringList('chat_saved_media_refs', [
+        for (final e in _savedMediaRefs.entries)
+          if (kept.contains(e.key)) '${e.key}\u0001${e.value}',
+      ]);
     } catch (_) {}
   }
 
   void _markMediaSaved(String? key) {
-    if (key == null || key.isEmpty || _savedMediaKeys.contains(key)) return;
+    final ref = _pendingSavedRef;
+    _pendingSavedRef = null;
+    if (key == null || key.isEmpty) return;
+    if (ref != null && ref.isNotEmpty) _savedMediaRefs[key] = ref;
+    if (_savedMediaKeys.contains(key)) {
+      unawaited(_persistSavedMedia());
+      return;
+    }
     _savedMediaKeys.add(key);
     if (mounted) setState(() {});
-    () async {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        // Cap the list so it can't grow without bound.
-        final keep = _savedMediaKeys.toList();
-        await prefs.setStringList(
-            'chat_saved_media',
-            keep.length > 500 ? keep.sublist(keep.length - 500) : keep);
-      } catch (_) {}
-    }();
+    unawaited(_persistSavedMedia());
   }
 
   // Swap a pending bubble for the real server message (success) or flag it
@@ -3270,7 +3349,7 @@ class _ChatPageState extends State<ChatPage>
       isMe: isMe,
       accent: scheme.primary,
       onColor: scheme.onSurface,
-      onDownload: () => _saveMediaToDevice(msg),
+      onDownload: _songDownload(msg),
     );
   }
   List<Map<String, dynamic>?> _viewerMsgs = const <Map<String, dynamic>?>[];

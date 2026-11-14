@@ -218,6 +218,20 @@ class MainActivity : AudioServiceFragmentActivity() {
                             result.success(-1L)
                         }
                     }
+                    "lastSavedRef" -> result.success(lastSavedRef)
+                    "refExists" -> {
+                        val ref = call.argument<String>("ref") ?: ""
+                        Thread {
+                            val ok = try {
+                                refExists(ref)
+                            } catch (_: SecurityException) {
+                                true // can't tell → never claim it's gone
+                            } catch (_: Exception) {
+                                true
+                            }
+                            runOnUiThread { result.success(ok) }
+                        }.start()
+                    }
                     // Quiet overnight update: only on Wi-Fi + charging.
                     "power" -> {
                         try {
@@ -876,6 +890,7 @@ class MainActivity : AudioServiceFragmentActivity() {
             }
             val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
             resolver.update(uri, done, null, null)
+            lastSavedRef = uri.toString()
             return "Download/$safeName"
         }
 
@@ -887,7 +902,22 @@ class MainActivity : AudioServiceFragmentActivity() {
         FileInputStream(src).use { input ->
             FileOutputStream(dest).use { out -> input.copyTo(out) }
         }
+        lastSavedRef = dest.absolutePath
         return dest.absolutePath
+    }
+
+    // Where the last saveToDownloads landed (content uri / path): the chat
+    // remembers it so a saved file's download arrow can come back if the
+    // file is later deleted from the phone.
+    @Volatile private var lastSavedRef: String? = null
+
+    private fun refExists(ref: String): Boolean {
+        if (ref.startsWith("content://")) {
+            return contentResolver.query(
+                Uri.parse(ref), arrayOf(MediaStore.MediaColumns._ID), null, null, null
+            )?.use { it.count > 0 } ?: false
+        }
+        return File(ref).exists()
     }
 
     // "name.ext" → "name (1).ext", "name (2).ext" … until a free name is found.

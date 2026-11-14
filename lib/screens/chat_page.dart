@@ -1268,6 +1268,9 @@ class _ChatPageState extends State<ChatPage>
       // Tap a tag in a bubble → a little card for that member.
       MentionSelf.onTap = _mentionTap;
     }
+    // A DM never answers a group's tag taps (a group page left open
+    // behind it must not pop its member card here).
+    if (!_isGroup) MentionSelf.onTap = null;
     await _loadCachedMessages(); // show cached messages instantly (clears loader)
     // + what arrived on the home socket since that cache was written — the
     // same message the badge / peek / notification showed, on the first frame.

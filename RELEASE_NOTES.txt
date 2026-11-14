@@ -1,14 +1,18 @@
-Updates continue where they left off if your connection drops — no paying for the same megabytes twice
-See when your person is already on the new Aluta
-Aluta tells you before an update if your phone needs more space
-On Wi-Fi and charging, updates download quietly overnight — ready to install in seconds
-Joining Wi-Fi with the update card open now shows you're no longer using mobile data
-Replying now shows the message you're answering in its own tinted box, clearly apart from what you type
-New Tidy button in your playlist — clean up messy song names any time
-New songs get clean names as soon as they're added (Undo keeps the original — Aluta remembers)
-Track numbers, "(1)" copies and bitrate tags no longer clutter song names
-Songs you save from a chat land in your playlist with clean names (Undo keeps the name they were sent with)
-Song bubbles in chat show the same clean name as your playlist
-Saved songs and files no longer show a download arrow
-If you delete a saved file from your phone, its download arrow comes back so you can get it again
-Tapping outside a search box now closes the keyboard, and messages like "Added 3 new songs" always show above it
+Song covers now show everywhere — the mini-player, Up next, the Now Playing disc and the music bar, not just your playlist
+The "back to latest" button in chats is now a small glass pill that doesn't compete with the mic
+Group mentions look softer: tags show in your theme colour, a mention of you stands out as a pill, and a tag deletes in one tap of backspace
+In your chat list, mentions show in your theme colour and chats where you're tagged get an @ up front; song previews use the clean name
+Songs shared in chat show their cover
+Now Playing takes each song cover's colour — or keep your theme colour (Player style → Colours)
+The lock screen and notification show the song's cover
+Listen Together shows the song's cover for everyone listening
+The "back to latest" pill shows who wrote while you were scrolled up, and turns into @ when someone tags you
+Tap a @mention to see who it is, with Message and Call
+The tag list puts the people talking right now first
+Opening a group where you were tagged takes you straight to that message
+See who's online in your status viewers before you nudge them
+Music statuses now carry the song — friends hear 15 seconds of it
+On a music status with sound, tap "Playing" to mute it
+The lock screen and notification now show a ❤ to save the song you're playing
+A smart line on the music card: sleep timer, "Our song", "On repeat today" or where you are in your playlist
+Listen Together shows the real song, its cover and who you're listening with on the music card

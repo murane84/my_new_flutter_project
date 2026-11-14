@@ -1380,6 +1380,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
         actions: [
           ToastAction('Undo', () async {
             await metadataStore.setMany({for (final p in paths) p: null});
+            // Undo = "keep these names": never offered again.
+            await SongNames.instance.keep(paths);
             if (mounted) setState(() {});
           }),
         ]);
@@ -2006,6 +2008,7 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
       child: LayoutBuilder(builder: (ctx, c) {
         // The header's actions, described once and drawn two ways: chips in
         // one row on wide panels, a neat toolbar strip on phones.
+        final messyNow = _messySongs();
         final actions = <({
           IconData icon,
           String tip,
@@ -2050,17 +2053,25 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
             active: false,
             activeColor: null,
           ),
+          // Tidy names any time (shuffle lives in the player's ⋮ menu). It
+          // glows amber while some names look messy.
           (
-            icon: Icons.shuffle_rounded,
-            tip: 'Shuffle these',
+            icon: Icons.auto_fix_high_rounded,
+            tip: messyNow.isEmpty
+                ? 'Song names are tidy'
+                : 'Tidy ${messyNow.length} song name${messyNow.length == 1 ? '' : 's'}',
             onTap: widget.playlist.isEmpty
                 ? null
                 : (_) {
-                    final paths = _displayed().map((e) => e.value).toList();
-                    if (paths.isNotEmpty) widget.onPlayScope(paths, 0, true);
+                    if (messyNow.isEmpty) {
+                      showToast(context, 'All your song names look tidy ✨',
+                          type: ToastType.success);
+                    } else {
+                      _tidyAll(messyNow);
+                    }
                   },
-            active: false,
-            activeColor: null,
+            active: messyNow.isNotEmpty,
+            activeColor: Colors.amber,
           ),
           if (widget.hasTrack)
             (

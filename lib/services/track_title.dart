@@ -12,6 +12,18 @@ String cleanTrackName(String raw) {
   // "Sean_Paul_-_We_Be_Burning_(mp3.pm)" → "Sean Paul - We Be Burning".
   n = n.replaceAll(RegExp(r'[\(\[]?\s*mp3\s*\.\s*\w+\s*[\)\]]?', caseSensitive: false), ' ');
   n = n.replaceAll(RegExp(r'_+'), ' ');
+  // Numbers that aren't part of the name: a bitrate ("320kbps", "128k"), a
+  // downloader's long id ("…_1699872034"), a track number in front
+  // ("03. Title", "7) Title", "07 - Title", "01 Title") and a copy counter
+  // at the end ("Title (1)"). "50 Cent", "7 Days", "2 Pac" stay.
+  n = n.replaceAll(
+      RegExp(r'\b\d{2,3}\s*kbps\b|\b(128|192|256|320)\s*k\b',
+          caseSensitive: false),
+      ' ');
+  n = n.replaceAll(RegExp(r'(?<![\w.])\d{7,}(?![\w.])'), ' ');
+  n = n.replaceFirst(RegExp(r'^\s*\d{1,3}\s*[.)\-–]\s+'), '');
+  n = n.replaceFirst(RegExp(r'^\s*0\d\s+(?=\D)'), '');
+  n = n.replaceFirst(RegExp(r'\s*[\(\[]\d{1,2}[\)\]]\s*$'), '');
   n = n.replaceAll(RegExp(r'\bsms\s*skiza\b.*', caseSensitive: false), ' ');
   n = n.replaceAll(RegExp(r'\bskiza\b.*', caseSensitive: false), ' ');
   n = n.replaceAll(

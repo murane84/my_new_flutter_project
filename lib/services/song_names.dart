@@ -1,3 +1,4 @@
+import '../utils/prefs_now.dart';
 import 'track_title.dart';
 
 /// Smart song names for files that have no proper tags — the name is all
@@ -75,11 +76,27 @@ class SongNames {
   bool looksMessy(String path) {
     final raw = _base(path);
     final p = parse(path);
+    // Anything the cleaner strips (underscores, site junk, stray numbers…)
+    // or a hidden artist — and never a name you chose to keep.
     return raw != p.title &&
-        (raw.contains('_') ||
-            RegExp(r'mp3\s*\.\s*\w+|www\.|\.com\b', caseSensitive: false)
-                .hasMatch(raw) ||
-            p.artist.isNotEmpty);
+        !isKept(path) &&
+        (cleanTrackName(raw) != raw.trim() || p.artist.isNotEmpty);
+  }
+
+  // Files whose own name you chose to keep (you undid a tidy): Aluta
+  // remembers and never offers or tidies them again.
+  static const _kKept = 'song_names_kept_v1';
+  Set<String>? _keptMemo;
+
+  bool isKept(String path) =>
+      (_keptMemo ??= (prefsNow?.getStringList(_kKept) ?? const []).toSet())
+          .contains(path);
+
+  Future<void> keep(Iterable<String> paths) async {
+    final set = (_keptMemo ??=
+        (prefsNow?.getStringList(_kKept) ?? const []).toSet())
+      ..addAll(paths);
+    await prefsNow?.setStringList(_kKept, set.toList());
   }
 
   ({String title, String artist}) _parse(String raw) {

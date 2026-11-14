@@ -2473,6 +2473,35 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         ..clear()
         ..addAll(added);
     });
+    unawaited(_announceFreshTidied(added));
+  }
+
+  /// New songs arrive with clean names: messy ones ("03. Holiday_1699…",
+  /// underscores, site junk, a hidden artist) are tidied as they join —
+  /// with Undo, which Aluta remembers (that file is never tidied again).
+  Future<void> _announceFreshTidied(List<String> added) async {
+    var tidied = <String>[];
+    try {
+      await _learnSongNames(); // know the artists before reading names
+      tidied = added
+          .where((p) =>
+              metadataStore.of(p) == null &&
+              SongNames.instance.looksMessy(p))
+          .toList();
+      if (tidied.isNotEmpty) {
+        await metadataStore.setMany({
+          for (final p in tidied)
+            p: () {
+              final n = SongNames.instance.parse(p);
+              return TrackMeta(
+                  title: n.title, artist: n.artist.isEmpty ? null : n.artist);
+            }(),
+        });
+      }
+    } catch (_) {
+      tidied = <String>[];
+    }
+    if (!mounted) return;
     var newest = added.first;
     for (final p in added) {
       if ((_addedAt[p] ?? 0) > (_addedAt[newest] ?? 0)) newest = p;
@@ -2485,17 +2514,31 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _revealFresh.value = true;
     }
 
+    Future<void> undoTidy() async {
+      await metadataStore.setMany({for (final p in tidied) p: null});
+      await SongNames.instance.keep(tidied);
+      if (mounted) setState(() {});
+    }
+
+    final t = tidied.length;
     showToast(
       context,
       'Added $n new song${n == 1 ? '' : 's'} 🎶',
       type: ToastType.success,
-      detail: canShare
-          ? 'Tap Show to see ${n == 1 ? 'it' : 'them'} — or share one with $partner'
-          : 'Tap to see ${n == 1 ? 'it' : 'them'} in your playlist',
+      detail: t > 0
+          ? (t == n
+              ? 'Name${n == 1 ? '' : 's'} tidied ✨ — tap to see'
+              : '$t name${t == 1 ? '' : 's'} tidied ✨ — tap to see')
+          : canShare
+              ? 'Tap Show to see ${n == 1 ? 'it' : 'them'} — or share one with $partner'
+              : 'Tap to see ${n == 1 ? 'it' : 'them'} in your playlist',
       onTap: show,
       actions: [
         ToastAction('Show', show),
-        if (canShare) ToastAction('Share one', () => _sendSongToPartner(newest)),
+        if (t > 0)
+          ToastAction('Undo tidy', undoTidy)
+        else if (canShare)
+          ToastAction('Share one', () => _sendSongToPartner(newest)),
       ],
     );
   }

@@ -381,7 +381,12 @@ class PlayerDisc extends StatelessWidget {
     this.dimmed = false,
     this.progress,
     this.partner,
+    this.caption,
   });
+
+  /// Polaroid's caption when the player knows better than "my song now"
+  /// (Listen Together: the shared song's name).
+  final String? caption;
 
   /// Duet's second record label: the person I'm listening with (else ♥).
   final Widget Function(double diameter)? partner;
@@ -455,6 +460,7 @@ class PlayerDisc extends StatelessWidget {
           isDark: isDark,
           playing: playing,
           artBuilder: artBuilder,
+          caption: caption,
         ),
       PlayerDiscStyle.aura => AuraDisc(
           side: side,

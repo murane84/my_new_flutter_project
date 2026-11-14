@@ -70,12 +70,16 @@ class PolaroidDisc extends StatefulWidget {
     required this.isDark,
     required this.playing,
     required this.artBuilder,
+    this.caption,
   });
   final double side;
   final Color accent;
   final bool isDark;
   final bool playing;
   final DiscArt artBuilder;
+
+  /// The song's name when it isn't my own song now (Listen Together).
+  final String? caption;
 
   @override
   State<PolaroidDisc> createState() => _PolaroidDiscState();
@@ -134,8 +138,11 @@ class _PolaroidDiscState extends State<PolaroidDisc>
                     now == null ? null : SongNames.instance.fromWhom(now.path);
                 final name =
                     now == null ? '' : SongArt.splitLabel(now.title).title;
+                final given = widget.caption;
                 return Text(
-                  from != null
+                  given != null
+                      ? (given.isEmpty ? '♡' : '$given ♡')
+                      : from != null
                       ? 'from $from ♡'
                       : (name.isEmpty ? '♡' : '$name ♡'),
                   maxLines: 1,

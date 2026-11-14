@@ -993,6 +993,9 @@ GestureDetector(
                         dimmed: PlayerStyleController.instance.orbDimmed,
                         artBuilder: (d, [c]) => _discCenter(d, c),
                         partner: _togetherNow ? _partnerFace : null,
+                        caption: _liveActive
+                            ? SongArt.splitLabel(_liveTitle()).title
+                            : null,
                       );
                     },
                   ),

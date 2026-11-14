@@ -524,6 +524,10 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                                         partner: _togetherNow
                                             ? _partnerFace
                                             : null,
+                                        caption: _liveActive
+                                            ? SongArt.splitLabel(_liveTitle())
+                                                .title
+                                            : null,
                                       ),
                                     );
                                   },

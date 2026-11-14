@@ -2772,7 +2772,23 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
               children: [
                 GestureDetector(
                   onTap: () => showPlayerStyleSheet(context,
-                      accent: accent, together: _oneToOne),
+                      accent: accent,
+                      together: _oneToOne,
+                      spin: _discSpin,
+                      playing: playing,
+                      // Samples show the shared song's cover.
+                      art: (d, [col]) => SizedBox(
+                          width: d,
+                          height: d,
+                          child: SongArt.byName(_title,
+                              size: d,
+                              decode: 360,
+                              fallback: Center(
+                                child: Icon(Icons.music_note_rounded,
+                                    size: d * 0.4,
+                                    color: col ??
+                                        Colors.white.withValues(alpha: 0.9)),
+                              )))),
                   child: SizedBox(
                     width: side,
                     height: side,
@@ -2795,6 +2811,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                           ? null
                           : (d) => PersonAvatar(
                               name: widget.peerName, radius: d / 2),
+                      caption: SongArt.splitLabel(_title).title,
                       // The song's cover (found by its name), else the note.
                       artBuilder: (d, [col]) => SizedBox(
                         width: d,

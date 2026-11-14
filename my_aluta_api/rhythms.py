@@ -89,18 +89,25 @@ def open_together_hearts(uid: int, online: Iterable[int]) -> int:
     db = SessionLocal()
     n = 0
     try:
+        # Only this person's own sealed hearts (a handful) — the "who else
+        # is here" check runs in Python, never a giant IN list.
         rows = (db.query(Message)
                 .filter(Message.sealed_content.isnot(None),
                         Message.receiver_id.isnot(None),
                         Message.meta.isnot(None),
                         # Held back by a block → never "together".
                         Message.visible_to_receiver.isnot(False))
-                .filter(((Message.sender_id == uid)
-                         & Message.receiver_id.in_(here))
-                        | ((Message.receiver_id == uid)
-                           & Message.sender_id.in_(here)))
+                .filter((Message.sender_id == uid)
+                        | (Message.receiver_id == uid))
                 .all())
-        due = [m for m in rows if not m.is_deleted and _wants_together(m)]
+
+        def other(m):
+            return int(m.receiver_id if int(m.sender_id) == int(uid)
+                       else m.sender_id)
+
+        due = [m for m in rows
+               if not m.is_deleted and other(m) in here
+               and _wants_together(m)]
         now = datetime.now(timezone.utc)
         for m in due:
             m.unlock_at = now

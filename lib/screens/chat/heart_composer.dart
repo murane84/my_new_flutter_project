@@ -1140,7 +1140,7 @@ extension _ChatHeartComposer on _ChatPageState {
               ctx,
               icon: Icons.favorite_rounded,
               title: 'Next time we’re together',
-              subtitle: 'Opens the moment you’re both online — '
+              subtitle: 'Opens the next time you’re both online at once — '
                   'a little surprise for you two',
               on: curTogether,
               onTap: () => Navigator.pop(ctx, 'together'),

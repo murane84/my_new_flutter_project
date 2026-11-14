@@ -181,7 +181,8 @@ class _BookTickState extends State<BookTick>
               behavior: HitTestBehavior.opaque,
               onTap: widget.onTap,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+                // No extra height: the bubble's meta row keeps its size.
+                padding: const EdgeInsets.symmetric(horizontal: 2),
                 child: icon,
               ),
             ),

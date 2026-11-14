@@ -2252,6 +2252,9 @@ extension _ChatPageHelpers3 on _ChatPageState {
   (int, int, int)? _groupReceipt(Map<String, dynamic> msg) {
     final mid = int.tryParse('${msg['id']}');
     if (mid == null || _groupMembers.isEmpty) return null;
+    // Members cached before the server sent pointers (or an older server):
+    // fall back to the message's own flags rather than a book stuck flying.
+    if (!_groupMembers.any((m) => m.containsKey('read_up_to'))) return null;
     var total = 0, delivered = 0, read = 0;
     for (final m in _groupMembers) {
       if (m['user_id']?.toString() == _myId) continue;

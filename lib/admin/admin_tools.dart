@@ -9,11 +9,21 @@ import '../utils/radii.dart';
 /// Each tool previews first (what it would free) and only runs after you
 /// confirm with your password from a full-access device. Nothing here
 /// touches a live shared memory — see the server side (admin_panel.py).
+/// Bumped after a clean-up tool ran, so the Storage page (kept alive in its
+/// own tab) refreshes its figures.
+final ValueNotifier<int> adminStorageChanged = ValueNotifier<int>(0);
+
 class AdminToolsSection extends StatefulWidget {
-  const AdminToolsSection({super.key, this.onChanged});
+  const AdminToolsSection(
+      {super.key, this.onChanged, this.health = true, this.tools = true});
 
   /// After a tool ran: the page's storage figures refresh too.
   final VoidCallback? onChanged;
+
+  /// Which parts to show: System → Health shows the server card, System →
+  /// Clean-up the tools (each its own page, no long scroll).
+  final bool health;
+  final bool tools;
 
   @override
   State<AdminToolsSection> createState() => _AdminToolsSectionState();
@@ -113,6 +123,7 @@ class _AdminToolsSectionState extends State<AdminToolsSection> {
         _preview.remove(t.path);
         await _loadHealth();
         widget.onChanged?.call();
+        adminStorageChanged.value++;
       }
     } on AdminApiException catch (e) {
       if (mounted) adminToast(context, e.message, error: true);
@@ -158,6 +169,7 @@ class _AdminToolsSectionState extends State<AdminToolsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (widget.health) ...[
         AdminSection(
           icon: Icons.monitor_heart_rounded,
           color: const Color(0xFF00C853),
@@ -233,15 +245,18 @@ class _AdminToolsSectionState extends State<AdminToolsSection> {
                       accent: const Color(0xFF00897B)),
                 ]),
         ),
-        const SizedBox(height: 14),
-        AdminSection(
-          icon: Icons.build_circle_rounded,
-          title: 'Clean-up tools',
-          subtitle: 'Preview first · running asks for your password · logged',
-          child: Column(children: [
-            for (final t in _tools) _toolTile(p, t),
-          ]),
-        ),
+        ],
+        if (widget.health && widget.tools) const SizedBox(height: 14),
+        if (widget.tools)
+          AdminSection(
+            icon: Icons.build_circle_rounded,
+            title: 'Clean-up tools',
+            subtitle:
+                'Preview first · running asks for your password · logged',
+            child: Column(children: [
+              for (final t in _tools) _toolTile(p, t),
+            ]),
+          ),
       ],
     );
   }

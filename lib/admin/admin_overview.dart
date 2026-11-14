@@ -9,7 +9,9 @@ import 'admin_widgets.dart';
 /// Which metrics page this is. Overview keeps the headline numbers (users,
 /// online, retention, sign-ups); the rest each get their own nav entry so
 /// nothing needs a long scroll.
-enum AdminMetricsView { overview, usage, system }
+/// Which page this is. System is split into Health (server + call relay),
+/// Storage and Clean-up — each its own tab, no long scroll.
+enum AdminMetricsView { overview, usage, system, storage, cleanup }
 
 /// Read-only metrics: users, online now, activity, device split, storage and
 /// the call relay — split across pages by [view]. Refreshes every minute while
@@ -47,13 +49,20 @@ class _AdminOverviewState extends State<AdminOverview> {
   void initState() {
     super.initState();
     _load();
+    // A clean-up ran (Clean-up tab) → the Storage tab's figures refresh.
+    if (widget.view == AdminMetricsView.storage) {
+      adminStorageChanged.addListener(_storageChanged);
+    }
     _timer = Timer.periodic(const Duration(seconds: 60), (_) {
       if (!_api.userIdle) _load(quiet: true);
     });
   }
 
+  void _storageChanged() => _load(quiet: true);
+
   @override
   void dispose() {
+    adminStorageChanged.removeListener(_storageChanged);
     _timer?.cancel();
     super.dispose();
   }
@@ -84,7 +93,7 @@ class _AdminOverviewState extends State<AdminOverview> {
       on(ov, '/admin/api/metrics/overview'),
       on(ov, '/admin/api/metrics/signups?days=$_signupDays'),
       on(us, '/admin/api/metrics/devices'),
-      on(sy, '/admin/api/metrics/storage'),
+      on(AdminMetricsView.storage, '/admin/api/metrics/storage'),
       on(us, '/admin/api/metrics/activity'),
       on(ov, '/admin/api/metrics/online'),
       on(sy, '/admin/api/metrics/relay'),
@@ -129,20 +138,27 @@ class _AdminOverviewState extends State<AdminOverview> {
             icon: switch (widget.view) {
               AdminMetricsView.overview => Icons.space_dashboard_rounded,
               AdminMetricsView.usage => Icons.insights_rounded,
-              AdminMetricsView.system => Icons.dns_rounded,
+              AdminMetricsView.system => Icons.monitor_heart_rounded,
+              AdminMetricsView.storage => Icons.storage_rounded,
+              AdminMetricsView.cleanup => Icons.cleaning_services_rounded,
             },
             title: switch (widget.view) {
               AdminMetricsView.overview => 'Overview',
               AdminMetricsView.usage => 'Usage',
-              AdminMetricsView.system => 'System',
+              AdminMetricsView.system => 'Health',
+              AdminMetricsView.storage => 'Storage',
+              AdminMetricsView.cleanup => 'Clean-up',
             },
             subtitle: _loadedAt == null
                 ? switch (widget.view) {
                     AdminMetricsView.overview => 'How Aluta is doing',
                     AdminMetricsView.usage =>
                       'Platforms, app versions and daily activity',
-                    AdminMetricsView.system =>
-                      'Storage, call relay, server health and clean-up',
+                    AdminMetricsView.system => 'Server health and call relay',
+                    AdminMetricsView.storage =>
+                      'What the server keeps, and for whom',
+                    AdminMetricsView.cleanup =>
+                      'Free space safely — preview first',
                   }
                 : 'Updated ${fmtAgo(_loadedAt!.toUtc().toIso8601String())}',
             trailing: IconButton.filledTonal(
@@ -193,9 +209,14 @@ class _AdminOverviewState extends State<AdminOverview> {
             _storageBlock(p),
             const SizedBox(height: 14),
           ],
-          // System: server health + the clean-up tools (Phase 3).
+          // System → Health: the server card (relay above); Clean-up: the
+          // tools on their own page.
           if (widget.view == AdminMetricsView.system) ...[
-            AdminToolsSection(onChanged: () => _load(quiet: true)),
+            const AdminToolsSection(tools: false),
+            const SizedBox(height: 14),
+          ],
+          if (widget.view == AdminMetricsView.cleanup) ...[
+            const AdminToolsSection(health: false),
             const SizedBox(height: 14),
           ],
           const SizedBox(height: 24),

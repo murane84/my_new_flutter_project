@@ -69,8 +69,12 @@ const _groups = <_AdminGroup>[
         Icons.receipt_long_rounded),
   ]),
   _AdminGroup('System', Icons.dns_outlined, Icons.dns_rounded, [
-    _AdminPage('system', 'Storage & relay', Icons.dns_outlined,
-        Icons.dns_rounded),
+    _AdminPage('system', 'Health', Icons.monitor_heart_outlined,
+        Icons.monitor_heart_rounded),
+    _AdminPage('storage', 'Storage', Icons.storage_outlined,
+        Icons.storage_rounded),
+    _AdminPage('cleanup', 'Clean-up', Icons.cleaning_services_outlined,
+        Icons.cleaning_services_rounded),
   ]),
 ];
 
@@ -118,6 +122,12 @@ class _AdminShellState extends State<AdminShell> {
             onOpenDevices: () => _go('devices')),
         'system' => AdminOverview(
             view: AdminMetricsView.system,
+            onOpenDevices: () => _go('devices')),
+        'storage' => AdminOverview(
+            view: AdminMetricsView.storage,
+            onOpenDevices: () => _go('devices')),
+        'cleanup' => AdminOverview(
+            view: AdminMetricsView.cleanup,
             onOpenDevices: () => _go('devices')),
         'devices' => AdminDevicesPage(onChanged: _loadMe),
         'feedback' => AdminFeedbackPage(onChanged: _loadMe),

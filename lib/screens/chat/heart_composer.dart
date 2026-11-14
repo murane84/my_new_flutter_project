@@ -1014,26 +1014,66 @@ extension _ChatHeartComposer on _ChatPageState {
     );
   }
 
-  /// "When should it open?" — quick presets + a date & time picker.
+  static final Map<int, (DateTime?, DateTime)> _wakeCache = {};
+
+  /// Their usual wake time (my clock), cached a while; null when unknown or
+  /// their last-seen setting doesn't include me.
+  Future<DateTime?> _partnerWake() async {
+    final id = widget.friendId;
+    final hit = _wakeCache[id];
+    if (hit != null &&
+        DateTime.now().difference(hit.$2) < const Duration(hours: 1)) {
+      return hit.$1;
+    }
+    DateTime? w;
+    try {
+      w = await ApiService()
+          .usualWake(id)
+          .timeout(const Duration(seconds: 2), onTimeout: () => null);
+    } catch (_) {}
+    _wakeCache[id] = (w, DateTime.now());
+    return w;
+  }
+
+  /// "When should it open?" — one-tap moments (her wake-up when we know it),
+  /// next time we're together, our anniversary, or any date & time.
   Future<void> _pickHeartUnlock() async {
     final now = DateTime.now();
     DateTime at(int dayOffset, int hour, [int minute = 0]) =>
         DateTime(now.year, now.month, now.day + dayOffset, hour, minute);
+    final first = _livePeerLabel.trim().split(RegExp(r'\s+')).first;
+    final wake = _isGroup ? null : await _partnerWake();
+    DateTime? wakeNext;
+    if (wake != null) {
+      var w = DateTime(now.year, now.month, now.day, wake.hour, wake.minute);
+      if (!w.isAfter(now.add(const Duration(minutes: 10)))) {
+        w = w.add(const Duration(days: 1));
+      }
+      wakeNext = w;
+    }
     final tonight = now.hour < 20 ? at(0, 20) : at(1, 20);
     final morning = at(now.hour < 7 ? 0 : 1, 7);
-    final presets = <(String, IconData, DateTime)>[
-      ('In 1 hour', Icons.timelapse_rounded, now.add(const Duration(hours: 1))),
-      (now.hour < 20 ? 'Tonight, 8:00 PM' : 'Tomorrow night, 8:00 PM',
-          Icons.nights_stay_rounded, tonight),
-      ('${now.hour < 7 ? 'This' : 'Tomorrow'} morning, 7:00 AM',
-          Icons.wb_twilight_rounded, morning),
+    // (key, icon, title, when)
+    final tiles = <(String, IconData, String, DateTime)>[
+      ('hour', Icons.timelapse_rounded, 'In 1 hour',
+          now.add(const Duration(hours: 1))),
+      ('tonight', Icons.nights_stay_rounded,
+          now.hour < 20 ? 'Tonight' : 'Tomorrow night', tonight),
+      if (wakeNext != null)
+        ('wake', Icons.wb_twilight_rounded, 'When $first wakes', wakeNext)
+      else
+        ('morning', Icons.wb_twilight_rounded,
+            now.hour < 7 ? 'This morning' : 'Tomorrow morning', morning),
     ];
     // Our anniversary (day + month this device remembers for this friend).
     final annivKey = 'heart_anniv_${widget.friendId}';
+    const usualKey = 'heart_unlock_usual_v1';
     String? annivMd;
+    String? usual;
     try {
       final p = await SharedPreferences.getInstance();
       annivMd = p.getString(annivKey);
+      usual = p.getString(usualKey);
     } catch (_) {}
     DateTime? nextOf(String? md) {
       if (md == null) return null;
@@ -1052,8 +1092,13 @@ extension _ChatHeartComposer on _ChatPageState {
     if (!mounted) return;
     final scheme = Theme.of(context).colorScheme;
     final cur = _heartUnlockAt;
+    final curTogether = cur != null && isTogetherSeal(cur);
     bool same(DateTime x) =>
-        cur != null && x.difference(cur).inMinutes.abs() < 2;
+        cur != null && !curTogether && x.difference(cur).inMinutes.abs() < 2;
+    final curCustom = cur != null &&
+        !curTogether &&
+        !tiles.any((t) => same(t.$4)) &&
+        !(anniv != null && same(anniv));
     final choice = await showAdaptiveSheet<Object>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1067,27 +1112,41 @@ extension _ChatHeartComposer on _ChatPageState {
         subtitle: 'Sealed — even to you — until then. You both get a little '
             'ping when it opens.',
         children: [
-          // Quick moments: three big tiles, one tap.
-          Row(children: [
-            for (final (i, p) in presets.indexed) ...[
-              if (i > 0) const SizedBox(width: 8),
-              Expanded(
-                child: _sheetTile(
-                  ctx,
-                  icon: p.$2,
-                  title: switch (i) {
-                    0 => 'In 1 hour',
-                    1 => now.hour < 20 ? 'Tonight' : 'Tomorrow night',
-                    _ => now.hour < 7 ? 'This morning' : 'Tomorrow morning',
-                  },
-                  caption: DateFormat('h:mm a').format(p.$3),
-                  on: same(p.$3),
-                  onTap: () => Navigator.pop(ctx, p.$3),
+          // Quick moments: three big tiles, one tap. My usual one wears a
+          // small "usual" mark.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final (i, t) in tiles.indexed) ...[
+                if (i > 0) const SizedBox(width: 8),
+                Expanded(
+                  child: _sheetTile(
+                    ctx,
+                    icon: t.$2,
+                    title: t.$3,
+                    caption: '${t.$1 == 'wake' ? '~' : ''}'
+                        '${DateFormat('h:mm a').format(t.$4)}'
+                        '${usual == t.$1 || (usual == 'morning' && t.$1 == 'wake') ? ' · usual' : ''}',
+                    on: same(t.$4),
+                    onTap: () => Navigator.pop(ctx, (t.$1, t.$4)),
+                  ),
                 ),
-              ),
+              ],
             ],
-          ]),
-          const SizedBox(height: 10),
+          ),
+          if (!_isGroup) ...[
+            const SizedBox(height: 10),
+            _sheetRow(
+              ctx,
+              icon: Icons.favorite_rounded,
+              title: 'Next time we’re together',
+              subtitle: 'Opens the moment you’re both online — '
+                  'a little surprise for you two',
+              on: curTogether,
+              onTap: () => Navigator.pop(ctx, 'together'),
+            ),
+          ],
+          const SizedBox(height: 8),
           _sheetRow(
             ctx,
             icon: Icons.celebration_rounded,
@@ -1105,15 +1164,11 @@ extension _ChatHeartComposer on _ChatPageState {
           _sheetRow(
             ctx,
             icon: Icons.event_rounded,
-            title: cur != null &&
-                    !presets.any((p) => same(p.$3)) &&
-                    !(anniv != null && same(anniv))
+            title: curCustom
                 ? 'On ${DateFormat('EEE d MMM · h:mm a').format(cur)}'
                 : 'Pick a date & time…',
             subtitle: 'A birthday, a reunion, a moment that matters',
-            on: cur != null &&
-                !presets.any((p) => same(p.$3)) &&
-                !(anniv != null && same(anniv)),
+            on: curCustom,
             onTap: () => Navigator.pop(ctx, 'pick'),
           ),
           if (cur != null) ...[
@@ -1137,7 +1192,27 @@ extension _ChatHeartComposer on _ChatPageState {
       rebuildWith(() => _heartUnlockAt = null);
       return;
     }
-    DateTime? when = choice is DateTime ? choice : null;
+    Future<void> remember(String key) async {
+      try {
+        final p = await SharedPreferences.getInstance();
+        await p.setString(usualKey, key);
+      } catch (_) {}
+    }
+
+    if (choice == 'together') {
+      unawaited(remember('together'));
+      // A far-off seal the server opens the moment we're both online.
+      rebuildWith(() => _heartUnlockAt =
+          DateTime.now().add(const Duration(days: 399)));
+      return;
+    }
+    DateTime? when;
+    if (choice is (String, DateTime)) {
+      when = choice.$2;
+      unawaited(remember(choice.$1 == 'wake' ? 'morning' : choice.$1));
+    } else if (choice is DateTime) {
+      when = choice;
+    }
     if (choice == 'anniv') {
       final d = await showDatePicker(
         context: context,
@@ -1177,7 +1252,41 @@ extension _ChatHeartComposer on _ChatPageState {
       showToast(context, 'Pick a moment a little later', type: ToastType.info);
       return;
     }
-    rebuildWith(() => _heartUnlockAt = when);
+    // A gentle check: is that the middle of their night? (between 11 PM and
+    // their usual wake-up) → offer their wake-up instead; mine wins if I keep it.
+    if (wake != null) {
+      final m = when.hour * 60 + when.minute;
+      final w = wake.hour * 60 + wake.minute;
+      final asleep = m >= 23 * 60 || m < w - 15;
+      if (asleep && !(choice is (String, DateTime) && choice.$1 == 'wake')) {
+        var better = DateTime(
+            when.year, when.month, when.day, wake.hour, wake.minute);
+        if (m >= 23 * 60) better = better.add(const Duration(days: 1));
+        final label = DateFormat('h:mm a').format(better);
+        final pick = await showDialog<bool>(
+          context: context,
+          builder: (dctx) => AlertDialog(
+            icon: Icon(Icons.bedtime_rounded, color: accentInk(scheme)),
+            title: Text('$first is usually asleep then'),
+            content: Text(
+                'Open it when $first wakes, around $label, so it’s the first '
+                'thing they see?'),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(dctx, false),
+                  child: const Text('Keep my time')),
+              FilledButton(
+                  onPressed: () => Navigator.pop(dctx, true),
+                  child: Text('Open at $label')),
+            ],
+          ),
+        );
+        if (!mounted) return;
+        if (pick == true) when = better;
+      }
+    }
+    final at0 = when;
+    rebuildWith(() => _heartUnlockAt = at0);
   }
 }
 

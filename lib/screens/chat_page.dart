@@ -122,6 +122,7 @@ import '../services/track_title.dart'
         displayArtistForPath,
         sharedTrackNames;
 import '../services/song_names.dart';
+import '../services/song_insights.dart' show SongInsights, SongFeel;
 import '../services/plan_limits.dart';
 import '../services/cover_art.dart';
 import '../widgets/song_art.dart';
@@ -2225,7 +2226,8 @@ class _ChatPageState extends State<ChatPage>
     final lullaby = heart && _pendingBed?['kind'] == 'lullaby';
     final bedMeta = _metaFor(
         bed: lullaby ? _pendingBed : (heart ? null : _sendBedOnce),
-        date: heart ? null : _sendDateOnce);
+        date: heart ? null : _sendDateOnce,
+        togetherSeal: unlockAt != null && isTogetherSeal(unlockAt));
     _markActivity();
     _ctrl.clear();
     setState(() {

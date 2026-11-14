@@ -1874,6 +1874,31 @@ class ApiService {
 
   /// Bigger Our Space for one of my Spaces: {active, until, cap_bytes,
   /// free_cap_bytes}; null on failure.
+  /// Their usual wake time today, in MY local time (null = unknown / not
+  /// allowed — the same rule as last seen).
+  Future<DateTime?> usualWake(int userId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http
+          .get(Uri.parse('${await _baseUrl}/users/$userId/wake'),
+              headers: _authHeaders(token))
+          .timeout(const Duration(seconds: 8));
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final m = (jsonDecode(resp.body) as Map?)?['utc_minute'];
+        if (m is num) {
+          final n = DateTime.now().toUtc();
+          return DateTime.utc(n.year, n.month, n.day)
+              .add(Duration(minutes: m.toInt()))
+              .toLocal();
+        }
+      }
+    } catch (e) {
+      _logger.w('usualWake failed: $e');
+    }
+    return null;
+  }
+
   /// Shared Harmony: whose plans (of these people) include Harmony.
   Future<Map<String, bool>> sharedHarmony(List<int> ids) async {
     if (ids.isEmpty) return const {};

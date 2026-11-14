@@ -61,6 +61,10 @@ class _SongBed {
         }
       }
       if (gen != _gen) return false;
+      // Start at the chosen part ("start at the chorus").
+      final from = (bed['start'] as num?)?.toInt() ?? 0;
+      if (from > 0) await p.seek(Duration(seconds: from));
+      if (gen != _gen) return false;
       await p.setVolume(0);
       // Never await play(): its future completes when the song ENDS.
       p.play();
@@ -267,7 +271,9 @@ extension _ChatSongMemories on _ChatPageState {
     };
   }
 
-  /// Change the song under the voice note / the lullaby.
+  /// Change the song under the voice note / the lullaby: our song first,
+  /// calm picks for a lullaby at night, songs they added marked; tap a cover
+  /// to hear 10 s, choose where it starts, then "Use this song".
   Future<void> _pickBedSong() async {
     final sid = _defaultKeepSpaceId;
     final cur = _pendingBed;
@@ -280,65 +286,232 @@ extension _ChatSongMemories on _ChatPageState {
       return;
     }
     final lullaby = cur['kind'] == 'lullaby';
+    final first = _livePeerLabel.trim().split(RegExp(r'\s+')).first;
+    String norm(String s) =>
+        s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
+    final ours = norm(_yourSongTitle ?? '');
+    final mine = playlistNotifier.value;
+    // Name every track once.
+    final named = [
+      for (final t in tracks) (t, sharedTrackNames(t, mine)),
+    ];
+    bool isOurs(Map t) => ours.isNotEmpty && norm('${t['title'] ?? ''}') == ours;
+    bool isCalm(Map t, String title) {
+      final si = SongInsights.instance;
+      return si.feelOf('${t['title'] ?? ''}') == SongFeel.calm ||
+          si.feelOf(title) == SongFeel.calm;
+    }
+
+    final h = DateTime.now().hour;
+    final night = lullaby && (h >= 19 || h < 5);
+    final top = [for (final n in named) if (isOurs(n.$1)) n];
+    final calm = night
+        ? [
+            for (final n in named)
+              if (!isOurs(n.$1) && isCalm(n.$1, n.$2.$1)) n
+          ]
+        : const <(Map<String, dynamic>, (String, String, String?))>[];
+    final rest = [
+      for (final n in named)
+        if (!top.contains(n) && !calm.contains(n)) n
+    ];
+
+    Map<String, dynamic>? sel = tracks.firstWhere(
+        (t) => '${t['title']}' == cur['title'],
+        orElse: () => <String, dynamic>{});
+    if (sel.isEmpty) sel = null;
+    var start = (cur['start'] as num?)?.toInt() ?? 0;
+    String? previewing; // the title being previewed
+    var alive = true; // the sheet is still open (its setState is valid)
+
+    Future<void> preview(Map t, void Function(VoidCallback) set) async {
+      final title = '${t['title'] ?? ''}';
+      if (previewing == title) {
+        await _SongBed.stop(owner: 'pick', fadeMs: 300);
+        if (alive) set(() => previewing = null);
+        return;
+      }
+      set(() => previewing = title);
+      final url = '${t['audio_url'] ?? ''}';
+      final ok = await _SongBed.play(
+          'pick',
+          {
+            'title': title,
+            if (url.startsWith('/attachments/')) 'url': url,
+            'clip': 10,
+            'start': identical(t, sel) ? start : 0,
+          },
+          volume: 0.8);
+      if (!ok) {
+        if (alive) set(() => previewing = null);
+        if (mounted) {
+          showToast(context, 'This one isn’t on your phone to preview',
+              type: ToastType.info);
+        }
+        return;
+      }
+      // The clip ends by itself after 10 s.
+      Future.delayed(const Duration(seconds: 10), () {
+        if (alive && previewing == title) set(() => previewing = null);
+      });
+    }
+
     final picked = await showAdaptiveSheet<Map<String, dynamic>>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(),
-      builder: (c) => _alutaSheet(
-        c,
-        icon: lullaby ? Icons.bedtime_rounded : Icons.queue_music_rounded,
-        title: 'Our Playlist',
-        subtitle: lullaby
-            ? 'Pick the lullaby — it plays softly as the heart opens'
-            : 'Pick the song that plays softly under your voice',
-        // Named, and pictured, the way my playlist shows them.
-        children: [
-          for (final (i, t) in tracks.indexed) ...[
-            if (i > 0) const SizedBox(height: 6),
-            Builder(builder: (_) {
-              final (title, artist, local) =
-                  sharedTrackNames(t, playlistNotifier.value);
-              final scheme = Theme.of(c).colorScheme;
-              final icon = Icon(Icons.music_note_rounded,
-                  size: 18, color: accentInk(scheme));
-              return _sheetRow(
-                c,
-                leading: ClipRRect(
-                  borderRadius: BorderRadius.circular(Radii.md),
-                  child: SizedBox(
-                    width: 42,
-                    height: 42,
-                    child: ColoredBox(
-                      color: scheme.primary.withValues(alpha: 0.12),
-                      child: local == null
-                          ? icon
-                          : SongArt(
-                              path: local,
-                              title: title,
-                              artist: artist,
-                              size: 42,
-                              fallback: icon),
-                    ),
-                  ),
+      builder: (c) => StatefulBuilder(builder: (c, set) {
+        final scheme = Theme.of(c).colorScheme;
+        String fmt(int s) => '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+
+        Widget section(String label) => Padding(
+              padding: const EdgeInsets.fromLTRB(4, 10, 4, 6),
+              child: Text(label,
+                  style: TextStyle(
+                      fontSize: 11,
+                      letterSpacing: 1.1,
+                      fontWeight: FontWeight.w800,
+                      color: accentInk(scheme))),
+            );
+
+        Widget row((Map<String, dynamic>, (String, String, String?)) n) {
+          final (t, (title, artist, local)) = n;
+          final on = identical(t, sel);
+          final hers = t['mine'] != true && '${t['added_by'] ?? ''}'.isNotEmpty;
+          final playing = previewing == '${t['title'] ?? ''}';
+          final icon = Icon(Icons.music_note_rounded,
+              size: 18, color: accentInk(scheme));
+          final cover = SizedBox(
+            width: 44,
+            height: 44,
+            child: Stack(fit: StackFit.expand, children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(Radii.md),
+                child: ColoredBox(
+                  color: scheme.primary.withValues(alpha: 0.12),
+                  child: local == null
+                      ? icon
+                      : SongArt(
+                          path: local,
+                          title: title,
+                          artist: artist,
+                          size: 44,
+                          fallback: icon),
                 ),
-                title: title,
-                subtitle: artist,
-                on: '${t['title']}' == cur['title'],
-                onTap: () => Navigator.pop(c, t),
-              );
-            }),
+              ),
+              // Tap the cover → 10 s preview (tap again to stop).
+              Material(
+                color: Colors.black.withValues(alpha: playing ? 0.45 : 0.18),
+                borderRadius: BorderRadius.circular(Radii.md),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(Radii.md),
+                  onTap: () => preview(t, set),
+                  child: Icon(
+                      playing ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 22),
+                ),
+              ),
+            ]),
+          );
+          final tags = [
+            if (artist.isNotEmpty) artist,
+            if (hers) 'added by $first',
+          ].join(' · ');
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Column(children: [
+              _sheetRow(
+                c,
+                leading: cover,
+                title: isOurs(t) ? '♥ $title' : title,
+                subtitle: tags,
+                on: on,
+                onTap: () => set(() {
+                  if (!on) start = 0;
+                  sel = t;
+                }),
+              ),
+              // The chosen song: where it starts (the part that matters).
+              if (on)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+                  child: Row(children: [
+                    Icon(Icons.flag_rounded,
+                        size: 16, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 6),
+                    Text('Starts at ${fmt(start)}',
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            fontFeatures: const [
+                              FontFeature.tabularFigures()
+                            ],
+                            color: scheme.onSurfaceVariant)),
+                    Expanded(
+                      child: Slider(
+                        value: start.toDouble(),
+                        min: 0,
+                        max: 300,
+                        divisions: 60,
+                        label: fmt(start),
+                        onChanged: (v) => set(() => start = v.round()),
+                        onChangeEnd: (_) {
+                          if (previewing != null) {
+                            previewing = null;
+                            preview(t, set);
+                          }
+                        },
+                      ),
+                    ),
+                  ]),
+                ),
+            ]),
+          );
+        }
+
+        return _alutaSheet(
+          c,
+          icon: lullaby ? Icons.bedtime_rounded : Icons.queue_music_rounded,
+          title: 'Our Playlist',
+          subtitle: lullaby
+              ? 'Pick the lullaby — it plays softly as the heart opens. '
+                  'Tap a cover to hear it.'
+              : 'Pick the song under your voice. Tap a cover to hear it.',
+          children: [
+            if (top.isNotEmpty) ...[section('OUR SONG'), ...top.map(row)],
+            if (calm.isNotEmpty) ...[
+              section('CALM FOR TONIGHT'),
+              ...calm.map(row)
+            ],
+            if (top.isNotEmpty || calm.isNotEmpty) section('ALL OUR SONGS'),
+            ...rest.map(row),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: sel == null
+                  ? null
+                  : () => Navigator.pop(c, {...sel!, '_start': start}),
+              icon: Icon(
+                  lullaby ? Icons.bedtime_rounded : Icons.check_rounded,
+                  size: 18),
+              label: Text(lullaby ? 'Use this lullaby' : 'Use this song'),
+              style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+            ),
           ],
-        ],
-      ),
+        );
+      }),
     );
+    alive = false;
+    unawaited(_SongBed.stop(owner: 'pick', fadeMs: 300));
     if (picked == null || !mounted) return;
     final url = (picked['audio_url'] ?? '').toString();
+    final st = (picked['_start'] as num?)?.toInt() ?? 0;
     rebuildWith(() => _pendingBed = {
           'kind': cur['kind'],
           'title': '${picked['title'] ?? ''}'.trim(),
           if (url.startsWith('/attachments/')) 'url': url,
           'clip': ?cur['clip'],
+          if (st > 0) 'start': st,
         });
   }
 

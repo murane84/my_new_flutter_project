@@ -105,7 +105,13 @@ String heartSentLabel(DateTime when) {
 }
 
 /// "Opens tonight 8:00 PM" / "Opens Fri 8:00 PM" / "Opens 12 Feb, 8:00 PM".
+/// A heart sealed "until next time we're together" carries a far-off date
+/// (the server opens it the moment we're both online).
+bool isTogetherSeal(DateTime when) =>
+    when.difference(DateTime.now()).inDays > 380;
+
 String heartOpensLabel(DateTime when, {String prefix = 'Opens '}) {
+  if (isTogetherSeal(when)) return '${prefix}when you’re both here';
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final day = DateTime(when.year, when.month, when.day);
@@ -1264,7 +1270,9 @@ class _HeartBubbleState extends State<HeartBubble>
       icon = Icons.hourglass_top_rounded;
       line = _hint
           ? heartOpensLabel(widget.unlockAt!, prefix: '')
-          : 'opens in ${_countdown(widget.unlockAt!.difference(DateTime.now()))}';
+          : isTogetherSeal(widget.unlockAt!)
+              ? 'opens when you’re both here'
+              : 'opens in ${_countdown(widget.unlockAt!.difference(DateTime.now()))}';
     } else if (_awaitingNote) {
       icon = Icons.auto_awesome_rounded;
       line = 'opening…';

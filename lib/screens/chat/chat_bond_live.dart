@@ -330,11 +330,14 @@ extension _ChatBondLive on _ChatPageState {
   }
 
   /// Meta for a send: a song bed, a planned date, and "quiet" when they sleep.
-  String? _metaFor({Map<String, dynamic>? bed, String? date}) {
+  String? _metaFor(
+      {Map<String, dynamic>? bed, String? date, bool togetherSeal = false}) {
     final m = <String, dynamic>{
       if (bed != null) 'bed': Map<String, dynamic>.from(bed)..remove('kind'),
       'date': ?date,
       if (_partnerAsleep) 'quiet': 1,
+      // A heart sealed until we're both online (the server opens it).
+      if (togetherSeal) 'open_when': 'together',
     };
     return m.isEmpty ? null : jsonEncode(m);
   }

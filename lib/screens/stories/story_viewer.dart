@@ -10,6 +10,8 @@ import 'package:video_player/video_player.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 
 import '../../services/contact_names.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../state/presence_state.dart';
 import 'dart:io';
 import '../../utils/net_image.dart';
 import '../../services/media_store.dart';
@@ -1662,6 +1664,17 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
             }
           }
 
+          // Who's here right now: they're the ones a nudge reaches warm
+          // (a reply comes soon) — they lead the list, lit green.
+          return Consumer(builder: (ctx, ref, _) {
+          final presence = ref.watch(presenceProvider);
+          final shown = [...viewers]..sort((a, b) {
+              final oa = presence.isOnline(a.userId) ? 0 : 1;
+              final ob = presence.isOnline(b.userId) ? 0 : 1;
+              return oa.compareTo(ob);
+            });
+          final onlineN =
+              viewers.where((v) => presence.isOnline(v.userId)).length;
           return SafeArea(
             child: ConstrainedBox(
               constraints: BoxConstraints(
@@ -1688,10 +1701,14 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                               ),
                               if (viewers.isNotEmpty)
                                 Text(
-                                    'Nudge someone who watched — it lands in your DM with them',
+                                    onlineN > 0
+                                        ? '$onlineN online now — nudge them while they’re here'
+                                        : 'No one’s online right now — a nudge waits in your DM',
                                     style: TextStyle(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.6),
+                                        color: onlineN > 0
+                                            ? const Color(0xFF7BE0A0)
+                                            : Colors.white
+                                                .withValues(alpha: 0.6),
                                         fontSize: 12)),
                             ],
                           ),
@@ -1710,9 +1727,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                     child: ListView.builder(
                       shrinkWrap: true,
                       padding: const EdgeInsets.only(bottom: 12),
-                      itemCount: viewers.length,
+                      itemCount: shown.length,
                       itemBuilder: (_, i) {
-                        final v = viewers[i];
+                        final v = shown[i];
+                        final on = presence.isOnline(v.userId);
                         final av = (v.avatarUrl ?? '').isNotEmpty
                             ? _absUrl(v.avatarUrl!)
                             : null;
@@ -1724,22 +1742,40 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                               horizontal: 12, vertical: 4),
                           child: Row(
                             children: [
-                              CircleAvatar(
-                                radius: 20,
-                                backgroundColor: Colors.white24,
-                                backgroundImage: av != null
-                                    ? authNetworkImageProvider(
-                                        av, mediaAuthHeaders(av))
-                                    : null,
-                                child: av == null
-                                    ? Text(
-                                        name.isNotEmpty
-                                            ? name[0].toUpperCase()
-                                            : '?',
-                                        style: const TextStyle(
-                                            color: Colors.white))
-                                    : null,
-                              ),
+                              Stack(clipBehavior: Clip.none, children: [
+                                CircleAvatar(
+                                  radius: 20,
+                                  backgroundColor: Colors.white24,
+                                  backgroundImage: av != null
+                                      ? authNetworkImageProvider(
+                                          av, mediaAuthHeaders(av))
+                                      : null,
+                                  child: av == null
+                                      ? Text(
+                                          name.isNotEmpty
+                                              ? name[0].toUpperCase()
+                                              : '?',
+                                          style: const TextStyle(
+                                              color: Colors.white))
+                                      : null,
+                                ),
+                                if (on)
+                                  Positioned(
+                                    right: -1,
+                                    bottom: -1,
+                                    child: Container(
+                                      width: 12,
+                                      height: 12,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF22C55E),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                            color: const Color(0xFF1C1B1F),
+                                            width: 2),
+                                      ),
+                                    ),
+                                  ),
+                              ]),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
@@ -1753,11 +1789,18 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                                         style: const TextStyle(
                                             color: Colors.white,
                                             fontWeight: FontWeight.w600)),
-                                    if (when != null)
-                                      Text('viewed ${_ago(when)}',
+                                    if (on || when != null)
+                                      Text(
+                                          [
+                                            if (on) 'online now',
+                                            if (when != null)
+                                              'viewed ${_ago(when)}',
+                                          ].join(' · '),
                                           style: TextStyle(
-                                              color: Colors.white
-                                                  .withValues(alpha: 0.55),
+                                              color: on
+                                                  ? const Color(0xFF7BE0A0)
+                                                  : Colors.white
+                                                      .withValues(alpha: 0.55),
                                               fontSize: 11.5)),
                                   ],
                                 ),
@@ -1767,8 +1810,12 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                               AnimatedSwitcher(
                                 duration: Motion.standard,
                                 child: state == null
-                                    ? Container(
+                                    ? Opacity(
                                         key: const ValueKey('nudge'),
+                                        // Offline → still possible, just
+                                        // quieter: it waits in the DM.
+                                        opacity: on ? 1 : 0.55,
+                                        child: Container(
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 4, vertical: 2),
                                         decoration: BoxDecoration(
@@ -1819,7 +1866,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                                             ),
                                           ],
                                         ),
-                                      )
+                                      ))
                                     : Row(
                                         key: ValueKey('sent-$state'),
                                         mainAxisSize: MainAxisSize.min,
@@ -1866,6 +1913,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
               ),
             ),
           );
+          });
         });
       },
     );

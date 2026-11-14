@@ -422,7 +422,11 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                             color: scheme.onSurfaceVariant,
                             tooltip: 'Player style',
                             onPressed: () =>
-                                showPlayerStyleSheet(context, accent: accent),
+                                showPlayerStyleSheet(context,
+                                    accent: accent,
+                                    art: (d, [c]) => _discCenter(d, c),
+                                    spin: _discCtrl,
+                                    playing: _liveActive || _player.playing),
                           ),
                           // Privacy: share "listening now" with friends on/off.
                           PresenceShareButton(color: accent, size: 22),

@@ -10,6 +10,7 @@ import '../../utils/motion.dart';
 import '../../utils/radii.dart';
 import '../../utils/adaptive_sheet.dart';
 import '../../utils/depth.dart';
+import '../../utils/toast_helper.dart';
 
 /// The look of the big rotating "now playing" glyph. The user can switch
 /// between these from the player; the choice is remembered across launches.
@@ -1808,8 +1809,14 @@ class _EqRingPainter extends CustomPainter {
 // ── Style picker ──────────────────────────────────────────────────────────
 
 /// Bottom sheet letting the user pick (and live-preview) the disc style.
+///
+/// [art] / [spin] / [playing] come from the player, so every sample shows
+/// the song playing now and the chosen one turns with the music.
 Future<void> showPlayerStyleSheet(BuildContext context,
-    {required Color accent}) {
+    {required Color accent,
+    Widget Function(double diameter, [Color? noteColor])? art,
+    Animation<double>? spin,
+    bool playing = true}) {
   final scheme = Theme.of(context).colorScheme;
   return showAdaptiveSheet<void>(
     context: context,
@@ -1820,18 +1827,33 @@ Future<void> showPlayerStyleSheet(BuildContext context,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
     ),
-    builder: (_) => _PlayerStyleSheet(accent: accent),
+    builder: (_) => _PlayerStyleSheet(
+        accent: accent, art: art, spin: spin, playing: playing),
   );
 }
 
 class _PlayerStyleSheet extends StatefulWidget {
-  const _PlayerStyleSheet({required this.accent});
+  const _PlayerStyleSheet(
+      {required this.accent, this.art, this.spin, this.playing = true});
   final Color accent;
+  final Widget Function(double diameter, [Color? noteColor])? art;
+  final Animation<double>? spin;
+  final bool playing;
   @override
   State<_PlayerStyleSheet> createState() => _PlayerStyleSheetState();
 }
 
 class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
+  static const _still = AlwaysStoppedAnimation<double>(0.0);
+
+  /// The sample under the mouse (desktop) — it turns, to preview the motion.
+  PlayerDiscStyle? _hovered;
+
+  Widget _note(double d, [Color? c]) => Center(
+        child: Icon(Icons.music_note_rounded,
+            size: d * 0.42, color: c ?? Colors.white.withValues(alpha: 0.9)),
+      );
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -1916,14 +1938,21 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
       bool isDark) {
     final accent = widget.accent;
     final locked = PlayerStyleController.instance.isLocked(st);
-    return GestureDetector(
+    // The chosen sample (and the one hovered) turns with the music.
+    final moving = !locked && (selected || _hovered == st);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = st),
+      onExit: (_) {
+        if (_hovered == st) setState(() => _hovered = null);
+      },
+      child: GestureDetector(
       onTap: () {
         if (locked) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text(
-                'Reach a 30-day streak in Our Space to unlock this disc 🔥'),
-            duration: Duration(seconds: 3),
-          ));
+          // A toast sits above the sheet / card (a snackbar hid behind it).
+          showToast(context,
+              'Reach a 30-day streak in Our Space to unlock this disc 🔥',
+              duration: const Duration(seconds: 3));
           return;
         }
         PlayerStyleController.instance.setStyle(st);
@@ -1973,14 +2002,11 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
                           accent: accent,
                           scheme: scheme,
                           isDark: isDark,
-                          spin: const AlwaysStoppedAnimation<double>(0.0),
-                          playing: true,
-                          artBuilder: (d, [c]) => Center(
-                            child: Icon(Icons.music_note_rounded,
-                                size: d * 0.42,
-                                color:
-                                    c ?? Colors.white.withValues(alpha: 0.9)),
-                          ),
+                          spin: moving ? (widget.spin ?? _still) : _still,
+                          playing: moving ? widget.playing : true,
+                          // The song playing now, so you see YOUR song in
+                          // each look (a note while nothing plays).
+                          artBuilder: locked ? _note : (widget.art ?? _note),
                         ),
                       ),
                     ),
@@ -2048,6 +2074,7 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
               ),
           ],
         ),
+      ),
       ),
     );
   }

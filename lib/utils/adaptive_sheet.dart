@@ -78,9 +78,19 @@ Future<T?> showAdaptiveSheet<T>({
           context: ctx,
           removeBottom: true,
           removeTop: true,
-          child: builder(ctx),
+          child: showDragHandle == true
+              ? Column(mainAxisSize: MainAxisSize.min, children: [
+                  const _CardHandle(),
+                  Flexible(child: builder(ctx)),
+                ])
+              : builder(ctx),
         ),
       );
+      // The grab line at the top drags the card down to close it, like
+      // the sheet it stands in for (a short pull springs back).
+      final movable = isDismissible && enableDrag
+          ? _DragToClose(onClose: () => Navigator.of(ctx).maybePop(), child: card)
+          : card;
       return SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -90,7 +100,7 @@ Future<T?> showAdaptiveSheet<T>({
             ),
             child: AnimatedBuilder(
               animation: anim,
-              child: card,
+              child: movable,
               builder: (_, child) {
                 final v = Motion.enter.transform(anim.value);
                 return Opacity(
@@ -105,4 +115,115 @@ Future<T?> showAdaptiveSheet<T>({
     },
     transitionBuilder: (ctx, a, _, child) => child,
   );
+}
+
+/// Material's sheet grab line, for cards whose sheet asked for one.
+class _CardHandle extends StatelessWidget {
+  const _CardHandle();
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: 10, bottom: 6),
+        child: Container(
+          width: 36,
+          height: 4,
+          decoration: BoxDecoration(
+            color: Theme.of(context)
+                .colorScheme
+                .onSurfaceVariant
+                .withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      );
+}
+
+/// Desktop card: a pull on its top strip (where the grab line sits) moves
+/// it down and fades it; far or fast enough closes it, else it springs back.
+/// Only the strip listens, so lists, sliders and text inside work as before.
+class _DragToClose extends StatefulWidget {
+  const _DragToClose({required this.onClose, required this.child});
+  final VoidCallback onClose;
+  final Widget child;
+  @override
+  State<_DragToClose> createState() => _DragToCloseState();
+}
+
+class _DragToCloseState extends State<_DragToClose>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _back = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 220))
+    ..addListener(() => setState(() => _dy = _from * (1 - _back.value)));
+  double _dy = 0;
+  double _from = 0;
+  bool _hover = false;
+
+  @override
+  void dispose() {
+    _back.dispose();
+    super.dispose();
+  }
+
+  void _end(DragEndDetails d) {
+    if (_dy > 110 || d.velocity.pixelsPerSecond.dy > 700) {
+      widget.onClose();
+      return;
+    }
+    _from = _dy;
+    _back.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fade = (1 - _dy / 400).clamp(0.4, 1.0);
+    return Transform.translate(
+      offset: Offset(0, _dy),
+      child: Opacity(
+        opacity: fade,
+        child: Stack(children: [
+          widget.child,
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 26,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.grab,
+              onEnter: (_) => setState(() => _hover = true),
+              onExit: (_) => setState(() => _hover = false),
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onVerticalDragStart: (_) => _back.stop(),
+                onVerticalDragUpdate: (d) => setState(() {
+                  // Down follows the pointer; up only gives a little.
+                  final next = _dy + d.delta.dy;
+                  _dy = next < 0 ? next * 0.25 : next;
+                }),
+                onVerticalDragEnd: _end,
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  // A soft glow under the grab line on hover says "pull me".
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 150),
+                    opacity: _hover ? 1 : 0,
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 6),
+                      width: 64,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant
+                            .withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
 }

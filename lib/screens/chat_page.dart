@@ -8010,11 +8010,11 @@ class _ChatPageState extends State<ChatPage>
                         duration: Motion.standard,
                         curve: Curves.easeOutCubic,
                         right: 10,
-                        bottom: _farFromBottom ? 60 : 10,
+                        bottom: _farFromBottom ? 48 : 10,
                         child: _buildMentionChip(scheme),
                       ),
-                    // Round "back to latest" button, bottom-right, whenever
-                    // you're a good way up the thread (a dot = new messages).
+                    // "Back to latest" pill, bottom-right, whenever you're a
+                    // good way up the thread (a glowing dot = new messages).
                     Positioned(
                       right: 12,
                       bottom: 12,
@@ -8027,44 +8027,43 @@ class _ChatPageState extends State<ChatPage>
                           child: AnimatedOpacity(
                             opacity: _farFromBottom ? 1 : 0,
                             duration: Motion.quick,
-                            child: Material(
-                              color: scheme.surface,
-                              shape: CircleBorder(
-                                  side: BorderSide(
-                                      color: scheme.outlineVariant
-                                          .withValues(alpha: 0.6))),
-                              elevation: Depth.low,
-                              shadowColor: Colors.black38,
-                              child: InkWell(
-                                customBorder: const CircleBorder(),
-                                onTap: _jumpToLatest,
-                                child: SizedBox(
-                                  width: 42,
-                                  height: 42,
-                                  child: Stack(
-                                    alignment: Alignment.center,
+                            // The Aluta glass pill (same as the message
+                            // hover pill): small and quiet, so it never
+                            // competes with the round mic button below it.
+                            child: GestureDetector(
+                              onTap: _jumpToLatest,
+                              child: Tooltip(
+                                message: 'Back to latest',
+                                child: _glass(
+                                  scheme,
+                                  height: 28,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 9),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(
-                                          Icons
-                                              .keyboard_double_arrow_down_rounded,
-                                          color: accentInk(scheme),
-                                          size: 24),
-                                      if (_hasNewMsg)
-                                        Positioned(
-                                          top: 7,
-                                          right: 8,
-                                          child: Container(
-                                            width: 9,
-                                            height: 9,
-                                            decoration: BoxDecoration(
-                                              color: scheme.primary,
-                                              shape: BoxShape.circle,
-                                              border: Border.all(
-                                                  color: scheme.surface,
-                                                  width: 1.5),
-                                            ),
+                                      if (_hasNewMsg) ...[
+                                        // New messages waiting: a soft
+                                        // accent heart-dot leads the way.
+                                        Container(
+                                          width: 7,
+                                          height: 7,
+                                          decoration: BoxDecoration(
+                                            color: scheme.primary,
+                                            shape: BoxShape.circle,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: scheme.primary
+                                                    .withValues(alpha: 0.5),
+                                                blurRadius: 6,
+                                              ),
+                                            ],
                                           ),
                                         ),
+                                        const SizedBox(width: 5),
+                                      ],
+                                      Icon(Icons.keyboard_arrow_down_rounded,
+                                          color: accentInk(scheme), size: 20),
                                     ],
                                   ),
                                 ),

@@ -121,7 +121,7 @@ class AppUpdater {
     _resumeWifiWait(context); // a "Wait for Wi-Fi" from before
     _cleanOld(); // update files for builds already installed
     _cycle = Timer.periodic(const Duration(minutes: 15), (_) => tick());
-    if (_android) {
+    if (_android && _netWatch == null) {
       _netWatch = Connectivity().onConnectivityChanged.listen((_) {
         _prefetch();
       });
@@ -738,6 +738,7 @@ class AppUpdater {
   final ValueNotifier<int> resumedFrom = ValueNotifier<int>(0);
 
   Future<(File?, String?)>? _dl; // the download running now
+  String? _dlBuild; // …and which build it is
   bool _loud = false; // someone is watching it (the card's progress)
   double _dlFrac = 0;
 
@@ -746,8 +747,14 @@ class AppUpdater {
   Future<(File?, String?)> _download(Map<String, dynamic> rel,
       {bool quiet = false}) async {
     final running = _dl;
+    if (running != null && _dlBuild != '${rel['build']}') {
+      // Another build is downloading (an older queued one): let it finish,
+      // then fetch the one asked for.
+      await running.catchError((_) => (null, null));
+      return _download(rel, quiet: quiet);
+    }
     if (running != null) {
-      // Join it; show its progress if this caller is the card.
+      // Same build: join it; show its progress if this caller is the card.
       if (!quiet) {
         _loud = true;
         progress.value = _dlFrac;
@@ -756,12 +763,14 @@ class AppUpdater {
     }
     _loud = !quiet;
     _dlFrac = 0;
+    _dlBuild = '${rel['build']}';
     final run = _downloadOnce(rel);
     _dl = run;
     try {
       return await run;
     } finally {
       _dl = null;
+      _dlBuild = null;
       if (_loud && progress.value != 1) progress.value = null;
       _loud = false;
     }
@@ -782,6 +791,7 @@ class AppUpdater {
     }
     if (_loud) progress.value = 0;
     resumedFrom.value = 0;
+    await _dropOtherParts(f.part.parent, '${rel['build']}');
     final client = http.Client();
     IOSink? sink;
     try {
@@ -864,6 +874,22 @@ class AppUpdater {
       } catch (_) {}
       client.close();
     }
+  }
+
+  /// A part / file of an older build superseded before it was installed
+  /// (1.0.9 half-downloaded when 1.0.10 is published) leaves the phone.
+  Future<void> _dropOtherParts(Directory dir, String build) async {
+    try {
+      await for (final e in dir.list()) {
+        final m = RegExp(r'aluta-(\d+)\.apk(\.ok|\.part|\.etag)?$')
+            .firstMatch(e.path);
+        // Older builds only — never a newer one already fetched.
+        if (m != null &&
+            (int.tryParse(m.group(1)!) ?? 0) < (int.tryParse(build) ?? 0)) {
+          await e.delete().catchError((_) => e);
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _dropPart(({File apk, File ok, File part, File tag}) f) async {

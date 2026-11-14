@@ -46,7 +46,54 @@ String cleanTrackName(String raw) {
   n = n.replaceAll(RegExp(r'\(\s*\)|\[\s*\]'), ' ');
   n = n.replaceAll(RegExp(r'\s+'), ' ').trim();
   n = n.replaceAll(RegExp(r'^[\s\-_|)\]\(\[]+|[\s\-_|)\]\(\[]+$'), '').trim();
-  return n.isEmpty ? raw.trim() : n;
+  if (n.isNotEmpty) return n;
+  // Nothing but site junk ("- Downloaded from clipzag.com"): never show the
+  // junk back — the song simply has no name of its own.
+  if (RegExp(r'downloaded\s*from|clipzag|y2mate|tubidy|mp3\s*\.',
+          caseSensitive: false)
+      .hasMatch(raw)) {
+    return 'Untitled song';
+  }
+  return raw.trim();
+}
+
+/// A song from a shared playlist (Our Playlist rows from the server, or a
+/// lullaby / voice-note bed) named the way MY playlist names it:
+/// (title, artist, my own copy's path when I have it). [myPaths] = my
+/// loaded playlist.
+(String, String, String?) sharedTrackNames(
+    Map t, List<String> myPaths) {
+  final raw = (t['title'] ?? '').toString().trim();
+  final ref = (t['ref'] ?? '').toString().trim();
+  String? local;
+  if (ref.isNotEmpty && myPaths.contains(ref)) {
+    local = ref;
+  } else if (raw.isNotEmpty) {
+    final want = raw.toLowerCase();
+    for (final p in myPaths) {
+      final stem = p
+          .split(RegExp(r'[\\/]+'))
+          .last
+          .replaceAll(RegExp(r'\.[^.]+$'), '')
+          .toLowerCase();
+      if (stem == want ||
+          displayLabelForPath(p).toLowerCase() == want ||
+          displayTitleForPath(p).toLowerCase() == want) {
+        local = p;
+        break;
+      }
+    }
+  }
+  if (local != null) {
+    return (displayTitleForPath(local), displayArtistForPath(local), local);
+  }
+  final p = SongNames.instance.parseName(raw);
+  final stored = (t['artist'] ?? '').toString().trim();
+  return (
+    p.title.isEmpty ? cleanTrackName(raw) : p.title,
+    stored.isNotEmpty ? stored : p.artist,
+    null,
+  );
 }
 
 /// The cleaned file-name (no extension) for a device path — the app's default

@@ -467,7 +467,8 @@ class _SongNotePillState extends State<_SongNotePill> {
             const SizedBox(width: 4),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 180),
-              child: Text('with “${widget.bed['title']}”',
+              child: Text(
+                  'with “${sharedTrackNames(widget.bed, playlistNotifier.value).$1}”',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

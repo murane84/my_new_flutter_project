@@ -119,7 +119,8 @@ import '../services/track_title.dart'
         cleanDisplayName,
         displayLabelForPath,
         displayTitleForPath,
-        displayArtistForPath;
+        displayArtistForPath,
+        sharedTrackNames;
 import '../services/song_names.dart';
 import '../services/plan_limits.dart';
 import '../services/cover_art.dart';
@@ -3301,7 +3302,7 @@ class _ChatPageState extends State<ChatPage>
         caption: hello
             ? _kVoiceHello
             : bed != null
-                ? '🎵 with “${_clip('${bed['title']}', 48)}”'
+                ? '🎵 with “${_clip(sharedTrackNames(bed, playlistNotifier.value).$1, 48)}”'
                 : _voiceMusicCaption(),
         meta: _metaFor(bed: bed),
       );

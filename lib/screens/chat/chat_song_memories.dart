@@ -290,14 +290,45 @@ extension _ChatSongMemories on _ChatPageState {
           const ListTile(
               title: Text('Our Playlist',
                   style: TextStyle(fontWeight: FontWeight.w800))),
+          // Named, and pictured, the way my playlist shows them.
           for (final t in tracks)
-            ListTile(
-              leading: const Icon(Icons.music_note_rounded),
-              title: Text('${t['title'] ?? ''}',
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-              selected: '${t['title']}' == cur['title'],
-              onTap: () => Navigator.pop(c, t),
-            ),
+            Builder(builder: (_) {
+              final (title, artist, local) =
+                  sharedTrackNames(t, playlistNotifier.value);
+              final scheme = Theme.of(c).colorScheme;
+              final on = '${t['title']}' == cur['title'];
+              final icon = Icon(Icons.music_note_rounded,
+                  size: 18, color: scheme.onPrimaryContainer);
+              return ListTile(
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(Radii.sm),
+                  child: SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: ColoredBox(
+                      color: scheme.primaryContainer,
+                      child: local == null
+                          ? icon
+                          : SongArt(
+                              path: local,
+                              title: title,
+                              artist: artist,
+                              size: 40,
+                              fallback: icon),
+                    ),
+                  ),
+                ),
+                title: Text(title,
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: artist.isEmpty
+                    ? null
+                    : Text(artist,
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                selected: on,
+                selectedColor: accentInk(scheme),
+                onTap: () => Navigator.pop(c, t),
+              );
+            }),
         ]),
       ),
     );
@@ -398,7 +429,9 @@ extension _ChatSongMemories on _ChatPageState {
         : _pendingBed;
     if (bed != null) {
       final lullaby = bed['kind'] == 'lullaby';
-      final t = _clip('${bed['title'] ?? ''}', 32);
+      // The tidy name my playlist uses, not the raw file name.
+      final (bt, _, _) = sharedTrackNames(bed, playlistNotifier.value);
+      final t = _clip(bt, 32);
       out.add((
         icon: lullaby ? Icons.bedtime_rounded : Icons.music_note_rounded,
         label: lullaby

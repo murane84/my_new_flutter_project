@@ -45,7 +45,7 @@ def _entry(r: AccountControl):
     if r.delete_after is not None:
         why = "This account is being deleted."
     elif r.disabled:
-        why = "This account is paused. Contact support@ozilane.com."
+        why = "This account is suspended. Contact support@ozilane.com."
     return (bool(why), why, so.timestamp() if so else None)
 
 

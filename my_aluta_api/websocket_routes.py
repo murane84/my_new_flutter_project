@@ -425,6 +425,16 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                 None, fire_online_watches, uid)
         except Exception:
             pass
+        # Daily rhythms: remember when they woke; open any "next time we're
+        # together" heart with someone who's already here.
+        try:
+            import rhythms
+            loop = asyncio.get_running_loop()
+            loop.run_in_executor(None, rhythms.record_first_online, uid)
+            here = [k for k, v in connected_users.items() if v and k != uid]
+            loop.run_in_executor(None, rhythms.open_together_hearts, uid, here)
+        except Exception:
+            pass
     # Server-first updates: every (re)connect hears the latest published
     # builds, so someone offline at publish time is told the moment they
     # come back (the app prompts once per build, then re-reminds every 6 h).

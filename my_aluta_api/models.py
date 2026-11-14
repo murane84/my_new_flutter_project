@@ -1495,6 +1495,17 @@ class UsageCounter(Base):
     day = Column(Date, primary_key=True)
     count = Column(Integer, nullable=False, default=0)
 
+class UserWake(Base):
+    """When someone first came online each day (two weeks kept) — their usual
+    wake time lets a sealed heart open "when she wakes up" (rhythms.py)."""
+    __tablename__ = "user_wake"
+
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                     primary_key=True)
+    day = Column(Date, primary_key=True)
+    first_at = Column(DateTime(timezone=True), nullable=False)
+
+
 # ── Receipt times ────────────────────────────────────────────────────────────
 # Every path that flips `delivered` / `is_read` on a loaded Message gets its
 # time stamped here, so the book ticks can say "Delivered 6:09 · Opened 6:12"

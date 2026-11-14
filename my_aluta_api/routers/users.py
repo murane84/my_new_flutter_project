@@ -309,6 +309,20 @@ def _share_a_chat(db: Session, a: int, b: int) -> bool:
     return crud.share_a_group(db, a, b)
 
 
+@router.get("/users/{user_id}/wake", tags=["Users"])
+def get_user_wake(user_id: int, db: Session = Depends(get_db),
+                  current_user: User = Depends(get_current_user)):
+    """Their usual wake time (minutes after midnight UTC) for a heart that
+    opens "when she wakes up" — mutual friends who may see their last seen
+    only; otherwise (or too few days yet) null."""
+    import privacy
+    import rhythms
+    if not crud.are_mutual(db, user_id, current_user.id) or \
+            not privacy.last_seen_visible(db, user_id, current_user.id):
+        return {"utc_minute": None}
+    return {"utc_minute": rhythms.usual_wake_minute(db, user_id)}
+
+
 @router.get("/users/{user_id}/status", tags=["Users"])
 def get_user_status(user_id: int, db: Session = Depends(get_db),
                     current_user: User = Depends(get_current_user)):

@@ -42,12 +42,22 @@ def clean_meta(raw) -> Optional[str]:
                 clip = 0
             if 0 < clip <= 60:
                 b["clip"] = clip
+            # Where in the song it starts (seconds) — "start at the chorus".
+            try:
+                start = int(bed.get("start") or 0)
+            except (TypeError, ValueError):
+                start = 0
+            if 0 < start <= 900:
+                b["start"] = start
             out["bed"] = b
     day = str(data.get("date") or "").strip()
     if _DAY.match(day):
         out["date"] = day
     if data.get("quiet") in (True, 1, "1"):
         out["quiet"] = 1
+    # A sealed heart that opens the next time we're both online (rhythms.py).
+    if data.get("open_when") == "together":
+        out["open_when"] = "together"
     # A duo status invite: "add your half" to this photo.
     if data.get("duo") in (True, 1, "1"):
         out["duo"] = 1

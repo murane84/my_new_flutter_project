@@ -362,6 +362,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
                                    "versions": latest_versions()})
     except Exception:
         pass
+    # Messages that reached them while they were away → delivered now (the
+    # senders' ticks turn grey-double), even if no push got through.
+    try:
+        from delivery import deliver_pending
+        asyncio.get_running_loop().run_in_executor(None, deliver_pending, uid)
+    except Exception:
+        pass
     # Messages held for this user's morning whose time has come.
     try:
         from morning import release_for

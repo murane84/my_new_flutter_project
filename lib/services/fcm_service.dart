@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
@@ -584,6 +585,12 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       final groupTitle = (data['group_title'] ?? '').toString();
       final messageId = (data['message_id'] ?? '').toString();
       final isGroup = convId.isNotEmpty;
+      // The push reached this phone = the message is delivered: the sender's
+      // tick turns grey-double now, even with Aluta closed (like WhatsApp).
+      if (!isGroup) {
+        final id = int.tryParse(messageId);
+        if (id != null) unawaited(ApiService().markMessageAsDelivered(id));
+      }
       // A personal @-mention gets through a muted group (banner + alert).
       final mentionMe = (data['type'] == 'mention' ||
               data['mentioned'] == '1') &&

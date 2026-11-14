@@ -156,6 +156,11 @@ String displayMentions(String text) {
   });
 }
 
+bool _opensWithSelfTag(String text) {
+  final m = _mentionRe.firstMatch(text);
+  return m != null && m.start == 0 && _isSelfMention(m.group(0)!);
+}
+
 bool _isSelfMention(String token) {
   final t = token.substring(1).replaceAll('\u00A0', ' ').toLowerCase();
   if (t == 'all') return true;
@@ -1000,7 +1005,11 @@ List<InlineSpan> previewSpans(
   // Tagged me (or @all) → a small accent "@" leads the line, so a mention
   // stands out in the list before the chat is even opened.
   final lead = <InlineSpan>[
-    if (mention != null && mentionsMe(oneLine))
+    // (Not when the line already opens with that tag — "@ @all …" read
+    // twice.)
+    if (mention != null &&
+        mentionsMe(oneLine) &&
+        !_opensWithSelfTag(oneLine))
       TextSpan(
           text: '@ ',
           style: base.copyWith(color: mention, fontWeight: FontWeight.w900)),

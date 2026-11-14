@@ -27,6 +27,7 @@ import '../utils/smooth_wheel.dart';
 import '../utils/app_reload.dart';
 import '../utils/connection_status.dart';
 import '../utils/session_events.dart';
+import '../services/plan_limits.dart';
 import 'auth_page.dart';
 import 'theme_provider.dart';
 import 'music_controls.dart';
@@ -5993,6 +5994,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
   /// Load the Together entitlement (fail-soft → free).
   Future<void> _loadPlan() async {
     final plan = await ApiService().getPlan();
+    PlanLimits.instance.update(plan); // call length etc. (kept offline too)
     if (!mounted) return;
     setState(() => _isTogether = plan['is_together'] == true);
   }

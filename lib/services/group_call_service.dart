@@ -10,6 +10,7 @@ import 'ice_config.dart';
 import 'notif_service.dart';
 import 'telecom_service.dart';
 import 'call_service.dart' show CallService;
+import 'plan_limits.dart';
 
 /// One participant in a group call (a peer, or a known roster member).
 class GroupParticipant {
@@ -245,6 +246,8 @@ class GroupCallService {
     }
     phase = GroupCallPhase.active;
     connectedAt = DateTime.now();
+    // My plan sets how long I stay (free: 10 min).
+    PlanLimits.instance.startCallClock(connectedAt!, () => unawaited(leave()));
     _starter = true; // I started this call → I post the call-log entry.
     clearOngoing(room);
     _publish();
@@ -277,6 +280,8 @@ class GroupCallService {
     }
     phase = GroupCallPhase.active;
     connectedAt = DateTime.now();
+    // My plan sets how long I stay (free: 10 min).
+    PlanLimits.instance.startCallClock(connectedAt!, () => unawaited(leave()));
     clearOngoing(room);
     _publish();
     onShowUI?.call();
@@ -318,6 +323,8 @@ class GroupCallService {
     cancelCallNotification();
     phase = GroupCallPhase.active;
     connectedAt = DateTime.now();
+    // My plan sets how long I stay (free: 10 min).
+    PlanLimits.instance.startCallClock(connectedAt!, () => unawaited(leave()));
     clearOngoing(room!);
     _publish();
     TelecomService.instance.setActive(_telecomId);
@@ -328,6 +335,7 @@ class GroupCallService {
 
   /// Leave / decline / hang up the group call.
   Future<void> leave() async {
+    PlanLimits.instance.stopCallClock();
     final r = room;
     final leftOthersBehind =
         phase == GroupCallPhase.active && participants.isNotEmpty;

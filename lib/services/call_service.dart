@@ -17,6 +17,7 @@ import 'contact_names.dart';
 import 'telecom_service.dart';
 import 'group_call_service.dart' show GroupCallService;
 import 'live_session_service.dart' show activeLiveSession;
+import 'plan_limits.dart';
 
 /// High-level state of the single active Aluta voice call.
 enum CallState {
@@ -855,6 +856,10 @@ class CallService {
         if (state != CallState.connected) {
           state = CallState.connected;
           connectedAt = DateTime.now();
+          // The caller's plan sets how long the call runs (free: 10 min).
+          if (isCaller) {
+            PlanLimits.instance.startCallClock(connectedAt!, hangUp);
+          }
           _publish();
           TelecomService.instance.setActive(_telecomId);
         }
@@ -911,6 +916,7 @@ class CallService {
   /// shortly after so screens can react to the `ended` state first.
   void _finish(CallEndReason reason) {
     if (state == CallState.idle) return;
+    PlanLimits.instance.stopCallClock();
     _ringTimeout?.cancel();
     _rejoinTimer?.cancel();
     cancelCallNotification(); // stop any ringing call notification

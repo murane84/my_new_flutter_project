@@ -1335,7 +1335,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
 
   Future<void> _pasteFilesFlow(List<String> paths) async {
     const imgExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-    const fileCap = 200 * 1024 * 1024; // server cap for arbitrary files
+    final fileCap = PlanLimits.instance.fileBytes; // my plan's size
     const ephemeralOver = 15 * 1024 * 1024; // big files: cache-then-purge
     for (var i = 0; i < paths.length; i++) {
       final path = paths[i];
@@ -1359,7 +1359,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
       }
       if (bytes.length > fileCap) {
         if (mounted) {
-          showToast(context, '"$name" is too large to send (max 200 MB).',
+          showToast(context, '"$name" is too large to send (${PlanLimits.instance.fileNote}).',
               type: ToastType.error);
         }
         continue;

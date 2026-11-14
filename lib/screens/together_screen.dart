@@ -168,6 +168,7 @@ class _TogetherScreenState extends State<TogetherScreen> {
       builder: (context, isWide) => RefreshIndicator(
         onRefresh: _load,
         child: ListView(
+          shrinkWrap: true,
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
             _hero(scheme),

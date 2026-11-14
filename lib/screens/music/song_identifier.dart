@@ -250,6 +250,10 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
       if (!mounted) return;
       if (res == null) {
         setState(() => _phase = _Phase.error);
+      } else if (res['error'] == 'limit') {
+        showToast(context, (res['detail'] ?? '').toString(),
+            type: ToastType.info, duration: const Duration(seconds: 5));
+        _backToChooser();
       } else if (res['error'] == 'not_configured') {
         setState(() => _phase = _Phase.notConfigured);
       } else if (res['error'] == 'service_error') {

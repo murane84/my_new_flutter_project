@@ -3576,6 +3576,15 @@ class ApiService {
       if (resp.statusCode == 503) {
         return {'matched': false, 'error': 'not_configured'};
       }
+      if (resp.statusCode == 429) {
+        // Today's recognitions for my plan are used up.
+        var detail = 'You’ve used today’s song recognitions';
+        try {
+          final d = jsonDecode(resp.body);
+          if (d is Map && d['detail'] is String) detail = d['detail'] as String;
+        } catch (_) {}
+        return {'matched': false, 'error': 'limit', 'detail': detail};
+      }
       return null;
     } catch (e) {
       _logger.e('recognizeSong exception: $e');

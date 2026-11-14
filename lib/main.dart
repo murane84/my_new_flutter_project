@@ -41,6 +41,7 @@ import 'services/metadata_overrides.dart';
 import 'services/live_session_service.dart' show liveHostNotify;
 import 'utils/toast_helper.dart';
 import 'utils/session_events.dart';
+import 'services/plan_limits.dart';
 import 'utils/popup_shell.dart' show GlobalTapOrigin;
 import 'screens/token_helper.dart' show warmMediaAuth;
 import 'state/playback_state.dart' show providerContainer;
@@ -845,6 +846,20 @@ class SplashScreenState extends State<SplashScreen>
                 if (open != null) ToastAction('Make it bigger', open),
               ]);
         }
+      });
+      // Call length from my plan: "1 minute left" / "call ended" lines.
+      PlanLimits.instance.callNote.addListener(() {
+        final ctx = navigatorKey.currentContext;
+        final note = PlanLimits.instance.callNote.value;
+        final open = SessionEvents.instance.openPlans;
+        if (ctx == null || note == null) return;
+        showToast(ctx, note,
+            type: ToastType.info,
+            duration: const Duration(seconds: 6),
+            actions: [
+              if (open != null && note.startsWith('Call ended'))
+                ToastAction('See plans', open),
+            ]);
       });
       // An extra Space while Together has run out: nothing is lost, it just
       // can't take new keepsakes until renewed.

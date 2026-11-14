@@ -2443,6 +2443,12 @@ class LiveSessionController {
       // Anything else (a real transport drop) stays 'disconnected' → reconnect.
       onDone: () async {
         final code = ch.closeCode;
+        // 4409: the room is full for the host's plan.
+        if (code == 4409) {
+          LiveRoomsRegistry.instance.removeSession(sessionId);
+          onEnded?.call('room_full');
+          return;
+        }
         var terminal = code == 4404 || code == 4403 || code == 4401;
         if (code == 4404 && !_hostEnded && !_disposed) {
           // Gone from the server, not ended by anyone (a restart).

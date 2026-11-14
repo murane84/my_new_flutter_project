@@ -1056,6 +1056,8 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     if (res == null || res['matched'] != true) {
       final why = !readable
           ? 'Aluta can’t open this file to listen to it'
+          : res?['error'] == 'limit'
+          ? (res?['detail'] ?? '').toString()
           : res?['error'] == 'not_configured'
           ? 'Song recognition isn’t set up on the server yet'
           : res?['error'] == 'service_error'

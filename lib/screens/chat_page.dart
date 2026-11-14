@@ -121,6 +121,7 @@ import '../services/track_title.dart'
         displayTitleForPath,
         displayArtistForPath;
 import '../services/song_names.dart';
+import '../services/plan_limits.dart';
 import '../services/cover_art.dart';
 import '../widgets/song_art.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -2989,7 +2990,7 @@ class _ChatPageState extends State<ChatPage>
         }
         return;
       }
-      const cap = 200 * 1024 * 1024;
+      final cap = PlanLimits.instance.fileBytes; // my plan's size
       const compressAbove = 12 * 1024 * 1024;
 
       // Large clips: shrink on-device so they fit the cap (mobile native only).
@@ -3018,7 +3019,7 @@ class _ChatPageState extends State<ChatPage>
 
       if (bytes.length > cap) {
         if (mounted) {
-          showToast(context, 'Video is too large to send (max 200 MB).',
+          showToast(context, 'Video is too large to send (${PlanLimits.instance.fileNote}).',
               type: ToastType.error);
         }
         return;
@@ -3547,7 +3548,7 @@ class _ChatPageState extends State<ChatPage>
   Future<void> _onWebPaste(List<webpaste.PastedFile> files) async {
     if (!mounted || files.isEmpty) return;
     const imgExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-    const fileCap = 200 * 1024 * 1024;
+    final fileCap = PlanLimits.instance.fileBytes; // my plan's size
     const ephemeralOver = 15 * 1024 * 1024;
     for (var i = 0; i < files.length; i++) {
       if (!mounted) return;
@@ -3566,7 +3567,7 @@ class _ChatPageState extends State<ChatPage>
       }
       if (bytes.length > fileCap) {
         if (mounted) {
-          showToast(context, '"$name" is too large to send (max 200 MB).',
+          showToast(context, '"$name" is too large to send (${PlanLimits.instance.fileNote}).',
               type: ToastType.error);
         }
         continue;

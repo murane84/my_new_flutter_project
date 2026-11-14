@@ -985,6 +985,11 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       _reconnect();
       return;
     }
+    if (reason == 'room_full') {
+      _snack('This room is full — the host’s plan sets how many can join');
+      _dismiss();
+      return;
+    }
     if (reason == 'session_gone') {
       // The session no longer exists (the host ended it, or it was reaped after
       // a long outage). Reconnecting to the same id would loop forever, so end

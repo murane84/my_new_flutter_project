@@ -279,57 +279,57 @@ extension _ChatSongMemories on _ChatPageState {
           type: ToastType.info);
       return;
     }
+    final lullaby = cur['kind'] == 'lullaby';
     final picked = await showAdaptiveSheet<Map<String, dynamic>>(
       context: context,
-      showDragHandle: true,
+      backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (c) => ConstrainedBox(
-        constraints:
-            BoxConstraints(maxHeight: MediaQuery.sizeOf(c).height * 0.6),
-        child: ListView(shrinkWrap: true, children: [
-          const ListTile(
-              title: Text('Our Playlist',
-                  style: TextStyle(fontWeight: FontWeight.w800))),
-          // Named, and pictured, the way my playlist shows them.
-          for (final t in tracks)
+      shape: const RoundedRectangleBorder(),
+      builder: (c) => _alutaSheet(
+        c,
+        icon: lullaby ? Icons.bedtime_rounded : Icons.queue_music_rounded,
+        title: 'Our Playlist',
+        subtitle: lullaby
+            ? 'Pick the lullaby — it plays softly as the heart opens'
+            : 'Pick the song that plays softly under your voice',
+        // Named, and pictured, the way my playlist shows them.
+        children: [
+          for (final (i, t) in tracks.indexed) ...[
+            if (i > 0) const SizedBox(height: 6),
             Builder(builder: (_) {
               final (title, artist, local) =
                   sharedTrackNames(t, playlistNotifier.value);
               final scheme = Theme.of(c).colorScheme;
-              final on = '${t['title']}' == cur['title'];
               final icon = Icon(Icons.music_note_rounded,
-                  size: 18, color: scheme.onPrimaryContainer);
-              return ListTile(
+                  size: 18, color: accentInk(scheme));
+              return _sheetRow(
+                c,
                 leading: ClipRRect(
-                  borderRadius: BorderRadius.circular(Radii.sm),
+                  borderRadius: BorderRadius.circular(Radii.md),
                   child: SizedBox(
-                    width: 40,
-                    height: 40,
+                    width: 42,
+                    height: 42,
                     child: ColoredBox(
-                      color: scheme.primaryContainer,
+                      color: scheme.primary.withValues(alpha: 0.12),
                       child: local == null
                           ? icon
                           : SongArt(
                               path: local,
                               title: title,
                               artist: artist,
-                              size: 40,
+                              size: 42,
                               fallback: icon),
                     ),
                   ),
                 ),
-                title: Text(title,
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: artist.isEmpty
-                    ? null
-                    : Text(artist,
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                selected: on,
-                selectedColor: accentInk(scheme),
+                title: title,
+                subtitle: artist,
+                on: '${t['title']}' == cur['title'],
                 onTap: () => Navigator.pop(c, t),
               );
             }),
-        ]),
+          ],
+        ],
       ),
     );
     if (picked == null || !mounted) return;

@@ -1051,76 +1051,85 @@ extension _ChatHeartComposer on _ChatPageState {
     final anniv = nextOf(annivMd);
     if (!mounted) return;
     final scheme = Theme.of(context).colorScheme;
+    final cur = _heartUnlockAt;
+    bool same(DateTime x) =>
+        cur != null && x.difference(cur).inMinutes.abs() < 2;
     final choice = await showAdaptiveSheet<Object>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       // No theme outline — this sheet draws its own card.
       shape: const RoundedRectangleBorder(),
-      builder: (ctx) => SafeArea(
-        child: Container(
-          margin: const EdgeInsets.all(10),
-          constraints: const BoxConstraints(maxWidth: 520),
-          decoration: BoxDecoration(
-            color: scheme.surface,
-            borderRadius: BorderRadius.circular(Radii.xxl),
-            border:
-                Border.all(color: scheme.primary.withValues(alpha: 0.18)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 14),
-              Icon(Icons.hourglass_top_rounded, color: accentInk(scheme)),
-              const SizedBox(height: 6),
-              Text('When should it open?',
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: scheme.onSurface)),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
-                child: Text(
-                  'It stays sealed — even to you — until then, and you both '
-                  'get a little ping when it opens.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontSize: 12.5, color: scheme.onSurfaceVariant),
-                ),
-              ),
-              for (final p in presets)
-                ListTile(
-                  leading: Icon(p.$2, color: accentInk(scheme)),
-                  title: Text(p.$1),
+      builder: (ctx) => _alutaSheet(
+        ctx,
+        icon: Icons.hourglass_top_rounded,
+        title: 'When should it open?',
+        subtitle: 'Sealed — even to you — until then. You both get a little '
+            'ping when it opens.',
+        children: [
+          // Quick moments: three big tiles, one tap.
+          Row(children: [
+            for (final (i, p) in presets.indexed) ...[
+              if (i > 0) const SizedBox(width: 8),
+              Expanded(
+                child: _sheetTile(
+                  ctx,
+                  icon: p.$2,
+                  title: switch (i) {
+                    0 => 'In 1 hour',
+                    1 => now.hour < 20 ? 'Tonight' : 'Tomorrow night',
+                    _ => now.hour < 7 ? 'This morning' : 'Tomorrow morning',
+                  },
+                  caption: DateFormat('h:mm a').format(p.$3),
+                  on: same(p.$3),
                   onTap: () => Navigator.pop(ctx, p.$3),
                 ),
-              ListTile(
-                leading: Icon(Icons.celebration_rounded, color: accentInk(scheme)),
-                title: Text(anniv == null
-                    ? 'On our anniversary…'
-                    : 'On our anniversary · ${DateFormat('d MMM').format(anniv)}'),
-                subtitle: Text(anniv == null
-                    ? 'Set the date once — opens that morning every year you pick it'
-                    : 'Opens at 8:00 AM · long-press to change the date'),
-                onTap: () => Navigator.pop(ctx, anniv ?? 'anniv'),
-                onLongPress: () => Navigator.pop(ctx, 'anniv'),
               ),
-              ListTile(
-                leading: Icon(Icons.event_rounded, color: accentInk(scheme)),
-                title: const Text('Pick a date & time…'),
-                subtitle: const Text('An anniversary, a birthday, a reunion'),
-                onTap: () => Navigator.pop(ctx, 'pick'),
-              ),
-              if (_heartUnlockAt != null)
-                ListTile(
-                  leading: Icon(Icons.lock_open_rounded,
-                      color: scheme.onSurfaceVariant),
-                  title: const Text('Open anytime (no seal)'),
-                  onTap: () => Navigator.pop(ctx, 'clear'),
-                ),
-              const SizedBox(height: 8),
             ],
+          ]),
+          const SizedBox(height: 10),
+          _sheetRow(
+            ctx,
+            icon: Icons.celebration_rounded,
+            title: anniv == null
+                ? 'On our anniversary…'
+                : 'On our anniversary · ${DateFormat('d MMM').format(anniv)}',
+            subtitle: anniv == null
+                ? 'Set the date once — it opens that morning'
+                : 'Opens at 8:00 AM · hold to change the date',
+            on: anniv != null && same(anniv),
+            onTap: () => Navigator.pop(ctx, anniv ?? 'anniv'),
+            onLongPress: () => Navigator.pop(ctx, 'anniv'),
           ),
-        ),
+          const SizedBox(height: 8),
+          _sheetRow(
+            ctx,
+            icon: Icons.event_rounded,
+            title: cur != null &&
+                    !presets.any((p) => same(p.$3)) &&
+                    !(anniv != null && same(anniv))
+                ? 'On ${DateFormat('EEE d MMM · h:mm a').format(cur)}'
+                : 'Pick a date & time…',
+            subtitle: 'A birthday, a reunion, a moment that matters',
+            on: cur != null &&
+                !presets.any((p) => same(p.$3)) &&
+                !(anniv != null && same(anniv)),
+            onTap: () => Navigator.pop(ctx, 'pick'),
+          ),
+          if (cur != null) ...[
+            const SizedBox(height: 6),
+            Center(
+              child: TextButton.icon(
+                onPressed: () => Navigator.pop(ctx, 'clear'),
+                icon: const Icon(Icons.lock_open_rounded, size: 18),
+                label: const Text('Open anytime — no seal'),
+                style: TextButton.styleFrom(
+                    foregroundColor: scheme.onSurfaceVariant,
+                    minimumSize: const Size(0, 44)),
+              ),
+            ),
+          ],
+        ],
       ),
     );
     if (!mounted || choice == null) return;
@@ -1172,6 +1181,223 @@ extension _ChatHeartComposer on _ChatPageState {
   }
 }
 
+
+// ── Aluta's sheet card (heart timing, Our Playlist pickers) ──────────────────
+// One rounded card in the page's tone, a soft accent edge, a header with its
+// icon, and contents that SCROLL when the screen is short — nothing ever
+// spills under the edge out of reach.
+Widget _alutaSheet(
+  BuildContext ctx, {
+  required IconData icon,
+  required String title,
+  String? subtitle,
+  required List<Widget> children,
+}) {
+  final scheme = Theme.of(ctx).colorScheme;
+  final maxH = MediaQuery.sizeOf(ctx).height * 0.86;
+  return SafeArea(
+    child: Container(
+      margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+      constraints: BoxConstraints(maxWidth: 520, maxHeight: maxH),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(Radii.xxl),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.22)),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color.alphaBlend(
+                scheme.primary.withValues(alpha: 0.10), scheme.surface),
+            scheme.surface,
+          ],
+          stops: const [0, 0.35],
+        ),
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 38,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Row(children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: scheme.primary.withValues(alpha: 0.16),
+                ),
+                child: Icon(icon, size: 21, color: accentInk(scheme)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: scheme.onSurface)),
+                    if (subtitle != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(subtitle,
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                height: 1.3,
+                                color: scheme.onSurfaceVariant)),
+                      ),
+                  ],
+                ),
+              ),
+            ]),
+            const SizedBox(height: 14),
+            ...children,
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// A big square-ish choice tile (icon, word, small caption).
+Widget _sheetTile(
+  BuildContext ctx, {
+  required IconData icon,
+  required String title,
+  String? caption,
+  bool on = false,
+  required VoidCallback onTap,
+}) {
+  final scheme = Theme.of(ctx).colorScheme;
+  return Material(
+    color: on
+        ? scheme.primary.withValues(alpha: 0.18)
+        : scheme.surfaceContainerHigh,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(Radii.lg),
+      side: BorderSide(
+          color: on ? scheme.primary : Colors.transparent, width: 1.4),
+    ),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(Radii.lg),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 24, color: accentInk(scheme)),
+            const SizedBox(height: 6),
+            Text(title,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                style: TextStyle(
+                    fontSize: 13,
+                    height: 1.15,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onSurface)),
+            if (caption != null) ...[
+              const SizedBox(height: 2),
+              Text(caption,
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                      color: scheme.onSurfaceVariant)),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// A full-width choice row in a soft card ([leading] replaces the icon,
+/// e.g. a song's cover).
+Widget _sheetRow(
+  BuildContext ctx, {
+  IconData? icon,
+  Widget? leading,
+  required String title,
+  String? subtitle,
+  bool on = false,
+  required VoidCallback onTap,
+  VoidCallback? onLongPress,
+}) {
+  final scheme = Theme.of(ctx).colorScheme;
+  return Material(
+    color: on
+        ? scheme.primary.withValues(alpha: 0.18)
+        : scheme.surfaceContainerHigh,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(Radii.lg),
+      side: BorderSide(
+          color: on ? scheme.primary : Colors.transparent, width: 1.4),
+    ),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(Radii.lg),
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 56),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(children: [
+            leading ??
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: scheme.primary.withValues(alpha: 0.12),
+                  ),
+                  child: Icon(icon, size: 20, color: accentInk(scheme)),
+                ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: on ? accentInk(scheme) : scheme.onSurface)),
+                  if (subtitle != null && subtitle.isNotEmpty)
+                    Text(subtitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: scheme.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            if (on)
+              Icon(Icons.check_circle_rounded,
+                  size: 20, color: accentInk(scheme)),
+          ]),
+        ),
+      ),
+    ),
+  );
+}
 
 /// A heart's photo (or a clip's first frame) shown WHOLE in a frame that
 /// takes the picture's own shape — portrait gets taller, landscape wider —

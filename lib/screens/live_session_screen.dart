@@ -32,6 +32,7 @@ import '../widgets/animated_reaction.dart';
 import '../widgets/tap_chip.dart';
 import '../widgets/now_glow.dart';
 import '../widgets/person_avatar.dart';
+import '../widgets/shared_harmony.dart';
 import '../widgets/aluta_composer_field.dart';
 import '../services/track_title.dart' show displayTitleForPath;
 import '../utils/readable.dart';
@@ -1718,8 +1719,16 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     super.dispose();
   }
 
+  // Shared Harmony: the host's / caller's Together plan dresses this
+  // screen in Harmony for me too (this screen only).
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => SharedHarmony(
+        ownerId: _isHost ? null : _c.hostUserId,
+        ownerName: widget.peerName,
+        child: _buildScreen(context),
+      );
+
+  Widget _buildScreen(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     // Full-page Listen Together hub (was a bottom sheet). Back/▾ minimises

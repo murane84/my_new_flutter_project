@@ -42,6 +42,7 @@ import '../services/notif_service.dart'
 import 'package:video_player/video_player.dart';
 import '../widgets/genie_menu.dart';
 import '../widgets/book_tick.dart';
+import '../widgets/shared_harmony.dart';
 import '../theme/aluta_palette.dart';
 import '../utils/readable.dart';
 import 'chat/song_cache.dart';
@@ -1676,7 +1677,13 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           });
         }
       },
-      child: shell,
+      // Shared Harmony: if my partner has Together, our Space is in
+      // Harmony for me too (this page only).
+      child: SharedHarmony(
+        ownerId: _partnerId,
+        ownerName: _partnerShown(''),
+        child: shell,
+      ),
     );
   }
 

@@ -798,9 +798,14 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
               ),
             if (message.isNotEmpty) ...[
               const SizedBox(height: 10),
+              // Tender words read like handwriting (Harmony Italic when
+              // Harmony is on).
               Text(message,
                   style: TextStyle(
-                      fontSize: 14, height: 1.4, color: scheme.onSurface)),
+                      fontSize: 14,
+                      height: 1.4,
+                      fontStyle: FontStyle.italic,
+                      color: scheme.onSurface)),
             ],
             if (sync) ...[
               const SizedBox(height: 12),

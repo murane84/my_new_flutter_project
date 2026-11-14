@@ -10,6 +10,7 @@ import '../utils/app_config.dart';
 import '../utils/net_image.dart';
 import 'token_helper.dart' show mediaAuthHeaders;
 import '../utils/motion.dart';
+import '../widgets/shared_harmony.dart';
 
 /// Full-screen UI for the single active Aluta voice call. It simply reflects
 /// [CallService]'s state — ring / calling / connected / ended — and drives the
@@ -108,8 +109,16 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
   bool get _ended => _call.state == CallState.ended;
 
+  // Shared Harmony: the host's / caller's Together plan dresses this
+  // screen in Harmony for me too (this screen only).
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => SharedHarmony(
+        ownerId: _call.isCaller ? null : _call.peerId,
+        ownerName: _call.peerName,
+        child: _buildScreen(context),
+      );
+
+  Widget _buildScreen(BuildContext context) {
     // Rebuild whenever the call state/mute/speaker changes (was _call's
     // ChangeNotifier). ref.listen handles the one-off transitions (dismiss on
     // idle, auto-close on end) that the old listener also did.

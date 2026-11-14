@@ -113,6 +113,41 @@ def space_plan(space_id: int, db: Session = Depends(get_db),
     }
 
 
+@router.get("/harmony")
+def shared_harmony(ids: str = "", db: Session = Depends(get_db),
+                   current_user: User = Depends(get_current_user)):
+    """Shared Harmony: which of these people's plans include the Harmony font
+    (Our Space partner, Listen Together host, the caller / call starter).
+    Only answered for people I share something with — my friends or members
+    of a conversation I'm in — so it never tells strangers anyone's plan."""
+    import crud
+    from models import ConversationMember
+    want = []
+    for x in ids.split(",")[:20]:
+        try:
+            want.append(int(x))
+        except ValueError:
+            pass
+    if not want:
+        return {}
+    ok = set(crud._get_friend_ids(db, current_user.id))
+    mine = [c.conversation_id for c in db.query(ConversationMember)
+            .filter(ConversationMember.user_id == current_user.id).all()]
+    if mine:
+        ok |= {m.user_id for m in db.query(ConversationMember)
+               .filter(ConversationMember.conversation_id.in_(mine),
+                       ConversationMember.user_id.in_(want)).all()}
+    out = {}
+    for uid in want:
+        if uid != current_user.id and uid not in ok:
+            continue
+        u = db.query(User).filter(User.id == uid).first()
+        if u is None:
+            continue
+        out[str(uid)] = billing.limit(db, u, "harmony_font") != 0
+    return out
+
+
 class PayIn(BaseModel):
     plan_code: str
     months: int = 1

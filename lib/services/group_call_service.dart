@@ -57,6 +57,10 @@ class GroupCallService {
   // Incoming-call caller info (for the ring screen).
   String incomingCaller = '';
 
+  /// Who rang (null when I started the call) — whose plan dresses the call
+  /// screen in Shared Harmony.
+  int? incomingFrom;
+
   // Group calls currently ACTIVE somewhere that I could join (roomId → title).
   // Populated from group_call_incoming (a call started/ongoing) and a REST
   // check when opening a group; cleared on group_call_ended. The group chat
@@ -302,6 +306,7 @@ class GroupCallService {
     room = r;
     title = t;
     incomingCaller = (msg['caller_name'] ?? '').toString();
+    incomingFrom = _asInt(msg['from']);
     phase = GroupCallPhase.ringing;
     _publish();
     onShowUI?.call();
@@ -658,6 +663,7 @@ class GroupCallService {
     _ringTimeout?.cancel();
     _stopLevelMonitor();
     _starter = false;
+    incomingFrom = null;
     _everConnected = false;
     _groupLogged = false;
     _peers.clear();

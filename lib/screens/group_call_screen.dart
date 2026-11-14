@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/group_call_service.dart';
 import '../services/contact_names.dart';
 import '../widgets/person_avatar.dart';
+import '../widgets/shared_harmony.dart';
 import '../state/group_call_state.dart';
 import '../utils/motion.dart';
 import '../utils/depth.dart';
@@ -62,8 +63,16 @@ class _GroupCallScreenState extends ConsumerState<GroupCallScreen> {
     return p.name.isNotEmpty ? p.name : 'Member';
   }
 
+  // Shared Harmony: the host's / caller's Together plan dresses this
+  // screen in Harmony for me too (this screen only).
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => SharedHarmony(
+        ownerId: _call.incomingFrom,
+        ownerName: _call.incomingCaller,
+        child: _buildScreen(context),
+      );
+
+  Widget _buildScreen(BuildContext context) {
     final snap = ref.watch(groupCallProvider);
     ref.listen<GroupCallSnapshot>(groupCallProvider, (prev, next) {
       if (next.phase == GroupCallPhase.idle) _dismiss();

@@ -1874,6 +1874,28 @@ class ApiService {
 
   /// Bigger Our Space for one of my Spaces: {active, until, cap_bytes,
   /// free_cap_bytes}; null on failure.
+  /// Shared Harmony: whose plans (of these people) include Harmony.
+  Future<Map<String, bool>> sharedHarmony(List<int> ids) async {
+    if (ids.isEmpty) return const {};
+    try {
+      final token = await _getToken();
+      if (token == null) return const {};
+      final resp = await http
+          .get(Uri.parse('${await _baseUrl}/plan/harmony?ids=${ids.join(',')}'),
+              headers: _authHeaders(token))
+          .timeout(const Duration(seconds: 15));
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final d = jsonDecode(resp.body);
+        if (d is Map) {
+          return {for (final e in d.entries) '${e.key}': e.value == true};
+        }
+      }
+    } catch (e) {
+      _logger.w('sharedHarmony failed: $e');
+    }
+    return const {};
+  }
+
   Future<Map<String, dynamic>?> getSpacePlan(int spaceId) async {
     try {
       final token = await _getToken();

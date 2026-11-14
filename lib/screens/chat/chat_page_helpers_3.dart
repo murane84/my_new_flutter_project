@@ -2206,14 +2206,14 @@ extension _ChatPageHelpers3 on _ChatPageState {
         ? BookState.delivered
         : BookState.sent;
     double? fraction;
-    int? opened;
     if (_isGroup) {
       if (total != null && total > 0 && opens >= total) {
         state = BookState.read;
       } else if (opens > 0) {
+        // Part-open; the pill's own words already say "2 of 5 opened", so
+        // the book carries no second count.
         state = BookState.delivered;
         fraction = total == null || total == 0 ? 0.5 : opens / total;
-        opened = opens;
       }
     } else if (openedAt.isNotEmpty) {
       state = BookState.read;
@@ -2228,7 +2228,6 @@ extension _ChatPageHelpers3 on _ChatPageState {
         animate: newest,
         heart: newest && !_isGroup && _bondedHere,
         openFraction: fraction,
-        openedCount: opened,
         onTap: () => showBookTimes(bctx, lines: _bookTimes(msg, false)),
       ),
     );

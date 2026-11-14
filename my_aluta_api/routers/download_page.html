@@ -190,8 +190,9 @@ background:linear-gradient(#ff3a60,var(--accent) 55%,#a00024)}
   .bar{padding:12px 40px}
   .wrap{padding:64px 40px 48px}
   .layout{display:grid;grid-template-columns:1.1fr 1fr;column-gap:64px;
-    grid-template-areas:"intro side" "extra side";align-items:start}
-  .intro{grid-area:intro}.extra{grid-area:extra;min-width:0}
+    grid-template-areas:"intro side" "extra side" "more side";align-items:start;
+    grid-template-rows:auto auto 1fr} /* spare height goes last, no gaps */
+  .intro{grid-area:intro}.extra{grid-area:extra;min-width:0}.more{grid-area:more;min-width:0}
   .side{grid-area:side;position:sticky;top:84px;max-height:calc(100vh - 100px);overflow-y:auto;
     scrollbar-width:thin;padding-bottom:4px;border-radius:var(--r-xxl)}
   h1{font-size:58px;margin-top:18px}
@@ -199,6 +200,28 @@ background:linear-gradient(#ff3a60,var(--accent) 55%,#a00024)}
   .feats{grid-template-columns:repeat(3,1fr)}
   .strip{overflow:visible}.phone{flex:1 1 0;min-width:0;width:auto}
   footer{padding:22px 40px 34px}
+}
+/* Wide screens (and zoomed-out windows): the page opens up instead of
+   staying a phone-width column — three columns side by side (the story ·
+   the download card · a look inside + install help), wider overall, so
+   there's little or nothing to scroll. */
+@media (min-width:1360px){
+  .bar,.wrap,footer{max-width:min(94vw,2400px)}
+  .wrap{padding:48px 48px 40px}
+  .layout{grid-template-columns:minmax(0,1.05fr) minmax(380px,.9fr) minmax(0,1fr);
+    column-gap:clamp(40px,3vw,72px);grid-template-areas:"intro side more" "extra side more";
+    grid-template-rows:auto 1fr}
+  .more .shots{margin-top:0}
+  h1{font-size:clamp(52px,3.6vw,88px)}
+  .lead{font-size:clamp(18px,1.15vw,24px)}
+  .side{top:76px;max-height:calc(100vh - 92px)}
+}
+/* Very wide (a big monitor or zoomed far out): everything reads larger
+   too, so the three columns never look sparse. */
+@media (min-width:2000px){
+  html{font-size:1.15em}
+  body{font-size:18px}
+  .card{padding:28px}
 }
 </style></head><body>
 <header><div class="bar">
@@ -234,6 +257,8 @@ background:linear-gradient(#ff3a60,var(--accent) 55%,#a00024)}
     <div class="feat"><b>Our Space</b><span data-i18n="fs2">Your playlist, moments, diary and love letters.</span></div>
     <div class="feat"><b data-i18n="ft3">Chats that remember</b><span data-i18n="fs3">The songs you shared stay with your days.</span></div>
   </div>
+</section>
+<section class="more">
   <div class="shots rise d3"><h3 data-i18n="shots">A look inside</h3><div class="strip">
     <figure class="phone" style="margin:0"><div class="scr"><div class="in">
       <div class="top"><span class="av"></span>Neema 💞</div>

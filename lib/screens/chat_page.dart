@@ -2417,10 +2417,16 @@ class _ChatPageState extends State<ChatPage>
     final key = msg['media_url'] as String?;
     final mine = msg['sender_id']?.toString() == _myId;
     if (mine || _savedMediaKeys.contains(key)) return null;
-    return () async {
-      final ok = await _saveMediaToDevice(msg);
-      if (ok) _markMediaSaved(key);
-    };
+    return () => _saveMediaToDevice(msg); // marks it saved itself
+  }
+
+  /// A song bubble's label, tidied the same way it's named when saved
+  /// ("Nandy - Asante_064918" → "Asante — Nandy"), so chat and playlist
+  /// read alike.
+  String _songLabel(Map<String, dynamic> msg) {
+    final ta = _songTitleArtist(msg);
+    if (ta == null) return (msg['media_name'] as String?) ?? 'Song';
+    return ta.$2.isEmpty ? ta.$1 : '${ta.$1} — ${ta.$2}';
   }
 
   // Where each saved attachment landed (content uri / file path), when the
@@ -2445,8 +2451,16 @@ class _ChatPageState extends State<ChatPage>
 
   /// Saved files that have since been deleted from the phone → forgotten,
   /// so their download arrow comes back.
+  static DateTime? _savedCheckedAt; // once per 10 min across chats
+
   Future<void> _verifySavedMedia() async {
     if (kIsWeb || _savedMediaRefs.isEmpty) return;
+    final last = _savedCheckedAt;
+    if (last != null &&
+        DateTime.now().difference(last) < const Duration(minutes: 10)) {
+      return;
+    }
+    _savedCheckedAt = DateTime.now();
     final gone = <String>[];
     for (final e in _savedMediaRefs.entries.toList()) {
       bool ok;
@@ -3341,9 +3355,7 @@ class _ChatPageState extends State<ChatPage>
     return _SongBubble(
       assetId: SongCache.assetId(rel),
       url: fullMediaUrl(rel),
-      title: (msg['content'] as String?)?.trim().isNotEmpty == true
-          ? (msg['content'] as String).trim()
-          : ((msg['media_name'] as String?) ?? 'Song'),
+      title: _songLabel(msg),
       fileName: msg['media_name'] as String?,
       mime: msg['media_mime'] as String?,
       isMe: isMe,

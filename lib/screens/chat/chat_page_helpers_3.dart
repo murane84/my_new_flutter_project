@@ -487,7 +487,23 @@ extension _ChatPageHelpers3 on _ChatPageState {
     }
   }
 
+  /// Save a message's media to the device. Every save — the bubble's
+  /// arrow, the long-press "Save to device", the viewer's Save — is
+  /// remembered for that attachment (its arrow goes; it comes back if the
+  /// file is deleted).
   Future<bool> _saveMediaToDevice(Map<String, dynamic> msg,
+      {void Function(int received, int total)? onProgress}) async {
+    _pendingSavedRef = null; // never a previous save's location
+    final ok = await _saveMediaToDeviceOnce(msg, onProgress: onProgress);
+    if (ok) {
+      _markMediaSaved(msg['media_url'] as String?);
+    } else {
+      _pendingSavedRef = null;
+    }
+    return ok;
+  }
+
+  Future<bool> _saveMediaToDeviceOnce(Map<String, dynamic> msg,
       {void Function(int received, int total)? onProgress}) async {
     final rel = msg['media_url'] as String?;
     if (rel == null || rel.isEmpty) return false;

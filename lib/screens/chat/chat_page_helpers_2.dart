@@ -992,9 +992,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
         return _SongBubble(
           assetId: SongCache.assetId(rel),
           url: url,
-          title: (msg['content'] as String?)?.trim().isNotEmpty == true
-              ? (msg['content'] as String).trim()
-              : ((msg['media_name'] as String?) ?? 'Song'),
+          title: _songLabel(msg),
           fileName: msg['media_name'] as String?,
           mime: msg['media_mime'] as String?,
           isMe: isMe,

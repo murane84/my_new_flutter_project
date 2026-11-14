@@ -1,3 +1,5 @@
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../utils/prefs_now.dart';
 import 'track_title.dart';
 
@@ -88,9 +90,17 @@ class SongNames {
   static const _kKept = 'song_names_kept_v1';
   Set<String>? _keptMemo;
 
-  bool isKept(String path) =>
-      (_keptMemo ??= (prefsNow?.getStringList(_kKept) ?? const []).toSet())
-          .contains(path);
+  bool isKept(String path) {
+    // Prefs not open yet → don't cache an empty set (it would hide the
+    // saved choices for the whole run).
+    final p = prefsNow;
+    if (_keptMemo == null && p == null) return false;
+    return (_keptMemo ??= (p!.getStringList(_kKept) ?? const []).toSet())
+        .contains(path);
+  }
+
+  static Future<SharedPreferences> _prefs() async =>
+      prefsNow ??= await SharedPreferences.getInstance();
 
   // Songs Aluta tidied by itself as they were saved (a chat download whose
   // label was messy): path → the original label, so the "Added" toast can
@@ -106,29 +116,31 @@ class SongNames {
   }
 
   Future<void> noteAutoTidy(String path, String raw) async {
+    final p = await _prefs();
     final list = [
-      for (final e in prefsNow?.getStringList(_kAuto) ?? const <String>[])
+      for (final e in p.getStringList(_kAuto) ?? const <String>[])
         if (!e.startsWith('$path\u0001')) e,
       '$path\u0001$raw',
     ];
-    await prefsNow?.setStringList(
+    await p.setStringList(
         _kAuto, list.length > 100 ? list.sublist(list.length - 100) : list);
   }
 
   Future<void> forgetAutoTidy(Iterable<String> paths) async {
+    final p = await _prefs();
     final drop = paths.toSet();
     final list = [
-      for (final e in prefsNow?.getStringList(_kAuto) ?? const <String>[])
+      for (final e in p.getStringList(_kAuto) ?? const <String>[])
         if (!drop.contains(e.split('\u0001').first)) e,
     ];
-    await prefsNow?.setStringList(_kAuto, list);
+    await p.setStringList(_kAuto, list);
   }
 
   Future<void> keep(Iterable<String> paths) async {
-    final set = (_keptMemo ??=
-        (prefsNow?.getStringList(_kKept) ?? const []).toSet())
+    final p = await _prefs();
+    final set = (_keptMemo ??= (p.getStringList(_kKept) ?? const []).toSet())
       ..addAll(paths);
-    await prefsNow?.setStringList(_kKept, set.toList());
+    await p.setStringList(_kKept, set.toList());
   }
 
   ({String title, String artist}) _parse(String raw) {

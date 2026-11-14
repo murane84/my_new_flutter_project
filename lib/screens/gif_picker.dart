@@ -10,6 +10,7 @@ import 'package:shimmer/shimmer.dart';
 import '../widgets/pill_search.dart';
 import '../widgets/edge_scroll_row.dart';
 import '../utils/radii.dart';
+import '../utils/keyboard.dart';
 
 /// GIPHY API key.
 ///
@@ -265,6 +266,7 @@ class _GifPickerState extends State<GifPicker> {
                 child: SizedBox(
                   height: 40,
                   child: TextField(
+                    onTapOutside: unfocusOnTapOutside,
                     controller: _searchCtrl,
                     textInputAction: TextInputAction.search,
                     style: const TextStyle(fontSize: 14),

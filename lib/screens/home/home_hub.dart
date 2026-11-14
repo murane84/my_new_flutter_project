@@ -490,6 +490,7 @@ extension _HomeHub on HomePageState {
                   _closeCircleSearch,
             },
             child: TextField(
+              onTapOutside: unfocusOnTapOutside,
               controller: _searchCtrl,
               focusNode: _circleSearchFocus,
               onChanged: _filterFriends,

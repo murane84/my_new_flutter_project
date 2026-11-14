@@ -92,6 +92,38 @@ class SongNames {
       (_keptMemo ??= (prefsNow?.getStringList(_kKept) ?? const []).toSet())
           .contains(path);
 
+  // Songs Aluta tidied by itself as they were saved (a chat download whose
+  // label was messy): path → the original label, so the "Added" toast can
+  // offer Undo with the real old name.
+  static const _kAuto = 'song_names_auto_v1';
+
+  String? autoTidyRaw(String path) {
+    for (final e in prefsNow?.getStringList(_kAuto) ?? const <String>[]) {
+      final i = e.indexOf('\u0001');
+      if (i > 0 && e.substring(0, i) == path) return e.substring(i + 1);
+    }
+    return null;
+  }
+
+  Future<void> noteAutoTidy(String path, String raw) async {
+    final list = [
+      for (final e in prefsNow?.getStringList(_kAuto) ?? const <String>[])
+        if (!e.startsWith('$path\u0001')) e,
+      '$path\u0001$raw',
+    ];
+    await prefsNow?.setStringList(
+        _kAuto, list.length > 100 ? list.sublist(list.length - 100) : list);
+  }
+
+  Future<void> forgetAutoTidy(Iterable<String> paths) async {
+    final drop = paths.toSet();
+    final list = [
+      for (final e in prefsNow?.getStringList(_kAuto) ?? const <String>[])
+        if (!drop.contains(e.split('\u0001').first)) e,
+    ];
+    await prefsNow?.setStringList(_kAuto, list);
+  }
+
   Future<void> keep(Iterable<String> paths) async {
     final set = (_keptMemo ??=
         (prefsNow?.getStringList(_kKept) ?? const []).toSet())

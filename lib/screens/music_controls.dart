@@ -2501,6 +2501,16 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     } catch (_) {
       tidied = <String>[];
     }
+    // Songs saved from a chat were already tidied as they were saved: the
+    // same toast offers their Undo (back to the label they were sent with).
+    final fromChat = <String, String>{
+      for (final p in added)
+        if (!tidied.contains(p))
+          if (SongNames.instance.autoTidyRaw(p) case final raw?) p: raw,
+    };
+    if (fromChat.isNotEmpty) {
+      await SongNames.instance.forgetAutoTidy(fromChat.keys);
+    }
     if (!mounted) return;
     var newest = added.first;
     for (final p in added) {
@@ -2515,12 +2525,15 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     }
 
     Future<void> undoTidy() async {
-      await metadataStore.setMany({for (final p in tidied) p: null});
-      await SongNames.instance.keep(tidied);
+      await metadataStore.setMany({
+        for (final p in tidied) p: null,
+        for (final e in fromChat.entries) e.key: TrackMeta(title: e.value),
+      });
+      await SongNames.instance.keep([...tidied, ...fromChat.keys]);
       if (mounted) setState(() {});
     }
 
-    final t = tidied.length;
+    final t = tidied.length + fromChat.length;
     showToast(
       context,
       'Added $n new song${n == 1 ? '' : 's'} 🎶',

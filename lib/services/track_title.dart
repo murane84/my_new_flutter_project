@@ -11,6 +11,8 @@ String cleanTrackName(String raw) {
   var n = raw;
   // "Sean_Paul_-_We_Be_Burning_(mp3.pm)" → "Sean Paul - We Be Burning".
   n = n.replaceAll(RegExp(r'[\(\[]?\s*mp3\s*\.\s*\w+\s*[\)\]]?', caseSensitive: false), ' ');
+  // A time / id stamp glued on with an underscore ("Asante_064918").
+  n = n.replaceAll(RegExp(r'_\d{5,}(?!\w)'), ' ');
   n = n.replaceAll(RegExp(r'_+'), ' ');
   // Numbers that aren't part of the name: a bitrate ("320kbps", "128k"), a
   // downloader's long id ("…_1699872034"), a track number in front

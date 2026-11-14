@@ -521,6 +521,11 @@ extension _ChatPageHelpers3 on _ChatPageState {
         ? null
         : track_meta.TrackMeta(
             title: song.$1, artist: song.$2.isEmpty ? null : song.$2);
+    if (meta != null) {
+      final label = (msg['content'] as String? ?? '').trim();
+      final tidy = song!.$2.isEmpty ? song.$1 : '${song.$1} — ${song.$2}';
+      if (label != tidy) _rawSongLabel[meta] = label;
+    }
     try {
       if (mounted) showToast(context, 'Preparing download…');
 
@@ -614,13 +619,27 @@ extension _ChatPageHelpers3 on _ChatPageState {
   /// (native, by PATH), everything else via the system Save dialog.
   /// (title, artist) of a song message from its "Title — Artist" label; null
   /// when the label is empty (then the file keeps its own name).
+  ///
+  /// The label is tidied on the way in (a sender's "Nandy - Asante_064918"
+  /// → "Asante" · "Nandy"), so a saved song lands in the playlist clean;
+  /// the "Added" toast offers Undo with the original label.
   (String, String)? _songTitleArtist(Map<String, dynamic> msg) {
     final label = (msg['content'] as String? ?? '').trim();
     if (label.isEmpty) return null;
     final i = label.indexOf(' — ');
-    if (i <= 0) return (label, '');
-    return (label.substring(0, i).trim(), label.substring(i + 3).trim());
+    if (i <= 0) {
+      final n = SongNames.instance.parseName(label);
+      return (n.title.isEmpty ? label : n.title, n.artist);
+    }
+    return (
+      cleanTrackName(label.substring(0, i).trim()),
+      cleanTrackName(label.substring(i + 3).trim()),
+    );
   }
+
+  // The original label of a song whose name was tidied while saving (read
+  // when the saved path is known).
+  static final Expando<String> _rawSongLabel = Expando<String>();
 
   /// "Title - Artist.mp3" — safe on every filesystem, keeping the original
   /// file's extension.
@@ -657,6 +676,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
     try {
       await track_meta.metadataStore.load();
       await track_meta.metadataStore.set(path, meta);
+      final raw = _rawSongLabel[meta];
+      if (raw != null) await SongNames.instance.noteAutoTidy(path, raw);
     } catch (_) {}
   }
 

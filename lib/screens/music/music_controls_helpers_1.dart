@@ -53,10 +53,9 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
     // track: the real title + artist, its cover, and who I'm with.
     final h = audioHandler;
     if (h != null) {
-      final raw = _liveTitle();
-      final n = SongNames.instance.parseName(raw);
-      final t = n.title.isEmpty ? raw : n.title;
-      final a = n.artist;
+      final ta = SongArt.splitLabel(_liveTitle());
+      final t = ta.title;
+      final a = ta.artist;
       final id = 'live:${t.toLowerCase()}|${a.toLowerCase()}';
       if (a.isNotEmpty) {
         final url = CoverArt.instance

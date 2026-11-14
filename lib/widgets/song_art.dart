@@ -63,8 +63,9 @@ class SongArt extends StatelessWidget {
   /// Art for a song known only by its label — "Title — Artist" or a file-ish
   /// "Artist - Title". No artist → [fallback] (a title alone finds the wrong
   /// cover too often).
-  static Widget byName(String label,
-      {required double size, required Widget fallback, int? decode}) {
+  /// Title + artist from a song's label, the one way every surface reads it
+  /// (disc, live screen, lock-screen card) — so they share one cover lookup.
+  static ({String title, String artist}) splitLabel(String label) {
     var t = label.trim(), a = '';
     final i = t.indexOf(' — ');
     if (i > 0) {
@@ -75,6 +76,13 @@ class SongArt extends StatelessWidget {
       if (n.title.isNotEmpty) t = n.title;
       a = n.artist;
     }
+    return (title: t, artist: a);
+  }
+
+  static Widget byName(String label,
+      {required double size, required Widget fallback, int? decode}) {
+    final ta = splitLabel(label);
+    final t = ta.title, a = ta.artist;
     if (a.isEmpty || t.isEmpty) return fallback;
     return SongArt(
         path: keyFor(t, a),

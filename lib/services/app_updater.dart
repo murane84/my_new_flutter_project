@@ -810,7 +810,7 @@ class AppUpdater {
         await _dropPart(f);
         await resp.stream.drain<void>();
         client.close();
-        return _downloadOnce(rel, again: true);
+        return await _downloadOnce(rel, again: true);
       }
       final resuming = have > 0 && resp.statusCode == 206;
       if (!resuming && resp.statusCode != 200) {

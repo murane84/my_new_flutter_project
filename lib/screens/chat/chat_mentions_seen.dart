@@ -130,7 +130,7 @@ extension _ChatMentionsSeen on _ChatPageState {
         child: AnimatedSize(
           duration: Motion.quick,
           curve: Curves.easeOutCubic,
-          child: _glass(
+          child: _alutaGlass(
             scheme,
             height: 28,
             padding: EdgeInsets.symmetric(

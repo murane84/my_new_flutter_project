@@ -9352,40 +9352,8 @@ class _HoverChevronState extends State<_HoverChevron> {
   /// Aluta's glass: see-through, a whisper of an accent edge, a soft shadow
   /// — no solid white, so it never reads as a block over the chat.
   Widget _glass(ColorScheme scheme, Widget child,
-      {EdgeInsets padding = EdgeInsets.zero, double? height}) {
-    final dark = scheme.brightness == Brightness.dark;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(999),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: dark ? 0.32 : 0.10),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(999),
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            height: height,
-            padding: padding,
-            decoration: BoxDecoration(
-              color: scheme.surface.withValues(alpha: dark ? 0.45 : 0.55),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(
-                  color: dark
-                      ? Colors.white.withValues(alpha: 0.08)
-                      : scheme.primary.withValues(alpha: 0.14)),
-            ),
-            child: child,
-          ),
-        ),
-      ),
-    );
-  }
+          {EdgeInsets padding = EdgeInsets.zero, double? height}) =>
+      _alutaGlass(scheme, child, padding: padding, height: height);
 
   Widget _floating(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -10095,4 +10063,42 @@ class _KeepSideButton extends StatelessWidget {
       },
     );
   }
+}
+
+/// Aluta's frosted glass pill (the message hover pill, "back to latest"…):
+/// blurred, faintly tinted, soft shadow.
+Widget _alutaGlass(ColorScheme scheme, Widget child,
+    {EdgeInsets padding = EdgeInsets.zero, double? height}) {
+  final dark = scheme.brightness == Brightness.dark;
+  return DecoratedBox(
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(999),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: dark ? 0.32 : 0.10),
+          blurRadius: 14,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          height: height,
+          padding: padding,
+          decoration: BoxDecoration(
+            color: scheme.surface.withValues(alpha: dark ? 0.45 : 0.55),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+                color: dark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : scheme.primary.withValues(alpha: 0.14)),
+          ),
+          child: child,
+        ),
+      ),
+    ),
+  );
 }

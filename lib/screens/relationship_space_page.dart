@@ -2279,6 +2279,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     if (_hasStreakUnlock('disc_anniversary')) {
       PlayerStyleController.instance.unlockAnniversary();
     }
+    // How close we are, for the locked disc in Player style.
+    final days = (s['current_days'] as num?)?.toInt();
+    if (days != null) PlayerStyleController.instance.noteStreak(days);
     final nu = (s['new_unlocks'] as List?) ?? const [];
     if (nu.isNotEmpty) _showUnlockToast(nu);
   }

@@ -126,6 +126,29 @@ class SongNames {
         _kAuto, list.length > 100 ? list.sublist(list.length - 100) : list);
   }
 
+  // Songs saved from a chat: path → who sent them (as I know them), so the
+  // Polaroid look can sign it "from Sam ♡".
+  static const _kFrom = 'song_names_from_v1';
+
+  String? fromWhom(String path) {
+    for (final e in prefsNow?.getStringList(_kFrom) ?? const <String>[]) {
+      final i = e.indexOf('\u0001');
+      if (i > 0 && e.substring(0, i) == path) return e.substring(i + 1);
+    }
+    return null;
+  }
+
+  Future<void> noteFrom(String path, String who) async {
+    final p = await _prefs();
+    final list = [
+      for (final e in p.getStringList(_kFrom) ?? const <String>[])
+        if (!e.startsWith('$path\u0001')) e,
+      '$path\u0001$who',
+    ];
+    await p.setStringList(
+        _kFrom, list.length > 200 ? list.sublist(list.length - 200) : list);
+  }
+
   Future<void> forgetAutoTidy(Iterable<String> paths) async {
     final p = await _prefs();
     final drop = paths.toSet();

@@ -529,6 +529,14 @@ extension _ChatPageHelpers3 on _ChatPageState {
       final label = (msg['content'] as String? ?? '').trim();
       final tidy = song!.$2.isEmpty ? song.$1 : '${song.$1} — ${song.$2}';
       if (label != tidy) _rawSongLabel[meta] = label;
+      // Who sent it (not me) → the Polaroid look signs it "from <name> ♡".
+      if (msg['sender_id']?.toString() != _myId) {
+        final who = (_isGroup
+                ? ((msg['sender'] as Map?)?['username'] ?? '').toString()
+                : _livePeerLabel)
+            .trim();
+        if (who.isNotEmpty) _songFrom[meta] = who;
+      }
     }
     try {
       if (mounted) showToast(context, 'Preparing download…');
@@ -644,6 +652,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
   // The original label of a song whose name was tidied while saving (read
   // when the saved path is known).
   static final Expando<String> _rawSongLabel = Expando<String>();
+  static final Expando<String> _songFrom = Expando<String>();
 
   /// "Title - Artist.mp3" — safe on every filesystem, keeping the original
   /// file's extension.
@@ -682,6 +691,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
       await track_meta.metadataStore.set(path, meta);
       final raw = _rawSongLabel[meta];
       if (raw != null) await SongNames.instance.noteAutoTidy(path, raw);
+      final from = _songFrom[meta];
+      if (from != null) await SongNames.instance.noteFrom(path, from);
     } catch (_) {}
   }
 

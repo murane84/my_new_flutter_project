@@ -272,6 +272,14 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
   // dot" over the note whenever a track had an id but no embedded cover.)
   // Centre art/note sized to [d] for the disc styles — album cover when we
   // have one, else the music-note fallback.
+  /// A 1:1 Listen Together is on (not a group room) → Duet can show us.
+  bool get _togetherNow =>
+      _liveActive && !(activeLiveSession?.isRoom ?? true);
+
+  /// Duet's second record: the person I'm listening with.
+  Widget _partnerFace(double d) => PersonAvatar(
+      name: activeLiveSession?.peerName ?? '', radius: d / 2);
+
   Widget _discCenter(double d, [Color? noteColor]) {
     final note = Center(
       child: Icon(Icons.music_note_rounded,
@@ -426,7 +434,8 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                                     accent: accent,
                                     art: (d, [c]) => _discCenter(d, c),
                                     spin: _discCtrl,
-                                    playing: _liveActive || _player.playing),
+                                    playing: _liveActive || _player.playing,
+                                    together: _togetherNow),
                           ),
                           // Privacy: share "listening now" with friends on/off.
                           PresenceShareButton(color: accent, size: 22),
@@ -483,8 +492,8 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                             final discW = AnimatedBuilder(
                               animation: PlayerStyleController.instance,
                               builder: (context, _) {
-                                final dStyle =
-                                    PlayerStyleController.instance.style;
+                                final dStyle = PlayerStyleController.instance
+                                    .shownFor(together: _togetherNow);
                                 return StreamBuilder<bool>(
                                   stream: _player.playingStream,
                                   initialData: _player.playing,
@@ -512,6 +521,9 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
                                         dimmed: PlayerStyleController
                                             .instance.orbDimmed,
                                         artBuilder: (d, [c]) => _discCenter(d, c),
+                                        partner: _togetherNow
+                                            ? _partnerFace
+                                            : null,
                                       ),
                                     );
                                   },

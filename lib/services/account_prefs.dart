@@ -72,6 +72,8 @@ class AccountPrefs {
     // Music player habits: repeat / shuffle, disc style (music controls)
     'music_repeat_mode', 'music_shuffle',
     'player_disc_style_v1', 'player_orb_dimmed_v1', 'player_cover_colours_v1',
+    'player_style_favs_v1', 'player_new_look_v1', 'player_match_day_v1',
+    'player_duet_together_v1',
     // Voice notes: my playback speed (chat)
     'voice_note_speed',
     // Vibration: all on/off, and the tick on tab switches (services/haptics)

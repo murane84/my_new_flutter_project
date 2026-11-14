@@ -315,6 +315,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   // Who's dropped in (from the server roster) and a live feed of reactions with
   // the sender attached — the "People" + "Chat" regions of the hub.
   final List<_Participant> _participants = [];
+
+  /// Just the two of us (not a room) — the player may show us as a Duet.
+  bool get _oneToOne => !widget.isRoom && _participants.length <= 2;
   // GROUP room: members who haven't dropped in yet (from the roster).
   final List<_Participant> _waiting = [];
   final List<_ReactionLog> _reactionFeed = [];
@@ -2763,11 +2766,13 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         return AnimatedBuilder(
           animation: PlayerStyleController.instance,
           builder: (ctx2, _) {
-            final style = PlayerStyleController.instance.style;
+            final style = PlayerStyleController.instance
+                .shownFor(together: _oneToOne);
             return Column(
               children: [
                 GestureDetector(
-                  onTap: () => showPlayerStyleSheet(context, accent: accent),
+                  onTap: () => showPlayerStyleSheet(context,
+                      accent: accent, together: _oneToOne),
                   child: SizedBox(
                     width: side,
                     height: side,
@@ -2785,6 +2790,11 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                       playing: playing,
                       progress: _liveProgress,
                       dimmed: PlayerStyleController.instance.orbDimmed,
+                      // Duet's second record: who I'm listening with.
+                      partner: !_oneToOne
+                          ? null
+                          : (d) => PersonAvatar(
+                              name: widget.peerName, radius: d / 2),
                       // The song's cover (found by its name), else the note.
                       artBuilder: (d, [col]) => SizedBox(
                         width: d,

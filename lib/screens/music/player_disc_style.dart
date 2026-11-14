@@ -11,6 +11,7 @@ import '../../utils/radii.dart';
 import '../../utils/adaptive_sheet.dart';
 import '../../utils/depth.dart';
 import '../../utils/toast_helper.dart';
+import '../../widgets/song_art.dart';
 import 'player_disc_more.dart';
 
 /// The look of the big rotating "now playing" glyph. The user can switch
@@ -102,6 +103,9 @@ class PlayerStyleController extends ChangeNotifier {
       _loaded = false;
       return load();
     });
+    // A new song: a hand-picked look lets go, and "New look each song"
+    // draws the next one.
+    SongArt.now.addListener(_onSong);
   }
   static final PlayerStyleController instance = PlayerStyleController._();
 
@@ -114,6 +118,23 @@ class PlayerStyleController extends ChangeNotifier {
   // Earned cosmetics (e.g. the Anniversary Vinyl disc) — unlocked by a bond's
   // "In tune" streak and remembered on-device so the style stays available.
   static const _annivKey = 'player_anniversary_unlocked_v1';
+  // Smart looks (sheet switches) + favourites.
+  static const _favKey = 'player_style_favs_v1';
+  static const _newLookKey = 'player_new_look_v1';
+  static const _dayKey = 'player_match_day_v1';
+  static const _duetKey = 'player_duet_together_v1';
+  // My bond's current "In tune" days, for the locked Anniversary card.
+  static const _streakKey = 'player_streak_days_v1';
+  static const anniversaryDays = 30;
+  Set<PlayerDiscStyle> _favs = <PlayerDiscStyle>{};
+  bool _newLook = false;
+  bool _matchDay = false;
+  bool _duetTogether = true;
+  int _streakDays = 0;
+  PlayerDiscStyle? _auto; // this song's look ("New look each song")
+  bool _pinned = false; // picked by hand → held until the next song
+  String? _songPath;
+
   PlayerDiscStyle _style = PlayerDiscStyle.orb;
   bool _orbDimmed = false;
   bool _anniversaryUnlocked = false;
@@ -123,6 +144,131 @@ class PlayerStyleController extends ChangeNotifier {
   bool get orbDimmed => _orbDimmed;
   bool get loaded => _loaded;
   bool get anniversaryUnlocked => _anniversaryUnlocked;
+  bool get newLook => _newLook;
+  bool get matchDay => _matchDay;
+  bool get duetTogether => _duetTogether;
+  int get streakDays => _streakDays;
+  bool isFav(PlayerDiscStyle s) => _favs.contains(s);
+
+  /// The look for the time of day ("Match my day"), or null for "mine".
+  static PlayerDiscStyle? dayLook([DateTime? at]) {
+    final t = at ?? DateTime.now();
+    final m = t.hour * 60 + t.minute;
+    if (m >= 17 * 60 + 30 && m < 20 * 60) return PlayerDiscStyle.sunset;
+    if (m >= 22 * 60 || m < 5 * 60) return PlayerDiscStyle.aura;
+    if (t.weekday >= DateTime.saturday && t.hour >= 12 && t.hour < 17) {
+      return PlayerDiscStyle.boombox;
+    }
+    return null;
+  }
+
+  /// The look the player shows now. [together] = a 1:1 Listen Together.
+  /// A look picked by hand wins (until the next song), then Duet while
+  /// together, this song's new look, the time of day, and my applied look.
+  PlayerDiscStyle shownFor({bool together = false}) {
+    if (_pinned) return _style;
+    if (together && _duetTogether) return PlayerDiscStyle.duet;
+    final auto = _auto;
+    if (_newLook && auto != null && !isLocked(auto)) return auto;
+    if (_matchDay) {
+      final d = dayLook();
+      if (d != null) return d;
+    }
+    return _style;
+  }
+
+  /// Why the player shows another look than the applied one (or null).
+  String? reasonFor({bool together = false}) {
+    final shown = shownFor(together: together);
+    if (shown == _style) return null;
+    if (!_pinned && together && _duetTogether) return 'listening together';
+    if (_newLook && shown == _auto) return 'new look for this song';
+    final h = DateTime.now().hour;
+    if (shown == PlayerDiscStyle.sunset) return 'evening';
+    if (shown == PlayerDiscStyle.aura) return h < 5 || h >= 22 ? 'late night' : null;
+    if (shown == PlayerDiscStyle.boombox) return 'weekend afternoon';
+    return null;
+  }
+
+  void _onSong() {
+    final path = SongArt.now.value?.path;
+    if (path == null || path == _songPath) return;
+    _songPath = path;
+    _pinned = false;
+    if (_newLook) _pickAuto();
+    // Never mid-build: the song can change while the player rebuilds.
+    Future.microtask(notifyListeners);
+  }
+
+  void _pickAuto() {
+    var pool = [
+      for (final s in _favs)
+        if (!isLocked(s)) s
+    ];
+    if (pool.length < 2) {
+      pool = [
+        for (final s in PlayerDiscStyle.values)
+          if (!isLocked(s)) s
+      ];
+    }
+    pool.remove(_auto ?? _style);
+    if (pool.isEmpty) return;
+    _auto = pool[math.Random().nextInt(pool.length)];
+  }
+
+  Future<void> _saveBool(String key, bool v) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setBool(key, v);
+      AccountPrefs.touch();
+    } catch (_) {/* best-effort — applies this session */}
+  }
+
+  Future<void> toggleFav(PlayerDiscStyle s) async {
+    if (!_favs.remove(s)) _favs.add(s);
+    notifyListeners();
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setStringList(_favKey, [for (final f in _favs) f.id]);
+      AccountPrefs.touch();
+    } catch (_) {}
+  }
+
+  Future<void> setNewLook(bool v) async {
+    if (_newLook == v) return;
+    _newLook = v;
+    _pinned = false;
+    _auto = null;
+    if (v) _pickAuto();
+    notifyListeners();
+    await _saveBool(_newLookKey, v);
+  }
+
+  Future<void> setMatchDay(bool v) async {
+    if (_matchDay == v) return;
+    _matchDay = v;
+    _pinned = false;
+    notifyListeners();
+    await _saveBool(_dayKey, v);
+  }
+
+  Future<void> setDuetTogether(bool v) async {
+    if (_duetTogether == v) return;
+    _duetTogether = v;
+    notifyListeners();
+    await _saveBool(_duetKey, v);
+  }
+
+  /// Our Space reports the bond's "In tune" days (locked-card progress).
+  Future<void> noteStreak(int days) async {
+    if (days == _streakDays) return;
+    _streakDays = days;
+    notifyListeners();
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setInt(_streakKey, days);
+    } catch (_) {}
+  }
 
   /// A style the user hasn't earned yet (shown locked in the picker).
   bool isLocked(PlayerDiscStyle s) =>
@@ -136,6 +282,14 @@ class PlayerStyleController extends ChangeNotifier {
       _orbDimmed = p.getBool(_dimKey) ?? false;
       _coverColours = p.getBool(_coverKey) ?? true;
       _anniversaryUnlocked = p.getBool(_annivKey) ?? false;
+      _favs = {
+        for (final id in p.getStringList(_favKey) ?? const <String>[])
+          PlayerDiscStyleX.fromId(id)
+      };
+      _newLook = p.getBool(_newLookKey) ?? false;
+      _matchDay = p.getBool(_dayKey) ?? false;
+      _duetTogether = p.getBool(_duetKey) ?? true;
+      _streakDays = p.getInt(_streakKey) ?? 0;
     } catch (_) {
       // Keep the default on any read failure.
     }
@@ -157,8 +311,14 @@ class PlayerStyleController extends ChangeNotifier {
   }
 
   Future<void> setStyle(PlayerDiscStyle s) async {
-    if (_style == s) return;
     if (isLocked(s)) return; // can't pick what isn't earned yet
+    // A hand pick shows at once, over Duet / new look / time of day, until
+    // the next song.
+    _pinned = true;
+    if (_style == s) {
+      notifyListeners();
+      return;
+    }
     _style = s;
     notifyListeners();
     try {
@@ -220,7 +380,11 @@ class PlayerDisc extends StatelessWidget {
     this.playing = true,
     this.dimmed = false,
     this.progress,
+    this.partner,
   });
+
+  /// Duet's second record label: the person I'm listening with (else ♥).
+  final Widget Function(double diameter)? partner;
 
   /// Song progress 0..1 for the classic tonearm's creep toward the centre.
   /// Defaults to the music player's own; Listen Together passes the
@@ -605,9 +769,10 @@ class PlayerDisc extends StatelessWidget {
                 child: Center(
                   child: front
                       ? artBuilder(labelD * 0.82, Colors.transparent)
-                      : Icon(Icons.favorite_rounded,
-                          size: labelD * 0.42,
-                          color: Color.lerp(accent, Colors.white, 0.55)),
+                      : partner?.call(labelD * 0.86) ??
+                          Icon(Icons.favorite_rounded,
+                              size: labelD * 0.42,
+                              color: Color.lerp(accent, Colors.white, 0.55)),
                 ),
               ),
             ),
@@ -1861,7 +2026,8 @@ Future<void> showPlayerStyleSheet(BuildContext context,
     {required Color accent,
     Widget Function(double diameter, [Color? noteColor])? art,
     Animation<double>? spin,
-    bool playing = true}) {
+    bool playing = true,
+    bool together = false}) {
   final scheme = Theme.of(context).colorScheme;
   return showAdaptiveSheet<void>(
     context: context,
@@ -1873,14 +2039,23 @@ Future<void> showPlayerStyleSheet(BuildContext context,
       borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xl)),
     ),
     builder: (_) => _PlayerStyleSheet(
-        accent: accent, art: art, spin: spin, playing: playing),
+        accent: accent,
+        art: art,
+        spin: spin,
+        playing: playing,
+        together: together),
   );
 }
 
 class _PlayerStyleSheet extends StatefulWidget {
   const _PlayerStyleSheet(
-      {required this.accent, this.art, this.spin, this.playing = true});
+      {required this.accent,
+      this.art,
+      this.spin,
+      this.playing = true,
+      this.together = false});
   final Color accent;
+  final bool together;
   final Widget Function(double diameter, [Color? noteColor])? art;
   final Animation<double>? spin;
   final bool playing;
@@ -1894,6 +2069,116 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
   /// The sample under the mouse (desktop) — it turns, to preview the motion.
   PlayerDiscStyle? _hovered;
 
+  /// The sample being held — shown big over the sheet until let go.
+  PlayerDiscStyle? _trying;
+
+  Widget _smartRow(String title, String sub, bool on,
+      ValueChanged<bool> onChanged, ColorScheme scheme) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(Radii.md),
+      onTap: () => onChanged(!on),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(children: [
+          Expanded(
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface)),
+                  Text(sub,
+                      style: TextStyle(
+                          fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                ]),
+          ),
+          Switch(
+            value: on,
+            activeTrackColor: widget.accent,
+            onChanged: onChanged,
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _smart(ColorScheme scheme) {
+    final c = PlayerStyleController.instance;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const SizedBox(height: 18),
+      Text('Smart looks',
+          style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: scheme.onSurfaceVariant)),
+      const SizedBox(height: 4),
+      _smartRow(
+          'Duet when listening together',
+          'Your person on the second record, back to your look after.',
+          c.duetTogether,
+          c.setDuetTogether,
+          scheme),
+      _smartRow(
+          'New look each song',
+          c.newLook && [for (final s in PlayerDiscStyle.values) if (c.isFav(s)) s].length >= 2
+              ? 'Each song draws one of your ♡ looks.'
+              : 'Each song gets another look — ♡ two or more to choose from.',
+          c.newLook,
+          c.setNewLook,
+          scheme),
+      _smartRow(
+          'Match my day',
+          'Sunset in the evening, Aura late at night, Boombox on weekend afternoons.',
+          c.matchDay,
+          c.setMatchDay,
+          scheme),
+    ]);
+  }
+
+  Widget _tryOverlay(ColorScheme scheme, bool isDark) {
+    final st = _trying;
+    return IgnorePointer(
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 180),
+        child: st == null
+            ? const SizedBox.shrink()
+            : Container(
+                key: ValueKey(st),
+                color: scheme.surface.withValues(alpha: 0.92),
+                alignment: Alignment.center,
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  SizedBox(
+                    width: 230,
+                    height: 230,
+                    child: PlayerDisc(
+                      style: st,
+                      side: 230,
+                      accent: widget.accent,
+                      scheme: scheme,
+                      isDark: isDark,
+                      spin: widget.spin ?? _still,
+                      playing: widget.playing,
+                      artBuilder: widget.art ?? _note,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(st.label,
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: scheme.onSurface)),
+                  const SizedBox(height: 4),
+                  Text('Let go to keep yours · tap it to apply',
+                      style: TextStyle(
+                          fontSize: 12.5, color: scheme.onSurfaceVariant)),
+                ]),
+              ),
+      ),
+    );
+  }
+
   Widget _note(double d, [Color? c]) => Center(
         child: Icon(Icons.music_note_rounded,
             size: d * 0.42, color: c ?? Colors.white.withValues(alpha: 0.9)),
@@ -1906,13 +2191,17 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
     return AnimatedBuilder(
       animation: PlayerStyleController.instance,
       builder: (context, _) {
-        final current = PlayerStyleController.instance.style;
+        final ctl = PlayerStyleController.instance;
+        final current = ctl.style;
+        final shown = ctl.shownFor(together: widget.together);
+        final why = ctl.reasonFor(together: widget.together);
         return ConstrainedBox(
           constraints: BoxConstraints(
               maxHeight: MediaQuery.of(context).size.height * 0.86),
           child: SafeArea(
           top: false,
-          child: Padding(
+          child: Stack(children: [
+          Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1941,7 +2230,7 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    'Pick the look of the spinning now-playing glyph.',
+                    'Tap to apply · hold to try · ♡ your favourites',
                     style:
                         TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
                   ),
@@ -1953,26 +2242,52 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
                   accent: widget.accent,
                   onChanged: PlayerStyleController.instance.setCoverColours,
                 ),
+                // The player is showing another look right now — say why.
+                if (why != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(children: [
+                      Icon(Icons.auto_awesome_rounded,
+                          size: 15, color: widget.accent),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text('Showing ${shown.label} · $why',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: scheme.onSurfaceVariant)),
+                      ),
+                    ]),
+                  ),
                 const SizedBox(height: 14),
                 Flexible(
-                  child: GridView(
+                  child: CustomScrollView(
                     shrinkWrap: true,
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 190,
-                      mainAxisSpacing: 14,
-                      crossAxisSpacing: 14,
-                      childAspectRatio: 0.82,
-                    ),
-                    children: [
-                      for (final st in PlayerDiscStyle.values)
-                        _styleCard(st, st == current, scheme, isDark),
+                    slivers: [
+                      SliverGrid(
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 190,
+                          mainAxisSpacing: 14,
+                          crossAxisSpacing: 14,
+                          childAspectRatio: 0.82,
+                        ),
+                        delegate: SliverChildListDelegate([
+                          for (final st in PlayerDiscStyle.values)
+                            _styleCard(st, st == current, scheme, isDark),
+                        ]),
+                      ),
+                      SliverToBoxAdapter(child: _smart(scheme)),
                     ],
                   ),
                 ),
               ],
             ),
           ),
+          Positioned.fill(child: _tryOverlay(scheme, isDark)),
+          ]),
         ),
         );
       },
@@ -1995,13 +2310,21 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
       onTap: () {
         if (locked) {
           // A toast sits above the sheet / card (a snackbar hid behind it).
-          showToast(context,
-              'Reach a 30-day streak in Our Space to unlock this disc 🔥',
+          final d = PlayerStyleController.instance.streakDays;
+          showToast(
+              context,
+              d > 0
+                  ? '$d of ${PlayerStyleController.anniversaryDays} days in tune 🔥 Keep listening together in Our Space'
+                  : 'Reach a ${PlayerStyleController.anniversaryDays}-day streak in Our Space to unlock this disc 🔥',
               duration: const Duration(seconds: 3));
           return;
         }
         PlayerStyleController.instance.setStyle(st);
       },
+      // Hold to try it big; let go and nothing changes.
+      onLongPressStart: (_) => setState(() => _trying = st),
+      onLongPressEnd: (_) => setState(() => _trying = null),
+      onLongPressCancel: () => setState(() => _trying = null),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(Radii.xl),
@@ -2056,6 +2379,29 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
                       ),
                     ),
                   ),
+                  if (!locked)
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: IconButton(
+                        visualDensity: VisualDensity.compact,
+                        tooltip: PlayerStyleController.instance.isFav(st)
+                            ? 'Remove from favourites'
+                            : 'Favourite',
+                        onPressed: () =>
+                            PlayerStyleController.instance.toggleFav(st),
+                        icon: Icon(
+                          PlayerStyleController.instance.isFav(st)
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                          size: 18,
+                          color: PlayerStyleController.instance.isFav(st)
+                              ? widget.accent
+                              : scheme.onSurfaceVariant
+                                  .withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ),
                   if (locked)
                     Positioned(
                       top: 10,
@@ -2111,11 +2457,32 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
             ),
             if (locked)
               Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Text('30-day streak',
-                    style: TextStyle(
-                        fontSize: 10.5,
-                        color: scheme.onSurfaceVariant)),
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+                child: Builder(builder: (_) {
+                  // How close the bond is: "12 of 30 days" + a thin bar.
+                  const goal = PlayerStyleController.anniversaryDays;
+                  final d = PlayerStyleController.instance.streakDays
+                      .clamp(0, goal);
+                  return Column(children: [
+                    Text(d > 0 ? '$d of $goal days' : '$goal-day streak',
+                        style: TextStyle(
+                            fontSize: 10.5,
+                            color: scheme.onSurfaceVariant)),
+                    if (d > 0) ...[
+                      const SizedBox(height: 4),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: d / goal,
+                          minHeight: 3,
+                          color: kAnniversaryGold,
+                          backgroundColor: kAnniversaryGold
+                              .withValues(alpha: 0.2),
+                        ),
+                      ),
+                    ],
+                  ]);
+                }),
               ),
           ],
         ),

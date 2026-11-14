@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../../utils/depth.dart';
+import '../../services/song_names.dart';
 import '../../widgets/song_art.dart';
 import '../home_page.dart' show playProgressNotifier;
 
@@ -128,10 +129,15 @@ class _PolaroidDiscState extends State<PolaroidDisc>
             child: ValueListenableBuilder(
               valueListenable: SongArt.now,
               builder: (_, now, _) {
+                // A song someone sent me is signed by them; else its name.
+                final from =
+                    now == null ? null : SongNames.instance.fromWhom(now.path);
                 final name =
                     now == null ? '' : SongArt.splitLabel(now.title).title;
                 return Text(
-                  name.isEmpty ? '♡' : '$name ♡',
+                  from != null
+                      ? 'from $from ♡'
+                      : (name.isEmpty ? '♡' : '$name ♡'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

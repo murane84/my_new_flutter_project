@@ -982,7 +982,8 @@ GestureDetector(
                     builder: (context, _) {
                       final mScheme = Theme.of(context).colorScheme;
                       return PlayerDisc(
-                        style: PlayerStyleController.instance.style,
+                        style: PlayerStyleController.instance
+                            .shownFor(together: _togetherNow),
                         side: side,
                         accent: accent,
                         scheme: mScheme,
@@ -991,6 +992,7 @@ GestureDetector(
                         playing: isPlaying,
                         dimmed: PlayerStyleController.instance.orbDimmed,
                         artBuilder: (d, [c]) => _discCenter(d, c),
+                        partner: _togetherNow ? _partnerFace : null,
                       );
                     },
                   ),

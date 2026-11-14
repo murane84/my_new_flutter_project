@@ -97,6 +97,11 @@ class MentionSelf {
   /// "@username" (same for everyone); only the rendering is personal.
   static final Map<String, String> names = {};
 
+  /// The reverse, for the composer: lowercase name I see (my phone-book
+  /// name) → their username. The composer shows "@My Sister"; sending turns
+  /// it back into the canonical "@username". Only unambiguous names.
+  static final Map<String, String> usernameOfShown = {};
+
   /// Tapping a tag in a bubble (the open group chat sets this): gets the
   /// lower-case username ("all" for @all).
   static void Function(String key)? onTap;
@@ -110,6 +115,9 @@ class MentionSelf {
 final RegExp _mentionRe = RegExp(
     r'(?<![^\s(\[{"\u0027])@[^\s@.,!?;:)\]}"\u0027]+(?:\u00A0[^\s@.,!?;:)\]}"\u0027]+)*',
     unicode: true);
+
+/// The same @-tag pattern, for the chat page (composer → usernames).
+RegExp get mentionTokenRe => _mentionRe;
 
 /// True when [text] tags me (my username) or @all — drives the chat's "@"
 /// stepper and badges.

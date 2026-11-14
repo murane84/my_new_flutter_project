@@ -8,9 +8,10 @@ part of '../chat_page.dart';
 //   keyboard with the composer and can never be covered by it, whatever the
 //   layout (phone home with player bar + footer, full-screen chat, desktop).
 // • Rows show the name saved in YOUR phone book (search matches it and the
-//   Aluta username), but the text inserted is the member's Aluta USERNAME —
-//   the one identity every reader shares, so the receiver's bubble, the
-//   server and the "you were mentioned" highlight all agree.
+//   Aluta username), and the composer shows that same saved name. On send
+//   each tag is turned back into the member's Aluta USERNAME
+//   ([_mentionsToUsernames]) — the one identity every reader shares, so the
+//   receiver's bubble, the server and the "mentioned you" highlight agree.
 // • Who gets tagged is derived from the TEXT at send time
 //   ([_resolveMentions]), so deleting a tag, editing, or restoring a draft
 //   can never send a stale mention.
@@ -76,11 +77,44 @@ extension _ChatMentions on _ChatPageState {
   /// Tell the bubble renderer how I name each member, so "@juma" in a
   /// message shows as my phone-book name for Juma (else his profile name).
   void _publishMentionNames() {
+    final shownCount = <String, int>{};
+    final usernames = <String>{};
     for (final m in _groupMembers) {
       final u = _memberUsername(m);
       if (u.isEmpty) continue;
       MentionSelf.names[u.toLowerCase()] = _memberName(m);
+      usernames.add(u.toLowerCase());
+      final k = _memberName(m).toLowerCase();
+      shownCount[k] = (shownCount[k] ?? 0) + 1;
     }
+    // Composer names → usernames, only where the name points at one person
+    // (two members saved alike, or a name that is someone else's username,
+    // keep the username in the composer instead).
+    for (final m in _groupMembers) {
+      final u = _memberUsername(m);
+      if (u.isEmpty) continue;
+      final shown = _memberName(m);
+      final k = shown.toLowerCase();
+      if (k == 'all') continue;
+      // The whole name must read as one tag ("Mama J." would cut at the dot).
+      final tag = '@${shown.replaceAll(' ', '\u00A0')}';
+      if (mentionTokenRe.matchAsPrefix(tag)?.end != tag.length) continue;
+      if ((shownCount[k] ?? 0) == 1 &&
+          (k == u.toLowerCase() || !usernames.contains(k))) {
+        MentionSelf.usernameOfShown[k] = u;
+      }
+    }
+  }
+
+  /// The composer's "@Saved Name" tags → "@username" for sending.
+  String _mentionsToUsernames(String text) {
+    if (!_isGroup || !text.contains('@')) return text;
+    return text.replaceAllMapped(mentionTokenRe, (mt) {
+      final tok = mt.group(0)!;
+      final key = tok.substring(1).replaceAll('\u00A0', ' ').toLowerCase();
+      final u = MentionSelf.usernameOfShown[key];
+      return u == null ? tok : '@${u.replaceAll(' ', '\u00A0')}';
+    });
   }
 
   /// Phone-book name if I saved this member, else their Aluta username.
@@ -98,8 +132,16 @@ extension _ChatMentions on _ChatPageState {
 
   /// The token inserted into the text for a member: "@user" with inner spaces
   /// joined by a non-breaking space so it stays one highlightable run.
-  String _mentionToken(Map<String, dynamic> m) =>
-      '@${_memberUsername(m).replaceAll(' ', '\u00A0')}';
+  /// Shows the name I saved for them when it's unambiguous (sending turns it
+  /// back into their username), else their username.
+  String _mentionToken(Map<String, dynamic> m) {
+    final u = _memberUsername(m);
+    final shown = _memberName(m);
+    final out = MentionSelf.usernameOfShown[shown.toLowerCase()] == u
+        ? shown
+        : u;
+    return '@${out.replaceAll(' ', '\u00A0')}';
+  }
 
   bool _isMe(Map<String, dynamic> m) =>
       _myId != null && m['user_id']?.toString() == _myId;

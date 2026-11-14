@@ -2186,7 +2186,8 @@ class _ChatPageState extends State<ChatPage>
   // ── Send ──────────────────────────────────────────────────────────────────
 
   Future<void> _sendMessage() async {
-    final text = _ctrl.text.trim();
+    // Tags show my saved names in the composer; they travel as usernames.
+    final text = _mentionsToUsernames(_ctrl.text.trim());
     final attach = _heartMode ? _heartAttach : null;
     if (text.isEmpty && attach == null) return;
 

@@ -55,6 +55,7 @@ import '../services/track_title.dart'
         displayTitleForPath,
         displayArtistForPath,
         displayLabelForPath;
+import '../services/song_names.dart';
 import '../widgets/song_art.dart';
 import '../utils/marquee_text.dart';
 import '../services/contact_names.dart';

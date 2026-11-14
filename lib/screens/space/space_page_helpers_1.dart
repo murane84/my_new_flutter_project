@@ -222,7 +222,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
       if (!mounted) return;
       if (f != null) {
         await _hostSession(f.path, 0,
-            titleOverride: title.isEmpty ? null : title);
+            titleOverride: title.isEmpty ? null : _crateLabel(track));
         return;
       }
     }
@@ -232,7 +232,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
     if (local == null) {
       showToast(
         context,
-        'You do not have "$title" loaded — add it to your player to listen '
+        'You do not have "${_crateLabel(track)}" loaded — add it to your player to listen '
         'together.',
         type: ToastType.info,
       );

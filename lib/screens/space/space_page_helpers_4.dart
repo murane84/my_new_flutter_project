@@ -282,11 +282,34 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
     );
   }
 
+  /// A shared-playlist song's (title, artist) as MY playlist shows it: the
+  /// tidy name of my copy when I have it, else its stored label tidied the
+  /// same way ("Sean_Paul_-_We_Be_Burning" → We Be Burning · Sean Paul).
+  (String, String) _crateTA(Map<String, dynamic> t) {
+    final raw = (t['title'] ?? '').toString().trim();
+    final local = _localPathFor((t['ref'] ?? '').toString().trim(), raw);
+    if (local != null) {
+      return (displayTitleForPath(local), displayArtistForPath(local));
+    }
+    final p = SongNames.instance.parseName(raw);
+    final stored = (t['artist'] ?? '').toString().trim();
+    return (
+      p.title.isEmpty ? cleanTrackName(raw) : p.title,
+      stored.isNotEmpty ? stored : p.artist,
+    );
+  }
+
+  /// "Title — Artist" for a shared-playlist song (what a session is named).
+  String _crateLabel(Map<String, dynamic> t) {
+    final (title, artist) = _crateTA(t);
+    return artist.isEmpty ? title : '$title — $artist';
+  }
+
   Widget _trackRow(ColorScheme scheme, Map<String, dynamic> t) {
     final id = (t['id'] as num?)?.toInt();
     final rawTitle = (t['title'] ?? '').toString();
-    final title = cleanTrackName(rawTitle);
-    final artist = (t['artist'] ?? '').toString();
+    // Named as my playlist names it (tidied, my edits first).
+    final (title, artist) = _crateTA(t);
     final memo = (t['memo'] ?? '').toString().trim();
     final source = (t['source'] ?? 'manual').toString();
     final mine = t['mine'] == true;
@@ -301,7 +324,8 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
     final playingNow = (playbackBus.isPlaying?.call() ?? false) &&
         nowTitle.isNotEmpty &&
         (nowTitle == rawTitle.toLowerCase() ||
-            nowTitle == title.toLowerCase());
+            nowTitle == title.toLowerCase() ||
+            nowTitle == '$title — $artist'.toLowerCase());
     final subParts = <String>[];
     if (artist.isNotEmpty) subParts.add(artist);
     subParts.add('added by $adder');

@@ -24,7 +24,8 @@ from typing import Optional
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, object_session
 
-from models import BillingPlan, BillingSettings, Entitlement, Payment, User
+from models import (BillingPlan, BillingSettings, Entitlement, Payment,
+                    PlanLimit, UsageCounter, User)
 
 FREE_SPACE_MB = int(os.environ.get("SPACE_CAP_MB", "150"))
 
@@ -33,8 +34,34 @@ DEFAULT_PLANS = [
     dict(code="together", name="Aluta Together", scope="person",
          price_tzs=3000, year_months=10, space_mb=None, sort=0),
     dict(code="space_plus", name="Bigger Our Space", scope="pair",
-         price_tzs=5000, year_months=10, space_mb=1024, sort=1),
+         price_tzs=5000, year_months=10, space_mb=1024, sort=2),
+    dict(code="together_plus", name="Together Plus", scope="person",
+         price_tzs=7000, year_months=10, space_mb=None, sort=1),
 ]
+
+# ── Limits: every section is open to everyone, with a light free amount ─────
+# Paid levels raise them (one bundle: Together, then Together Plus). Values are
+# edited in the admin panel (plan_limits); these fill any gap. -1 = unlimited.
+UNLIMITED = -1
+HARD_FILE_MB = 200   # what the server can hold per file today
+METERS = [
+    dict(key="spaces", label="Our Spaces you can pin", unit="bonds"),
+    dict(key="room_size", label="People in a Listen Together room",
+         unit="people"),
+    dict(key="file_mb", label="Largest file or video you send", unit="MB"),
+    dict(key="call_minutes", label="Length of a call (1:1 and group)",
+         unit="min"),
+    dict(key="recognize_day", label="Song recognitions a day", unit="a day"),
+]
+LEVELS = ["free", "together", "together_plus"]
+DEFAULT_LIMITS = {
+    "free": {"spaces": 2, "room_size": 5, "file_mb": 50, "call_minutes": 10,
+             "recognize_day": 5},
+    "together": {"spaces": 8, "room_size": 25, "file_mb": 200,
+                 "call_minutes": 60, "recognize_day": 30},
+    "together_plus": {"spaces": 20, "room_size": 50, "file_mb": 200,
+                      "call_minutes": UNLIMITED, "recognize_day": 100},
+}
 
 LEGACY_DAYS = 30  # testers flipped to Together by the old toggle keep it this long
 TXN_RE = re.compile(r"^[A-Z0-9]{6,20}$")
@@ -80,7 +107,7 @@ def ensure_seed(db: Session) -> None:
         if d["code"] not in have:
             db.add(BillingPlan(active=True, **d))
     if db.query(BillingSettings).filter(BillingSettings.id == 1).first() is None:
-        db.add(BillingSettings(id=1, pay_network="M-Pesa"))
+        db.add(BillingSettings(id=1, pay_network="M-Pesa", sandbox=True))
     db.flush()
     t = now()
     legacy = (db.query(User).filter(User.plan_tier == "together").all())
@@ -124,7 +151,8 @@ def settings(db: Session) -> BillingSettings:
 
 
 def settings_dict(st: BillingSettings) -> dict:
-    return {"pay_network": st.pay_network or "M-Pesa",
+    return {"sandbox": st.sandbox is not False,
+            "pay_network": st.pay_network or "M-Pesa",
             "pay_number": st.pay_number or "",
             "pay_name": st.pay_name or "",
             "instructions": st.instructions or ""}
@@ -174,13 +202,25 @@ def has(db: Session, code: str, *, user_id=None, pair_key=None) -> bool:
     return until(db, code, user_id=user_id, pair_key=pair_key) is not None
 
 
+def level_of(user: User, db: Optional[Session] = None) -> str:
+    """'free' | 'together' | 'together_plus' — which limits apply."""
+    db = db or object_session(user)
+    if db is None:
+        return "together" if (user.plan_tier or "free") == "together" else "free"
+    if has(db, "together_plus", user_id=user.id):
+        return "together_plus"
+    if has(db, "together", user_id=user.id):
+        return "together"
+    return "free"
+
+
 def tier_of(user: User, db: Optional[Session] = None) -> str:
-    """'together' | 'free' for gating. Keeps users.plan_tier in step as a
-    cache for older code paths."""
+    """'together' (Together or Together Plus) | 'free' for the older gates.
+    Keeps users.plan_tier in step as a cache."""
     db = db or object_session(user)
     if db is None:
         return getattr(user, "plan_tier", None) or "free"
-    t = "together" if has(db, "together", user_id=user.id) else "free"
+    t = "free" if level_of(user, db) == "free" else "together"
     if (user.plan_tier or "free") != t:
         user.plan_tier = t
         try:
@@ -248,5 +288,71 @@ def payment_dict(p: Payment, db: Session) -> dict:
         "pair_key": p.pair_key, "partner_id": p.partner_id,
         "partner_username": partner.username if partner else None,
         "status": p.status, "note": p.note,
+        "sandbox": bool(p.sandbox),
         "created_at": iso(p.created_at), "decided_at": iso(p.decided_at),
     }
+
+
+# ── Limits ──────────────────────────────────────────────────────────────────
+
+def limits_table(db: Session) -> dict:
+    """{level: {meter: value}} — defaults overlaid with the admin's edits."""
+    out = {lv: dict(DEFAULT_LIMITS[lv]) for lv in LEVELS}
+    for r in db.query(PlanLimit).all():
+        if r.plan_code in out:
+            out[r.plan_code][r.meter] = int(r.value)
+    return out
+
+
+def limit(db: Session, user: User, meter: str) -> int:
+    """This person's amount of [meter] (-1 = unlimited)."""
+    lv = level_of(user, db)
+    v = limits_table(db).get(lv, {}).get(meter)
+    if v is None:
+        v = DEFAULT_LIMITS["free"].get(meter, 0)
+    if meter == "file_mb" and (v == UNLIMITED or v > HARD_FILE_MB):
+        v = HARD_FILE_MB
+    return int(v)
+
+
+def my_limits(db: Session, user: User) -> dict:
+    return {m["key"]: limit(db, user, m["key"]) for m in METERS}
+
+
+def set_limit(db: Session, level: str, meter: str, value: int) -> None:
+    r = (db.query(PlanLimit)
+         .filter(PlanLimit.plan_code == level, PlanLimit.meter == meter).first())
+    if r is None:
+        db.add(PlanLimit(plan_code=level, meter=meter, value=int(value)))
+    else:
+        r.value = int(value)
+    db.flush()
+
+
+def use_daily(db: Session, user: User, meter: str) -> tuple:
+    """Count one use of a daily meter. Returns (allowed, used, limit) — when
+    not allowed nothing is counted."""
+    cap = limit(db, user, meter)
+    today = now().date()
+    row = (db.query(UsageCounter)
+           .filter(UsageCounter.user_id == user.id,
+                   UsageCounter.meter == meter,
+                   UsageCounter.day == today).first())
+    used = int(row.count) if row else 0
+    if cap != UNLIMITED and used >= cap:
+        return False, used, cap
+    if row is None:
+        db.add(UsageCounter(user_id=user.id, meter=meter, day=today, count=1))
+    else:
+        row.count = used + 1
+    db.commit()
+    return True, used + 1, cap
+
+
+def upgrade_hint(db: Session, user: User) -> str:
+    lv = level_of(user, db)
+    if lv == "free":
+        return "Aluta Together gives you more."
+    if lv == "together":
+        return "Together Plus gives you more."
+    return ""

@@ -64,15 +64,14 @@ async def _lapse_guard(request: Request, db: Session = Depends(get_db)):
     except HTTPException:
         return  # the route itself answers 401
     import billing
-    if billing.tier_of(user, db) == "together":
-        return
     ids = [sid for (sid,) in (
         db.query(RelationshipSpace.id)
         .filter(RelationshipSpace.owner_id == user.id)
         .order_by(RelationshipSpace.is_primary.desc(),
                   RelationshipSpace.created_at, RelationshipSpace.id)
         .all())]
-    if int(m.group(1)) in ids[FREE_SPACE_CAP:]:
+    cap = billing.limit(db, user, "spaces")
+    if cap != billing.UNLIMITED and int(m.group(1)) in ids[cap:]:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="This Our Space is read-only until Together is renewed "
@@ -357,9 +356,9 @@ def _has_space_room(db: Session, user: User) -> bool:
         .filter(RelationshipSpace.owner_id == user.id)
         .count()
     )
-    plan = current_user_plan(user)
-    cap = TOGETHER_SPACE_CAP if plan == "together" else FREE_SPACE_CAP
-    return count < cap
+    import billing
+    cap = billing.limit(db, user, "spaces")
+    return cap == billing.UNLIMITED or count < cap
 
 
 def _create_bond_space(db: Session, owner_id: int, partner_id: int,
@@ -1058,17 +1057,14 @@ def create_space(
             )
 
     existing = len(owner_spaces)
-    plan = current_user_plan(current_user)
-    cap = TOGETHER_SPACE_CAP if plan == "together" else FREE_SPACE_CAP
-    if existing >= cap:
+    import billing
+    cap = billing.limit(db, current_user, "spaces")
+    if cap != billing.UNLIMITED and existing >= cap:
+        hint = billing.upgrade_hint(db, current_user)
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=(
-                "The free plan keeps one Our Space. Upgrade to Together to pin "
-                "more of the people who matter."
-                if plan != "together"
-                else "You've reached the maximum number of Spaces."
-            ),
+            detail=(f"Your plan keeps {cap} Our Spaces. "
+                    + (hint or "You've reached the most Spaces.")),
         )
 
     space = RelationshipSpace(

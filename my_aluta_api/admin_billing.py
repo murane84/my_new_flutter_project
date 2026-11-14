@@ -92,7 +92,7 @@ def overview(ctx: AdminCtx = Depends(admin_ctx), db: Session = Depends(get_db)):
 
     def revenue(since=None) -> int:
         q = db.query(func.coalesce(func.sum(Payment.amount_tzs), 0)).filter(
-            Payment.status == "confirmed")
+            Payment.status == "confirmed", Payment.sandbox.is_(False))
         if since is not None:
             q = q.filter(Payment.decided_at >= since)
         return int(q.scalar() or 0)
@@ -120,10 +120,14 @@ def overview(ctx: AdminCtx = Depends(admin_ctx), db: Session = Depends(get_db)):
             seen.add(k)
             expiring.append(x)
     pending = db.query(Payment).filter(Payment.status == "pending").count()
+    test_total = int(db.query(func.coalesce(func.sum(Payment.amount_tzs), 0))
+                     .filter(Payment.status == "confirmed",
+                             Payment.sandbox.is_(True)).scalar() or 0)
     return {
         "revenue_month_tzs": revenue(month0),
         "revenue_30d_tzs": revenue(t - timedelta(days=30)),
         "revenue_total_tzs": revenue(),
+        "revenue_test_tzs": test_total,
         "active_together": len(together),
         "active_space_plus": len(space),
         "pending_payments": pending,
@@ -406,6 +410,7 @@ def edit_plan(code: str, payload: PlanIn, ctx: AdminCtx = Depends(admin_ctx),
 
 class SettingsIn(BaseModel):
     password: str
+    sandbox: Optional[bool] = None
     pay_network: Optional[str] = None
     pay_number: Optional[str] = None
     pay_name: Optional[str] = None
@@ -421,8 +426,49 @@ def edit_settings(payload: SettingsIn, ctx: AdminCtx = Depends(admin_ctx),
         v = getattr(payload, f)
         if v is not None:
             setattr(st, f, v.strip()[:500] or None)
+    if payload.sandbox is not None:
+        st.sandbox = bool(payload.sandbox)
     _audit(db, "pay_settings_edited", user_id=ctx.user.id,
            device_id=ctx.device.id, target="billing_settings", ip=ctx.ip,
            detail=billing.settings_dict(st))
     db.commit()
     return {"ok": True, "settings": billing.settings_dict(st)}
+
+
+# ── Limits (every section open, a light free amount, more when paid) ────────
+
+@router.get("/limits")
+def limits(ctx: AdminCtx = Depends(admin_ctx), db: Session = Depends(get_db)):
+    billing.ensure_seed(db)
+    return {"meters": billing.METERS, "levels": billing.LEVELS,
+            "table": billing.limits_table(db),
+            "unlimited": billing.UNLIMITED,
+            "hard_file_mb": billing.HARD_FILE_MB}
+
+
+class LimitIn(BaseModel):
+    password: str
+    level: str
+    meter: str
+    value: int
+
+
+@router.post("/limits")
+def edit_limit(payload: LimitIn, ctx: AdminCtx = Depends(admin_ctx),
+               db: Session = Depends(get_db)):
+    """Change one amount (applies at once — the app reads it from /plan)."""
+    _guard(ctx, payload.password)
+    if payload.level not in billing.LEVELS:
+        raise HTTPException(400, "Unknown level")
+    if payload.meter not in {m["key"] for m in billing.METERS}:
+        raise HTTPException(400, "Unknown limit")
+    v = int(payload.value)
+    if v < billing.UNLIMITED or v > 1_000_000:
+        raise HTTPException(400, "Use a number, or -1 for unlimited")
+    before = billing.limits_table(db)[payload.level].get(payload.meter)
+    billing.set_limit(db, payload.level, payload.meter, v)
+    _audit(db, "limit_edited", user_id=ctx.user.id, device_id=ctx.device.id,
+           target=f"limit:{payload.level}.{payload.meter}", ip=ctx.ip,
+           detail={"before": before, "after": v})
+    db.commit()
+    return {"ok": True, "table": billing.limits_table(db)}

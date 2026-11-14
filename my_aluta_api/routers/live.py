@@ -411,6 +411,23 @@ async def end_session(
 
 
 # ------------------------------ WebSocket ------------------------------
+def _room_cap(host_id: int) -> Optional[int]:
+    """People allowed in this host's room (host included); None = no cap."""
+    try:
+        import billing
+        db = SessionLocal()
+        try:
+            host = db.query(User).filter(User.id == host_id).first()
+            if host is None:
+                return None
+            cap = billing.limit(db, host, "room_size")
+        finally:
+            db.close()
+        return None if cap == billing.UNLIMITED else max(2, cap)
+    except Exception:
+        return None
+
+
 def _authenticate_ws(token: Optional[str], user_id: int) -> Optional[User]:
     if not token:
         return None
@@ -541,6 +558,14 @@ async def live_session_ws(websocket: WebSocket, session_id: str, token: str = ""
     # as a member for the rest of the session (group rooms re-check live).
     if session.open and session.conversation_id is None:
         session.allowed_ids.add(user.id)
+
+    # Room size follows the HOST's plan (a light free amount, more with
+    # Together). Someone already in (a reconnect) is never turned away.
+    if (user.id != session.host_id and user.id not in session.connections):
+        cap = _room_cap(session.host_id)
+        if cap is not None and len(session.connections) >= cap:
+            await websocket.close(code=4409)  # room full
+            return
 
     is_host = (user.id == session.host_id)
 

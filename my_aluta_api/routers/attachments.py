@@ -407,16 +407,23 @@ async def upload_media(
     if not data:
         raise HTTPException(status_code=400, detail="Empty file")
     _mime = (file.content_type or "").lower()
+    # Files and videos: the sender's plan sets the size (a light free amount,
+    # more with Together). Photos / voice / songs keep the fixed cap.
+    import billing
+    _plan_cap = billing.limit(db, current_user, "file_mb") * 1024 * 1024
     if _mime.startswith("video/"):
-        _cap = VIDEO_MAX_BYTES
+        _cap = min(VIDEO_MAX_BYTES, _plan_cap)
     elif _mime.startswith("image/") or _mime.startswith("audio/"):
         _cap = MAX_BYTES
     else:
-        _cap = FILE_MAX_BYTES
+        _cap = min(FILE_MAX_BYTES, _plan_cap)
     if len(data) > _cap:
         _mb = _cap // (1024 * 1024)
+        _hint = ("" if _mime.startswith("image/") or _mime.startswith("audio/")
+                 else billing.upgrade_hint(db, current_user))
         raise HTTPException(
-            status_code=413, detail=f"File too large (max {_mb} MB)")
+            status_code=413,
+            detail=f"File too large (max {_mb} MB). {_hint}".strip())
 
     # Opportunistic housekeeping: every new upload sweeps out expired ephemeral
     # bytes so old shared songs don't accumulate even if no one re-fetched them.

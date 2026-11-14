@@ -1448,6 +1448,9 @@ class Payment(Base):
     pair_key = Column(String, nullable=True)
     partner_id = Column(Integer, nullable=True)
     status = Column(String, nullable=False, default="pending", index=True)
+    # Made while billing was in test mode (no real money) — kept out of
+    # revenue.
+    sandbox = Column(Boolean, nullable=False, default=False)
     note = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(),
                         nullable=False)
@@ -1464,3 +1467,28 @@ class BillingSettings(Base):
     pay_number = Column(String, nullable=True)    # e.g. a Lipa number / phone
     pay_name = Column(String, nullable=True)      # the name the payer sees
     instructions = Column(Text, nullable=True)
+    # Test mode: no real money (until an official M-Pesa API / Lipa number).
+    # The app says so on the pay screen; any code works; revenue skips them.
+    sandbox = Column(Boolean, nullable=False, default=True)
+
+
+class PlanLimit(Base):
+    """How much of each metered thing a plan level gives (Admin Phase 4.1).
+    plan_code 'free' is everyone's light free amount; -1 = unlimited.
+    Edited in the admin panel; billing.DEFAULT_LIMITS fills gaps."""
+    __tablename__ = "plan_limits"
+
+    plan_code = Column(String, primary_key=True)
+    meter = Column(String, primary_key=True)
+    value = Column(Integer, nullable=False)
+
+
+class UsageCounter(Base):
+    """Per-person daily use of a metered thing (e.g. song recognitions)."""
+    __tablename__ = "usage_counters"
+
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                     primary_key=True)
+    meter = Column(String, primary_key=True)
+    day = Column(Date, primary_key=True)
+    count = Column(Integer, nullable=False, default=0)

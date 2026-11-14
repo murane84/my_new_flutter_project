@@ -209,6 +209,23 @@ async def recognize(
         raise HTTPException(status_code=400, detail="Empty audio clip")
     if len(contents) > _MAX_BYTES:
         raise HTTPException(status_code=413, detail="Clip too large")
+    # Each recognition is a paid call to a third party: a daily amount per
+    # plan (counted only once the clip is accepted).
+    import billing
+    from database import SessionLocal
+    _db = SessionLocal()
+    try:
+        _u = _db.query(User).filter(
+            User.id == current_user.id).first()
+        ok, _used, cap = billing.use_daily(_db, _u, "recognize_day")
+        hint = billing.upgrade_hint(_db, _u)
+    finally:
+        _db.close()
+    if not ok:
+        raise HTTPException(
+            status_code=429,
+            detail=f"You've used today's {cap} song recognitions. "
+                   + (hint or "More tomorrow."))
 
     audd_error: str | None = None
 

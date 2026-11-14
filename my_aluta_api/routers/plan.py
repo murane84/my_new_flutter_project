@@ -42,6 +42,10 @@ def _pair_of(db: Session, user: User, space_id: Optional[int]):
     return pair_key(user.id, others[0]), others[0]
 
 
+def _iso_until(u):
+    return None if u is None or u.year >= 9999 else billing.iso(u)
+
+
 def _payload(db: Session, user: User) -> dict:
     billing.ensure_seed(db)
     tier = billing.tier_of(user, db)
@@ -61,7 +65,15 @@ def _payload(db: Session, user: User) -> dict:
         "together_until": None if t_until is None or t_until.year >= 9999
         else billing.iso(t_until),
         "together_forever": bool(t_until and t_until.year >= 9999),
-        "space_cap": TOGETHER_SPACE_CAP if together else FREE_SPACE_CAP,
+        "level": billing.level_of(user, db),
+        "plus_until": _iso_until(billing.until(db, "together_plus",
+                                               user_id=user.id)),
+        "space_cap": billing.limit(db, user, "spaces"),
+        # Every section is open; these are my amounts (-1 = unlimited), and
+        # what each level gives, for the plans page.
+        "limits": billing.my_limits(db, user),
+        "limits_table": billing.limits_table(db),
+        "meters": billing.METERS,
         "benefits": {
             "multiple_spaces": together,
             "forever_history": together,
@@ -163,6 +175,7 @@ def report_payment(payload: PayIn, bg: BackgroundTasks,
         user_id=current_user.id, plan_code=p.code, months=months,
         amount_tzs=billing.price_for(p, months),
         network=(billing.settings(db).pay_network or "M-Pesa"),
+        sandbox=billing.settings(db).sandbox is not False,
         txn_code=code,
         payer_phone=(payload.payer_phone or "").strip()[:20] or None,
         pair_key=pk, partner_id=partner, status="pending",

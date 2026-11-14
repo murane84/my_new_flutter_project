@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
@@ -244,10 +245,30 @@ class PlayerStyleController extends ChangeNotifier {
     await _saveBool(_newLookKey, v);
   }
 
+  // While "Match my day" is on: a light check every few minutes, so the
+  // look turns at the hour (5:30 pm → Sunset) without waiting for a song.
+  Timer? _dayTimer;
+  PlayerDiscStyle? _dayWas;
+
+  void _watchDay() {
+    _dayTimer?.cancel();
+    _dayTimer = null;
+    if (!_matchDay) return;
+    _dayWas = dayLook();
+    _dayTimer = Timer.periodic(const Duration(minutes: 3), (_) {
+      final now = dayLook();
+      if (now != _dayWas) {
+        _dayWas = now;
+        notifyListeners();
+      }
+    });
+  }
+
   Future<void> setMatchDay(bool v) async {
     if (_matchDay == v) return;
     _matchDay = v;
     _pinned = false;
+    _watchDay();
     notifyListeners();
     await _saveBool(_dayKey, v);
   }
@@ -290,6 +311,7 @@ class PlayerStyleController extends ChangeNotifier {
       _matchDay = p.getBool(_dayKey) ?? false;
       _duetTogether = p.getBool(_duetKey) ?? true;
       _streakDays = p.getInt(_streakKey) ?? 0;
+      _watchDay();
     } catch (_) {
       // Keep the default on any read failure.
     }

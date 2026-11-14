@@ -278,7 +278,9 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
 
   /// Duet's second record: the person I'm listening with.
   Widget _partnerFace(double d) => PersonAvatar(
-      name: activeLiveSession?.peerName ?? '', radius: d / 2);
+      name: activeLiveSession?.peerName ?? '',
+      avatar: activeLiveSession?.peerAvatar,
+      radius: d / 2);
 
   Widget _discCenter(double d, [Color? noteColor]) {
     final note = Center(

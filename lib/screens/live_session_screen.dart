@@ -1095,6 +1095,13 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         ..clear()
         ..addAll(list);
     });
+    // The other person's photo, for Duet on the music player too.
+    for (final x in list) {
+      if (x.id != widget.myUserId) {
+        activeLiveSession?.peerAvatar = x.avatar;
+        break;
+      }
+    }
   }
 
   // Resolve a participant's avatar url by id (null if unknown / no photo).
@@ -2810,7 +2817,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                       partner: !_oneToOne
                           ? null
                           : (d) => PersonAvatar(
-                              name: widget.peerName, radius: d / 2),
+                              name: widget.peerName,
+                              avatar: activeLiveSession?.peerAvatar,
+                              radius: d / 2),
                       caption: SongArt.splitLabel(_title).title,
                       // The song's cover (found by its name), else the note.
                       artBuilder: (d, [col]) => SizedBox(

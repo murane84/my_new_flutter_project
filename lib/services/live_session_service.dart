@@ -66,6 +66,10 @@ class ActiveLiveSession {
   /// The friend this 1:1 session is with (host: who I invited).
   final int? peerId;
 
+  /// The other person's photo (avatar_url), once the roster arrives — the
+  /// player's Duet record shows it.
+  String? peerAvatar;
+
   final LiveSessionController controller;
   final LiveRole role;
   final String peerName;

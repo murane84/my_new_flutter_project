@@ -14,18 +14,66 @@ import 'admin_widgets.dart';
 import '../utils/radii.dart';
 import '../utils/depth.dart';
 
-/// Tab order in the rail / bottom bar / ⋮ menu.
-const int _kOverview = 0,
-    _kUsage = 1,
-    _kSystem = 2,
-    _kDevices = 3,
-    _kFeedback = 4,
-    _kPeople = 5,
-    _kLog = 6;
+// ── Navigation: groups → pages ─────────────────────────────────────────────
+// The rail / bottom bar show GROUPS only (a handful, however many tools
+// arrive); a group with several pages gets a slim tab strip on top of its
+// page, and the ⋮ menu opens each group as a flyout. A new tool = one
+// _AdminPage line in the right group (or a new group) — nothing else.
 
-/// Signed-in frame: Overview · Usage · System · Devices · Feedback ·
-/// People · Activity log, plus the always-there
-/// "Lock admin" (Not me), the dark/light switch and sign-out.
+/// One page of the admin.
+class _AdminPage {
+  const _AdminPage(this.id, this.label, this.icon, this.iconSel,
+      {this.badge = _noBadge});
+  final String id;
+  final String label;
+  final IconData icon, iconSel;
+  final int Function(_AdminShellState s) badge;
+  static int _noBadge(_AdminShellState s) => 0;
+}
+
+/// A group of pages (one rail / bottom-bar destination).
+class _AdminGroup {
+  const _AdminGroup(this.label, this.icon, this.iconSel, this.pages);
+  final String label;
+  final IconData icon, iconSel;
+  final List<_AdminPage> pages;
+  int badge(_AdminShellState s) =>
+      pages.fold(0, (sum, p) => sum + p.badge(s));
+}
+
+int _pendingBadge(_AdminShellState s) => s._pending;
+int _feedbackBadge(_AdminShellState s) => s._newFeedback;
+
+const _groups = <_AdminGroup>[
+  _AdminGroup('Insights', Icons.insights_outlined, Icons.insights_rounded, [
+    _AdminPage('overview', 'Overview', Icons.space_dashboard_outlined,
+        Icons.space_dashboard_rounded),
+    _AdminPage('usage', 'Usage', Icons.show_chart_rounded,
+        Icons.show_chart_rounded),
+  ]),
+  _AdminGroup('People', Icons.people_alt_outlined, Icons.people_alt_rounded, [
+    _AdminPage('people', 'People', Icons.people_alt_outlined,
+        Icons.people_alt_rounded),
+    _AdminPage('feedback', 'Feedback', Icons.rate_review_outlined,
+        Icons.rate_review_rounded,
+        badge: _feedbackBadge),
+  ]),
+  _AdminGroup('Security', Icons.shield_outlined, Icons.shield_rounded, [
+    _AdminPage('devices', 'Devices', Icons.devices_outlined,
+        Icons.devices_rounded,
+        badge: _pendingBadge),
+    _AdminPage('log', 'Activity log', Icons.receipt_long_outlined,
+        Icons.receipt_long_rounded),
+  ]),
+  _AdminGroup('System', Icons.dns_outlined, Icons.dns_rounded, [
+    _AdminPage('system', 'Storage & relay', Icons.dns_outlined,
+        Icons.dns_rounded),
+  ]),
+];
+
+/// Signed-in frame: the page groups (Insights · People · Security ·
+/// System), plus the always-there "Lock admin" (Not me), the dark/light
+/// switch and sign-out.
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key, required this.session, required this.onSignOut});
   final Map<String, dynamic> session;
@@ -36,7 +84,44 @@ class AdminShell extends StatefulWidget {
 }
 
 class _AdminShellState extends State<AdminShell> {
-  int _tab = 0;
+  int _group = 0;
+  // The page last open in each group (coming back to a group lands there).
+  final Map<int, int> _pageIn = <int, int>{};
+  int get _pending => (_me?['pending_requests'] as num?)?.toInt() ?? 0;
+  int get _newFeedback => (_me?['new_feedback'] as num?)?.toInt() ?? 0;
+
+  int _pageOf(int g) =>
+      (_pageIn[g] ?? 0).clamp(0, _groups[g].pages.length - 1);
+
+  /// Open a page by id (from banners, cards, the ⋮ menu).
+  void _go(String id) {
+    for (var g = 0; g < _groups.length; g++) {
+      final i = _groups[g].pages.indexWhere((p) => p.id == id);
+      if (i >= 0) {
+        setState(() {
+          _group = g;
+          _pageIn[g] = i;
+        });
+        return;
+      }
+    }
+  }
+
+  Widget _pageWidget(String id) => switch (id) {
+        'overview' =>
+          AdminOverview(onOpenDevices: () => _go('devices')),
+        'usage' => AdminOverview(
+            view: AdminMetricsView.usage,
+            onOpenDevices: () => _go('devices')),
+        'system' => AdminOverview(
+            view: AdminMetricsView.system,
+            onOpenDevices: () => _go('devices')),
+        'devices' => AdminDevicesPage(onChanged: _loadMe),
+        'feedback' => AdminFeedbackPage(onChanged: _loadMe),
+        'people' => const AdminUsersPage(),
+        'log' => const AdminAuditPage(),
+        _ => const SizedBox.shrink(),
+      };
   Map<String, dynamic>? _me;
   Timer? _meTimer;
 
@@ -128,21 +213,13 @@ class _AdminShellState extends State<AdminShell> {
     final p = context.adm;
     final owner = (widget.session['owner'] as Map?)?.cast<String, dynamic>();
     final probation = _device['on_probation'] == true;
-    final pending = (_me?['pending_requests'] as num?)?.toInt() ?? 0;
-    final newFeedback = (_me?['new_feedback'] as num?)?.toInt() ?? 0;
-    final pages = <Widget>[
-      AdminOverview(onOpenDevices: () => setState(() => _tab = _kDevices)),
-      AdminOverview(
-          view: AdminMetricsView.usage,
-          onOpenDevices: () => setState(() => _tab = _kDevices)),
-      AdminOverview(
-          view: AdminMetricsView.system,
-          onOpenDevices: () => setState(() => _tab = _kDevices)),
-      AdminDevicesPage(onChanged: _loadMe),
-      AdminFeedbackPage(onChanged: _loadMe),
-      const AdminUsersPage(),
-      const AdminAuditPage(),
-    ];
+    final pending = _pending;
+    // Every page stays alive (as before): one flat stack, in group order.
+    final flat = [for (final g in _groups) ...g.pages];
+    final pages = [for (final pg in flat) _pageWidget(pg.id)];
+    final group = _groups[_group];
+    final page = group.pages[_pageOf(_group)];
+    final stackIndex = flat.indexOf(page);
     final wide = MediaQuery.sizeOf(context).width >= 840;
 
     final banners = <Widget>[
@@ -162,7 +239,7 @@ class _AdminShellState extends State<AdminShell> {
               ? 'A device is asking for admin access.'
               : '$pending devices are asking for admin access.',
           action: 'Review',
-          onAction: () => setState(() => _tab = _kDevices),
+          onAction: () => _go('devices'),
         ),
     ];
 
@@ -173,7 +250,14 @@ class _AdminShellState extends State<AdminShell> {
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: AdminInstallCard(),
         ),
-        Expanded(child: IndexedStack(index: _tab, children: pages)),
+        if (group.pages.length > 1)
+          _SubTabs(
+            pages: group.pages,
+            selected: _pageOf(_group),
+            badgeOf: (pg) => pg.badge(this),
+            onSelect: (i) => setState(() => _pageIn[_group] = i),
+          ),
+        Expanded(child: IndexedStack(index: stackIndex, children: pages)),
       ],
     );
 
@@ -259,43 +343,32 @@ class _AdminShellState extends State<AdminShell> {
                 enabled: false,
               ),
               const GenieMenuEntry.divider(),
-              GenieMenuEntry(
-                icon: Icons.space_dashboard_rounded,
-                label: 'Overview',
-                onTap: () => setState(() => _tab = _kOverview),
-              ),
-              GenieMenuEntry(
-                icon: Icons.insights_rounded,
-                label: 'Usage',
-                onTap: () => setState(() => _tab = _kUsage),
-              ),
-              GenieMenuEntry(
-                icon: Icons.dns_rounded,
-                label: 'System · storage & call relay',
-                onTap: () => setState(() => _tab = _kSystem),
-              ),
-              GenieMenuEntry(
-                icon: Icons.devices_rounded,
-                label: pending > 0 ? 'Devices · $pending waiting' : 'Devices',
-                onTap: () => setState(() => _tab = _kDevices),
-              ),
-              GenieMenuEntry(
-                icon: Icons.rate_review_rounded,
-                label: newFeedback > 0
-                    ? 'Feedback · $newFeedback new'
-                    : 'Feedback',
-                onTap: () => setState(() => _tab = _kFeedback),
-              ),
-              GenieMenuEntry(
-                icon: Icons.people_alt_rounded,
-                label: 'People',
-                onTap: () => setState(() => _tab = _kPeople),
-              ),
-              GenieMenuEntry(
-                icon: Icons.receipt_long_rounded,
-                label: 'Activity log',
-                onTap: () => setState(() => _tab = _kLog),
-              ),
+              // One row per group; its pages open as a flyout (a submenu
+              // on phones) — the menu never grows past the groups.
+              for (var g = 0; g < _groups.length; g++)
+                if (_groups[g].pages.length == 1)
+                  GenieMenuEntry(
+                    icon: _groups[g].iconSel,
+                    label: _groups[g].label,
+                    onTap: () => _go(_groups[g].pages.first.id),
+                  )
+                else
+                  GenieMenuEntry(
+                    icon: _groups[g].iconSel,
+                    label: _groups[g].badge(this) > 0
+                        ? '${_groups[g].label} · ${_groups[g].badge(this)}'
+                        : _groups[g].label,
+                    children: [
+                      for (final pg in _groups[g].pages)
+                        GenieMenuEntry(
+                          icon: pg.iconSel,
+                          label: pg.badge(this) > 0
+                              ? '${pg.label} · ${pg.badge(this)}'
+                              : pg.label,
+                          onTap: () => _go(pg.id),
+                        ),
+                    ],
+                  ),
               const GenieMenuEntry.divider(),
               GenieMenuEntry(
                 icon: p.dark
@@ -328,42 +401,17 @@ class _AdminShellState extends State<AdminShell> {
                     border: Border(right: BorderSide(color: p.border)),
                   ),
                   child: NavigationRail(
-                    selectedIndex: _tab,
-                    onDestinationSelected: (i) => setState(() => _tab = i),
+                    selectedIndex: _group,
+                    onDestinationSelected: (g) => setState(() => _group = g),
                     labelType: NavigationRailLabelType.all,
                     minWidth: 88,
                     destinations: [
-                      const NavigationRailDestination(
-                          icon: Icon(Icons.space_dashboard_outlined),
-                          selectedIcon: Icon(Icons.space_dashboard_rounded),
-                          label: Text('Overview')),
-                      const NavigationRailDestination(
-                          icon: Icon(Icons.insights_outlined),
-                          selectedIcon: Icon(Icons.insights_rounded),
-                          label: Text('Usage')),
-                      const NavigationRailDestination(
-                          icon: Icon(Icons.dns_outlined),
-                          selectedIcon: Icon(Icons.dns_rounded),
-                          label: Text('System')),
-                      NavigationRailDestination(
-                          icon: navIcon(Icons.devices_outlined, badge: pending),
-                          selectedIcon:
-                              navIcon(Icons.devices_rounded, badge: pending),
-                          label: const Text('Devices')),
-                      NavigationRailDestination(
-                          icon: navIcon(Icons.rate_review_outlined,
-                              badge: newFeedback),
-                          selectedIcon: navIcon(Icons.rate_review_rounded,
-                              badge: newFeedback),
-                          label: const Text('Feedback')),
-                      const NavigationRailDestination(
-                          icon: Icon(Icons.people_alt_outlined),
-                          selectedIcon: Icon(Icons.people_alt_rounded),
-                          label: Text('People')),
-                      const NavigationRailDestination(
-                          icon: Icon(Icons.receipt_long_outlined),
-                          selectedIcon: Icon(Icons.receipt_long_rounded),
-                          label: Text('Activity log')),
+                      for (final g in _groups)
+                        NavigationRailDestination(
+                            icon: navIcon(g.icon, badge: g.badge(this)),
+                            selectedIcon:
+                                navIcon(g.iconSel, badge: g.badge(this)),
+                            label: Text(g.label)),
                     ],
                   ),
                 ),
@@ -374,44 +422,99 @@ class _AdminShellState extends State<AdminShell> {
       bottomNavigationBar: wide
           ? null
           : NavigationBar(
-              selectedIndex: _tab,
-              onDestinationSelected: (i) => setState(() => _tab = i),
-              // Six tabs: only the selected one shows its label on phones.
-              labelBehavior:
-                  NavigationDestinationLabelBehavior.onlyShowSelected,
+              selectedIndex: _group,
+              onDestinationSelected: (g) => setState(() => _group = g),
               destinations: [
-                const NavigationDestination(
-                    icon: Icon(Icons.space_dashboard_outlined),
-                    selectedIcon: Icon(Icons.space_dashboard_rounded),
-                    label: 'Overview'),
-                const NavigationDestination(
-                    icon: Icon(Icons.insights_outlined),
-                    selectedIcon: Icon(Icons.insights_rounded),
-                    label: 'Usage'),
-                const NavigationDestination(
-                    icon: Icon(Icons.dns_outlined),
-                    selectedIcon: Icon(Icons.dns_rounded),
-                    label: 'System'),
-                NavigationDestination(
-                    icon: navIcon(Icons.devices_outlined, badge: pending),
-                    selectedIcon: navIcon(Icons.devices_rounded, badge: pending),
-                    label: 'Devices'),
-                NavigationDestination(
-                    icon: navIcon(Icons.rate_review_outlined,
-                        badge: newFeedback),
-                    selectedIcon:
-                        navIcon(Icons.rate_review_rounded, badge: newFeedback),
-                    label: 'Feedback'),
-                const NavigationDestination(
-                    icon: Icon(Icons.people_alt_outlined),
-                    selectedIcon: Icon(Icons.people_alt_rounded),
-                    label: 'People'),
-                const NavigationDestination(
-                    icon: Icon(Icons.receipt_long_outlined),
-                    selectedIcon: Icon(Icons.receipt_long_rounded),
-                    label: 'Log'),
+                for (final g in _groups)
+                  NavigationDestination(
+                      icon: navIcon(g.icon, badge: g.badge(this)),
+                      selectedIcon: navIcon(g.iconSel, badge: g.badge(this)),
+                      label: g.label),
               ],
             ),
+    );
+  }
+}
+
+/// The pages of the open group — a slim strip of pills above the page.
+class _SubTabs extends StatelessWidget {
+  const _SubTabs({
+    required this.pages,
+    required this.selected,
+    required this.badgeOf,
+    required this.onSelect,
+  });
+  final List<_AdminPage> pages;
+  final int selected;
+  final int Function(_AdminPage) badgeOf;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.adm;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            for (var i = 0; i < pages.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _pill(p, pages[i], i == selected, badgeOf(pages[i]),
+                    () => onSelect(i)),
+              ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _pill(AdminPalette p, _AdminPage pg, bool on, int badge,
+      VoidCallback tap) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(Radii.xl),
+        onTap: on ? null : tap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: on ? kAdminRed.withValues(alpha: p.dark ? 0.18 : 0.10) : p.card2,
+            borderRadius: BorderRadius.circular(Radii.xl),
+            border: Border.all(
+                color: on ? kAdminRed.withValues(alpha: 0.55) : p.border),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(on ? pg.iconSel : pg.icon,
+                size: 16, color: on ? kAdminRed : p.muted),
+            const SizedBox(width: 6),
+            Text(pg.label,
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+                    color: on ? p.text : p.muted)),
+            if (badge > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: kAdminRed,
+                  borderRadius: BorderRadius.circular(Radii.xl),
+                ),
+                child: Text('$badge',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800)),
+              ),
+            ],
+          ]),
+        ),
+      ),
     );
   }
 }

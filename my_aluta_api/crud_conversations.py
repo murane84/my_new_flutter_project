@@ -449,9 +449,19 @@ def message_info(db: Session, conversation_id: int, message_id: int, sender_id: 
         }
         lr = 0 if held else (m.last_read_message_id or 0)
         ld = 0 if held else (m.last_delivered_message_id or 0)
+        # A 1:1: the message itself knows exactly when it arrived / was read
+        # (the member pointers only know the latest time they moved).
+        dm = (bool(msg) and not held and msg.receiver_id is not None
+              and int(msg.receiver_id) == int(m.user_id))
         if is_heart and not held and str(m.user_id) in opens:
             opened.append({**base, "timestamp": opens[str(m.user_id)]})
-        if lr >= message_id:
+        if dm and msg.is_read:
+            read.append({**base, "timestamp": msg.read_at or m.last_read_at,
+                         "delivered_at": msg.delivered_at})
+        elif dm and msg.delivered:
+            delivered.append({**base,
+                              "timestamp": msg.delivered_at or m.last_delivered_at})
+        elif lr >= message_id:
             read.append({**base, "timestamp": m.last_read_at})
         elif ld >= message_id:
             delivered.append({**base, "timestamp": m.last_delivered_at})

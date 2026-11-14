@@ -67,6 +67,8 @@ def _conversation_out(db: Session, conv: Conversation, me: int) -> schemas.Conve
                 net_grade=(net_grades.grade_of(u.id)
                            if shown_online and u.id != me else None),
                 role=m.role,
+                delivered_up_to=m.last_delivered_message_id,
+                read_up_to=m.last_read_message_id,
             )
         )
         if m.user_id == me:

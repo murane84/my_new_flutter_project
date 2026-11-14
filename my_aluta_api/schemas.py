@@ -258,6 +258,9 @@ class ConversationMemberOut(BaseModel):
     # friends who are online, exactly like the friend list.
     net_grade: Optional[str] = None
     role: str = "member"
+    # Book ticks in groups: how far this member has received / read.
+    delivered_up_to: Optional[int] = None
+    read_up_to: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -296,6 +299,8 @@ class MessageInfoMember(BaseModel):
     phone: Optional[str] = None
     # When they read (read list) or received (delivered list) the message.
     timestamp: Optional[datetime] = None
+    # 1:1 read entries: when it reached them, for "Delivered · Opened".
+    delivered_at: Optional[datetime] = None
 
 
 class MessageInfoOut(BaseModel):

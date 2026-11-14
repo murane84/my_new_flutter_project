@@ -107,6 +107,8 @@ class Message(Base):
     is_read = Column(Boolean, default=False)
     read_at = Column(DateTime(timezone=True), nullable=True)
     delivered = Column(Boolean, default=False)
+    # When it reached the receiver (book ticks: "Delivered 6:09 PM").
+    delivered_at = Column(DateTime(timezone=True), nullable=True)
 
     # ── Media attachment (image / file / audio voice note) ──────────────────
     # message_type: "text" | "image" | "file" | "audio"
@@ -1492,3 +1494,27 @@ class UsageCounter(Base):
     meter = Column(String, primary_key=True)
     day = Column(Date, primary_key=True)
     count = Column(Integer, nullable=False, default=0)
+
+# ── Receipt times ────────────────────────────────────────────────────────────
+# Every path that flips `delivered` / `is_read` on a loaded Message gets its
+# time stamped here, so the book ticks can say "Delivered 6:09 · Opened 6:12"
+# (bulk query.update() callers set the columns themselves).
+from sqlalchemy import event as _sa_event  # noqa: E402
+
+
+@_sa_event.listens_for(Message.delivered, "set")
+def _stamp_delivered(target, value, oldvalue, initiator):
+    if value and oldvalue is not True and target.delivered_at is None:
+        target.delivered_at = datetime.now(timezone.utc)
+
+
+@_sa_event.listens_for(Message.is_read, "set")
+def _stamp_read(target, value, oldvalue, initiator):
+    if value and oldvalue is not True:
+        now = datetime.now(timezone.utc)
+        if target.read_at is None:
+            target.read_at = now
+        if target.delivered_at is None:
+            target.delivered_at = now
+        if not target.delivered:
+            target.delivered = True

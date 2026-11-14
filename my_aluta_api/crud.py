@@ -198,10 +198,16 @@ def mark_messages_as_read(db: Session, receiver_id: int, sender_id: int):
     updated_ids = [msg.id for msg in messages_to_update.all()]
 
     if updated_ids:
+        now = datetime.now(timezone.utc)
         messages_to_update.update({
             Message.is_read: True,
-            Message.read_at: datetime.now(timezone.utc)
+            Message.read_at: now,
+            Message.delivered: True,
         }, synchronize_session=False)
+        # Read without a delivered stamp (opened straight away) → same time.
+        db.query(Message).filter(
+            Message.id.in_(updated_ids), Message.delivered_at.is_(None)
+        ).update({Message.delivered_at: now}, synchronize_session=False)
         db.commit()
 
     return updated_ids
@@ -221,7 +227,10 @@ def mark_messages_as_delivered(db: Session, receiver_id: int, sender_id: int):
     updated_ids = [msg.id for msg in messages_to_update.all()]
     
     if updated_ids:
-        messages_to_update.update({Message.delivered: True}, synchronize_session=False)
+        messages_to_update.update(
+            {Message.delivered: True,
+             Message.delivered_at: datetime.now(timezone.utc)},
+            synchronize_session=False)
         db.commit()
     
     return updated_ids

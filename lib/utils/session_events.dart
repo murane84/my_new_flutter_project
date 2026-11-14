@@ -21,4 +21,19 @@ class SessionEvents {
   final ValueNotifier<int> spaceFull = ValueNotifier<int>(0);
 
   void markSpaceFull() => spaceFull.value++;
+
+  /// Bumped when the server refuses a keepsake because this extra Our Space
+  /// is read-only (Together ran out — HTTP 402). Nothing is lost.
+  final ValueNotifier<int> spaceReadOnly = ValueNotifier<int>(0);
+
+  void markSpaceReadOnly() => spaceReadOnly.value++;
+
+  /// Bumped when my plan changed (a payment confirmed, a gift, an end) —
+  /// pushed by the server; open screens reload the plan.
+  final ValueNotifier<int> planChanged = ValueNotifier<int>(0);
+
+  void markPlanChanged() => planChanged.value++;
+
+  /// Opens the plans page (set by the signed-in home) — for toasts.
+  void Function()? openPlans;
 }

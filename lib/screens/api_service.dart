@@ -1830,23 +1830,66 @@ class ApiService {
 
   /// DEV/TRIAL: turn Together on (true) or off (false). Returns the new plan, or
   /// null on failure.
-  Future<Map<String, dynamic>?> setTogether(bool on) async {
+  /// Report a mobile-money payment (the transaction code from the payment
+  /// message). It waits for the Aluta team to confirm it. Returns
+  /// (ok, message to show).
+  Future<(bool, String)> reportPayment({
+    required String planCode,
+    required int months,
+    required String txnCode,
+    String? payerPhone,
+    int? spaceId,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return (false, 'Please sign in again');
+      final resp = await http
+          .post(
+            Uri.parse('${await _baseUrl}/plan/pay'),
+            headers: _authHeaders(token),
+            body: jsonEncode({
+              'plan_code': planCode,
+              'months': months,
+              'txn_code': txnCode,
+              if (payerPhone != null && payerPhone.isNotEmpty)
+                'payer_phone': payerPhone,
+              'space_id': ?spaceId,
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return (true, 'Sent — we’ll confirm it shortly 💛');
+      }
+      String msg = 'Couldn’t send it — try again';
+      try {
+        final d = jsonDecode(resp.body);
+        if (d is Map && d['detail'] is String) msg = d['detail'] as String;
+      } catch (_) {}
+      return (false, msg);
+    } catch (e) {
+      _logger.w('reportPayment failed: $e');
+      return (false, 'No connection — try again');
+    }
+  }
+
+  /// Bigger Our Space for one of my Spaces: {active, until, cap_bytes,
+  /// free_cap_bytes}; null on failure.
+  Future<Map<String, dynamic>?> getSpacePlan(int spaceId) async {
     try {
       final token = await _getToken();
       if (token == null) return null;
-      final resp = await http.post(
-        Uri.parse('${await _baseUrl}/plan/${on ? 'together' : 'free'}'),
-        headers: _authHeaders(token),
-      );
+      final resp = await http
+          .get(Uri.parse('${await _baseUrl}/plan/space/$spaceId'),
+              headers: _authHeaders(token))
+          .timeout(const Duration(seconds: 15));
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
-        if (data is Map<String, dynamic>) return data;
+        final d = jsonDecode(resp.body);
+        if (d is Map<String, dynamic>) return d;
       }
-      return null;
     } catch (e) {
-      _logger.w('setTogether failed: $e');
-      return null;
+      _logger.w('getSpacePlan failed: $e');
     }
+    return null;
   }
 
   // ---------------------------------------------------------------------------
@@ -2190,6 +2233,7 @@ class ApiService {
         }),
       );
       if (resp.statusCode == 413) SessionEvents.instance.markSpaceFull();
+      if (resp.statusCode == 402) SessionEvents.instance.markSpaceReadOnly();
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final data = jsonDecode(resp.body);
         if (data is Map<String, dynamic>) return data;
@@ -2220,6 +2264,7 @@ class ApiService {
         }),
       );
       if (resp.statusCode == 413) SessionEvents.instance.markSpaceFull();
+      if (resp.statusCode == 402) SessionEvents.instance.markSpaceReadOnly();
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final data = jsonDecode(resp.body);
         if (data is Map<String, dynamic>) return data;
@@ -2842,6 +2887,7 @@ class ApiService {
         }),
       );
       if (resp.statusCode == 413) SessionEvents.instance.markSpaceFull();
+      if (resp.statusCode == 402) SessionEvents.instance.markSpaceReadOnly();
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final d = jsonDecode(resp.body);
         if (d is Map<String, dynamic>) return d;
@@ -2905,6 +2951,7 @@ class ApiService {
         }),
       );
       if (resp.statusCode == 413) SessionEvents.instance.markSpaceFull();
+      if (resp.statusCode == 402) SessionEvents.instance.markSpaceReadOnly();
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final d = jsonDecode(resp.body);
         if (d is Map<String, dynamic>) return d;

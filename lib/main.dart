@@ -835,10 +835,29 @@ class SplashScreenState extends State<SplashScreen>
       _spaceFullHooked = true;
       SessionEvents.instance.spaceFull.addListener(() {
         final ctx = navigatorKey.currentContext;
+        final open = SessionEvents.instance.openPlans;
         if (ctx != null) {
           showToast(ctx,
-              'Our Space is full — remove a few moments to keep new ones',
-              type: ToastType.error, duration: const Duration(seconds: 4));
+              'Our Space is full — remove a few moments, or make it bigger',
+              type: ToastType.error,
+              duration: const Duration(seconds: 6),
+              actions: [
+                if (open != null) ToastAction('Make it bigger', open),
+              ]);
+        }
+      });
+      // An extra Space while Together has run out: nothing is lost, it just
+      // can't take new keepsakes until renewed.
+      SessionEvents.instance.spaceReadOnly.addListener(() {
+        final ctx = navigatorKey.currentContext;
+        final open = SessionEvents.instance.openPlans;
+        if (ctx != null) {
+          showToast(ctx,
+              'This Our Space is read-only until Together is renewed — '
+              'everything in it is safe',
+              type: ToastType.info,
+              duration: const Duration(seconds: 6),
+              actions: [if (open != null) ToastAction('Renew', open)]);
         }
       });
     }

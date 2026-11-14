@@ -879,6 +879,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
     _loadSpaces();            // pinned "Our Space" hero(es) — one-shot, no poll
     _loadBondRequests();      // pending "pin a bond" requests (banner + chip)
     _loadPlan();              // Together entitlement (badge + gating)
+    // A plan started / ended (pushed by the server) → refresh it; and the
+    // "Our Space is full / read-only" toasts can open the plans page.
+    SessionEvents.instance.planChanged.addListener(_onPlanChanged);
+    SessionEvents.instance.openPlans = _openPlansHook;
     _fetchStories();          // active stories for the tray + tile rings
     _loadLayoutState();
     _discoverServer();
@@ -989,6 +993,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
     StoryPosting.instance.removeListener(_onStoryPosting);
     LastSeenPrivacy.instance.mode.removeListener(_onLastSeenPrivacy);
     spacesListStale.removeListener(_loadSpaces);
+    SessionEvents.instance.planChanged.removeListener(_onPlanChanged);
+    if (SessionEvents.instance.openPlans == _openPlansHook) {
+      SessionEvents.instance.openPlans = null;
+    }
     if (ReplyBanner.onIncoming == _showReplyBanner) {
       ReplyBanner.onIncoming = null;
       LiveRoomsRegistry.instance.joinRoom = null;
@@ -2756,6 +2764,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
           ToastAction('Update', open),
         ],
       );
+      return;
+    }
+    // My plan started / was extended / ended (admin confirmed a payment).
+    if (type == 'plan_updated') {
+      SessionEvents.instance.markPlanChanged();
       return;
     }
     // The partner I invited just arrived on the new version.
@@ -5969,6 +5982,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
           .toList();
     });
   }
+
+  void _onPlanChanged() {
+    _loadPlan();
+    _loadSpaces();
+  }
+
+  void _openPlansHook() => _openTogether();
 
   /// Load the Together entitlement (fail-soft → free).
   Future<void> _loadPlan() async {

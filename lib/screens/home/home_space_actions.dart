@@ -35,6 +35,7 @@ extension _HomeSpaceActions on HomePageState {
       navigatorKey.currentContext ?? context,
       TogetherScreen(
         initialTogether: _isTogether,
+        myUserId: _myUserId,
         onChanged: () {
           _loadPlan();
           _loadSpaces();

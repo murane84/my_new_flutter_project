@@ -17,6 +17,7 @@ import '../widgets/reply_banner.dart';
 import '../screens/api_service.dart';
 import '../screens/token_helper.dart' show getToken;
 import '../utils/app_config.dart';
+import '../utils/session_events.dart';
 
 /// A small picture for an Our Space photo alert (best-effort, ~3 s).
 Future<Uint8List?> _fetchPicture(String ref) async {
@@ -378,6 +379,17 @@ Future<void> handleFcmData(Map<String, dynamic> data,
         body: mine((data['body'] ?? 'Your partner is here ✨').toString()),
         id: alutaNotifId('partner_updated', from),
         payload: {'kind': 'space', 'from': from},
+        actions: const [(kOpen, 'Open')],
+      );
+    } else if (type == 'plan_updated' || type == 'admin_payment') {
+      // A plan started / ended (or, on the owner's phone, a payment to check).
+      if (type == 'plan_updated') SessionEvents.instance.markPlanChanged();
+      await showAlutaNotification(
+        channel: alutaTeamChannel,
+        title: (data['title'] ?? 'Aluta').toString(),
+        body: (data['body'] ?? '').toString(),
+        id: alutaNotifId(type, (data['title'] ?? '').toString()),
+        payload: {'kind': type == 'plan_updated' ? 'plan' : 'admin'},
         actions: const [(kOpen, 'Open')],
       );
     } else if (type == 'feedback_update') {

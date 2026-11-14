@@ -4,6 +4,7 @@ import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:linkify/linkify.dart' show linkify;
 import '../../utils/loose_url_linkifier.dart';
 import '../../utils/readable.dart' show accentInk;
+import '../../services/song_names.dart';
 
 /// Renders a chat message with lightweight, WhatsApp/Telegram-style formatting:
 ///   *bold*  _italic_  ~strike~  __underline__  `code`  ==highlight==  ||spoiler||
@@ -839,9 +840,35 @@ List<InlineSpan> _previewInline(
   TextStyle base, {
   required Color codeBg,
   required Color highlightBg,
+  Color? mention,
 }) {
-  List<InlineSpan> recurse(String inner, TextStyle st) =>
-      _previewInline(inner, st, codeBg: codeBg, highlightBg: highlightBg);
+  List<InlineSpan> recurse(String inner, TextStyle st) => _previewInline(
+      inner, st,
+      codeBg: codeBg, highlightBg: highlightBg, mention: mention);
+
+  // Plain words, with @-tags in the accent ink (names as I know them).
+  List<InlineSpan> plain(String t, TextStyle st) {
+    t = _applyFractions(t);
+    if (mention == null || !t.contains('@')) {
+      return [TextSpan(text: t, style: st)];
+    }
+    final spans = <InlineSpan>[];
+    var c = 0;
+    for (final m in _mentionRe.allMatches(t)) {
+      if (m.start > c) {
+        spans.add(TextSpan(text: t.substring(c, m.start), style: st));
+      }
+      final tok = m.group(0)!;
+      final key = tok.substring(1).replaceAll('\u00A0', ' ').toLowerCase();
+      final shown = key == 'all' ? null : MentionSelf.names[key];
+      spans.add(TextSpan(
+          text: shown == null ? tok : '@$shown',
+          style: st.copyWith(color: mention, fontWeight: FontWeight.w700)));
+      c = m.end;
+    }
+    if (c < t.length) spans.add(TextSpan(text: t.substring(c), style: st));
+    return spans;
+  }
 
   final out = <InlineSpan>[];
   var cursor = 0;
@@ -861,13 +888,11 @@ List<InlineSpan> _previewInline(
       break;
     }
     if (found == null) {
-      out.add(TextSpan(text: _applyFractions(s.substring(cursor)), style: base));
+      out.addAll(plain(s.substring(cursor), base));
       break;
     }
     if (found.start > cursor) {
-      out.add(TextSpan(
-          text: _applyFractions(s.substring(cursor, found.start)),
-          style: base));
+      out.addAll(plain(s.substring(cursor, found.start), base));
     }
     switch (found.marker.kind) {
       case 'code':
@@ -923,6 +948,7 @@ List<InlineSpan> previewSpans(
   TextStyle base, {
   required Color codeBg,
   required Color highlightBg,
+  Color? mention,
 }) {
   final oneLine = text
       .split('\n')
@@ -941,9 +967,28 @@ List<InlineSpan> previewSpans(
   // A leading type emoji (📞 Missed call, 🎵 Song, 📷 Photo…) becomes a real
   // icon: emoji glyphs take the preview's faded colour and some (🎵 is near
   // black on Windows) vanish on a dark theme. Icons stay crisp in both.
+  // Tagged me (or @all) → a small accent "@" leads the line, so a mention
+  // stands out in the list before the chat is even opened.
+  final lead = <InlineSpan>[
+    if (mention != null && mentionsMe(oneLine))
+      TextSpan(
+          text: '@ ',
+          style: base.copyWith(color: mention, fontWeight: FontWeight.w900)),
+  ];
   for (final e in _previewIcons.entries) {
     if (!oneLine.startsWith(e.key)) continue;
-    final rest = oneLine.substring(e.key.length).trimLeft();
+    var rest = oneLine.substring(e.key.length).trimLeft();
+    // A song reads by its tidy name, as in the chat and the playlist
+    // ("Nandy - Asante_064918" → "Asante — Nandy").
+    if ((e.key == '🎵' || e.key == '🎶') && rest.isNotEmpty) {
+      final i = rest.indexOf(' — ');
+      if (i <= 0) {
+        final n = SongNames.instance.parseName(rest);
+        if (n.title.isNotEmpty) {
+          rest = n.artist.isEmpty ? n.title : '${n.title} — ${n.artist}';
+        }
+      }
+    }
     final low = rest.toLowerCase();
     final bad = e.key == '📞' &&
         const ['missed', 'declined', 'no answer', 'unreachable', 'failed',
@@ -986,10 +1031,15 @@ List<InlineSpan> previewSpans(
             ]),
           ),
         ),
-      ..._previewInline(rest, base, codeBg: codeBg, highlightBg: highlightBg),
+      ..._previewInline(rest, base,
+          codeBg: codeBg, highlightBg: highlightBg, mention: mention),
     ];
   }
-  return _previewInline(oneLine, base, codeBg: codeBg, highlightBg: highlightBg);
+  return [
+    ...lead,
+    ..._previewInline(oneLine, base,
+        codeBg: codeBg, highlightBg: highlightBg, mention: mention),
+  ];
 }
 
 /// Preview type-emoji → icon (see [previewSpans]). ❤️ stays an emoji: it's

@@ -90,6 +90,10 @@ class PlayerStyleController extends ChangeNotifier {
 
   static const _key = 'player_disc_style_v1';
   static const _dimKey = 'player_orb_dimmed_v1';
+  // Now Playing's colour: from the song's cover (default) or my theme.
+  static const _coverKey = 'player_cover_colours_v1';
+  bool _coverColours = true;
+  bool get coverColours => _coverColours;
   // Earned cosmetics (e.g. the Anniversary Vinyl disc) — unlocked by a bond's
   // "In tune" streak and remembered on-device so the style stays available.
   static const _annivKey = 'player_anniversary_unlocked_v1';
@@ -113,6 +117,7 @@ class PlayerStyleController extends ChangeNotifier {
       final p = await SharedPreferences.getInstance();
       _style = PlayerDiscStyleX.fromId(p.getString(_key));
       _orbDimmed = p.getBool(_dimKey) ?? false;
+      _coverColours = p.getBool(_coverKey) ?? true;
       _anniversaryUnlocked = p.getBool(_annivKey) ?? false;
     } catch (_) {
       // Keep the default on any read failure.
@@ -145,6 +150,21 @@ class PlayerStyleController extends ChangeNotifier {
       AccountPrefs.touch();
     } catch (_) {
       // Best-effort — selection still applies this session.
+    }
+  }
+
+  /// Let Now Playing take the song cover's colour, or keep my theme's.
+  /// Remembered (and follows my account like the disc style).
+  Future<void> setCoverColours(bool v) async {
+    if (_coverColours == v) return;
+    _coverColours = v;
+    notifyListeners();
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setBool(_coverKey, v);
+      AccountPrefs.touch();
+    } catch (_) {
+      // Best-effort — still applies this session.
     }
   }
 
@@ -1859,6 +1879,13 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
                         TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
                   ),
                 ),
+                const SizedBox(height: 12),
+                // Colours: from the song's cover, or always my theme.
+                _ColourChoice(
+                  coverOn: PlayerStyleController.instance.coverColours,
+                  accent: widget.accent,
+                  onChanged: PlayerStyleController.instance.setCoverColours,
+                ),
                 const SizedBox(height: 14),
                 Flexible(
                   child: GridView(
@@ -2023,5 +2050,74 @@ class _PlayerStyleSheetState extends State<_PlayerStyleSheet> {
         ),
       ),
     );
+  }
+}
+
+/// "Colours: Cover | My theme" — two soft pills, the chosen one filled.
+class _ColourChoice extends StatelessWidget {
+  const _ColourChoice(
+      {required this.coverOn, required this.accent, required this.onChanged});
+  final bool coverOn;
+  final Color accent;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget pill(bool cover, IconData icon, String label) {
+      final on = coverOn == cover;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => onChanged(cover),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 10),
+            decoration: BoxDecoration(
+              color: on
+                  ? accent.withValues(alpha: 0.14)
+                  : scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                  color: on
+                      ? accent.withValues(alpha: 0.55)
+                      : scheme.outlineVariant.withValues(alpha: 0.5)),
+            ),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(icon, size: 16, color: on ? accent : scheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+                        color: on ? scheme.onSurface : scheme.onSurfaceVariant)),
+              ),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('Colours',
+          style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: scheme.onSurfaceVariant)),
+      const SizedBox(height: 6),
+      Row(children: [
+        pill(true, Icons.palette_rounded, 'From the cover'),
+        const SizedBox(width: 8),
+        pill(false, Icons.brush_rounded, 'My theme'),
+      ]),
+      const SizedBox(height: 4),
+      Text(
+          coverOn
+              ? 'Now Playing glows in each song cover\'s colour.'
+              : 'Now Playing keeps your theme colour — covers still show.',
+          style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+    ]);
   }
 }

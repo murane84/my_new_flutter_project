@@ -30,6 +30,7 @@ import '../utils/smooth_wheel.dart';
 import '../utils/prefs_now.dart';
 import '../utils/keyboard.dart';
 import '../widgets/song_art.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/now_glow.dart';
 import 'stories/quick_status_sheet.dart';
 import '../utils/file_bytes.dart';
@@ -279,6 +280,15 @@ class _MusicControlsState extends ConsumerState<MusicControls>
   void _shareArtAccent() =>
       NowPlayingPresence.instance.setCoverColor(_artAccentVN.value);
   int? _artAccentForId;
+  // The current song's cover colour (file cover, else the online one) —
+  // shown only while "Colours: From the cover" is on (Player style sheet).
+  Color? _coverAccent;
+  VoidCallback? _coverWait; // waiting for an online cover to land
+  void _applyCoverAccent() {
+    final want =
+        PlayerStyleController.instance.coverColours ? _coverAccent : null;
+    if (_artAccentVN.value != want) _artAccentVN.value = want;
+  }
   // Cached parsed LRC lines for the now-playing synced-lyric ticker.
   String? _lrcCachePath;
   Duration? _lrcCacheDur;
@@ -434,6 +444,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     // The song's cover colour also tints the ring friends see around my
     // photo in their Circle list.
     _artAccentVN.addListener(_shareArtAccent);
+    PlayerStyleController.instance.addListener(_applyCoverAccent);
     // On Android, build the player with an equalizer + loudness pipeline so
     // the Equalizer screen can actually shape the sound. Elsewhere it's plain.
     if (Platform.isAndroid) {
@@ -625,6 +636,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     _queueScrollCtrl.dispose();
     _queueGlow.dispose();
     _artAccentVN.removeListener(_shareArtAccent);
+    PlayerStyleController.instance.removeListener(_applyCoverAccent);
+    if (_coverWait != null) {
+      CoverArt.instance.version.removeListener(_coverWait!);
+    }
     _artAccentVN.dispose();
     _playlistCtrl.dispose();
     _speedCtrl.dispose();
@@ -1585,8 +1600,10 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _currentArtId = null; // resolved by _fetchMetadata once the song is found
       _artAccentForId = null; // re-derive the artwork accent for the new track
       _artAccentVN.value = null;
+      _coverAccent = null;
     });
     SongArt.now.value = (path: path, title: initTitle);
+    unawaited(_resolveOnlineAccent(path));
     ref.read(nowPlayingProvider.notifier).update(
         track: initTitle, artist: initArtist, playing: true);
     _syncFavoriteAmbient();
@@ -2011,8 +2028,11 @@ class _MusicControlsState extends ConsumerState<MusicControls>
         _trackName = initTitle;
         _artistName = initArtist;
         _currentArtId = null;
+        _coverAccent = null;
       });
+      _artAccentVN.value = null;
       SongArt.now.value = (path: path, title: initTitle);
+      unawaited(_resolveOnlineAccent(path));
       ref.read(nowPlayingProvider.notifier).update(
           track: initTitle, artist: initArtist, playing: false);
       _syncFavoriteAmbient();

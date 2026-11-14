@@ -31,7 +31,67 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
       final accent = _makeUsableAccent(picked);
       if (!mounted) return;
       _artAccentForId = id;
-      _artAccentVN.value = accent;
+      _coverAccent = accent; // the file's own cover wins over an online one
+      _applyCoverAccent();
+    } catch (_) {}
+  }
+
+  /// No cover in the file (or not a phone) → the cover Aluta found online
+  /// for this song gives Now Playing its colour too. Waits for the lookup if
+  /// it hasn't landed yet; never overrides the file's own cover.
+  Future<void> _resolveOnlineAccent(String path) async {
+    if (_coverWait != null) {
+      CoverArt.instance.version.removeListener(_coverWait!);
+      _coverWait = null;
+    }
+    bool stillCurrent() =>
+        mounted &&
+        _currentIndex >= 0 &&
+        _currentIndex < _playlist.length &&
+        _playlist[_currentIndex] == path;
+    // Give the file's own cover a moment to be read first (phones).
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    if (!stillCurrent() || _coverAccent != null) return;
+    final ta = _effTA(path);
+    final url =
+        CoverArt.instance.urlFor(path, title: ta.$1, artist: ta.$2);
+    if (url == null) {
+      // Not looked up yet → try again once it lands (one listener at a time).
+      void again() {
+        CoverArt.instance.version.removeListener(again);
+        if (_coverWait == again) _coverWait = null;
+        if (stillCurrent() && _coverAccent == null) {
+          final u = CoverArt.instance
+              .urlFor(path, title: ta.$1, artist: ta.$2);
+          if (u != null) unawaited(_accentFromUrl(path, u));
+        }
+      }
+      _coverWait = again;
+      CoverArt.instance.version.addListener(again);
+      return;
+    }
+    await _accentFromUrl(path, url);
+  }
+
+  Future<void> _accentFromUrl(String path, String url) async {
+    try {
+      final palette = await PaletteGenerator.fromImageProvider(
+        CachedNetworkImageProvider(url, maxWidth: 160),
+        size: const Size(120, 120),
+        maximumColorCount: 8,
+      );
+      final picked = palette.vibrantColor?.color ??
+          palette.lightVibrantColor?.color ??
+          palette.dominantColor?.color;
+      if (picked == null || !mounted) return;
+      if (_currentIndex < 0 ||
+          _currentIndex >= _playlist.length ||
+          _playlist[_currentIndex] != path ||
+          _coverAccent != null) {
+        return;
+      }
+      _coverAccent = _makeUsableAccent(picked);
+      _applyCoverAccent();
     } catch (_) {}
   }
 

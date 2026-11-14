@@ -795,6 +795,52 @@ class _SongBubble extends StatefulWidget {
 
 class _SongBubbleState extends State<_SongBubble> {
   final ja.AudioPlayer _player = ja.AudioPlayer();
+
+  // ── The song's cover (online, by title + artist) ─────────────────────────
+  bool _hasCover = false;
+
+  ({String title, String artist}) get _ta {
+    final i = widget.title.indexOf(' — ');
+    return i <= 0
+        ? (title: widget.title.trim(), artist: '')
+        : (
+            title: widget.title.substring(0, i).trim(),
+            artist: widget.title.substring(i + 3).trim()
+          );
+  }
+
+  /// The play/pause glyph over the cover (or alone, when there's none).
+  Widget _coverUnder(Widget glyph) {
+    final ta = _ta;
+    return ValueListenableBuilder<int>(
+      valueListenable: CoverArt.instance.version,
+      builder: (context, _, _) {
+        final url = ta.artist.isEmpty
+            ? null
+            : CoverArt.instance.urlFor(
+                'song:${ta.title.toLowerCase()}|${ta.artist.toLowerCase()}',
+                title: ta.title,
+                artist: ta.artist);
+        final has = url != null;
+        if (has != _hasCover) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() => _hasCover = has);
+          });
+        }
+        if (!has) return glyph;
+        return Stack(fit: StackFit.expand, children: [
+          CachedNetworkImage(
+            imageUrl: url,
+            fit: BoxFit.cover,
+            memCacheWidth: 126,
+            errorWidget: (_, _, _) => const SizedBox.shrink(),
+          ),
+          const ColoredBox(color: Color(0x59000000)),
+          Center(child: glyph),
+        ]);
+      },
+    );
+  }
   bool _prepared = false;
   bool _loading = false;
   bool _unavailable = false;
@@ -1000,7 +1046,11 @@ class _SongBubbleState extends State<_SongBubble> {
                         color: widget.accent.withAlpha(isDark ? 90 : 70),
                         width: 1),
                   ),
-                  child: _loading
+                  // The song arrives dressed: its real cover (found online
+                  // by title + artist, like the playlist's) under the play
+                  // button, softly dimmed so the button stays readable.
+                  clipBehavior: Clip.antiAlias,
+                  child: _coverUnder(_loading
                       ? Padding(
                           padding: const EdgeInsets.all(11),
                           child: CircularProgressIndicator(
@@ -1014,9 +1064,12 @@ class _SongBubbleState extends State<_SongBubble> {
                               : (playing
                                   ? Icons.pause_rounded
                                   : Icons.play_arrow_rounded),
-                          color:
-                              isDark ? const Color(0xFFFF8A93) : widget.accent,
-                          size: 22),
+                          color: _hasCover
+                              ? Colors.white
+                              : (isDark
+                                  ? const Color(0xFFFF8A93)
+                                  : widget.accent),
+                          size: 22)),
                 ),
               ),
               const SizedBox(width: 10),

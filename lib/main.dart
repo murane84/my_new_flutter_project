@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart'
-    show kIsWeb, defaultTargetPlatform, TargetPlatform;
+    show kIsWeb, kReleaseMode, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 // (Newer Flutter keeps the iOS page transition in the cupertino library.)
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
@@ -122,6 +122,12 @@ Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   final binding = WidgetsFlutterBinding.ensureInitialized();
+  // A widget that fails to build in a release app shows Flutter's grey
+  // error box — a whitish flash mid-transition. Draw nothing instead (the
+  // error is still reported); the next frame normally builds it fine.
+  if (kReleaseMode) {
+    ErrorWidget.builder = (_) => const SizedBox.shrink();
+  }
   // Hold the native launch logo until the splash has its logo decoded
   // (SplashScreen lifts it), with a safety net so it can never get stuck.
   FlutterNativeSplash.preserve(widgetsBinding: binding);

@@ -2153,10 +2153,19 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                           builder: (ctx, child) {
                             // Turning-page depth: the centred page is full size,
                             // neighbours shrink slightly like leaves of a book.
+                            // Read safely: while the section changes the
+                            // controller can briefly have no single position
+                            // (.position would throw → a grey error box).
                             double t = 0;
-                            if (_diaryPageCtrl.hasClients &&
-                                _diaryPageCtrl.position.hasContentDimensions) {
-                              t = (_diaryPageCtrl.page ?? i.toDouble()) - i;
+                            final ps = _diaryPageCtrl.positions;
+                            if (ps.length == 1) {
+                              final pos = ps.first;
+                              if (pos.hasContentDimensions &&
+                                  pos.hasPixels &&
+                                  pos.viewportDimension > 0) {
+                                final pg = _diaryPageCtrl.page;
+                                if (pg != null && pg.isFinite) t = pg - i;
+                              }
                             }
                             final scale =
                                 (1 - (t.abs() * 0.10)).clamp(0.88, 1.0);

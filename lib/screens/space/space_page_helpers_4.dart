@@ -114,9 +114,15 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
                 child: OutlinedButton.icon(
                   onPressed: _qSubmitting ? null : _listenTogether,
                   icon: const Icon(Icons.headphones_rounded, size: 16),
-                  label: const Text('Listen together'),
+                  // Always one line — shrinks a touch on big text instead of
+                  // wrapping into two rows.
+                  label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('Listen together', maxLines: 1)),
                   style: OutlinedButton.styleFrom(
                       visualDensity: VisualDensity.compact,
+                      minimumSize: const Size(0, 44),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       foregroundColor: _accent,
                       side: BorderSide(color: _accent.withValues(alpha: 0.5))),
                 ),
@@ -126,9 +132,13 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
                 child: FilledButton.icon(
                   onPressed: _qSubmitting ? null : _composeDedication,
                   icon: const Icon(Icons.favorite_rounded, size: 16),
-                  label: const Text('Dedicate'),
+                  label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('Dedicate', maxLines: 1)),
                   style: FilledButton.styleFrom(
                       backgroundColor: _accent,
+                      minimumSize: const Size(0, 44),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       visualDensity: VisualDensity.compact),
                 ),
               ),

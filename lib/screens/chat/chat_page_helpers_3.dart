@@ -2183,7 +2183,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
         animate: newest,
         // One heart at a time (newest only), and only with my bond; songs
         // and voice notes float a note in any chat. Groups never a heart.
-        heart: newest && !_isGroup && (music || _bondedHere),
+        heart: newest && (music || (!_isGroup && _bondedHere)),
         openFraction: fraction,
         openedCount: opened,
         onTap: s == BookState.failed

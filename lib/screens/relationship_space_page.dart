@@ -1680,7 +1680,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       // Shared Harmony: if my partner has Together, our Space is in
       // Harmony for me too (this page only).
       child: SharedHarmony(
-        ownerId: _partnerId,
+        // A 1:1 bond only (a group Space has no single "partner").
+        ownerId: _others.length == 1 ? _partnerId : null,
         ownerName: _partnerShown(''),
         child: shell,
       ),

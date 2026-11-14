@@ -19,10 +19,11 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
         size: 200,
       );
       if (bytes == null || bytes.isEmpty) return;
-      // The file has a cover → the lock screen shows it too.
+      // The file has a cover → the lock screen shows it too (the song's
+      // own media uri: Android reads its embedded art as the thumbnail).
       if (_currentIndex >= 0 && _currentIndex < _playlist.length) {
         audioHandler?.setArt(_playlist[_currentIndex],
-            Uri.parse('content://media/external/audio/media/$id/albumart'));
+            Uri.parse('content://media/external/audio/media/$id'));
       }
       final palette = await PaletteGenerator.fromImageProvider(
         MemoryImage(bytes),

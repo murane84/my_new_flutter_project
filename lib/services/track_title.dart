@@ -72,6 +72,19 @@ String displayTitleForPath(String path) {
   return out.isEmpty ? 'Live song' : out;
 }
 
+/// The artist as the playlist shows it (your edit, else read from the
+/// file name; '' when unknown).
+String displayArtistForPath(String path) =>
+    metadataStore.artist(path, SongNames.instance.parse(path).artist).trim();
+
+/// "Title — Artist" as the playlist shows it (just the title when the
+/// artist is unknown) — for anything that names a song from a path.
+String displayLabelForPath(String path) {
+  final t = displayTitleForPath(path);
+  final a = displayArtistForPath(path);
+  return a.isEmpty ? t : '$t — $a';
+}
+
 /// Strip a file extension then clean downloader junk from a raw file name,
 /// giving the nice display title the app shows for web-picked files.
 String cleanDisplayName(String fileName) {

@@ -1200,8 +1200,7 @@ extension _HomePageHelpers1 on HomePageState {
     return [
       for (final p in list.skip(at + 1).take(n))
         (
-          title: metadataStore.title(
-              p, p.replaceAll('\\', '/').split('/').last.replaceAll(RegExp(r'\.[^.]+$'), '')),
+          title: displayLabelForPath(p),
           load: () => readFileBytes(p),
         ),
     ];

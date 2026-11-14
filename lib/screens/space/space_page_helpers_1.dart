@@ -247,7 +247,11 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
     if (title.isEmpty) return null;
     final want = title.toLowerCase();
     for (final p in paths) {
-      if (_songTitle(p).toLowerCase() == want) return p;
+      if (_songTitle(p).toLowerCase() == want ||
+          displayTitleForPath(p).toLowerCase() == want ||
+          _fileTitle(p).toLowerCase() == want) {
+        return p;
+      }
     }
     return null;
   }

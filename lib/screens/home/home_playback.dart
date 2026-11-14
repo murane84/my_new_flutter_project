@@ -99,10 +99,16 @@ String? loadedPathForTitle(String title) {
   for (final p in playlistNotifier.value) {
     var name = p.split(RegExp(r'[\\/]')).last;
     name = name.replaceAll(RegExp(r'\.[A-Za-z0-9]{2,4}$'), '');
-    final n = norm(name);
-    if (n == want) exact ??= p;
-    if (want.length >= 4 && n.startsWith(want)) starts ??= p;
-    if (want.length >= 4 && n.contains(want)) contains ??= p;
+    // The file name, or the tidy name the playlist shows.
+    for (final n in {
+      norm(name),
+      norm(displayTitleForPath(p)),
+      norm(displayLabelForPath(p)),
+    }) {
+      if (n == want) exact ??= p;
+      if (want.length >= 4 && n.startsWith(want)) starts ??= p;
+      if (want.length >= 4 && n.contains(want)) contains ??= p;
+    }
   }
   return exact ?? starts ?? contains;
 }

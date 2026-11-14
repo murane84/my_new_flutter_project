@@ -76,7 +76,12 @@ import '../services/share_inbox.dart';
 import '../services/contact_names.dart';
 import '../widgets/heart_toast.dart';
 import '../services/metadata_overrides.dart';
-import '../services/track_title.dart' show splitTitleArtist;
+import '../services/track_title.dart'
+    show
+        splitTitleArtist,
+        displayLabelForPath,
+        displayTitleForPath,
+        displayArtistForPath;
 import 'listening_audience_sheet.dart' show PresenceShareButton;
 import '../services/tune_in.dart';
 import '../widgets/tune_in_ask.dart';

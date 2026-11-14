@@ -1234,9 +1234,15 @@ extension _ChatPageHelpers1 on _ChatPageState {
                             child: isNow
                                 ? const PlayingBars(
                                     color: Colors.white, scale: 0.7)
-                                : Icon(Icons.music_note_rounded,
-                                    size: 17,
-                                    color: scheme.onPrimaryContainer),
+                                : SongArt(
+                                    path: p,
+                                    title: displayTitleForPath(p),
+                                    artist: displayArtistForPath(p),
+                                    size: 36,
+                                    fallback: Icon(Icons.music_note_rounded,
+                                        size: 17,
+                                        color: scheme.onPrimaryContainer),
+                                  ),
                           ),
                           title: MarqueeText(
                             text: _titleFromPath(p),
@@ -1343,7 +1349,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
               token: token,
               myUserId: myUserId,
               audioBytes: bytes,
-              title: picked.name,
+              title: cleanDisplayName(picked.name),
               conversationId: widget.conversationId,
               groupName:
                   widget.groupTitle.isEmpty ? 'the group' : widget.groupTitle,
@@ -1353,7 +1359,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
               myUserId: myUserId,
               receiverId: widget.friendId,
               audioBytes: bytes,
-              title: picked.name,
+              title: cleanDisplayName(picked.name),
               peerName: _livePeerLabel,
             ),
     ));

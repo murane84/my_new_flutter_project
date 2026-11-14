@@ -593,9 +593,7 @@ extension _ChatPollsAdmin on _ChatPageState {
 
     try {
       for (final p in playlistNotifier.value) {
-        var name = p.split(RegExp(r'[\\/]')).last;
-        name = name.replaceAll(RegExp(r'\.[A-Za-z0-9]{2,4}$'), '');
-        add(name);
+        add(displayLabelForPath(p)); // as the playlist names it
       }
       if (out.isEmpty) {
         for (final e in playbackBus.webQueue?.call() ?? const []) {
@@ -1387,11 +1385,17 @@ extension _ChatPollsAdmin on _ChatPageState {
       for (final p in playlistNotifier.value) {
         var name = p.split(RegExp(r'[\\/]')).last;
         name = name.replaceAll(RegExp(r'\.[A-Za-z0-9]{2,4}$'), '');
-        final n = norm(name);
-        if (n == want) return p;
-        if (want.length >= 4) {
-          if (n.startsWith(want)) starts ??= p;
-          if (n.contains(want)) contains ??= p;
+        // The file name, or the tidy name the playlist shows.
+        for (final n in {
+          norm(name),
+          norm(displayTitleForPath(p)),
+          norm(displayLabelForPath(p)),
+        }) {
+          if (n == want) return p;
+          if (want.length >= 4) {
+            if (n.startsWith(want)) starts ??= p;
+            if (n.contains(want)) contains ??= p;
+          }
         }
       }
     } catch (_) {}

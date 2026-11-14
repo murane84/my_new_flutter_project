@@ -49,10 +49,8 @@ class _MomentComposerState extends State<_MomentComposer> {
     super.dispose();
   }
 
-  String _titleFromPath(String path) {
-    final name = path.split(RegExp(r'[\\/]+')).last;
-    return name.replaceAll(RegExp(r'\.[^.]+$'), '');
-  }
+  // As the playlist names it (tidied, your edits first).
+  String _titleFromPath(String path) => displayLabelForPath(path);
 
   void _clearPicked() {
     _bytes = null;
@@ -289,8 +287,14 @@ class _MomentComposerState extends State<_MomentComposer> {
                 shrinkWrap: true,
                 itemCount: paths.length,
                 itemBuilder: (c, i) => ListTile(
-                  leading:
-                      Icon(Icons.music_note_rounded, color: widget.accent),
+                  leading: SongArt(
+                      path: paths[i],
+                      title: displayTitleForPath(paths[i]),
+                      artist: displayArtistForPath(paths[i]),
+                      size: 40,
+                      radius: Radii.md,
+                      fallback: Icon(Icons.music_note_rounded,
+                          color: widget.accent)),
                   title: Text(_titleFromPath(paths[i]),
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                   onTap: () => Navigator.pop(ctx, paths[i]),
@@ -862,10 +866,8 @@ class _PlaylistAddSheetState extends State<_PlaylistAddSheet> {
     super.dispose();
   }
 
-  String _titleFromPath(String path) {
-    final name = path.split(RegExp(r'[\\/]+')).last;
-    return name.replaceAll(RegExp(r'\.[^.]+$'), '');
-  }
+  // As the playlist names it (tidied, your edits first).
+  String _titleFromPath(String path) => displayLabelForPath(path);
 
   Future<void> _pickFromLibrary() async {
     final scheme = Theme.of(context).colorScheme;
@@ -906,8 +908,14 @@ class _PlaylistAddSheetState extends State<_PlaylistAddSheet> {
                 shrinkWrap: true,
                 itemCount: paths.length,
                 itemBuilder: (c, i) => ListTile(
-                  leading:
-                      Icon(Icons.music_note_rounded, color: widget.accent),
+                  leading: SongArt(
+                      path: paths[i],
+                      title: displayTitleForPath(paths[i]),
+                      artist: displayArtistForPath(paths[i]),
+                      size: 40,
+                      radius: Radii.md,
+                      fallback: Icon(Icons.music_note_rounded,
+                          color: widget.accent)),
                   title: Text(_titleFromPath(paths[i]),
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                   onTap: () => Navigator.pop(ctx, paths[i]),

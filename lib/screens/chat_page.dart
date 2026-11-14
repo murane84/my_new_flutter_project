@@ -112,7 +112,14 @@ import '../utils/app_config.dart';
 import '../utils/loose_url_linkifier.dart';
 import '../services/app_busy.dart';
 import '../services/block_list.dart';
-import '../services/track_title.dart' show splitTitleArtist, cleanTrackName;
+import '../services/track_title.dart'
+    show
+        splitTitleArtist,
+        cleanTrackName,
+        cleanDisplayName,
+        displayLabelForPath,
+        displayTitleForPath,
+        displayArtistForPath;
 import '../services/song_names.dart';
 import '../services/cover_art.dart';
 import '../widgets/song_art.dart';

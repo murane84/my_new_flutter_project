@@ -2973,10 +2973,8 @@ extension _HomeFriendListView on HomePageState {
     );
   }
 
-  String _roomTitleFromPath(String path) {
-    final name = path.split(RegExp(r'[\\/]+')).last;
-    return name.replaceAll(RegExp(r'\.[^.]+$'), '');
-  }
+  // As the playlist names it (tidied, your edits first).
+  String _roomTitleFromPath(String path) => displayLabelForPath(path);
 
   /// Start a room: from the song already playing (one tap), else pick one.
   Future<void> _startRoomFlow() async {
@@ -3109,8 +3107,14 @@ extension _HomeFriendListView on HomePageState {
                 shrinkWrap: true,
                 itemCount: paths.length,
                 itemBuilder: (c, i) => ListTile(
-                  leading:
-                      Icon(Icons.music_note_rounded, color: accentInk(scheme)),
+                  leading: SongArt(
+                      path: paths[i],
+                      title: displayTitleForPath(paths[i]),
+                      artist: displayArtistForPath(paths[i]),
+                      size: 40,
+                      radius: Radii.md,
+                      fallback: Icon(Icons.music_note_rounded,
+                          color: accentInk(scheme))),
                   title: Text(_roomTitleFromPath(paths[i]),
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                   onTap: () => Navigator.pop(ctx, paths[i]),

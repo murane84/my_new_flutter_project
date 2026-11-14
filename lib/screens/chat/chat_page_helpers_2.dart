@@ -7,14 +7,8 @@ part of '../chat_page.dart';
 
 extension _ChatPageHelpers2 on _ChatPageState {
   /// Derive a clean display title from a file path (basename without extension).
-  String _titleFromPath(String path) {
-    var name = path;
-    final slash = name.lastIndexOf(RegExp(r'[\\/]'));
-    if (slash >= 0) name = name.substring(slash + 1);
-    final dot = name.lastIndexOf('.');
-    if (dot > 0) name = name.substring(0, dot);
-    return name.trim().isEmpty ? 'Live song' : name.trim();
-  }
+  // As the playlist names it ("Title — Artist", tidied, your edits first).
+  String _titleFromPath(String path) => displayLabelForPath(path);
 
   /// Ask whether to call over the internet (Aluta) or via the device dialer.
   /// Open a group member's profile card (tapped from their message header).

@@ -49,7 +49,13 @@ import '../widgets/tune_in_ask.dart';
 import '../widgets/playing_bars.dart';
 import '../widgets/now_glow.dart';
 import '../widgets/photo_viewer.dart';
-import '../services/track_title.dart' show cleanTrackName;
+import '../services/track_title.dart'
+    show
+        cleanTrackName,
+        displayTitleForPath,
+        displayArtistForPath,
+        displayLabelForPath;
+import '../widgets/song_art.dart';
 import '../utils/marquee_text.dart';
 import '../services/contact_names.dart';
 import '../widgets/keepsake_photo.dart';
@@ -986,7 +992,15 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     await _hostSession(path, startPos, gated: true);
   }
 
+  /// The song's name as the playlist shows it (tidied, your edits first).
   String _songTitle(String path) {
+    final a = displayArtistForPath(path);
+    final t = displayTitleForPath(path);
+    return a.isEmpty ? t : '$t — $a';
+  }
+
+  /// The bare file name (older capsules were labelled with it).
+  String _fileTitle(String path) {
     final name = path.split(RegExp(r'[\\/]+')).last;
     return name.replaceAll(RegExp(r'\.[^.]+$'), '');
   }
@@ -1070,7 +1084,8 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                     shrinkWrap: true,
                     itemCount: paths.length,
                     itemBuilder: (c, i) {
-                      final t = _songTitle(paths[i]);
+                      final t = displayTitleForPath(paths[i]);
+                      final a = displayArtistForPath(paths[i]);
                       final isNow = paths[i] == curPath &&
                           (playbackBus.isPlaying?.call() ?? false);
                       return Padding(
@@ -1096,22 +1111,47 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
                                         : _accent.withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(Radii.md),
                                   ),
-                                  // The song playing right now dances.
+                                  // The song playing right now dances;
+                                  // the others show their cover, the same
+                                  // picture as in the playlist.
                                   child: isNow
                                       ? const PlayingBars(
                                           color: Colors.white, scale: 0.75)
-                                      : Icon(Icons.music_note_rounded,
-                                          color: _accent, size: 19),
+                                      : SongArt(
+                                          path: paths[i],
+                                          title: t,
+                                          artist: a,
+                                          size: 40,
+                                          radius: Radii.md,
+                                          fallback: Icon(
+                                              Icons.music_note_rounded,
+                                              color: _accent,
+                                              size: 19),
+                                        ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
-                                  child: Text(t,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: scheme.onSurface)),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(t,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: scheme.onSurface)),
+                                      if (a.isNotEmpty)
+                                        Text(a,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color:
+                                                    scheme.onSurfaceVariant)),
+                                    ],
+                                  ),
                                 ),
                                 const SizedBox(width: 8),
                                 Icon(Icons.play_circle_fill_rounded,

@@ -3160,6 +3160,20 @@ class HomePageState extends rp.ConsumerState<HomePage>
       if (data.isNotEmpty && data['username'] != null) {
         await prefs.setString('username', data['username']);
         MentionSelf.username = data['username'].toString();
+        // Circle previews show @tags by my phone-book names too, even for a
+        // group I haven't opened this run (the open group adds its members).
+        MentionSelf.lookup = (key) {
+          for (final f in _allFriends) {
+            if ((f['username'] ?? '').toString().toLowerCase() != key) {
+              continue;
+            }
+            final phone = (f['phone'] ?? '').toString();
+            final saved =
+                phone.isEmpty ? null : ContactNames.instance.nameFor(phone);
+            return (saved == null || saved.isEmpty) ? null : saved;
+          }
+          return null;
+        };
         if (mounted) setState(() => _username = data['username']);
       } else {
         if (mounted) setState(() => _username = prefs.getString('username') ?? 'User');

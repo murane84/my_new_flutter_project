@@ -102,9 +102,23 @@ class MentionSelf {
   /// it back into the canonical "@username". Only unambiguous names.
   static final Map<String, String> usernameOfShown = {};
 
+  /// Fallback for surfaces outside an open group (the Circle list
+  /// previews): lowercase username → my phone-book name, from my friends.
+  /// Set by home.
+  static String? Function(String key)? lookup;
+
   /// Tapping a tag in a bubble (the open group chat sets this): gets the
   /// lower-case username ("all" for @all).
   static void Function(String key)? onTap;
+}
+
+/// How I see "@[key]" (lowercase username): "You" for me, my phone-book
+/// name for a member/friend I saved, else null (keep their Aluta name).
+String? _shownMention(String key) {
+  if (key == 'all') return null;
+  final me = MentionSelf.username?.trim().toLowerCase();
+  if (me != null && me.isNotEmpty && key == me) return 'You';
+  return MentionSelf.names[key] ?? MentionSelf.lookup?.call(key);
 }
 
 // An @-mention token. The picker inserts the member's Aluta USERNAME (the same
@@ -137,7 +151,7 @@ String displayMentions(String text) {
   return text.replaceAllMapped(_mentionRe, (m) {
     final tok = m.group(0)!;
     final key = tok.substring(1).replaceAll('\u00A0', ' ').toLowerCase();
-    final shown = key == 'all' ? null : MentionSelf.names[key];
+    final shown = _shownMention(key);
     return shown == null ? tok : '@$shown';
   });
 }
@@ -162,7 +176,7 @@ List<InlineSpan> _mentionize(
     }
     final tok = m.group(0)!;
     final key = tok.substring(1).replaceAll('\u00A0', ' ').toLowerCase();
-    final shown = key == 'all' ? null : MentionSelf.names[key];
+    final shown = _shownMention(key);
     final label = shown == null ? tok : '@$shown';
     // Inside ==highlight== (a background of its own): plain accent text.
     if (mentionStyle.backgroundColor != null ||
@@ -875,7 +889,7 @@ List<InlineSpan> _previewInline(
       }
       final tok = m.group(0)!;
       final key = tok.substring(1).replaceAll('\u00A0', ' ').toLowerCase();
-      final shown = key == 'all' ? null : MentionSelf.names[key];
+      final shown = _shownMention(key);
       spans.add(TextSpan(
           text: shown == null ? tok : '@$shown',
           style: st.copyWith(color: mention, fontWeight: FontWeight.w700)));
@@ -977,7 +991,8 @@ List<InlineSpan> previewSpans(
         return l;
       })
       .join('  ')
-      .replaceAll(RegExp(r'\s+'), ' ')
+      // Collapse whitespace but keep U+00A0: it joins a multi-word @tag.
+      .replaceAll(RegExp(r'[^\S\u00A0]+'), ' ')
       .trim();
   // A leading type emoji (📞 Missed call, 🎵 Song, 📷 Photo…) becomes a real
   // icon: emoji glyphs take the preview's faded colour and some (🎵 is near

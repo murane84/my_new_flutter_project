@@ -44,6 +44,7 @@ import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../utils/adaptive_sheet.dart';
 import '../utils/depth.dart';
+import '../widgets/song_art.dart';
 import 'live/live_pause_fx.dart';
 
 /// Popup "Listen Together" session UI for both the host (DJ) and a listener.
@@ -2784,10 +2785,19 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                       playing: playing,
                       progress: _liveProgress,
                       dimmed: PlayerStyleController.instance.orbDimmed,
-                      artBuilder: (d, [col]) => Center(
-                        child: Icon(Icons.music_note_rounded,
-                            size: d * 0.4,
-                            color: col ?? Colors.white.withValues(alpha: 0.9)),
+                      // The song's cover (found by its name), else the note.
+                      artBuilder: (d, [col]) => SizedBox(
+                        width: d,
+                        height: d,
+                        child: SongArt.byName(_title,
+                            size: d,
+                            decode: 360,
+                            fallback: Center(
+                              child: Icon(Icons.music_note_rounded,
+                                  size: d * 0.4,
+                                  color: col ??
+                                      Colors.white.withValues(alpha: 0.9)),
+                            )),
                       ),
                     )),
                         if (catching)

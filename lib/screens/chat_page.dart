@@ -115,6 +115,7 @@ import '../services/block_list.dart';
 import '../services/track_title.dart' show splitTitleArtist, cleanTrackName;
 import '../services/song_names.dart';
 import '../services/cover_art.dart';
+import '../widgets/song_art.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/keyboard.dart';
 import 'stories/quick_status_sheet.dart';

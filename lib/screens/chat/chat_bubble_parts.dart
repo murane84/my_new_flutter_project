@@ -818,7 +818,7 @@ class _SongBubbleState extends State<_SongBubble> {
         final url = ta.artist.isEmpty
             ? null
             : CoverArt.instance.urlFor(
-                'song:${ta.title.toLowerCase()}|${ta.artist.toLowerCase()}',
+                SongArt.keyFor(ta.title, ta.artist),
                 title: ta.title,
                 artist: ta.artist);
         final has = url != null;

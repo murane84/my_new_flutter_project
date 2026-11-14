@@ -244,7 +244,17 @@ extension _MusicControlsHelpers1 on _MusicControlsState {
             _currentIndex < _playlist.length
         ? _playlist[_currentIndex]
         : null;
-    if (path == null) return SizedBox(width: d, height: d, child: note);
+    if (path == null) {
+      // Listening along: the host's song, by its name.
+      if (_liveActive && !_isLiveHost) {
+        return SizedBox(
+            width: d,
+            height: d,
+            child: SongArt.byName(_liveTitle(),
+                size: d, fallback: note, decode: 360));
+      }
+      return SizedBox(width: d, height: d, child: note);
+    }
     final ta = _effTA(path);
     return SizedBox(
       width: d,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 
 import '../services/cover_art.dart';
+import '../services/song_names.dart';
 
 /// A song's picture, the same everywhere it shows — playlist rows, the
 /// mini-player, Up next, the Now Playing disc and the home music bar:
@@ -53,6 +54,36 @@ class SongArt extends StatelessWidget {
   /// my song's cover).
   static final ValueNotifier<({String path, String title})?> now =
       ValueNotifier<({String path, String title})?>(null);
+
+  /// The cover key for a song known only by name (a chat song, a Listen
+  /// Together song): the same key everywhere, so it's looked up once.
+  static String keyFor(String title, String artist) =>
+      'song:${title.trim().toLowerCase()}|${artist.trim().toLowerCase()}';
+
+  /// Art for a song known only by its label — "Title — Artist" or a file-ish
+  /// "Artist - Title". No artist → [fallback] (a title alone finds the wrong
+  /// cover too often).
+  static Widget byName(String label,
+      {required double size, required Widget fallback, int? decode}) {
+    var t = label.trim(), a = '';
+    final i = t.indexOf(' — ');
+    if (i > 0) {
+      a = t.substring(i + 3).trim();
+      t = t.substring(0, i).trim();
+    } else {
+      final n = SongNames.instance.parseName(t);
+      if (n.title.isNotEmpty) t = n.title;
+      a = n.artist;
+    }
+    if (a.isEmpty || t.isEmpty) return fallback;
+    return SongArt(
+        path: keyFor(t, a),
+        title: t,
+        artist: a,
+        size: size,
+        fallback: fallback,
+        decode: decode);
+  }
 
   static bool get _phone =>
       !kIsWeb &&

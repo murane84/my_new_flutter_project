@@ -143,7 +143,8 @@ class _TogetherScreenState extends State<TogetherScreen> {
           type: ToastType.info);
       return;
     }
-    if ((_pay['pay_number'] ?? '').toString().isEmpty) {
+    if ((_pay['pay_number'] ?? '').toString().isEmpty &&
+        _pay['sandbox'] != true) {
       showToast(context, 'Payments open very soon — check back shortly',
           type: ToastType.info);
       return;
@@ -175,7 +176,10 @@ class _TogetherScreenState extends State<TogetherScreen> {
             const SizedBox(height: 18),
             for (final b in _benefits) _benefitRow(scheme, b),
             const SizedBox(height: 14),
+            _levels(scheme),
+            const SizedBox(height: 14),
             _status(scheme, 'together'),
+            _status(scheme, 'together_plus'),
             _cta(scheme),
             const SizedBox(height: 28),
             _spaceSection(scheme),
@@ -320,34 +324,153 @@ class _TogetherScreenState extends State<TogetherScreen> {
     );
   }
 
+  String get _level => (_plan?['level'] ?? (_isTogether ? 'together' : 'free'))
+      .toString();
+
+  static const _levelNames = {
+    'free': 'Free',
+    'together': 'Together',
+    'together_plus': 'Plus',
+  };
+
+  String _amount(num? v, String unit) {
+    final n = (v ?? 0).toInt();
+    if (n < 0) return '∞';
+    return unit == 'MB' ? '$n MB' : unit == 'min' ? '$n min' : '$n';
+  }
+
+  /// Every section is open to everyone — this shows how much each level
+  /// gives, with my column lit.
+  Widget _levels(ColorScheme scheme) {
+    final meters = ((_plan?['meters'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((m) => m.cast<String, dynamic>())
+        .toList();
+    final table =
+        (_plan?['limits_table'] as Map?)?.cast<String, dynamic>() ?? const {};
+    if (meters.isEmpty || table.isEmpty) return const SizedBox.shrink();
+    const levels = ['free', 'together', 'together_plus'];
+    final mine = _level;
+    Widget cell(String text, {bool head = false, bool lit = false}) => Expanded(
+          flex: 3,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            color: lit ? _gold.withValues(alpha: 0.16) : null,
+            child: Text(text,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: head ? 12 : 12.5,
+                    fontWeight:
+                        head || lit ? FontWeight.w800 : FontWeight.w500,
+                    color: head ? scheme.onSurfaceVariant : scheme.onSurface)),
+          ),
+        );
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(Radii.lg),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: [
+        Row(children: [
+          Expanded(
+            flex: 5,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 7, 4, 7),
+              child: Text('Everyone can use it all',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: scheme.onSurfaceVariant)),
+            ),
+          ),
+          for (final l in levels)
+            cell(_levelNames[l]!, head: true, lit: l == mine),
+        ]),
+        for (final m in meters)
+          Row(children: [
+            Expanded(
+              flex: 5,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 7, 4, 7),
+                child: Text('${m['label']}',
+                    style: TextStyle(fontSize: 12, color: scheme.onSurface)),
+              ),
+            ),
+            for (final l in levels)
+              cell(
+                  _amount((table[l] as Map?)?[m['key']] as num?,
+                      '${m['unit']}'),
+                  lit: l == mine),
+          ]),
+      ]),
+    );
+  }
+
   Widget _cta(ColorScheme scheme) {
-    final def = _planDef('together');
     if (!_known) {
       return const Center(
           child: Padding(
               padding: EdgeInsets.all(12),
               child: CircularProgressIndicator(strokeWidth: 2)));
     }
-    final price = def == null
-        ? ''
-        : ' · ${_tzs(def['price_tzs'] as num?)} a month';
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton.icon(
-        style: FilledButton.styleFrom(
-          backgroundColor: _isTogether ? scheme.surfaceContainerHighest : _gold,
-          foregroundColor: _isTogether ? scheme.onSurface : _ink,
-          padding: const EdgeInsets.symmetric(vertical: 15),
+    final t = _planDef('together');
+    final p = _planDef('together_plus');
+    final lvl = _level;
+    String price(Map<String, dynamic>? d) =>
+        d == null ? '' : ' · ${_tzs(d['price_tzs'] as num?)}/mo';
+    final plusUntil = (_plan?['plus_until'] ?? '').toString();
+    return Column(children: [
+      if (lvl != 'together_plus' && t != null)
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor:
+                  lvl == 'together' ? scheme.surfaceContainerHighest : _gold,
+              foregroundColor: lvl == 'together' ? scheme.onSurface : _ink,
+              padding: const EdgeInsets.symmetric(vertical: 15),
+            ),
+            onPressed: () => _buy('together'),
+            icon: Icon(lvl == 'together'
+                ? Icons.add_circle_outline_rounded
+                : Icons.workspace_premium_rounded),
+            label: Text(
+                lvl == 'together'
+                    ? 'Add more Together time${price(t)}'
+                    : 'Start Together${price(t)}',
+                style:
+                    const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+          ),
         ),
-        onPressed: () => _buy('together'),
-        icon: Icon(_isTogether
-            ? Icons.add_circle_outline_rounded
-            : Icons.workspace_premium_rounded),
-        label: Text(
-            _isTogether ? 'Add more time$price' : 'Start Together$price',
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-      ),
-    );
+      if (p != null) ...[
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFFB88A12),
+              side: const BorderSide(color: Color(0xFFB88A12)),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            onPressed: () => _buy('together_plus'),
+            icon: const Icon(Icons.all_inclusive_rounded),
+            label: Text(
+                lvl == 'together_plus'
+                    ? 'Add more Plus time${price(p)}'
+                    : 'Go Together Plus${price(p)}',
+                style: const TextStyle(fontWeight: FontWeight.w800)),
+          ),
+        ),
+        if (lvl == 'together_plus' && plusUntil.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('Plus until ${_date(plusUntil)}',
+                style: TextStyle(
+                    fontSize: 12, color: scheme.onSurfaceVariant)),
+          ),
+      ],
+    ]);
   }
 
   Widget _spaceSection(ColorScheme scheme) {
@@ -545,6 +668,21 @@ class _PaySheetState extends State<_PaySheet> {
               if (widget.forWhom != null)
                 Text('For ${widget.forWhom}',
                     style: TextStyle(color: scheme.onSurfaceVariant)),
+              if (widget.pay['sandbox'] == true) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF42A5F5).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(Radii.md),
+                  ),
+                  child: Text(
+                      'Test mode — no real money moves. Type any code '
+                      '(e.g. TEST123456) to try it; the Aluta team confirms '
+                      'it like a real one.',
+                      style: TextStyle(fontSize: 12.5, color: scheme.onSurface)),
+                ),
+              ],
               const SizedBox(height: 14),
               Row(children: [
                 choice(1, '1 month', 'TZS ${tzs.format(widget.plan['price_tzs'] ?? 0)}'),
@@ -560,7 +698,7 @@ class _PaySheetState extends State<_PaySheet> {
                   'Send TZS ${tzs.format(_amount)} with $net to', [
                 Row(children: [
                   Expanded(
-                    child: SelectableText(number,
+                    child: SelectableText(number.isEmpty ? '—' : number,
                         style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,

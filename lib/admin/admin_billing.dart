@@ -18,6 +18,7 @@ String fmtTzs(num? n) =>
 
 String _planName(String? code) => switch (code) {
       'together' => 'Aluta Together',
+      'together_plus' => 'Together Plus',
       'space_plus' => 'Bigger Our Space',
       _ => code ?? '—',
     };
@@ -47,6 +48,7 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
   List<Map<String, dynamic>> _subs = const [];
   List<Map<String, dynamic>> _plans = const [];
   Map<String, dynamic> _settings = const {};
+  Map<String, dynamic>? _limits; // {meters, levels, table, unlimited}
   String _payFilter = 'pending';
   final _q = TextEditingController();
   bool _loading = true;
@@ -100,8 +102,10 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
           if (mounted) setState(() => _subs = _list(s['entitlements']));
         case AdminBillingView.prices:
           final s = await _api.get('/admin/api/billing/plans');
+          final l = await _api.get('/admin/api/billing/limits');
           if (!mounted) return;
           setState(() {
+            _limits = l;
             _plans = _list(s['plans']);
             _settings =
                 (s['settings'] as Map?)?.cast<String, dynamic>() ?? const {};
@@ -212,11 +216,21 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('${fmtTzs(p['amount_tzs'])} · ${p['username'] ?? '?'}',
-                      style: TextStyle(
-                          color: c.text,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14.5)),
+                  Row(children: [
+                    Flexible(
+                      child: Text(
+                          '${fmtTzs(p['amount_tzs'])} · ${p['username'] ?? '?'}',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: c.text,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14.5)),
+                    ),
+                    if (p['sandbox'] == true) ...[
+                      const SizedBox(width: 6),
+                      const _TestChip(),
+                    ],
+                  ]),
                   Text(
                       '${_planName(p['plan_code'] as String?)} · '
                       '${p['months'] == 12 ? '12 months' : '${p['months']} mo'}'
@@ -403,6 +417,125 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
         done: 'Saved');
   }
 
+  static const _levelNames = {
+    'free': 'Free',
+    'together': 'Together',
+    'together_plus': 'Plus',
+  };
+
+  String _limitText(dynamic v, String unit) {
+    final n = (v as num?)?.toInt() ?? 0;
+    if (n == -1) return 'Unlimited';
+    return '$n $unit';
+  }
+
+  Future<void> _editLimit(Map<String, dynamic> meter, String level) async {
+    final table = (_limits?['table'] as Map?)?.cast<String, dynamic>() ?? {};
+    final now = ((table[level] as Map?)?[meter['key']] as num?)?.toInt() ?? 0;
+    final ctl = TextEditingController(text: now == -1 ? '' : '$now');
+    var unlimited = now == -1;
+    final value = await showDialog<int>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, set) => AlertDialog(
+          title: Text('${_levelNames[level]} · ${meter['label']}'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+              controller: ctl,
+              enabled: !unlimited,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                  suffixText: '${meter['unit']}',
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(Radii.md))),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: unlimited,
+              onChanged: (v) => set(() => unlimited = v),
+              title: const Text('Unlimited'),
+            ),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                  ctx, unlimited ? -1 : (int.tryParse(ctl.text) ?? now)),
+              child: const Text('Next'),
+            ),
+          ],
+        ),
+      ),
+    );
+    ctl.dispose();
+    if (value == null || !mounted) return;
+    final pw = await askPassword(context,
+        title: 'Change it to ${_limitText(value, '${meter['unit']}')}?',
+        message: 'Applies at once for everyone on ${_levelNames[level]}.',
+        action: 'Save');
+    if (pw == null) return;
+    await _post('/admin/api/billing/limits',
+        {'password': pw, 'level': level, 'meter': meter['key'], 'value': value},
+        done: 'Saved');
+  }
+
+  Widget _limitsSection() {
+    final c = context.adm;
+    final meters = _list(_limits?['meters']);
+    final table = (_limits?['table'] as Map?)?.cast<String, dynamic>() ?? {};
+    const levels = ['free', 'together', 'together_plus'];
+    return AdminSection(
+      title: 'What each plan gives',
+      subtitle: 'Every section is open to everyone — tap an amount to change it',
+      icon: Icons.tune_rounded,
+      color: _kGold,
+      child: Column(children: [
+        Row(children: [
+          const Expanded(flex: 5, child: SizedBox()),
+          for (final l in levels)
+            Expanded(
+              flex: 3,
+              child: Text(_levelNames[l]!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: c.muted,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12)),
+            ),
+        ]),
+        const Divider(),
+        for (final m in meters)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(children: [
+              Expanded(
+                flex: 5,
+                child: Text('${m['label']}',
+                    style: TextStyle(color: c.text, fontSize: 13)),
+              ),
+              for (final l in levels)
+                Expanded(
+                  flex: 3,
+                  child: TextButton(
+                    onPressed: () => _editLimit(m, l),
+                    style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 6)),
+                    child: Text(
+                        _limitText((table[l] as Map?)?[m['key']], '${m['unit']}'),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 12.5)),
+                  ),
+                ),
+            ]),
+          ),
+      ]),
+    );
+  }
+
   Widget _planTile(Map<String, dynamic> p) {
     final c = context.adm;
     final active = p['active'] == true;
@@ -483,8 +616,18 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
         if (o != null) {
           final noNumber =
               ((o['settings'] as Map?)?['pay_number'] ?? '').toString().isEmpty;
+          final test = (o['settings'] as Map?)?['sandbox'] == true;
           body.addAll([
-            if (noNumber)
+            if (test)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: AdminInline(
+                    text: 'Test mode is on — no real money moves; any code '
+                        'works. Payments made now are counted apart as '
+                        '“test”. Turn it off in Prices → Where people pay '
+                        'once real M-Pesa is set up.'),
+              ),
+            if (noNumber && !test)
               const Padding(
                 padding: EdgeInsets.only(bottom: 12),
                 child: AdminInline(
@@ -498,7 +641,8 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
                   value: fmtTzs(o['revenue_month_tzs']),
                   icon: Icons.calendar_month_rounded,
                   accent: _kGreen,
-                  hint: 'Last 30 days ${fmtTzs(o['revenue_30d_tzs'])}'),
+                  hint: 'Last 30 days ${fmtTzs(o['revenue_30d_tzs'])}'
+                      '${(o['revenue_test_tzs'] ?? 0) == 0 ? '' : ' · test ${fmtTzs(o['revenue_test_tzs'])}'}'),
               AdminStat(
                   label: 'Payments to check',
                   value: fmtInt(o['pending_payments'] as num?),
@@ -592,6 +736,10 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
       case AdminBillingView.prices:
         body.addAll([
           for (final p in _plans) _planTile(p),
+          if (_limits != null) ...[
+            const SizedBox(height: 10),
+            _limitsSection(),
+          ],
           const SizedBox(height: 10),
           AdminSection(
             title: 'Where people pay',
@@ -602,6 +750,9 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
                 onPressed: _editSettings,
                 icon: const Icon(Icons.edit_rounded)),
             child: Text(
+                (_settings['sandbox'] == true
+                        ? 'TEST MODE — no real money (any code works)\n'
+                        : '') +
                 (_settings['pay_number'] ?? '').toString().isEmpty
                     ? 'Not set yet — the app can’t show people where to pay.'
                     : '${_settings['pay_network']} · ${_settings['pay_number']}'
@@ -700,8 +851,9 @@ class _GrantDialogState extends State<_GrantDialog> {
               SegmentedButton<String>(
                 segments: const [
                   ButtonSegment(value: 'together', label: Text('Together')),
+                  ButtonSegment(value: 'together_plus', label: Text('Plus')),
                   ButtonSegment(
-                      value: 'space_plus', label: Text('Bigger Our Space')),
+                      value: 'space_plus', label: Text('Our Space')),
                 ],
                 selected: {_plan},
                 onSelectionChanged: (s) => setState(() => _plan = s.first),
@@ -922,6 +1074,7 @@ class _PayDialogState extends State<_PayDialog> {
       TextEditingController(text: '${widget.settings['pay_name'] ?? ''}');
   late final _how =
       TextEditingController(text: '${widget.settings['instructions'] ?? ''}');
+  late bool _test = widget.settings['sandbox'] != false;
 
   @override
   void dispose() {
@@ -945,6 +1098,14 @@ class _PayDialogState extends State<_PayDialog> {
         width: 380,
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _test,
+              onChanged: (v) => setState(() => _test = v),
+              title: const Text('Test mode'),
+              subtitle: const Text('No real money — any code works. Turn '
+                  'off when real M-Pesa payments start.'),
+            ),
             TextField(controller: _net, decoration: _dec('Network', 'e.g. M-Pesa')),
             const SizedBox(height: 10),
             TextField(
@@ -968,6 +1129,7 @@ class _PayDialogState extends State<_PayDialog> {
             child: const Text('Cancel')),
         FilledButton(
           onPressed: () => Navigator.pop(context, <String, dynamic>{
+            'sandbox': _test,
             'pay_network': _net.text.trim(),
             'pay_number': _num.text.trim(),
             'pay_name': _name.text.trim(),
@@ -978,4 +1140,23 @@ class _PayDialogState extends State<_PayDialog> {
       ],
     );
   }
+}
+
+
+class _TestChip extends StatelessWidget {
+  const _TestChip();
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        decoration: BoxDecoration(
+          color: const Color(0xFF42A5F5).withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: const Text('TEST',
+            style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.6,
+                color: Color(0xFF42A5F5))),
+      );
 }

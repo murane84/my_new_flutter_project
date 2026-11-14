@@ -1324,13 +1324,17 @@ def _acct_state(c) -> dict:
 
 
 def _user_row(u: User, c) -> dict:
+    # "Online" = a live socket right now (users.is_online can be left stale
+    # by a dropped connection).
+    import websocket_manager
+    live = bool(websocket_manager.connected_users.get(u.id))
     return {
         "id": u.id,
         "username": u.username,
         "email": u.email,
         "phone": u.phone,
         "avatar_url": u.avatar_url,
-        "online": bool(u.is_online),
+        "online": live,
         "last_seen": _iso(_aware(u.last_seen)),
         "created_at": _iso(_aware(getattr(u, "created_at", None))),
         "plan": getattr(u, "plan_tier", None) or "free",

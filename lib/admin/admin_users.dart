@@ -9,7 +9,7 @@ import '../utils/radii.dart';
 
 /// People (Admin Phase 2): find someone, see their card (profile, devices,
 /// last seen, storage, plan) and — from a full (non-probation) device, with
-/// your password — reset their sign-in, pause / un-pause the account, or
+/// your password — reset their sign-in, suspend / reactivate the account, or
 /// delete it (typed username → 7 days frozen and restorable → gone).
 class AdminUsersPage extends StatefulWidget {
   const AdminUsersPage({super.key});
@@ -145,12 +145,12 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Pause $name’s account?'),
+        title: Text('Suspend $name’s account?'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('They can’t sign in and every device is cut off until you '
-                'un-pause. Nothing is deleted.',
+                'reactivate it. Nothing is deleted.',
                 style: TextStyle(color: ctx.adm.muted)),
             const SizedBox(height: 12),
             TextField(
@@ -171,20 +171,20 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
               child: const Text('Cancel')),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Pause account')),
+              child: const Text('Suspend account')),
         ],
       ),
     );
     if (ok != true) return;
     await _act('pause', {'password': pw.text, 'reason': reason.text},
-        done: 'Account paused');
+        done: 'Account suspended');
   }
 
   Future<void> _unpause() async {
     final pw = await askPassword(context,
-        title: 'Un-pause ${_open?['username']}?',
+        title: 'Reactivate ${_open?['username']}?',
         message: 'They can sign in again.',
-        action: 'Un-pause');
+        action: 'Reactivate');
     if (pw == null) return;
     await _act('unpause', {'password': pw}, done: 'Account active again');
   }
@@ -264,15 +264,50 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
   }
 
   // ── UI ────────────────────────────────────────────────────────────────────
+  /// The ACCOUNT's state (not whether they're on right now — that's the
+  /// green dot on the avatar and the "Last seen" line):
+  /// Active · Suspended · Deletion pending (with the day it goes).
   static (Color, String) _status(Map<String, dynamic> u) =>
       switch (u['status']) {
-        'paused' => (const Color(0xFFFFA000), 'Paused'),
+        'paused' => (const Color(0xFFFFA000), 'Suspended'),
         'deleting' => (kAdminRed,
             'Deleting ${fmtDateTime(u['delete_after'] as String?)}'),
-        _ => u['online'] == true
-            ? (const Color(0xFF00C853), 'Online')
-            : (const Color(0xFF9E9E9E), 'Seen ${fmtAgo(u['last_seen'] as String?)}'),
+        _ => (const Color(0xFF00C853), 'Active'),
       };
+
+  /// Really connected right now (a live socket on the server).
+  static bool _onlineNow(Map<String, dynamic> u) => u['online'] == true;
+
+  Widget _avatar(Map<String, dynamic> u) {
+    final letter =
+        ((u['username'] ?? '?').toString().characters.firstOrNull ?? '?')
+            .toUpperCase();
+    return Stack(clipBehavior: Clip.none, children: [
+      CircleAvatar(
+        backgroundColor: kAdminRed.withValues(alpha: 0.14),
+        child: Text(letter,
+            style: const TextStyle(
+                color: kAdminRed, fontWeight: FontWeight.w800)),
+      ),
+      if (_onlineNow(u))
+        Positioned(
+          right: -1,
+          bottom: -1,
+          child: Tooltip(
+            message: 'Online now',
+            child: Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: const Color(0xFF00C853),
+                shape: BoxShape.circle,
+                border: Border.all(color: context.adm.bg, width: 2),
+              ),
+            ),
+          ),
+        ),
+    ]);
+  }
 
   Widget _pill(Color c, String t) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -307,14 +342,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
           selectedTileColor: kAdminRed.withValues(alpha: 0.08),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(Radii.md)),
-          leading: CircleAvatar(
-            backgroundColor: kAdminRed.withValues(alpha: 0.14),
-            child: Text(
-                ((u['username'] ?? '?').toString().characters.firstOrNull ?? '?')
-                    .toUpperCase(),
-                style: const TextStyle(
-                    color: kAdminRed, fontWeight: FontWeight.w800)),
-          ),
+          leading: _avatar(u),
           title: Text((u['username'] ?? '').toString(),
               style: TextStyle(color: p.text, fontWeight: FontWeight.w700)),
           subtitle: Text(
@@ -367,7 +395,9 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
             line(Icons.event_rounded, 'Joined',
                 fmtDateTime(u['created_at'] as String?)),
             line(Icons.schedule_rounded, 'Last seen',
-                fmtDateTime(u['last_seen'] as String?)),
+                _onlineNow(u)
+                    ? 'Online now'
+                    : fmtDateTime(u['last_seen'] as String?)),
             line(Icons.workspace_premium_rounded, 'Plan',
                 (u['plan'] ?? 'free').toString()),
             line(Icons.group_rounded, 'Friends',
@@ -412,14 +442,14 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
               if (status == 'active')
                 OutlinedButton.icon(
                   onPressed: _pause,
-                  icon: const Icon(Icons.pause_circle_rounded, size: 18),
-                  label: const Text('Pause account'),
+                  icon: const Icon(Icons.block_rounded, size: 18),
+                  label: const Text('Suspend account'),
                 ),
               if (status == 'paused')
                 FilledButton.tonalIcon(
                   onPressed: _unpause,
-                  icon: const Icon(Icons.play_circle_rounded, size: 18),
-                  label: const Text('Un-pause'),
+                  icon: const Icon(Icons.check_circle_rounded, size: 18),
+                  label: const Text('Reactivate'),
                 ),
               if (status != 'deleting')
                 OutlinedButton.icon(

@@ -730,18 +730,17 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         }
         _showReasons = false;
       }
-      _reactionFeed.insert(
-          0,
-          _ReactionLog(me ? 'You' : who, '📞', DateTime.now(),
-              text: on
-                  ? (widget.isRoom && !host
-                      ? 'stepped out for a call'
-                      : 'on a call')
-                  : (me ? 'are back' : 'is back'),
-              mine: me,
-              avatar: _avatarFor(by)));
-      if (_reactionFeed.length > 80) _reactionFeed.removeLast();
     });
+    _flashNudge(
+        by,
+        on ? Icons.call_rounded : Icons.headphones_rounded,
+        on
+            ? (me
+                ? 'You’re on a call'
+                : widget.isRoom && !host
+                    ? '$who stepped out for a call'
+                    : '$who is on a call')
+            : (me ? 'You’re back' : '$who is back'));
   }
 
   // ── Pauses, the human way ────────────────────────────────────────────────
@@ -803,13 +802,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
       _pauseReason = key;
       _showReasons = false;
       _status = _pauseLine();
-      _reactionFeed.insert(
-          0,
-          _ReactionLog(_nameOfId(by), '⏸', DateTime.now(),
-              text: 'paused · ${pauseReasons[key]}',
-              mine: by == widget.myUserId,
-              avatar: _avatarFor(by)));
     });
+    _flashNudge(by, Icons.pause_rounded,
+        '${_nameOfId(by)} paused · ${pauseReasons[key]}');
   }
 
   void _sendReadyNudge() {
@@ -833,19 +828,14 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     if (to == widget.myUserId && !mine) {
       Haptics.mediumImpact();
       _snack('💞 ${_nameOfId(by)} is ready when you are');
+      return; // the toast says it
     }
-    setState(() {
-      _reactionFeed.insert(
-          0,
-          _ReactionLog(_nameOfId(by), '💞', DateTime.now(),
-              text: mine
-                  ? 'are ready when ${_nameOfId(to)} is'
-                  : to == widget.myUserId
-                      ? 'is ready when you are'
-                      : 'is ready when ${_nameOfId(to)} is',
-              mine: mine,
-              avatar: _avatarFor(by)));
-    });
+    _flashNudge(
+        by,
+        Icons.favorite_rounded,
+        mine
+            ? 'You’re ready when ${_nameOfId(to)} is'
+            : '${_nameOfId(by)} is ready when ${_nameOfId(to)} is');
   }
 
   /// Paused a long while → save the spot as a note in our chat.
@@ -867,6 +857,65 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
   // Who paused / resumed — so a pause reads as a person, never as the
   // network freezing ("⏸ Juma paused the song").
   Timer? _byTimer;
+
+  // Who paused / resumed: a short line under the player (with their face)
+  // instead of auto text in the room's chat — the thread stays for people.
+  ({String text, String? avatar, String name, IconData icon})? _nudge;
+  Timer? _nudgeTimer;
+
+  void _flashNudge(int? by, IconData icon, String text) {
+    if (!mounted || by == null) return;
+    _nudgeTimer?.cancel();
+    setState(() => _nudge = (
+          text: text,
+          avatar: _avatarFor(by),
+          name: _nameOfId(by),
+          icon: icon,
+        ));
+    _nudgeTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _nudge = null);
+    });
+  }
+
+  Widget _nudgeLine(ColorScheme scheme, Color accent) {
+    final n = _nudge;
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        child: n == null
+            ? const SizedBox(width: double.infinity, key: ValueKey('none'))
+            : Padding(
+                key: ValueKey(n),
+                padding: const EdgeInsets.only(top: 8),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: accent.withValues(alpha: 0.25)),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    PersonAvatar(name: n.name, avatar: n.avatar, radius: 10),
+                    const SizedBox(width: 6),
+                    Icon(n.icon, size: 15, color: accent),
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(n.text,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.onSurface)),
+                    ),
+                  ]),
+                ),
+              ),
+      ),
+    );
+  }
   void _onPlayPauseBy(bool playing, int? by) {
     if (!mounted) return;
     final me = by != null && by == widget.myUserId;
@@ -891,23 +940,21 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
         if (mounted && _pausedBy != null) setState(() => _offerLater = true);
       });
     }
-    final line = by == null
+    // The status keeps the state (who paused stays named while it's
+    // paused); the moment itself is a short line under the player — not
+    // auto text in the room's chat.
+    final line = by == null || playing
         ? (playing ? 'Playing' : 'Paused')
-        : playing
-            ? (me ? '▶ You resumed the song' : '▶ $who resumed the song')
-            : _pauseLine();
-    setState(() {
-      _status = line;
-      if (by != null) {
-        _reactionFeed.insert(
-            0,
-            _ReactionLog(me ? 'You' : who!, playing ? '▶' : '⏸', DateTime.now(),
-                text: playing ? 'resumed the song' : 'paused the song',
-                mine: me,
-                avatar: _avatarFor(by)));
-        if (_reactionFeed.length > 80) _reactionFeed.removeLast();
-      }
-    });
+        : _pauseLine();
+    setState(() => _status = line);
+    if (by != null) {
+      _flashNudge(
+          by,
+          playing ? Icons.play_arrow_rounded : Icons.pause_rounded,
+          me
+              ? (playing ? 'You resumed' : 'You paused')
+              : '$who ${playing ? 'resumed' : 'paused'}');
+    }
     // A resume settles back to "Playing"; a pause stays named until the
     // music moves again (that's when it matters most).
     _byTimer?.cancel();
@@ -1645,6 +1692,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
     _awayTimer?.cancel();
     _discSpin.dispose();
     _byTimer?.cancel();
+    _nudgeTimer?.cancel();
     _reasonsTimer?.cancel();
     _laterTimer?.cancel();
     _countTimer?.cancel();
@@ -2871,6 +2919,7 @@ class _LiveSessionScreenState extends State<LiveSessionScreen>
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.hintColor),
                 ),
+                _nudgeLine(scheme, accent),
                 _pauseExtras(scheme),
                 // Partner offline while I wait → one tap to be pinged.
                 if (_peerAway && !_peerJoined && widget.receiverId != null)

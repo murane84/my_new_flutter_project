@@ -28,6 +28,8 @@ import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../utils/adaptive_sheet.dart';
 import '../utils/depth.dart';
+import '../services/text_style_pref.dart';
+import '../utils/session_events.dart';
 
 /// The personalization surface (build step 5): whole-app **theme** (System /
 /// Light / Dark) + a curated **accent** preset set. Dark stays the brand's
@@ -130,6 +132,10 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
               style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
             ),
           ],
+          const SizedBox(height: 18),
+          _sectionLabel(scheme, 'TEXT STYLE'),
+          const SizedBox(height: 10),
+          const _TextStyleSection(),
           const SizedBox(height: 18),
           _sectionLabel(scheme, 'CHAT & STATUS'),
           const SizedBox(height: 10),
@@ -2132,6 +2138,233 @@ class _GalleryAutoSaveSectionState extends State<_GalleryAutoSaveSection> {
               if (g.videos)
                 sub('Videos only on Wi-Fi', g.videosWifiOnly, g.setWifiOnly),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Text style ──────────────────────────────────────────────────────────────
+// Aluta (today's font, the default) · Harmony (Aluta's own, with Together) ·
+// Soft · Easy read. Tapping a style previews it right here; Harmony without
+// the plan previews too, with one way to get it — never a dead end.
+class _TextStyleSection extends StatefulWidget {
+  const _TextStyleSection();
+
+  @override
+  State<_TextStyleSection> createState() => _TextStyleSectionState();
+}
+
+class _TextStyleSectionState extends State<_TextStyleSection> {
+  AlutaFont? _peek; // a locked style being previewed
+
+  Future<void> _pick(AlutaFont f) async {
+    final pref = TextStylePref.instance;
+    if (f.paid && !pref.hasHarmony) {
+      setState(() => _peek = f);
+      return;
+    }
+    setState(() => _peek = null);
+    await pref.choose(f);
+    Haptics.selectionClick();
+  }
+
+  TextStyle _in(AlutaFont f, TextStyle s, Brightness b, {bool head = false}) {
+    final fam = head ? f.headingFamily(b) : f.family(b);
+    return fam == null ? s : s.copyWith(fontFamily: fam);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final b = Theme.of(context).brightness;
+    final pref = TextStylePref.instance;
+    return ValueListenableBuilder<AlutaFont>(
+      valueListenable: pref.chosen,
+      builder: (context, chosen, _) {
+        final preview = _peek ?? chosen;
+        final locked = preview.paid && !pref.hasHarmony;
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(Radii.xl),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final f in AlutaFont.values)
+                    _chip(scheme, b, f,
+                        on: f == preview,
+                        lock: f.paid && !pref.hasHarmony),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Live preview: a heading, a message each way, a time.
+              Container(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  borderRadius: BorderRadius.circular(Radii.lg),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Our Diary',
+                        style: _in(
+                            preview,
+                            TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
+                                color: scheme.onSurface),
+                            b,
+                            head: true)),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _bubble(scheme, b, preview,
+                          'Habari za jioni? Umeshasikiliza ile nyimbo mpya?',
+                          mine: false),
+                    ),
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: _bubble(scheme, b, preview,
+                          'Ndiyo! ♪ Let’s listen together tonight.',
+                          mine: true),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(preview.blurb,
+                  style: TextStyle(
+                      fontSize: 12, color: scheme.onSurfaceVariant)),
+              if (locked) ...[
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  onPressed: () {
+                    final open = SessionEvents.instance.openPlans;
+                    if (open != null) {
+                      Navigator.of(context).maybePop();
+                      open();
+                    }
+                  },
+                  icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                  label: const Text('Get Harmony with Aluta Together'),
+                ),
+              ] else if (chosen.paid && !pref.hasHarmony) ...[
+                const SizedBox(height: 6),
+                Text(
+                    'Harmony comes back by itself when Aluta Together is on '
+                    'again.',
+                    style: TextStyle(
+                        fontSize: 12, color: accentInk(scheme))),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _chip(ColorScheme scheme, Brightness b, AlutaFont f,
+      {required bool on, required bool lock}) {
+    return Material(
+      color: on
+          ? scheme.primary.withValues(alpha: 0.14)
+          : scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(Radii.lg),
+        side: BorderSide(
+            color: on ? scheme.primary : scheme.outlineVariant,
+            width: on ? 1.6 : 1),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(Radii.lg),
+        onTap: () => _pick(f),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 96, minHeight: 56),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text('Aa',
+                      style: _in(
+                          f,
+                          TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.onSurface),
+                          b,
+                          head: true)),
+                  if (lock) ...[
+                    const SizedBox(width: 6),
+                    Icon(Icons.lock_rounded,
+                        size: 13, color: scheme.onSurfaceVariant),
+                  ],
+                ]),
+                Text(f.title,
+                    style: _in(
+                        f,
+                        TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface),
+                        b)),
+                if (f == AlutaFont.aluta)
+                  Text('Default',
+                      style: TextStyle(
+                          fontSize: 10.5, color: scheme.onSurfaceVariant))
+                else if (lock)
+                  Text('With Together',
+                      style: TextStyle(
+                          fontSize: 10.5, color: accentInk(scheme))),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _bubble(ColorScheme scheme, Brightness b, AlutaFont f, String text,
+      {required bool mine}) {
+    final bg = mine ? scheme.primary : scheme.surfaceContainerHighest;
+    final ink = mine ? readableOn(scheme.primary) : scheme.onSurface;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 300),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(18),
+            topRight: const Radius.circular(18),
+            bottomLeft: Radius.circular(mine ? 18 : 6),
+            bottomRight: Radius.circular(mine ? 6 : 18),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(text,
+                style: _in(f, TextStyle(fontSize: 15, color: ink, height: 1.35),
+                    b)),
+            Text('7:32 PM',
+                style: _in(
+                    f,
+                    TextStyle(
+                        fontSize: 11, color: ink.withValues(alpha: 0.7)),
+                    b)),
           ],
         ),
       ),

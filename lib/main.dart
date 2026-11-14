@@ -42,6 +42,8 @@ import 'services/live_session_service.dart' show liveHostNotify;
 import 'utils/toast_helper.dart';
 import 'utils/session_events.dart';
 import 'services/plan_limits.dart';
+import 'services/text_style_pref.dart';
+import 'utils/prefs_now.dart';
 import 'utils/popup_shell.dart' show GlobalTapOrigin;
 import 'screens/token_helper.dart' show warmMediaAuth;
 import 'state/playback_state.dart' show providerContainer;
@@ -135,6 +137,12 @@ void main() async {
   Future.delayed(const Duration(seconds: 4), _liftNativeSplash);
   // My Vibration choice, read before the first tap can buzz.
   unawaited(Haptics.init());
+  // My text style (and the plan that unlocks Harmony) before the first
+  // screens paint.
+  unawaited(warmPrefsNow().then((_) {
+    PlanLimits.instance.restore();
+    TextStylePref.instance.start();
+  }));
   // Floating cards (desktop emoji / reaction pickers) grow out of where
   // the click that opened them landed.
   startPointerTracking();
@@ -158,7 +166,11 @@ void main() async {
   Widget appRoot() => rp.UncontrolledProviderScope(
         container: providerContainer,
         child: ChangeNotifierProvider(
-          create: (_) => ThemeProvider(),
+          create: (_) {
+            final p = ThemeProvider();
+            TextStylePref.instance.shown.addListener(p.repaint);
+            return p;
+          },
           child: const MyApp(),
         ),
       );
@@ -257,7 +269,7 @@ class MyApp extends StatelessWidget {
 
   ThemeData _buildTheme(ColorScheme scheme) {
     // Windows: emoji fall back to Aluta's soft Noto set (see EmojiFont).
-    return EmojiFont.applyTo(ThemeData(
+    return EmojiFont.applyTo(TextStylePref.apply(ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
       // Android 14+: swiping back from the edge shows the page behind
@@ -393,7 +405,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-    ));
+    ), TextStylePref.instance.shown.value));
   }
 
   @override

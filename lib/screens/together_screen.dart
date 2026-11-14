@@ -335,6 +335,7 @@ class _TogetherScreenState extends State<TogetherScreen> {
 
   String _amount(num? v, String unit) {
     final n = (v ?? 0).toInt();
+    if (unit == 'on/off') return n == 0 ? '—' : '✓';
     if (n < 0) return '∞';
     return unit == 'MB' ? '$n MB' : unit == 'min' ? '$n min' : '$n';
   }

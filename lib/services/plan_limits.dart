@@ -18,6 +18,10 @@ class PlanLimits {
   Map<String, int> _limits = const {};
   String level = 'free';
 
+  /// Bumped whenever the amounts change (perks like the Harmony font
+  /// follow it).
+  final ValueNotifier<int> changed = ValueNotifier<int>(0);
+
   /// A short line the call screens show ("1 minute left …"), or null.
   final ValueNotifier<String?> callNote = ValueNotifier<String?>(null);
 
@@ -77,6 +81,7 @@ class PlanLimits {
           if (e.value is num) e.key.toString(): (e.value as num).toInt()
       };
     }
+    changed.value++;
   }
 
   // ── Call length ──────────────────────────────────────────────────────────

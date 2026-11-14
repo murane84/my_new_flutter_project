@@ -76,6 +76,8 @@ class AccountPrefs {
     'player_duet_together_v1',
     // Voice notes: my playback speed (chat)
     'voice_note_speed',
+    // Appearance → Text style (services/text_style_pref)
+    'text_style_v1',
     // Vibration: all on/off, and the tick on tab switches (services/haptics)
     'haptics_on_v1', 'haptics_tabs_v1',
   ];

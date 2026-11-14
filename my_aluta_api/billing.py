@@ -52,15 +52,19 @@ METERS = [
     dict(key="call_minutes", label="Length of a call (1:1 and group)",
          unit="min"),
     dict(key="recognize_day", label="Song recognitions a day", unit="a day"),
+    # A perk, not an amount: 0 = off, anything else = on.
+    dict(key="harmony_font", label="Harmony font (Aluta's own)",
+         unit="on/off"),
 ]
 LEVELS = ["free", "together", "together_plus"]
 DEFAULT_LIMITS = {
     "free": {"spaces": 2, "room_size": 5, "file_mb": 50, "call_minutes": 10,
-             "recognize_day": 5},
+             "recognize_day": 5, "harmony_font": 0},
     "together": {"spaces": 8, "room_size": 25, "file_mb": 200,
-                 "call_minutes": 60, "recognize_day": 30},
+                 "call_minutes": 60, "recognize_day": 30, "harmony_font": 1},
     "together_plus": {"spaces": 20, "room_size": 50, "file_mb": 200,
-                      "call_minutes": UNLIMITED, "recognize_day": 100},
+                      "call_minutes": UNLIMITED, "recognize_day": 100,
+                      "harmony_font": 1},
 }
 
 LEGACY_DAYS = 30  # testers flipped to Together by the old toggle keep it this long

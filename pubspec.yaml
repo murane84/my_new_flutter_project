@@ -227,3 +227,45 @@ flutter:
     - assets/sounds/ring.wav
     - assets/sounds/ringback.wav
     - assets/sounds/hangup.wav
+    # Licences of the bundled fonts (shown in Legal → licences).
+    - assets/fonts/OFL-Harmony.txt
+    - assets/fonts/OFL-Nunito.txt
+    - assets/fonts/OFL-AtkinsonHyperlegible.txt
+
+  # Text styles (Appearance → Text style). Today's font stays the default.
+  # Harmony = Aluta's own, built from Lora (SIL OFL; tool/build_harmony.py).
+  fonts:
+    - family: Harmony
+      fonts:
+        - asset: assets/fonts/Harmony-Regular.ttf
+        - asset: assets/fonts/Harmony-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Harmony-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Harmony-Italic.ttf
+          style: italic
+    # Dark mode: the same Harmony a hair heavier for light-on-dark text.
+    - family: HarmonyDark
+      fonts:
+        - asset: assets/fonts/HarmonyDark-Regular.ttf
+        - asset: assets/fonts/Harmony-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Harmony-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Harmony-Italic.ttf
+          style: italic
+    # Headings only: Lora's elegance with heart dots on i and j.
+    - family: HarmonyDisplay
+      fonts:
+        - asset: assets/fonts/HarmonyDisplay-SemiBold.ttf
+          weight: 600
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito-Regular.ttf
+        - asset: assets/fonts/Nunito-Bold.ttf
+          weight: 700
+    - family: AtkinsonHyperlegible
+      fonts:
+        - asset: assets/fonts/AtkinsonHyperlegible-Regular.ttf
+        - asset: assets/fonts/AtkinsonHyperlegible-Bold.ttf
+          weight: 700

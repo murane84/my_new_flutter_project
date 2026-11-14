@@ -425,6 +425,7 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
 
   String _limitText(dynamic v, String unit) {
     final n = (v as num?)?.toInt() ?? 0;
+    if (unit == 'on/off') return n == 0 ? 'Off' : 'On';
     if (n == -1) return 'Unlimited';
     return '$n $unit';
   }
@@ -434,7 +435,10 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
     final now = ((table[level] as Map?)?[meter['key']] as num?)?.toInt() ?? 0;
     final ctl = TextEditingController(text: now == -1 ? '' : '$now');
     var unlimited = now == -1;
-    final value = await showDialog<int>(
+    // A perk (on/off) just flips; the confirm step below still asks.
+    final int? value = meter['unit'] == 'on/off'
+        ? (now == 0 ? 1 : 0)
+        : await showDialog<int>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, set) => AlertDialog(

@@ -39,6 +39,9 @@ class ThemeProvider with ChangeNotifier {
 
   /// Back-compat: the old quick dark⇆light toggle (still used on the auth pages
   /// and the overflow menu). Routes through [setThemeMode].
+  /// Rebuild the app's themes (the text style changed).
+  void repaint() => notifyListeners();
+
   void toggleTheme(bool isDarkMode) {
     setThemeMode(isDarkMode ? ThemeMode.dark : ThemeMode.light);
   }

@@ -1660,8 +1660,8 @@ extension _HomePageHelpers1 on HomePageState {
       color: hasUnread ? textColor.withAlpha(200) : textColor.withAlpha(110),
       fontWeight: hasUnread ? FontWeight.w500 : FontWeight.normal,
     );
-    // My own last message: "You:" + its ticks (✓ sent · ✓✓ delivered ·
-    // accent ✓✓ read) — know if they've seen it without opening the chat.
+    // My own last message: "You:" + its book (flying · landed · opened in
+    // the theme colour) — know if they've seen it without opening the chat.
     final m = mine;
     // Render the message's formatting (*bold* _italic_ …) right in the preview.
     return Text.rich(
@@ -1671,12 +1671,15 @@ extension _HomePageHelpers1 on HomePageState {
             alignment: PlaceholderAlignment.middle,
             child: Padding(
               padding: const EdgeInsets.only(right: 3),
-              child: Icon(
-                m.delivered || m.read
-                    ? Icons.done_all_rounded
-                    : Icons.done_rounded,
-                size: 14,
-                color: m.read ? scheme.primary : textColor.withAlpha(120),
+              child: BookTick(
+                state: m.read
+                    ? BookState.read
+                    : m.delivered
+                        ? BookState.delivered
+                        : BookState.sent,
+                muted: textColor.withAlpha(120),
+                color: accentInk(scheme),
+                size: 20,
               ),
             ),
           ),

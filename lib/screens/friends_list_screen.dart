@@ -13,6 +13,8 @@ import '../utils/snackbar_helper.dart';
 import '../services/contact_names.dart';
 import '../utils/radii.dart';
 import '../widgets/skeleton.dart';
+import '../widgets/book_tick.dart';
+import '../utils/readable.dart';
 import '../utils/adaptive_sheet.dart';
 
 class FriendsListScreen extends StatefulWidget {
@@ -218,16 +220,15 @@ class FriendsListScreenState extends State<FriendsListScreen> {
                       if (isYouLastSender)
                         Padding(
                           padding: const EdgeInsets.only(right: 4),
-                          child: Icon(
-                            user.lastMessageRead == true
-                                ? Icons.done_all
+                          child: BookTick(
+                            state: user.lastMessageRead == true
+                                ? BookState.read
                                 : user.lastMessageDelivered == true
-                                    ? Icons.done_all
-                                    : Icons.done,
-                            size: 14,
-                            color: user.lastMessageRead == true
-                                ? Colors.blue
-                                : textColor.withAlpha(120),
+                                    ? BookState.delivered
+                                    : BookState.sent,
+                            muted: textColor.withAlpha(120),
+                            color: accentInk(Theme.of(context).colorScheme),
+                            size: 20,
                           ),
                         ),
                       Expanded(

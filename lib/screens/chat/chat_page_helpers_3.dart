@@ -2132,44 +2132,167 @@ extension _ChatPageHelpers3 on _ChatPageState {
     }
   }
 
-  // [muted] tints "sending / sent / delivered"; [read] highlights the read
-  // receipt. Both are passed in so the ticks stay legible on either the dark
-  // teal-green or the pale-mint sent bubble.
+  // Book ticks: [muted] for the waiting book, [read] the theme colour the
+  // book opens into (both tuned to stay legible on this bubble).
   Widget _buildStatusIcon(Map<String, dynamic> msg,
       {required Color muted, required Color read}) {
     final status = msg['status']?.toString();
-    // Still uploading / sending: a small spinner sits in the tick slot — no
-    // single tick yet. The composer stays free so more messages can queue.
+    final type = (msg['message_type'] ?? 'text').toString();
+    final music = type == 'song' || type == 'voice' || type == 'audio';
+    final newest = _isNewestMine(msg);
+    var state = BookState.sent;
+    double? fraction;
+    int? opened;
     if (status == 'sending') {
-      return SizedBox(
-        width: 11,
-        height: 11,
-        child: CircularProgressIndicator(strokeWidth: 1.6, color: muted),
-      );
-    }
-    // Send failed: a tappable retry marker in the tick slot.
-    if (status == 'failed') {
-      return GestureDetector(
-        onTap: () => _retrySend(msg),
-        child: Icon(Icons.error_outline_rounded,
-            size: 14, color: Colors.redAccent),
-      );
-    }
-    if (msg['is_read'] == true) {
-      // My bonded person saw it: the same ticks in Aluta's rose, beating
-      // once (lub-dub) as they turn — a heart icon here read as a second
-      // reaction next to the real ❤️ ones.
-      if (_bondedHere) {
-        return _HeartbeatTick(
-            id: '${msg['id']}',
-            color: accentInk(Theme.of(context).colorScheme));
+      state = BookState.sending;
+    } else if (status == 'failed') {
+      state = BookState.failed;
+    } else if (status == 'queued') {
+      state = BookState.queued;
+    } else if (_isGroup) {
+      final r = _groupReceipt(msg);
+      if (r == null) {
+        state = msg['is_read'] == true
+            ? BookState.read
+            : (msg['delivered'] == true ? BookState.delivered : BookState.sent);
+      } else {
+        final (total, got, seen) = r;
+        if (seen >= total) {
+          state = BookState.read;
+        } else if (seen > 0) {
+          // Opens partway as people read it, with how many have.
+          state = BookState.delivered;
+          fraction = seen / total;
+          opened = seen;
+        } else if (got >= total) {
+          state = BookState.delivered;
+        }
       }
-      return Icon(Icons.done_all, size: 13, color: read);
+    } else if (msg['is_read'] == true) {
+      state = BookState.read;
+    } else if (msg['delivered'] == true) {
+      state = BookState.delivered;
     }
-    if (msg['delivered'] == true) {
-      return Icon(Icons.done_all, size: 13, color: muted);
+    final s = state;
+    return Builder(
+      builder: (bctx) => BookTick(
+        state: s,
+        muted: muted,
+        color: read,
+        kind: music ? BookKind.music : BookKind.text,
+        animate: newest,
+        // One heart at a time (newest only), and only with my bond; songs
+        // and voice notes float a note in any chat. Groups never a heart.
+        heart: newest && !_isGroup && (music || _bondedHere),
+        openFraction: fraction,
+        openedCount: opened,
+        onTap: s == BookState.failed
+            ? () => _retrySend(msg)
+            : (s == BookState.sending || s == BookState.queued)
+                ? null
+                : () => showBookTimes(bctx, lines: _bookTimes(msg, music)),
+      ),
+    );
+  }
+
+  /// My newest message in this chat (the list is newest first) — the only
+  /// bubble whose book moves.
+  bool _isNewestMine(Map<String, dynamic> msg) {
+    final me = _myId;
+    if (me == null) return false;
+    for (final m in _messages) {
+      if (m['sender_id']?.toString() == me) {
+        return identical(m, msg) || m['id'] == msg['id'];
+      }
     }
-    return Icon(Icons.done, size: 13, color: muted);
+    return false;
+  }
+
+  /// Groups: (others, received, opened) for my message, from each member's
+  /// pointers; null when the members aren't loaded yet.
+  (int, int, int)? _groupReceipt(Map<String, dynamic> msg) {
+    final mid = int.tryParse('${msg['id']}');
+    if (mid == null || _groupMembers.isEmpty) return null;
+    var total = 0, delivered = 0, read = 0;
+    for (final m in _groupMembers) {
+      if (m['user_id']?.toString() == _myId) continue;
+      total++;
+      final r = (m['read_up_to'] as num?)?.toInt() ?? 0;
+      final d = (m['delivered_up_to'] as num?)?.toInt() ?? 0;
+      if (r >= mid) read++;
+      if (r >= mid || d >= mid) delivered++;
+    }
+    return total == 0 ? null : (total, delivered, read);
+  }
+
+  /// Live group receipts: a member received / read up to a message.
+  void _onGroupReceipts(Map<String, dynamic> event) {
+    if (!_isGroup || '${event['conversation_id']}' != '$_cid') return;
+    final uid = '${event['user_id']}';
+    final d = (event['delivered_up_to'] as num?)?.toInt();
+    final r = (event['read_up_to'] as num?)?.toInt();
+    var changed = false;
+    for (final m in _groupMembers) {
+      if (m['user_id']?.toString() != uid) continue;
+      if (d != null && d > ((m['delivered_up_to'] as num?)?.toInt() ?? 0)) {
+        m['delivered_up_to'] = d;
+        changed = true;
+      }
+      if (r != null && r > ((m['read_up_to'] as num?)?.toInt() ?? 0)) {
+        m['read_up_to'] = r;
+        if (r > ((m['delivered_up_to'] as num?)?.toInt() ?? 0)) {
+          m['delivered_up_to'] = r;
+        }
+        changed = true;
+      }
+    }
+    if (changed && mounted) setState(() {});
+  }
+
+  /// The rows of the tap-the-book card.
+  Future<List<(String, String)>> _bookTimes(
+      Map<String, dynamic> msg, bool music) async {
+    final mid = int.tryParse('${msg['id']}');
+    final cid = _isGroup
+        ? _cid
+        : (msg['conversation_id'] as num?)?.toInt() ??
+            int.tryParse('${msg['conversation_id'] ?? ''}');
+    if (mid == null || cid == null || cid == 0) return const [];
+    final info = await ApiService().messageInfo(cid, mid);
+    if (info == null) return const [];
+    String at(dynamic iso) =>
+        (iso == null || '$iso'.isEmpty) ? '' : _timeOnly('$iso');
+    List<Map> list(String k) =>
+        ((info[k] as List?) ?? const []).whereType<Map>().toList();
+    final read = list('read'), got = list('delivered'), sent = list('sent');
+    final opened = music ? 'Played' : 'Opened';
+    if (!_isGroup) {
+      if (read.isNotEmpty) {
+        final e = read.first;
+        return [
+          if (at(e['delivered_at']).isNotEmpty)
+            ('Delivered', at(e['delivered_at'])),
+          (opened, at(e['timestamp'])),
+        ];
+      }
+      if (got.isNotEmpty) return [('Delivered', at(got.first['timestamp']))];
+      return const [];
+    }
+    final total = read.length + got.length + sent.length;
+    String name(Map e) {
+      final phone = e['phone']?.toString() ?? '';
+      final saved =
+          phone.isNotEmpty ? ContactNames.instance.nameFor(phone) : null;
+      final n = (saved ?? e['username'] ?? '').toString().trim();
+      return n.split(RegExp(r'\s+')).first;
+    }
+
+    return [
+      ('$opened by', '${read.length} of $total'),
+      for (final e in read.take(4)) (name(e), at(e['timestamp'])),
+      if (read.length > 4) ('', '+${read.length - 4} more'),
+      if (got.isNotEmpty) ('Delivered to', '${got.length}'),
+    ];
   }
 
   // Checks if two adjacent messages (list is reversed = newer first) should

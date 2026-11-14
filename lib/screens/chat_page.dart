@@ -157,6 +157,7 @@ import '../utils/emoji_field.dart'
         emojiStartTabRefresh;
 import '../widgets/emoji_colon_suggest.dart';
 import '../widgets/keyboard_swap_panel.dart';
+import '../widgets/book_tick.dart';
 import '../utils/adaptive_sheet.dart';
 import '../utils/depth.dart';
 
@@ -1580,6 +1581,10 @@ class _ChatPageState extends State<ChatPage>
     final type = event['type'];
     if (!mounted) return;
     if (_handleGroupMetaWs(type?.toString(), event)) return;
+    if (type == 'conversation_receipts') {
+      _onGroupReceipts(event);
+      return;
+    }
     if (type == 'msg_pulse') {
       _onPulseReceived(event);
       return;
@@ -5969,10 +5974,7 @@ class _ChatPageState extends State<ChatPage>
                             if (isMe) ...[
                               const SizedBox(width: 3),
                               _buildStatusIcon(msg,
-                                  muted: inkSoft,
-                                  read: isDark
-                                      ? const Color(0xFF9FD0FF)
-                                      : const Color(0xFF1E88E5)),
+                                  muted: inkSoft, read: rose),
                             ],
                           ],
                         ],
@@ -6115,8 +6117,10 @@ class _ChatPageState extends State<ChatPage>
     // on some custom colours and after switching theme.
     final sentMuted = bubbleMutedOn(sentBubble);
     final recvMuted = bubbleMutedOn(recvBubble);
-    // Read receipt: a blue double-tick that contrasts with this bubble.
-    final sentRead = bubbleReadTickOn(sentBubble);
+    // Opened book: the theme colour, nudged to stay readable on this bubble.
+    final sentRead = bubbleTintOn(
+        accentInk(Theme.of(context).colorScheme), sentBubble,
+        min: 3.0);
     // Sent/delivered ticks: the muted colour; read ones switch to sentRead.
     final tickGray = sentMuted;
     // Subtle border to lift each bubble off the wallpaper.

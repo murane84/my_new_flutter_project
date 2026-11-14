@@ -47,6 +47,7 @@ import '../utils/brand_theme.dart';
 import '../widgets/ambient_backdrop.dart';
 import '../widgets/chat_wallpaper_sheet.dart';
 import '../widgets/person_avatar.dart';
+import '../widgets/book_tick.dart';
 import '../widgets/story_ring.dart';
 import '../widgets/net_gate.dart';
 import '../widgets/now_glow.dart';

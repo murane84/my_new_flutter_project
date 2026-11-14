@@ -204,14 +204,32 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
                             color: scheme.onSurface),
                       ),
                       const SizedBox(height: 3),
-                      Text(
-                        sealed
-                            ? heartOpensLabel(unlock)
-                            : (mine
-                                ? '$when · ${opened ? 'opened 💗' : 'not opened yet'}'
-                                : when),
-                        style: TextStyle(
-                            fontSize: 12, color: scheme.onSurfaceVariant),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              sealed ? heartOpensLabel(unlock) : when,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: scheme.onSurfaceVariant),
+                            ),
+                          ),
+                          // Mine: the shared book — opens in colour once
+                          // they've opened the letter.
+                          if (mine && !sealed) ...[
+                            const SizedBox(width: 6),
+                            BookTick(
+                              state: opened
+                                  ? BookState.read
+                                  : BookState.delivered,
+                              muted: scheme.onSurfaceVariant,
+                              color: tint,
+                              size: 18,
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   ),

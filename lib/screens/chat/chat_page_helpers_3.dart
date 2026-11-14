@@ -2195,6 +2195,45 @@ extension _ChatPageHelpers3 on _ChatPageState {
     );
   }
 
+  /// A secret heart I sent: the book opens when THEY open it (not when the
+  /// chat is read). Groups open partway by how many opened; [total] is how
+  /// many can.
+  Widget _heartBook(Map<String, dynamic> msg,
+      {required Color muted, required Color read, int? total}) {
+    final opens = _heartOpens(msg).length;
+    final openedAt = (msg['opened_at'] ?? '').toString();
+    var state = msg['delivered'] == true || msg['is_read'] == true
+        ? BookState.delivered
+        : BookState.sent;
+    double? fraction;
+    int? opened;
+    if (_isGroup) {
+      if (total != null && total > 0 && opens >= total) {
+        state = BookState.read;
+      } else if (opens > 0) {
+        state = BookState.delivered;
+        fraction = total == null || total == 0 ? 0.5 : opens / total;
+        opened = opens;
+      }
+    } else if (openedAt.isNotEmpty) {
+      state = BookState.read;
+    }
+    final newest = _isNewestMine(msg);
+    return Builder(
+      builder: (bctx) => BookTick(
+        state: state,
+        muted: muted,
+        color: read,
+        size: 18,
+        animate: newest,
+        heart: newest && !_isGroup && _bondedHere,
+        openFraction: fraction,
+        openedCount: opened,
+        onTap: () => showBookTimes(bctx, lines: _bookTimes(msg, false)),
+      ),
+    );
+  }
+
   /// My newest message in this chat (the list is newest first) — the only
   /// bubble whose book moves.
   bool _isNewestMine(Map<String, dynamic> msg) {
@@ -2264,7 +2303,15 @@ extension _ChatPageHelpers3 on _ChatPageState {
         (iso == null || '$iso'.isEmpty) ? '' : _timeOnly('$iso');
     List<Map> list(String k) =>
         ((info[k] as List?) ?? const []).whereType<Map>().toList();
-    final read = list('read'), got = list('delivered'), sent = list('sent');
+    // A secret heart counts who OPENED it, not who saw the chat.
+    final heart = info.containsKey('opened');
+    final read = heart ? list('opened') : list('read');
+    final got = heart
+        ? [...list('read'), ...list('delivered')]
+            .where((e) => !read.any((r) => r['user_id'] == e['user_id']))
+            .toList()
+        : list('delivered');
+    final sent = list('sent');
     final opened = music ? 'Played' : 'Opened';
     if (!_isGroup) {
       if (read.isNotEmpty) {

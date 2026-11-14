@@ -5897,6 +5897,15 @@ class _ChatPageState extends State<ChatPage>
             final showTime = showAvatar || isFirst;
             if (st == null && !showTime) return const SizedBox.shrink();
             final warm = st?.warm == true;
+            // My heart's opened receipt speaks the shared book: closed while
+            // waiting, opening in colour when they open it (one book — it
+            // replaces both the receipt icon and the delivery ticks).
+            final receipt = isMe &&
+                st != null &&
+                st.icon != Icons.hourglass_top_rounded &&
+                st.icon != Icons.lock_rounded &&
+                const {'sending', 'failed', 'queued'}
+                    .every((x) => msg['status']?.toString() != x);
             // A quiet, near-colourless frosted pill (like a bubble's own
             // timestamp, not a badge): frosted glass in the page's tone with
             // neutral grey text — dark grey on light, soft white on dark — so
@@ -5939,9 +5948,20 @@ class _ChatPageState extends State<ChatPage>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (st != null) ...[
-                            Icon(st.icon,
-                                size: 11.5,
-                                color: warm ? rose : inkSoft),
+                            if (receipt)
+                              _heartBook(msg,
+                                  muted: inkSoft,
+                                  read: rose,
+                                  total: (msg['heart_for']?.toString() ?? '')
+                                          .isNotEmpty
+                                      ? 1
+                                      : (_groupMembers.length > 1
+                                          ? _groupMembers.length - 1
+                                          : null))
+                            else
+                              Icon(st.icon,
+                                  size: 11.5,
+                                  color: warm ? rose : inkSoft),
                             const SizedBox(width: 4),
                             // Long names ("Only … can open it") ellipsize
                             // instead of pushing the pill off-screen.
@@ -5971,7 +5991,7 @@ class _ChatPageState extends State<ChatPage>
                             Text(_timeOnly(msg['timestamp'] ?? ''),
                                 style: TextStyle(
                                     fontSize: 10.5, color: ink)),
-                            if (isMe) ...[
+                            if (isMe && !receipt) ...[
                               const SizedBox(width: 3),
                               _buildStatusIcon(msg,
                                   muted: inkSoft, read: rose),

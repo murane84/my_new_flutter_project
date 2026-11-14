@@ -41,6 +41,7 @@ import '../services/notif_service.dart'
     show syncDiaryReminders, cancelDiaryReminder, PlanReminder;
 import 'package:video_player/video_player.dart';
 import '../widgets/genie_menu.dart';
+import '../widgets/book_tick.dart';
 import '../theme/aluta_palette.dart';
 import '../utils/readable.dart';
 import 'chat/song_cache.dart';

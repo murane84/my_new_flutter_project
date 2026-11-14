@@ -661,6 +661,20 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                             style: TextStyle(
                                 fontSize: 11,
                                 color: scheme.onSurfaceVariant)),
+                        // Mine: the shared book — closed while it waits,
+                        // open in colour once they've opened it.
+                        if (mine) ...[
+                          const SizedBox(width: 6),
+                          BookTick(
+                            state: opened
+                                ? BookState.read
+                                : BookState.delivered,
+                            muted: scheme.onSurfaceVariant,
+                            color: accentInk(scheme),
+                            kind: sync ? BookKind.music : BookKind.text,
+                            size: 18,
+                          ),
+                        ],
                       ],
                     ),
                   ],
@@ -926,6 +940,18 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                             color: _accent)),
+                    if (mine) ...[
+                      const SizedBox(width: 6),
+                      BookTick(
+                        state: d['opened'] == true
+                            ? BookState.read
+                            : BookState.delivered,
+                        muted: scheme.onSurfaceVariant,
+                        color: _accent,
+                        kind: BookKind.music,
+                        size: 18,
+                      ),
+                    ],
                     if (unopened) ...[
                       const SizedBox(width: 6),
                       Container(

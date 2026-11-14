@@ -11,6 +11,7 @@ import '../../utils/radii.dart';
 import '../../utils/adaptive_sheet.dart';
 import '../../utils/depth.dart';
 import '../../utils/toast_helper.dart';
+import 'player_disc_more.dart';
 
 /// The look of the big rotating "now playing" glyph. The user can switch
 /// between these from the player; the choice is remembered across launches.
@@ -25,6 +26,10 @@ enum PlayerDiscStyle {
   heartbeat,
   duet,
   equalizer,
+  polaroid,
+  aura,
+  sunset,
+  boombox,
   // Earned: unlocked by a 30-day "In tune" streak in Our Space (§5.7).
   anniversary,
 }
@@ -44,6 +49,10 @@ extension PlayerDiscStyleX on PlayerDiscStyle {
         PlayerDiscStyle.heartbeat => 'heartbeat',
         PlayerDiscStyle.duet => 'duet',
         PlayerDiscStyle.equalizer => 'equalizer',
+        PlayerDiscStyle.polaroid => 'polaroid',
+        PlayerDiscStyle.aura => 'aura',
+        PlayerDiscStyle.sunset => 'sunset',
+        PlayerDiscStyle.boombox => 'boombox',
         PlayerDiscStyle.anniversary => 'anniversary_vinyl',
       };
 
@@ -58,6 +67,10 @@ extension PlayerDiscStyleX on PlayerDiscStyle {
         PlayerDiscStyle.heartbeat => 'Heartbeat',
         PlayerDiscStyle.duet => 'Duet',
         PlayerDiscStyle.equalizer => 'Equalizer',
+        PlayerDiscStyle.polaroid => 'Polaroid',
+        PlayerDiscStyle.aura => 'Aura',
+        PlayerDiscStyle.sunset => 'Sunset',
+        PlayerDiscStyle.boombox => 'Boombox',
         PlayerDiscStyle.anniversary => 'Anniversary Vinyl',
       };
 
@@ -69,7 +82,10 @@ extension PlayerDiscStyleX on PlayerDiscStyle {
         PlayerDiscStyle.anniversary ||
         PlayerDiscStyle.heartbeat ||
         PlayerDiscStyle.duet ||
-        PlayerDiscStyle.equalizer =>
+        PlayerDiscStyle.equalizer ||
+        PlayerDiscStyle.polaroid ||
+        PlayerDiscStyle.sunset ||
+        PlayerDiscStyle.boombox =>
           false,
         _ => true,
       };
@@ -266,6 +282,35 @@ class PlayerDisc extends StatelessWidget {
           accent: accent,
           isDark: isDark,
           spin: spin,
+          playing: playing,
+          artBuilder: artBuilder,
+        ),
+      PlayerDiscStyle.polaroid => PolaroidDisc(
+          side: side,
+          accent: accent,
+          isDark: isDark,
+          playing: playing,
+          artBuilder: artBuilder,
+        ),
+      PlayerDiscStyle.aura => AuraDisc(
+          side: side,
+          accent: accent,
+          isDark: isDark,
+          playing: playing,
+          artBuilder: artBuilder,
+        ),
+      PlayerDiscStyle.sunset => SunsetDisc(
+          side: side,
+          accent: accent,
+          isDark: isDark,
+          playing: playing,
+          artBuilder: artBuilder,
+          progress: progress,
+        ),
+      PlayerDiscStyle.boombox => BoomboxDisc(
+          side: side,
+          accent: accent,
+          isDark: isDark,
           playing: playing,
           artBuilder: artBuilder,
         ),

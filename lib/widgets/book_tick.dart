@@ -527,8 +527,12 @@ void _showBookTimesAt(
   final card = scheme.surfaceContainerHigh;
   // Room above? Open above the book (tail down), else below (tail up).
   final above = at.dy > 150;
-  // The tail sits over the book's centre (the card is right-aligned to it).
-  final tailRight = (box.size.width / 2 - 7).clamp(4.0, 40.0);
+  // The tail's tip sits right over the book's centre. The outline keeps its
+  // tip at least [TailedCardBorder.minEdge] in from the card's corner, so a
+  // narrow book (≈20 px) would leave the tail ~6 px off to the left — the
+  // card reaches a few px past the book on the right instead.
+  const tipIn = TailedCardBorder.minEdge + 2; // tip's distance from the right
+  final dx = tipIn - box.size.width / 2;
 
   Timer? auto;
   // Close once the list has scrolled about a bubble's height.
@@ -564,7 +568,7 @@ void _showBookTimesAt(
           showWhenUnlinked: false,
           targetAnchor: above ? Alignment.topRight : Alignment.bottomRight,
           followerAnchor: above ? Alignment.bottomRight : Alignment.topRight,
-          offset: Offset(0, above ? -2 : 2),
+          offset: Offset(dx, above ? -2 : 2),
           child: TweenAnimationBuilder<double>(
             tween: Tween(begin: 0, end: 1),
             duration: Motion.quick,
@@ -573,7 +577,9 @@ void _showBookTimesAt(
               opacity: v.clamp(0.0, 1.0),
               child: Transform.scale(
                 scale: 0.85 + 0.15 * v,
+                // Grows out of the tail's tip, like the drop-down menus.
                 alignment: above ? Alignment.bottomRight : Alignment.topRight,
+                origin: const Offset(-tipIn, 0),
                 child: child,
               ),
             ),
@@ -588,7 +594,7 @@ void _showBookTimesAt(
                   elevation: 6,
                   shadowColor: Colors.black.withValues(alpha: 0.35),
                   shape: TailedCardBorder(
-                    tipX: tailRight + 7,
+                    tipX: tipIn,
                     tipFromRight: true,
                     up: !above,
                     radius: Radii.lg,

@@ -1905,6 +1905,7 @@ extension _HomeFriendListView on HomePageState {
                   const SizedBox(height: 2),
                   _tileSubtitle(
                       scheme, textColor, npLine, isTyping, lastMsg, hasUnread,
+                      draft: Drafts.ofFriend(f['id']),
                       mine: (f['last_sender_id'] as num?)?.toInt() ==
                                   _myUserId &&
                               _myUserId != null
@@ -2576,6 +2577,10 @@ extension _HomeFriendListView on HomePageState {
                           fontWeight: FontWeight.w600,
                         ),
                       );
+                    }
+                    final draft = Drafts.ofGroup(g['id']);
+                    if (draft != null && !isTyping) {
+                      return _draftLine(scheme, textColor, draft);
                     }
                     if (isTyping) {
                       return Text(

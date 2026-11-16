@@ -1627,11 +1627,39 @@ extension _HomePageHelpers1 on HomePageState {
     );
   }
 
+  /// "✎ Draft: …" — what I left unsent in this chat's composer.
+  Widget _draftLine(ColorScheme scheme, Color textColor, String draft) {
+    final base = TextStyle(fontSize: 12.5, color: textColor.withAlpha(150));
+    final ink = accentInk(scheme);
+    return Text.rich(
+      TextSpan(style: base, children: [
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 3),
+            child: Icon(Icons.edit_rounded, size: 13, color: ink),
+          ),
+        ),
+        TextSpan(
+            text: 'Draft: ',
+            style: base.copyWith(color: ink, fontWeight: FontWeight.w700)),
+        ...previewSpans(draft, base,
+            codeBg: textColor.withValues(alpha: 0.12),
+            highlightBg: const Color(0x66FFC107),
+            mention: ink),
+      ]),
+      overflow: TextOverflow.ellipsis,
+      maxLines: 1,
+    );
+  }
+
   /// The single contextual line under a friend's name, in priority order:
   /// live track → typing… → last message (styled for unread).
   Widget _tileSubtitle(ColorScheme scheme, Color textColor, String? npLine,
       bool typing, String lastMsg, bool hasUnread,
-      {({bool delivered, bool read})? mine}) {
+      {({bool delivered, bool read})? mine, String? draft}) {
+    // typing… → my unsent draft → their live track → the last message.
+    if (draft != null && !typing) return _draftLine(scheme, textColor, draft);
     if (npLine != null) {
       final npStyle = TextStyle(
           fontSize: 12.5,

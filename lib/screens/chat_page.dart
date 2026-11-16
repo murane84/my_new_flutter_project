@@ -122,6 +122,7 @@ import '../services/track_title.dart'
         displayArtistForPath,
         sharedTrackNames;
 import '../services/song_names.dart';
+import '../services/drafts.dart';
 import '../services/song_insights.dart' show SongInsights, SongFeel;
 import '../services/plan_limits.dart';
 import '../services/cover_art.dart';
@@ -466,6 +467,7 @@ class _ChatPageState extends State<ChatPage>
       } else {
         await prefs.setString(_draftKey, t);
       }
+      Drafts.changed(); // the Circle tile shows / drops "Draft:"
     } catch (_) {}
   }
 

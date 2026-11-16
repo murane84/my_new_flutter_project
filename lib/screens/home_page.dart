@@ -157,6 +157,7 @@ import '../services/gallery_autosave.dart';
 import '../widgets/week_in_music_sheet.dart';
 import '../widgets/pill_search.dart';
 import '../services/haptics.dart';
+import '../services/drafts.dart';
 import '../widgets/slide_track.dart';
 import '../widgets/edge_scroll_row.dart';
 import '../utils/motion.dart';
@@ -827,6 +828,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Repaint the friend list when the phone-book name map finishes a
     // (re)read, so saved names appear the moment they load.
     ContactNames.instance.revision.addListener(_onContactsChanged);
+    Drafts.revision.addListener(_onContactsChanged);
     // Phonebook name map so saved contact names show in the friend list.
     // Deferred ~4s off the first frame (never competes with cold-start render/
     // audio), and allowPrompt so it REQUESTS contacts permission if it isn't
@@ -1024,6 +1026,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     SessionEvents.instance.expired.removeListener(_onSessionExpired);
     ShareInbox.instance.removeListener(_onSharePending);
     ContactNames.instance.revision.removeListener(_onContactsChanged);
+    Drafts.revision.removeListener(_onContactsChanged);
     playlistDrawerBus.isOpen.removeListener(_onPlaylistDrawerToggled);
     NowPlayingPresence.instance.removeListener(_onPresenceChanged);
     SteadyListening.instance.removeListener(_onPresenceChanged);

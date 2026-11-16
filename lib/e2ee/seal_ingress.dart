@@ -40,8 +40,7 @@ class SealIngress {
   /// Unlock [m] in place: `content` becomes the text (or a 🔒 note).
   static Future<void> open(Map<String, dynamic> m) async {
     if (!isSealed(m)) return;
-    // A timed heart whose moment hasn't come: the server still holds its
-    // locked copies — it stays covered (for its sender too) until then.
+    // A timed heart from before its copies travelled with it: covered.
     if (m['message_type'] == 'heart' && m['envelopes'] == null) return;
     final me = await myUid();
     SealOpened r;
@@ -56,7 +55,9 @@ class SealIngress {
       case SealOpenStatus.plain:
         return;
       case SealOpenStatus.ok:
-        m['content'] = r.text ?? '';
+        // A timed heart is opened now (its key can't wait for the moment)
+        // but stays covered — for its sender too — until unlock_at.
+        m['content'] = _stillTimed(m) ? '' : (r.text ?? '');
         m.remove('seal_state');
       case SealOpenStatus.noKey:
         m['content'] = lockedNoKey;
@@ -90,6 +91,12 @@ class SealIngress {
   /// A push for a sealed text: put the unlocked text in `body` when this
   /// phone can read it, without moving any session (the chat opens it for
   /// real). Returns the data to show.
+  static bool _stillTimed(Map<String, dynamic> m) {
+    if (m['message_type'] != 'heart') return false;
+    final ua = DateTime.tryParse('${m['unlock_at'] ?? ''}');
+    return ua != null && DateTime.now().toUtc().isBefore(ua.toUtc());
+  }
+
   static Future<Map<String, dynamic>> openPush(Map<String, dynamic> data) async {
     if (data.values.any(SealScope.isSealed)) {
       // 🔒 Our Space words in a push (the server avoids it, but never show
@@ -97,6 +104,8 @@ class SealIngress {
       data = await SealSpace.instance.openJson(Map<String, dynamic>.from(data));
     }
     if (data['e2ee'] == null) return data;
+    // A heart never shows its note in a banner ("❤️ Secret message").
+    if (data['msg_kind'] == 'heart') return data;
     final out = Map<String, dynamic>.from(data);
     try {
       final me = await myUid();

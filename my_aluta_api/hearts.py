@@ -21,8 +21,10 @@
                  (`redact`), and the attachment route refuses them the file.
 
 A 1:1 heart's note is end-to-end encrypted (e2ee_msgs.py): `content` is
-empty and its per-device copies are `envelopes` — for a timed heart they wait
-in `sealed_content` until the moment. Group hearts are still plain (protected
+empty and its per-device copies are `envelopes`. A timed one is opened by the
+phones on arrival (a ratchet key can't wait months) and kept covered by the
+app until `unlock_at` — a modified app could peek early, an accepted trade-off
+for love notes; the server still never has the words. Group hearts are still plain (protected
 by the server withholding them, an open heart by the client's cover gate).
 """
 import json
@@ -131,8 +133,8 @@ def unseal(msg) -> bool:
     if ua is not None and ua > datetime.now(timezone.utc):
         return False
     if getattr(msg, "e2ee", None):
-        # 🔒 Sealed heart: what was held back is its locked copies.
-        msg.envelopes = msg.sealed_content or None
+        # 🔒 Sealed heart: the note is in its copies on the phones; this
+        # just marks the moment (the phones uncover it).
         msg.content = ""
     else:
         msg.content = msg.sealed_content or ""

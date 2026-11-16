@@ -280,8 +280,8 @@ class SealMessenger {
         return const SealOpened(SealOpenStatus.noKey);
       }
       try {
-        final text = await _decrypt(sender, mine, commit: commit);
-        if (commit) await _remember(peer, id, rev, text);
+        final text = await _decrypt(sender, mine,
+            commit: commit, keep: (t) => _remember(peer, id, rev, t));
         return SealOpened(SealOpenStatus.ok, text);
       } catch (_) {
         if (known != null) return SealOpened(SealOpenStatus.ok, known.$2);
@@ -295,7 +295,12 @@ class SealMessenger {
     return (j['t'] ?? '').toString();
   }
 
-  Future<String> _decrypt(int from, String b64, {required bool commit}) async {
+  /// [keep] stores the text BEFORE the session moves on: if the app dies in
+  /// between, the text is safe and the session can still re-derive the key —
+  /// the other order would lose the message for good.
+  Future<String> _decrypt(int from, String b64,
+      {required bool commit,
+      required Future<void> Function(String text) keep}) async {
     final List<int> raw;
     try {
       raw = base64Decode(b64);
@@ -303,12 +308,18 @@ class SealMessenger {
       throw SealError('not base64');
     }
     if (raw.length > 2 && raw[1] == SealSpec.typeSelf) {
-      return _textOf(await openSelfBox(_keys.selfKey, raw));
+      final text = _textOf(await openSelfBox(_keys.selfKey, raw));
+      if (commit) await keep(text);
+      return text;
     }
     final env = SealEnvelope.decode(raw);
     Future<String> done(SealSession s, List<int> clear, String ik) async {
-      if (commit) await _save(from, ik, s);
-      return _textOf(clear);
+      final text = _textOf(clear);
+      if (commit) {
+        await keep(text);
+        await _save(from, ik, s);
+      }
+      return text;
     }
 
     SealSession copyOf(SealSession s) => SealSession.fromJson(

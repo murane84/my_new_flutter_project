@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 import crud
 from auth import get_current_user
 from database import get_db
-from models import E2eeDevice, E2eePreKey, Friend, User
+from models import E2eeDevice, E2eePreKey, User
 
 router = APIRouter(prefix="/e2ee", tags=["E2EE"])
 
@@ -159,18 +159,16 @@ def delete_device(device_id: str, db: Session = Depends(get_db),
 
 
 def _may_reach(db: Session, me: User, user_id: int) -> bool:
-    """Same reach as sending a message: in either one's Circle, and I haven't
-    blocked them (their block on me stays invisible, as for messages)."""
+    """Exactly the reach of sending a message (crud.may_reach: a contact
+    either way, or someone in a group with me), and I haven't blocked them
+    (their block on me stays invisible, as for messages)."""
     if user_id == me.id:
         return True
     i_blocked, _ = crud.block_state(db, me.id, user_id)
     if i_blocked:
         raise HTTPException(status_code=403,
                             detail="Unblock them to send a message")
-    return db.query(Friend.id).filter(
-        ((Friend.user_id == me.id) & (Friend.friend_id == user_id))
-        | ((Friend.user_id == user_id) & (Friend.friend_id == me.id))
-    ).first() is not None
+    return crud.may_reach(db, me.id, user_id)
 
 
 def _live_devices(db: Session, user_id: int):

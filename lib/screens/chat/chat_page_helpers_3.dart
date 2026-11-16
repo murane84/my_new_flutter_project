@@ -2175,7 +2175,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
     }
     final s = state;
     return Builder(
-      builder: (bctx) => BookTick(
+      builder: (_) => BookTick(
         state: s,
         muted: muted,
         color: read,
@@ -2186,11 +2186,12 @@ extension _ChatPageHelpers3 on _ChatPageState {
         heart: newest && (music || (!_isGroup && _bondedHere)),
         openFraction: fraction,
         openedCount: opened,
-        onTap: s == BookState.failed
-            ? () => _retrySend(msg)
-            : (s == BookState.sending || s == BookState.queued)
-                ? null
-                : () => showBookTimes(bctx, lines: _bookTimes(msg, music)),
+        onTap: s == BookState.failed ? () => _retrySend(msg) : null,
+        times: (s == BookState.sending ||
+                s == BookState.queued ||
+                s == BookState.failed)
+            ? null
+            : () => _bookTimes(msg, music),
       ),
     );
   }
@@ -2220,7 +2221,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
     }
     final newest = _isNewestMine(msg);
     return Builder(
-      builder: (bctx) => BookTick(
+      builder: (_) => BookTick(
         state: state,
         muted: muted,
         color: read,
@@ -2228,7 +2229,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
         animate: newest,
         heart: newest && !_isGroup && _bondedHere,
         openFraction: fraction,
-        onTap: () => showBookTimes(bctx, lines: _bookTimes(msg, false)),
+        times: () => _bookTimes(msg, false),
       ),
     );
   }

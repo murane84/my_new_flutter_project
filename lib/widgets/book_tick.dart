@@ -39,6 +39,7 @@ class BookTick extends StatefulWidget {
     this.openFraction,
     this.openedCount,
     this.onTap,
+    this.times,
     this.size = 22,
     this.compact = false,
   });
@@ -62,6 +63,10 @@ class BookTick extends StatefulWidget {
   /// Groups: how many opened it (shown beside a part-open book).
   final int? openedCount;
   final VoidCallback? onTap;
+
+  /// Tap the book → a small card pinned to it with these rows ("Delivered
+  /// 6:09 PM", "Opened 6:12 PM", or who opened it in a group).
+  final Future<List<(String, String)>> Function()? times;
   final double size;
 
   /// List size (chat previews): "sent" keeps the tilt and the motion lines
@@ -107,10 +112,21 @@ class _BookTickState extends State<BookTick>
     }
   }
 
+  final LayerLink _link = LayerLink();
+
   @override
   void dispose() {
+    if (identical(_timesOwner, this)) _closeTimes();
     _c.dispose();
     super.dispose();
+  }
+
+  VoidCallback? get _tap {
+    if (widget.onTap != null) return widget.onTap;
+    final times = widget.times;
+    if (times == null) return null;
+    return () => _showBookTimesAt(context,
+        link: _link, owner: this, lines: times());
   }
 
   String get _label => switch (widget.state) {
@@ -178,20 +194,24 @@ class _BookTickState extends State<BookTick>
         ],
       );
     }
-    return Semantics(
+    final tap = _tap;
+    return CompositedTransformTarget(
+      link: _link,
+      child: Semantics(
       label: _label,
-      button: widget.onTap != null,
-      child: widget.onTap == null
+      button: tap != null,
+      child: tap == null
           ? icon
           : GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: widget.onTap,
+              onTap: tap,
               child: Padding(
                 // No extra height: the bubble's meta row keeps its size.
                 padding: const EdgeInsets.symmetric(horizontal: 2),
                 child: icon,
               ),
             ),
+      ),
     );
   }
 }
@@ -474,45 +494,81 @@ class _BookPainter extends CustomPainter {
 }
 
 // ── Tap the book → when it arrived / was opened ───────────────────────────
+// The card is pinned to its book with a LayerLink, so it scrolls WITH the
+// bubble; a small tail points at the book. It closes on a tap anywhere, when
+// the list scrolls a bubble's height, when the book leaves the screen (its
+// widget goes away) and after a few seconds.
 
 OverlayEntry? _timesEntry;
+Object? _timesOwner;
+VoidCallback? _timesUnhook;
 
-/// A small Aluta card popping from the book: "Delivered 6:09 PM · Opened
-/// 6:12 PM" (or, in a group, who has opened it). [lines] loads the rows.
-void showBookTimes(
-  BuildContext context, {
-  required Future<List<(String, String)>> lines,
-}) {
+void _closeTimes() {
+  _timesUnhook?.call();
+  _timesUnhook = null;
   _timesEntry?.remove();
   _timesEntry = null;
+  _timesOwner = null;
+}
+
+void _showBookTimesAt(
+  BuildContext context, {
+  required LayerLink link,
+  required Object owner,
+  required Future<List<(String, String)>> lines,
+}) {
+  _closeTimes();
   final box = context.findRenderObject() as RenderBox?;
   final overlay = Overlay.maybeOf(context);
   if (box == null || overlay == null || !box.attached) return;
   final at = box.localToGlobal(Offset.zero);
-  final screen = MediaQuery.sizeOf(context);
   final scheme = Theme.of(context).colorScheme;
+  final card = scheme.surfaceContainerHigh;
+  // Room above? Open above the book (tail down), else below (tail up).
+  final above = at.dy > 150;
+  // The tail sits over the book's centre (the card is right-aligned to it).
+  final tailRight = (box.size.width / 2 - 7).clamp(4.0, 40.0);
+
   Timer? auto;
-  void close() {
-    auto?.cancel();
-    _timesEntry?.remove();
-    _timesEntry = null;
+  // Close once the list has scrolled about a bubble's height.
+  final pos = Scrollable.maybeOf(context)?.position;
+  if (pos != null) {
+    final start = pos.pixels;
+    void onScroll() {
+      if ((pos.pixels - start).abs() > 60) _closeTimes();
+    }
+
+    pos.addListener(onScroll);
+    _timesUnhook = () {
+      auto?.cancel();
+      try {
+        pos.removeListener(onScroll);
+      } catch (_) {}
+    };
+  } else {
+    _timesUnhook = () => auto?.cancel();
   }
 
-  final right = (screen.width - at.dx - box.size.width).clamp(8.0, screen.width);
-  final fromTop = at.dy > 140;
+  final tail = CustomPaint(
+    size: const Size(14, 7),
+    painter: _TailPainter(card, down: above),
+  );
+
   _timesEntry = OverlayEntry(
     builder: (_) => Stack(
       children: [
         Positioned.fill(
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
-            onTap: close,
+            onTap: _closeTimes,
           ),
         ),
-        Positioned(
-          right: right,
-          top: fromTop ? null : at.dy + box.size.height + 6,
-          bottom: fromTop ? screen.height - at.dy + 6 : null,
+        CompositedTransformFollower(
+          link: link,
+          showWhenUnlinked: false,
+          targetAnchor: above ? Alignment.topRight : Alignment.bottomRight,
+          followerAnchor: above ? Alignment.bottomRight : Alignment.topRight,
+          offset: Offset(0, above ? -2 : 2),
           child: TweenAnimationBuilder<double>(
             tween: Tween(begin: 0, end: 1),
             duration: Motion.quick,
@@ -521,72 +577,119 @@ void showBookTimes(
               opacity: v.clamp(0.0, 1.0),
               child: Transform.scale(
                 scale: 0.85 + 0.15 * v,
-                alignment:
-                    fromTop ? Alignment.bottomRight : Alignment.topRight,
+                alignment: above ? Alignment.bottomRight : Alignment.topRight,
                 child: child,
               ),
             ),
-            child: Material(
-              color: scheme.surfaceContainerHigh,
-              elevation: 6,
-              borderRadius: BorderRadius.circular(Radii.lg),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 260),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                  child: FutureBuilder<List<(String, String)>>(
-                    future: lines,
-                    builder: (_, snap) {
-                      if (!snap.hasData) {
-                        return SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 1.6, color: scheme.primary),
-                        );
-                      }
-                      final rows = snap.data!;
-                      if (rows.isEmpty) {
-                        return Text('On its way',
-                            style: TextStyle(
-                                fontSize: 12.5,
-                                color: scheme.onSurfaceVariant));
-                      }
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          for (final (k, v) in rows)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 1.5),
-                              child: Text.rich(
-                                TextSpan(children: [
-                                  TextSpan(
-                                      text: '$k  ',
-                                      style: TextStyle(
-                                          color: scheme.onSurfaceVariant)),
-                                  TextSpan(
-                                      text: v,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w700)),
-                                ]),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (!above)
+                  Padding(
+                      padding: EdgeInsets.only(right: tailRight), child: tail),
+                Material(
+                  color: card,
+                  elevation: 6,
+                  shadowColor: Colors.black.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(Radii.lg),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 260),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 9),
+                      child: FutureBuilder<List<(String, String)>>(
+                        future: lines,
+                        builder: (_, snap) {
+                          if (!snap.hasData) {
+                            return SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 1.6, color: scheme.primary),
+                            );
+                          }
+                          final rows = snap.data!;
+                          if (rows.isEmpty) {
+                            return Text('On its way',
                                 style: TextStyle(
-                                    fontSize: 12.5, color: scheme.onSurface),
-                              ),
-                            ),
-                        ],
-                      );
-                    },
+                                    fontSize: 12.5,
+                                    color: scheme.onSurfaceVariant));
+                          }
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (final (k, v) in rows)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 1.5),
+                                  child: Text.rich(
+                                    TextSpan(children: [
+                                      TextSpan(
+                                          text: '$k  ',
+                                          style: TextStyle(
+                                              color: scheme.onSurfaceVariant)),
+                                      TextSpan(
+                                          text: v,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w700)),
+                                    ]),
+                                    style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: scheme.onSurface),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                if (above)
+                  Padding(
+                      padding: EdgeInsets.only(right: tailRight), child: tail),
+              ],
             ),
           ),
         ),
       ],
     ),
   );
+  _timesOwner = owner;
   overlay.insert(_timesEntry!);
-  auto = Timer(const Duration(seconds: 5), close);
+  auto = Timer(const Duration(seconds: 5), _closeTimes);
+}
+
+/// The little pointer under / over the card, in the card's colour.
+class _TailPainter extends CustomPainter {
+  _TailPainter(this.color, {required this.down});
+  final Color color;
+  final bool down;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Path();
+    if (down) {
+      p
+        ..moveTo(0, 0)
+        ..lineTo(size.width, 0)
+        ..lineTo(size.width / 2 + 1.5, size.height - 1)
+        ..quadraticBezierTo(
+            size.width / 2, size.height, size.width / 2 - 1.5, size.height - 1)
+        ..close();
+    } else {
+      p
+        ..moveTo(0, size.height)
+        ..lineTo(size.width, size.height)
+        ..lineTo(size.width / 2 + 1.5, 1)
+        ..quadraticBezierTo(size.width / 2, 0, size.width / 2 - 1.5, 1)
+        ..close();
+    }
+    canvas.drawPath(p, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_TailPainter o) => o.color != color || o.down != down;
 }

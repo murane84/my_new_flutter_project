@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import '../screens/token_helper.dart';
 import '../utils/app_config.dart';
 import '../utils/net.dart' as http;
+import 'seal_directory.dart';
+import 'seal_keystore.dart';
 import 'seal_messenger.dart';
 import 'seal_primitives.dart';
 
@@ -74,7 +76,9 @@ class SealHandover {
       final r = await http.post(Uri.parse('$base/e2ee/handover'),
           headers: headers,
           body: jsonEncode({'code': code, 'package': base64Encode(pkg)}));
-      return r.statusCode == 200;
+      if (r.statusCode == 200) return true;
+      await release(); // refused (e.g. too large): don't keep it waiting
+      return false;
     } catch (e) {
       debugPrint('Seal hand-over send: $e');
       await release();
@@ -108,6 +112,12 @@ class SealHandover {
           final status = j['status'];
           if (status == 'none') return 0;
           if (status == 'ready') {
+            // Texts are filed under this computer's own keys: make sure they
+            // exist before taking the package in (sign-in may still be
+            // setting them up).
+            final owner = SealDirectory.ownerOf(token);
+            if (owner == null) return 0;
+            await SealKeyStore.instance.ensure(owner);
             final clear = await openHandover(
                 linkKey, base64Decode(j['package'] as String));
             final body = jsonDecode(utf8.decode(clear)) as Map<String, dynamic>;

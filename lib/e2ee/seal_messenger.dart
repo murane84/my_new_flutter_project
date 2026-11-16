@@ -84,8 +84,9 @@ class SealMessenger {
 
   Future<void> _lock = Future<void>.value();
   final Map<int, (DateTime, List<SealPeerDevice>)> _devices = {};
-  final Map<int, Map<String, List<dynamic>>> _plainCache = {};
-  final Map<int, Map<String, String>> _heldCache = {};
+  // Keyed '<device id>:<peer>' (see [_ns]).
+  final Map<String, Map<String, List<dynamic>>> _plainCache = {};
+  final Map<String, Map<String, String>> _heldCache = {};
 
   Future<T> _locked<T>(Future<T> Function() f) {
     final c = Completer<T>();
@@ -259,6 +260,7 @@ class SealMessenger {
       final rev = _int(m['e2ee_rev']);
       final sender = _int(m['sender_id']);
       final peer = sender == myUid ? _int(m['receiver_id']) : sender;
+      await _keys.load(); // texts and sessions are filed under its id
       final known = await _recall(peer, id);
       if (known != null && (known.$1 >= rev || !commit)) {
         return SealOpened(SealOpenStatus.ok, known.$2);
@@ -367,17 +369,17 @@ class SealMessenger {
   // ── Remembered text ──────────────────────────────────────────────────────
 
   Future<Map<String, List<dynamic>>> _plainOf(int peer) async {
-    final c = _plainCache[peer];
+    final c = _plainCache['$_ns:$peer'];
     if (c != null) return c;
     Map<String, List<dynamic>> m = {};
     try {
-      final s = await _plain.read('aluta_seal_plain_$peer');
+      final s = await _plain.read(_plainKey(peer));
       if (s != null) {
         m = (jsonDecode(s) as Map<String, dynamic>)
             .map((k, v) => MapEntry(k, v as List<dynamic>));
       }
     } catch (_) {}
-    return _plainCache[peer] = m;
+    return _plainCache['$_ns:$peer'] = m;
   }
 
   Future<(int, String)?> _recall(int peer, int id) async {
@@ -394,11 +396,16 @@ class SealMessenger {
         m.remove('$old');
       }
     }
-    await _plain.write('aluta_seal_plain_$peer', jsonEncode(m));
+    await _plain.write(_plainKey(peer), jsonEncode(m));
     await _notePlainPeer(peer);
   }
 
-  static const String _plainPeersKey = 'aluta_seal_plain_peers';
+  // Unlocked texts are filed under this device identity too: another account
+  // on the same phone (new keys → new id) never sees them — nor hands them
+  // over to a computer it links.
+  String _plainKey(int peer) => 'aluta_seal_plain_${_ns}_$peer';
+  String _heldKey(int peer) => 'aluta_seal_held_${_ns}_$peer';
+  String get _plainPeersKey => 'aluta_seal_plain_peers_$_ns';
 
   Future<List<int>> _plainPeers() async {
     try {
@@ -418,14 +425,17 @@ class SealMessenger {
   /// Every text this device has unlocked or sent, by friend — what a newly
   /// linked computer needs to read the sealed history ({peer: {id: [rev,
   /// text]}}).
-  Future<Map<String, dynamic>> exportPlain() => _locked(() async => {
-        for (final peer in await _plainPeers())
-          '$peer': await _plainOf(peer),
+  Future<Map<String, dynamic>> exportPlain() => _locked(() async {
+        await _keys.load();
+        return {
+          for (final peer in await _plainPeers()) '$peer': await _plainOf(peer),
+        };
       });
 
   /// Take in a phone's texts (the hand-over); a newer revision wins.
   /// Returns how many texts were new here.
   Future<int> importPlain(Map<String, dynamic> data) => _locked(() async {
+        await _keys.load();
         var added = 0;
         for (final e in data.entries) {
           final peer = int.tryParse(e.key);
@@ -440,7 +450,7 @@ class SealMessenger {
             m['${r.key}'] = [_int(v[0]), v[1].toString()];
             added++;
           }
-          await _plain.write('aluta_seal_plain_$peer', jsonEncode(m));
+          await _plain.write(_plainKey(peer), jsonEncode(m));
           await _notePlainPeer(peer);
         }
         return added;
@@ -448,11 +458,17 @@ class SealMessenger {
 
   /// My own sent / edited text (I have no envelope of my own).
   Future<void> rememberSent(int peer, int id, int rev, String text) =>
-      _locked(() => _remember(peer, id, rev, text));
+      _locked(() async {
+        await _keys.load();
+        await _remember(peer, id, rev, text);
+      });
 
   /// The remembered text of a message, if this device unlocked / sent it.
   Future<String?> textOf(int peer, int id) async =>
-      (await _locked(() => _recall(peer, id)))?.$2;
+      (await _locked(() async {
+        await _keys.load();
+        return _recall(peer, id);
+      }))?.$2;
 
   static int? _heldIdOf(Object? meta) {
     if (meta is! String || !meta.contains('"held"')) return null;
@@ -465,30 +481,33 @@ class SealMessenger {
   }
 
   Future<Map<String, String>> _heldOf(int peer) async {
-    final c = _heldCache[peer];
+    final c = _heldCache['$_ns:$peer'];
     if (c != null) return c;
     Map<String, String> m = {};
     try {
-      final s = await _plain.read('aluta_seal_held_$peer');
+      final s = await _plain.read(_heldKey(peer));
       if (s != null) {
         m = (jsonDecode(s) as Map<String, dynamic>)
             .map((k, v) => MapEntry(k, v.toString()));
       }
     } catch (_) {}
-    return _heldCache[peer] = m;
+    return _heldCache['$_ns:$peer'] = m;
   }
 
   /// A morning message's text, kept until it is delivered.
   Future<void> rememberHeld(int peer, int heldId, String text) =>
       _locked(() async {
+        await _keys.load();
         final m = await _heldOf(peer);
         m['$heldId'] = text;
         if (m.length > 200) m.remove(m.keys.first);
-        await _plain.write('aluta_seal_held_$peer', jsonEncode(m));
+        await _plain.write(_heldKey(peer), jsonEncode(m));
       });
 
-  Future<String?> recallHeld(int peer, int heldId) async =>
-      (await _heldOf(peer))['$heldId'];
+  Future<String?> recallHeld(int peer, int heldId) async {
+    await _keys.load();
+    return (await _heldOf(peer))['$heldId'];
+  }
 
   /// Sign-out: forget every session and remembered text.
   Future<void> wipe() => _locked(() async {
@@ -502,14 +521,13 @@ class SealMessenger {
               await _sessions.delete(_sessKey(uid, ik));
             }
             await _sessions.delete(_peersKey(uid));
-            await _plain.delete('aluta_seal_plain_$uid');
-            _plainCache.remove(uid);
-            await _plain.delete('aluta_seal_held_$uid');
+            await _plain.delete(_plainKey(uid));
+            await _plain.delete(_heldKey(uid));
           }
           await _sessions.delete(_uidsKey);
           for (final peer in await _plainPeers()) {
-            await _plain.delete('aluta_seal_plain_$peer');
-            await _plain.delete('aluta_seal_held_$peer');
+            await _plain.delete(_plainKey(peer));
+            await _plain.delete(_heldKey(peer));
           }
           await _plain.delete(_plainPeersKey);
         } catch (_) {}

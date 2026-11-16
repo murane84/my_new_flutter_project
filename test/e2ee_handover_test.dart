@@ -41,6 +41,25 @@ void main() {
     await expectLater(openHandover(computer, bad), throwsA(isA<SealError>()));
   });
 
+  test("another account on the same phone never hands over the first's texts",
+      () async {
+    final keyDisk = MemorySealStorage();
+    final plainDisk = MemorySealStorage();
+    Future<SealMessenger> signIn(String who) async {
+      final keys = SealKeyStore(storage: keyDisk);
+      await keys.ensure(who);
+      return SealMessenger(
+          keys: keys, sessions: MemorySealStorage(), plain: plainDisk);
+    }
+
+    final first = await signIn('anna');
+    await first.rememberSent(7, 101, 0, 'siri yetu');
+    expect(await first.exportPlain(), isNotEmpty);
+    final second = await signIn('ben'); // no sign-out in between
+    expect(await second.exportPlain(), isEmpty);
+    expect(await second.textOf(7, 101), isNull);
+  });
+
   test("the phone's unlocked texts open on the computer", () async {
     Future<SealMessenger> app() async {
       final keys = SealKeyStore(storage: MemorySealStorage());

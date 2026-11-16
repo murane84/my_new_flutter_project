@@ -21,6 +21,8 @@ import 'live_audio_cache.dart';
 import 'live_rooms_registry.dart';
 import 'song_insights.dart';
 import '../screens/web_fs/blob_url.dart';
+import '../e2ee/seal_directory.dart';
+import '../e2ee/seal_room.dart';
 
 /// "Listen together" live session client.
 ///
@@ -195,6 +197,23 @@ class LiveSessionController {
   LiveRole? role;
   String? sessionId;
   int? _myUserId; // this device's user id — stamped as `from` on signaling.
+
+  // 🔒 This session's sealed Chat & reactions (seal_room.dart): the host's
+  // room key, lines waiting for it (in and out), and the last key request.
+  SealRoom? _room;
+  final List<Map<String, dynamic>> _roomHeldIn = [];
+  final List<Map<String, dynamic>> _roomHeldOut = [];
+  DateTime? _roomAskedAt;
+
+  SealRoom get _sealRoom {
+    final s = sessionId ?? '';
+    final r = _room;
+    if (r != null && r.session == s) return r;
+    _roomHeldIn.clear();
+    _roomHeldOut.clear();
+    _roomAskedAt = null;
+    return _room = SealRoom(s);
+  }
 
   // Host-side call-log style history: post ONE entry to the thread when the
   // session ends, recording the outcome (listened / declined / no-answer).
@@ -2543,6 +2562,42 @@ class LiveSessionController {
 
   Future<void> _handleControl(Map<String, dynamic> msg) async {
     final type = msg['type'] as String?;
+    // 🔒 The room's key and sealed lines (seal_room.dart).
+    if (type == 'room_key') {
+      if (_asInt(msg['to']) == _myUserId &&
+          await _sealRoom.takeKey(msg, hostUserId)) {
+        _flushRoomHeld();
+      }
+      return;
+    }
+    if (type == 'room_key_request') {
+      if (role == LiveRole.host) unawaited(_giveRoomKey(_asInt(msg['from'])));
+      return;
+    }
+    if (type == 'room_e2ee') {
+      _sealRoom.sealedRoom = msg['on'] == true;
+      if (!_sealRoom.sealedRoom) _flushRoomHeld();
+      return;
+    }
+    final sealedField = type == 'comment' && SealRoom.isSealed(msg['text'])
+        ? 'text'
+        : type == 'reaction' && SealRoom.isSealed(msg['gif'])
+            ? 'gif'
+            : null;
+    if (sealedField != null) {
+      final room = _sealRoom;
+      if (!room.hasKey) {
+        // Not given the key yet: keep the line until it arrives.
+        if (_roomHeldIn.length < 50) _roomHeldIn.add(msg);
+        _askRoomKey();
+        return;
+      }
+      try {
+        msg[sealedField] = await room.open(msg[sealedField] as String);
+      } catch (_) {
+        return; // not this room's key: drop it, never show it raw
+      }
+    }
     if (type == 'reaction') _countJamReaction();
     if (type == 'session_roster') {
       final d = msg['data'];
@@ -2609,6 +2664,8 @@ class LiveSessionController {
           liveHostNotify?.call('$name reconnected');
         }
         _welcomePeer(_asInt((msg['data'] as Map?)?['user_id']));
+        // 🔒 Their copy of the room's key (Chat & reactions).
+        unawaited(_giveRoomKey(_asInt((msg['data'] as Map?)?['user_id'])));
       } else if (type == 'ctl') {
         // A listener requested a transport action. The host executes it
         // authoritatively; the resulting play/pause/position/track_change
@@ -2697,6 +2754,13 @@ class LiveSessionController {
         if (peerId != null) {
           _peerRecoverAttempts.remove(peerId);
           unawaited(_closePeer(peerId));
+          // 🔒 The last guest on an older Aluta left: seal the room again.
+          final room = _sealRoom;
+          room.keyless.remove(peerId);
+          if (room.keyless.isEmpty && !room.sealedRoom && room.hasKey) {
+            room.sealedRoom = true;
+            _sendControl({'type': 'room_e2ee', 'on': true});
+          }
         }
       }
       return;
@@ -2995,8 +3059,8 @@ class LiveSessionController {
 
   /// A GIF/sticker reaction — relayed like an emoji reaction (no `to`), carrying
   /// the GIF url instead of an emoji. Ephemeral.
-  void sendGifReaction(String url) => _sendControl(
-      {'type': 'reaction', 'gif': url, 'from_id': _myUserId});
+  void sendGifReaction(String url) => unawaited(_sendRoomLine(
+      {'type': 'reaction', 'gif': url, 'from_id': _myUserId}, 'gif'));
 
   /// Either participant → everyone: a typed chat line in the reactions column.
   /// Relayed by the server like any control message (no `to`), so it just
@@ -3004,7 +3068,89 @@ class LiveSessionController {
   void sendComment(String text) {
     final t = text.trim();
     if (t.isEmpty) return;
-    _sendControl({'type': 'comment', 'text': t, 'from_id': _myUserId});
+    unawaited(_sendRoomLine(
+        {'type': 'comment', 'text': t, 'from_id': _myUserId}, 'text'));
+  }
+
+  // ── 🔒 Sealed Chat & reactions (seal_room.dart) ─────────────────────────
+
+  /// Send a chat line / GIF reaction sealed with the room's key ([field]
+  /// is the part that's sealed). A guest without the key yet keeps it until
+  /// the host's key arrives; a room the host made plain sends it as is.
+  Future<void> _sendRoomLine(Map<String, dynamic> msg, String field) async {
+    final room = _sealRoom;
+    if (!room.sealedRoom) {
+      _sendControl(msg);
+      return;
+    }
+    if (role == LiveRole.host && !await room.ensureHostKey()) {
+      // This device has no end-to-end keys: the room speaks plainly.
+      room.sealedRoom = false;
+      _sendControl({'type': 'room_e2ee', 'on': false});
+      _sendControl(msg);
+      return;
+    }
+    if (!room.hasKey) {
+      if (_roomHeldOut.length < 50) _roomHeldOut.add(msg);
+      _askRoomKey();
+      return;
+    }
+    try {
+      _sendControl({...msg, field: await room.seal(msg[field] as String)});
+    } catch (_) {}
+  }
+
+  /// GUEST: ask the host for the room's key (at most every few seconds).
+  void _askRoomKey() {
+    final host = hostUserId;
+    if (role != LiveRole.listener || host == null) return;
+    final at = _roomAskedAt;
+    if (at != null && DateTime.now().difference(at).inSeconds < 5) return;
+    _roomAskedAt = DateTime.now();
+    _sendControl({'type': 'room_key_request', 'to': host, 'from': _myUserId});
+  }
+
+  /// HOST: give guest [uid] the room's key — or, when they can't take one
+  /// (an older Aluta), make the room plain while they're here.
+  Future<void> _giveRoomKey(int? uid) async {
+    final me = _myUserId;
+    if (uid == null || me == null || role != LiveRole.host) return;
+    final room = _sealRoom;
+    if (!await room.ensureHostKey()) {
+      if (room.sealedRoom) {
+        room.sealedRoom = false;
+        _sendControl({'type': 'room_e2ee', 'on': false});
+      }
+      return;
+    }
+    final devices = await SealDirectory.instance.devicesOf(uid);
+    if (devices == null) return; // can't ask now; they'll ask again
+    if (devices.isEmpty) {
+      room.keyless.add(uid);
+      if (room.sealedRoom) {
+        room.sealedRoom = false;
+        _sendControl({'type': 'room_e2ee', 'on': false});
+      }
+      return;
+    }
+    final msg = await room.keyMessageFor(uid, me);
+    if (msg != null) _sendControl(msg);
+    // A late joiner learns the room is plain right now.
+    if (!room.sealedRoom) _sendControl({'type': 'room_e2ee', 'on': false, 'to': uid});
+  }
+
+  /// The key arrived (or the room went plain): let held lines through.
+  void _flushRoomHeld() {
+    final out = List<Map<String, dynamic>>.from(_roomHeldOut);
+    final inn = List<Map<String, dynamic>>.from(_roomHeldIn);
+    _roomHeldOut.clear();
+    _roomHeldIn.clear();
+    for (final m in out) {
+      unawaited(_sendRoomLine(m, m['type'] == 'comment' ? 'text' : 'gif'));
+    }
+    for (final m in inn) {
+      unawaited(_handleControl(m));
+    }
   }
 
   // ---------------------------------------------------------------------------

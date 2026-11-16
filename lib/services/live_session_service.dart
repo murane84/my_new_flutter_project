@@ -3111,8 +3111,9 @@ class LiveSessionController {
   }
 
   /// HOST: give guest [uid] the room's key — or, when they can't take one
-  /// (an older Aluta), make the room plain while they're here.
-  Future<void> _giveRoomKey(int? uid) async {
+  /// (an older Aluta), make the room plain while they're here. A guest whose
+  /// app is just setting its keys up is tried again once, a little later.
+  Future<void> _giveRoomKey(int? uid, {bool retry = true}) async {
     final me = _myUserId;
     if (uid == null || me == null || role != LiveRole.host) return;
     final room = _sealRoom;
@@ -3131,10 +3132,27 @@ class LiveSessionController {
         room.sealedRoom = false;
         _sendControl({'type': 'room_e2ee', 'on': false});
       }
+      if (retry) {
+        final session = sessionId;
+        Timer(const Duration(seconds: 20), () {
+          if (sessionId == session && room.keyless.contains(uid)) {
+            unawaited(_giveRoomKey(uid, retry: false));
+          }
+        });
+      }
       return;
     }
     final msg = await room.keyMessageFor(uid, me);
-    if (msg != null) _sendControl(msg);
+    if (msg != null) {
+      _sendControl(msg);
+      // They can read sealed lines now: if they were the last one who
+      // couldn't, seal the room again.
+      if (room.keyless.remove(uid) && room.keyless.isEmpty && !room.sealedRoom) {
+        room.sealedRoom = true;
+        _sendControl({'type': 'room_e2ee', 'on': true});
+        return;
+      }
+    }
     // A late joiner learns the room is plain right now.
     if (!room.sealedRoom) _sendControl({'type': 'room_e2ee', 'on': false, 'to': uid});
   }

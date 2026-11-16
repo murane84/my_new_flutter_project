@@ -42,6 +42,10 @@ class SealDirectory implements SealKeyDirectory {
   static const int opkLow = 20;
   static const int opkTarget = 100;
 
+  /// A key lookup sits on the path of sending (and, while it runs, of
+  /// opening): never let a stalled network hold a chat up for long.
+  static const Duration _wait = Duration(seconds: 10);
+
   SealKeyStore get keys => SealKeyStore.instance;
   bool _syncing = false;
 
@@ -150,8 +154,9 @@ class SealDirectory implements SealKeyDirectory {
       final h = await _headers();
       if (h == null) return null;
       final base = await AppConfig.baseUrl;
-      final r = await http.get(Uri.parse('$base/e2ee/devices/$userId'),
-          headers: h);
+      final r = await http
+          .get(Uri.parse('$base/e2ee/devices/$userId'), headers: h)
+          .timeout(_wait);
       if (r.statusCode != 200) return null;
       final list = (jsonDecode(r.body) as Map<String, dynamic>)['devices']
           as List;
@@ -178,8 +183,9 @@ class SealDirectory implements SealKeyDirectory {
       final q = deviceId == null
           ? ''
           : '?device_id=${Uri.encodeQueryComponent(deviceId)}';
-      final r = await http.get(Uri.parse('$base/e2ee/bundles/$userId$q'),
-          headers: h);
+      final r = await http
+          .get(Uri.parse('$base/e2ee/bundles/$userId$q'), headers: h)
+          .timeout(_wait);
       if (r.statusCode != 200) return null;
       final list = (jsonDecode(r.body) as Map<String, dynamic>)['bundles']
           as List;

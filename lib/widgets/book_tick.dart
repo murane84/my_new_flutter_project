@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../utils/motion.dart';
 import '../utils/radii.dart';
+import 'genie_menu.dart' show TailedCardBorder;
 
 /// Where a message (or anything with an "opened" receipt) stands.
 enum BookState { sending, queued, sent, delivered, read, failed }
@@ -549,11 +550,6 @@ void _showBookTimesAt(
     _timesUnhook = () => auto?.cancel();
   }
 
-  final tail = CustomPaint(
-    size: const Size(14, 7),
-    painter: _TailPainter(card, down: above),
-  );
-
   _timesEntry = OverlayEntry(
     builder: (_) => Stack(
       children: [
@@ -585,19 +581,25 @@ void _showBookTimesAt(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                if (!above)
-                  Padding(
-                      padding: EdgeInsets.only(right: tailRight), child: tail),
+                // One outline — the card and its tail — exactly like the
+                // drop-down menus (fill and shadow flow round the tail).
                 Material(
                   color: card,
                   elevation: 6,
                   shadowColor: Colors.black.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(Radii.lg),
+                  shape: TailedCardBorder(
+                    tipX: tailRight + 7,
+                    tipFromRight: true,
+                    up: !above,
+                    radius: Radii.lg,
+                  ),
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 260),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 9),
+                      // The tail lives inside the outline: keep the words
+                      // clear of it.
+                      padding: EdgeInsets.fromLTRB(
+                          12, above ? 9 : 9 + 9, 12, above ? 9 + 9 : 9),
                       child: FutureBuilder<List<(String, String)>>(
                         future: lines,
                         builder: (_, snap) {
@@ -647,9 +649,6 @@ void _showBookTimesAt(
                     ),
                   ),
                 ),
-                if (above)
-                  Padding(
-                      padding: EdgeInsets.only(right: tailRight), child: tail),
               ],
             ),
           ),
@@ -660,36 +659,4 @@ void _showBookTimesAt(
   _timesOwner = owner;
   overlay.insert(_timesEntry!);
   auto = Timer(const Duration(seconds: 5), _closeTimes);
-}
-
-/// The little pointer under / over the card, in the card's colour.
-class _TailPainter extends CustomPainter {
-  _TailPainter(this.color, {required this.down});
-  final Color color;
-  final bool down;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Path();
-    if (down) {
-      p
-        ..moveTo(0, 0)
-        ..lineTo(size.width, 0)
-        ..lineTo(size.width / 2 + 1.5, size.height - 1)
-        ..quadraticBezierTo(
-            size.width / 2, size.height, size.width / 2 - 1.5, size.height - 1)
-        ..close();
-    } else {
-      p
-        ..moveTo(0, size.height)
-        ..lineTo(size.width, size.height)
-        ..lineTo(size.width / 2 + 1.5, 1)
-        ..quadraticBezierTo(size.width / 2, 0, size.width / 2 - 1.5, 1)
-        ..close();
-    }
-    canvas.drawPath(p, Paint()..color = color);
-  }
-
-  @override
-  bool shouldRepaint(_TailPainter o) => o.color != color || o.down != down;
 }

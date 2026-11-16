@@ -224,7 +224,7 @@ class _GenieMenuSurfaceState extends State<_GenieMenuSurface> {
     final openDown = roomBelow >= 220 || roomBelow >= roomAbove;
     final maxH = openDown ? roomBelow : roomAbove;
     // The tail points at the button's centre, kept clear of the corners.
-    final tailX = _TailedCardBorder.clampTip(anchor.center.dx - left, w);
+    final tailX = TailedCardBorder.clampTip(anchor.center.dx - left, w);
     // The genie grows out of the tail's tip.
     final origin = Alignment(
       (tailX / w) * 2 - 1,
@@ -383,7 +383,7 @@ class _GenieMenuSurfaceState extends State<_GenieMenuSurface> {
                     // triangle stuck on its edge.
                     decoration: ShapeDecoration(
                       color: fill,
-                      shape: _TailedCardBorder(
+                      shape: TailedCardBorder(
                           tipX: tailX, up: openDown, side: edge),
                       shadows: shadow,
                     ),
@@ -856,15 +856,20 @@ class GeniePopupMenuButton<T> extends StatelessWidget {
 /// so it reads as part of the card. [up] puts it on the top edge (menu opens
 /// downward); otherwise it sits on the bottom edge. [tipX] is the tip's x in
 /// the card's local space.
-class _TailedCardBorder extends ShapeBorder {
-  const _TailedCardBorder({
+class TailedCardBorder extends ShapeBorder {
+  const TailedCardBorder({
     required this.tipX,
     required this.up,
     this.side = BorderSide.none,
     this.radius = 18,
+    this.tipFromRight = false,
   });
 
+  /// The tip's x in the card's local space — or, with [tipFromRight], its
+  /// distance from the card's RIGHT edge (for cards whose width isn't known
+  /// up front, e.g. the tap-the-book card right-aligned to its book).
   final double tipX;
+  final bool tipFromRight;
   final bool up;
   final BorderSide side;
   final double radius;
@@ -891,7 +896,8 @@ class _TailedCardBorder extends ShapeBorder {
     final t = rect.top + tailH, b = rect.bottom;
     final tip = rect.top;
     final rad = math.min(radius, math.min(rect.width, b - t) / 2);
-    final tx = l + clampTip(tipX, rect.width);
+    final tx =
+        l + clampTip(tipFromRight ? rect.width - tipX : tipX, rect.width);
     final dl = tx - l, dr = r - tx;
     final hb = math.max(8.0, math.min(halfBase, math.min(dl, dr) - 4));
     // Tail-side corners give way when the tail sits close to them, so the
@@ -935,17 +941,22 @@ class _TailedCardBorder extends ShapeBorder {
   }
 
   @override
-  ShapeBorder scale(double t) => _TailedCardBorder(
-      tipX: tipX, up: up, side: side.scale(t), radius: radius * t);
+  ShapeBorder scale(double t) => TailedCardBorder(
+      tipX: tipX,
+      up: up,
+      side: side.scale(t),
+      radius: radius * t,
+      tipFromRight: tipFromRight);
 
   @override
   bool operator ==(Object other) =>
-      other is _TailedCardBorder &&
+      other is TailedCardBorder &&
       other.tipX == tipX &&
       other.up == up &&
       other.side == side &&
-      other.radius == radius;
+      other.radius == radius &&
+      other.tipFromRight == tipFromRight;
 
   @override
-  int get hashCode => Object.hash(tipX, up, side, radius);
+  int get hashCode => Object.hash(tipX, up, side, radius, tipFromRight);
 }

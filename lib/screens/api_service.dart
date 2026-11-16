@@ -1469,7 +1469,9 @@ class ApiService {
         final data = jsonDecode(response.body);
         if (data is Map<String, dynamic>) {
           if (sealed != null) {
-            data['content'] = content;
+            // A timed heart stays covered for its sender too (as before):
+            // the text waits on this phone until the moment.
+            if (unlockAt == null) data['content'] = content;
             await SealIngress.sent(receiverId, data, content);
           }
           return data;

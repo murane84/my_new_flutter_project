@@ -2400,8 +2400,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
                       size: 13, color: accentInk(scheme)),
                 ),
               ),
+              // Honest about today's reach: text only (photos, voice notes,
+              // songs, hearts and Our Space follow in later phases).
               const TextSpan(
-                  text: 'Messages are end-to-end encrypted. '
+                  text: 'Text messages are end-to-end encrypted. '
                       'Only the two of you can read them.'),
             ]),
             textAlign: TextAlign.center,

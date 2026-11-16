@@ -16,9 +16,25 @@ class SealDeviceBundle {
   final PreKeyBundle bundle;
 }
 
+/// One device of a person, as listed by the key directory.
+class SealPeerDevice {
+  SealPeerDevice(this.deviceId, this.ikSig);
+  final String deviceId;
+  final String ikSig; // base64 Ed25519 identity
+}
+
+/// What the messenger needs from the key directory (a fake in tests).
+abstract class SealKeyDirectory {
+  /// Live devices of [userId] (null = couldn't ask).
+  Future<List<SealPeerDevice>?> devicesOf(int userId);
+
+  /// Bundles for [userId]'s devices (one-time prekeys get spent).
+  Future<List<SealDeviceBundle>?> bundlesFor(int userId, {String? deviceId});
+}
+
 /// Keeps this device's public keys on the server's key directory and
 /// fetches friends' bundles. Best-effort: nothing here ever blocks a chat.
-class SealDirectory {
+class SealDirectory implements SealKeyDirectory {
   SealDirectory._();
   static final SealDirectory instance = SealDirectory._();
 
@@ -128,9 +144,31 @@ class SealDirectory {
     }
   }
 
+  @override
+  Future<List<SealPeerDevice>?> devicesOf(int userId) async {
+    try {
+      final h = await _headers();
+      if (h == null) return null;
+      final base = await AppConfig.baseUrl;
+      final r = await http.get(Uri.parse('$base/e2ee/devices/$userId'),
+          headers: h);
+      if (r.statusCode != 200) return null;
+      final list = (jsonDecode(r.body) as Map<String, dynamic>)['devices']
+          as List;
+      return [
+        for (final d in list.cast<Map<String, dynamic>>())
+          SealPeerDevice(d['device_id'] as String, d['ik_sig'] as String)
+      ];
+    } catch (e) {
+      debugPrint('Seal devices: $e');
+      return null;
+    }
+  }
+
   /// Bundles for every live device of [userId] (your own id → your other
   /// devices). Each call spends one of their one-time prekeys per device,
   /// so fetch only when starting a session. Null when unreachable.
+  @override
   Future<List<SealDeviceBundle>?> bundlesFor(int userId,
       {String? deviceId}) async {
     try {

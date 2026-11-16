@@ -70,6 +70,13 @@ def _deliver(db, row: HeldMessage) -> None:
     db.commit()
     msg = crud.create_message(db, sender_id=sid, message=schemas.MessageCreate(
         receiver_id=rid, content=content, e2ee=e2ee, envelopes=envelopes))
+    if e2ee:
+        # The sender's phone kept the sealed text under the hold's id; this
+        # lets it find it again for the delivered message.
+        import json
+        msg.meta = json.dumps({"held": held_id})
+        db.commit()
+        db.refresh(msg)
     # A block made since it was held: same as a live send — kept for the
     # sender, never delivered (no socket, no push, hidden from them).
     if crud.blocked_either(db, sid, rid):
@@ -79,13 +86,15 @@ def _deliver(db, row: HeldMessage) -> None:
         data = serialize_message(schemas.MessageWithSender.model_validate(msg))
         safe_notify_user(sid, {"type": "message_sent", "data": data})
         safe_notify_user(sid, {"type": "held_released",
-                               "data": {"id": held_id, "receiver_id": rid}})
+                               "data": {"id": held_id, "receiver_id": rid,
+                                        "message_id": msg.id}})
         return
     data = serialize_message(schemas.MessageWithSender.model_validate(msg))
     safe_notify_user(rid, {"type": "new_message", "data": data})
     safe_notify_user(sid, {"type": "message_sent", "data": data})
     safe_notify_user(sid, {"type": "held_released",
-                           "data": {"id": held_id, "receiver_id": rid}})
+                           "data": {"id": held_id, "receiver_id": rid,
+                                    "message_id": msg.id}})
     sender = db.query(User).filter(User.id == sid).first()
     try:
         send_push_to_user(int(rid), {

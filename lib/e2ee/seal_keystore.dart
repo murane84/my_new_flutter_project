@@ -64,6 +64,9 @@ class SealKeyStore {
 
   static final SealKeyStore instance = SealKeyStore();
 
+  /// Secure storage on phones / desktop, localStorage on web.
+  static SealStorage platformStorage() => _PlatformStorage();
+
   static const String _key = 'aluta_seal_keys_v1';
   static const Duration spkRotateAfter = Duration(days: 7);
 

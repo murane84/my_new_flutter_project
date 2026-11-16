@@ -1937,11 +1937,16 @@ extension _HomeFriendListView on HomePageState {
               ),
             ],
             const SizedBox(width: 4),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Row(mainAxisSize: MainAxisSize.min, children: [
-                  _pinMark(f, scheme),
+            // Right column: the time, then the quiet marks (📌) and the
+            // unread badge. No call button — calling is a swipe right.
+            Builder(builder: (_) {
+              final playing = npLine != null;
+              final badge = _unreadBadge(scheme, textColor, unread);
+              final pin = _pinMark(f, scheme);
+              final pinned = _pinnedChats.contains(_pinKeyOf(f));
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
                   Text(
                     _formatFriendTimestamp(lastTime),
                     style: TextStyle(
@@ -1954,72 +1959,48 @@ extension _HomeFriendListView on HomePageState {
                           : FontWeight.normal,
                     ),
                   ),
-                ]),
-                if (hasUnread) ...[
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: scheme.primary,
-                      borderRadius: BorderRadius.circular(Radii.md),
-                    ),
-                    child: Text(
-                      unread > 99 ? '99+' : '$unread',
-                      style: TextStyle(
-                        color: scheme.onPrimary,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
+                  if (pinned || (hasUnread && !playing)) ...[
+                    const SizedBox(height: 4),
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      pin,
+                      if (hasUnread && !playing) badge,
+                    ]),
+                  ],
+                ],
+              );
+            }),
+            // BRIDGE — while this friend is playing, a one-tap "tune in";
+            // unread messages ride on its corner so both show at once.
+            if (npLine != null) ...[
+              const SizedBox(width: 8),
+              Stack(clipBehavior: Clip.none, children: [
+                IconButton(
+                  tooltip: 'Tune in with $name',
+                  icon: Icon(Icons.headphones_rounded,
+                      color: accentInk(scheme), size: 20),
+                  visualDensity: VisualDensity.compact,
+                  constraints:
+                      const BoxConstraints.tightFor(width: 38, height: 38),
+                  padding: EdgeInsets.zero,
+                  style: IconButton.styleFrom(
+                      backgroundColor: scheme.primary.withValues(alpha: 0.10),
+                      minimumSize: const Size(38, 38),
+                      fixedSize: const Size(38, 38),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                  onPressed: () =>
+                      _tuneInto(int.tryParse(f['id'].toString()) ?? -1, name),
+                ),
+                if (hasUnread)
+                  Positioned(
+                    top: -5,
+                    right: -6,
+                    child: IgnorePointer(
+                      child: _unreadBadge(scheme, textColor, unread,
+                          ring: Theme.of(context).colorScheme.surface),
                     ),
                   ),
-                ],
-              ],
-            ),
-            // Breathing room between the time and the button — the tinted
-            // 🎧 circle sat right against "Fri". Same gap for 📞, so the time
-            // never shifts when the button swaps.
-            const SizedBox(width: 8),
-            // BRIDGE — when this friend is playing right now, a one-tap "tune
-            // in" takes the call button's place (calling stays one swipe
-            // right away, and in the chat).
-            if (npLine != null)
-              IconButton(
-                tooltip: 'Tune in with $name',
-                icon: Icon(Icons.headphones_rounded,
-                    color: accentInk(scheme), size: 20),
-                visualDensity: VisualDensity.compact,
-                constraints: const BoxConstraints.tightFor(width: 38, height: 38),
-                padding: EdgeInsets.zero,
-                // Pin its real size to the 38 box (M3's 40 px minimum made
-                // the tinted circle spill over the time beside it).
-                style: IconButton.styleFrom(
-                    backgroundColor: scheme.primary.withValues(alpha: 0.10),
-                    minimumSize: const Size(38, 38),
-                    fixedSize: const Size(38, 38),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                onPressed: () =>
-                    _tuneInto(int.tryParse(f['id'].toString()) ?? -1, name),
-              )
-            else
-              IconButton(
-                tooltip: 'Call $name',
-                icon:
-                    Icon(Icons.call_rounded, color: accentInk(scheme), size: 20),
-                visualDensity: VisualDensity.compact,
-                constraints: const BoxConstraints.tightFor(width: 38, height: 38),
-                padding: EdgeInsets.zero,
-                style: IconButton.styleFrom(
-                    minimumSize: const Size(38, 38),
-                    fixedSize: const Size(38, 38),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                onPressed: () => _showCallChoice(
-                  friendId: int.tryParse(f['id'].toString()) ?? -1,
-                  name: name,
-                  avatar: f['avatar_url'] as String?,
-                  phone: f['phone'] as String?,
-                ),
-              ),
+              ]),
+            ],
           ],
         ),
       ),
@@ -2302,6 +2283,30 @@ extension _HomeFriendListView on HomePageState {
 
   /// Small mark before the tile's time for a pinned chat: a heart for a
   /// bonded partner (Aluta's signature), a pin for everyone else.
+  /// The unread count pill: theme colour; soft grey when muted; [ring]
+  /// outlines it when it sits on the 🎧 button's corner.
+  Widget _unreadBadge(ColorScheme scheme, Color textColor, int unread,
+      {bool muted = false, Color? ring}) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: muted ? textColor.withValues(alpha: 0.18) : scheme.primary,
+        borderRadius: BorderRadius.circular(Radii.md),
+        border: ring == null ? null : Border.all(color: ring, width: 2),
+      ),
+      child: Text(
+        unread > 99 ? '99+' : '$unread',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: muted ? textColor.withValues(alpha: 0.75) : scheme.onPrimary,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
   Widget _pinMark(Map<String, dynamic> m, ColorScheme scheme) {
     if (!_pinnedChats.contains(_pinKeyOf(m))) return const SizedBox.shrink();
     final bonded = m['is_group'] != true &&
@@ -2631,11 +2636,14 @@ extension _HomeFriendListView on HomePageState {
               ),
             ),
             const SizedBox(width: 4),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Row(mainAxisSize: MainAxisSize.min, children: [
-                  _pinMark(g, scheme),
+            // Right column: the time, then 📌 / 🔕, "@" and the unread badge.
+            // No call button — a group call is a swipe right.
+            Builder(builder: (_) {
+              final tagged = _groupMentions.containsKey(gid);
+              final pinned = _pinnedChats.contains(_pinKeyOf(g));
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
                   Text(
                     _formatFriendTimestamp(lastTime),
                     style: TextStyle(
@@ -2647,64 +2655,37 @@ extension _HomeFriendListView on HomePageState {
                           hasUnread ? FontWeight.w600 : FontWeight.normal,
                     ),
                   ),
-                ]),
-                if (hasUnread || _groupMentions.containsKey(gid)) ...[
-                  const SizedBox(height: 4),
-                  Row(mainAxisSize: MainAxisSize.min, children: [
-                  // "@" = someone tagged me here (like WhatsApp's chip).
-                  if (_groupMentions.containsKey(gid))
-                    Container(
-                      margin: EdgeInsets.only(right: hasUnread ? 4 : 0),
-                      padding: const EdgeInsets.all(2.5),
-                      decoration: BoxDecoration(
-                        color: scheme.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.alternate_email_rounded,
-                          size: 11, color: scheme.onPrimary),
-                    ),
-                  if (hasUnread)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      // Muted: a soft grey count instead of the loud accent.
-                      color: muted
-                          ? textColor.withValues(alpha: 0.18)
-                          : scheme.primary,
-                      borderRadius: BorderRadius.circular(Radii.md),
-                    ),
-                    child: Text(
-                      unread > 99 ? '99+' : '$unread',
-                      style: TextStyle(
-                        color: muted
-                            ? textColor.withValues(alpha: 0.75)
-                            : scheme.onPrimary,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  ]),
+                  if (pinned || muted || hasUnread || tagged) ...[
+                    const SizedBox(height: 4),
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      _pinMark(g, scheme),
+                      if (muted)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: Icon(Icons.notifications_off_rounded,
+                              size: 12, color: textColor.withAlpha(110)),
+                        ),
+                      // "@" = someone tagged me here.
+                      if (tagged)
+                        Container(
+                          margin: EdgeInsets.only(right: hasUnread ? 4 : 0),
+                          padding: const EdgeInsets.all(2.5),
+                          decoration: BoxDecoration(
+                            color: muted
+                                ? textColor.withValues(alpha: 0.35)
+                                : scheme.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.alternate_email_rounded,
+                              size: 11, color: scheme.onPrimary),
+                        ),
+                      if (hasUnread)
+                        _unreadBadge(scheme, textColor, unread, muted: muted),
+                    ]),
+                  ],
                 ],
-              ],
-            ),
-            // Same gap as a DM row, so times line up down the list.
-            const SizedBox(width: 8),
-            // Quick group call — same flow as starting one from inside the
-            // group (rings every member, opens the group-call screen).
-            IconButton(
-              tooltip: 'Group call · $name',
-              icon: Icon(Icons.call_rounded, color: accentInk(scheme), size: 20),
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints.tightFor(width: 38, height: 38),
-              padding: EdgeInsets.zero,
-              style: IconButton.styleFrom(
-                  minimumSize: const Size(38, 38),
-                  fixedSize: const Size(38, 38),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-              onPressed: () => _startGroupCall(g),
-            ),
+              );
+            }),
           ],
         ),
       ),

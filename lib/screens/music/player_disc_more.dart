@@ -12,9 +12,9 @@ import '../home_page.dart' show playProgressNotifier;
 /// note while there is none).
 typedef DiscArt = Widget Function(double diameter, [Color? noteColor]);
 
-/// The round cover from [art], cropped to a square of [side] (drawn a bit
-/// larger so the circle fills the corners) — for the looks with a photo
-/// or a window rather than a disc.
+/// The cover from [art] as a rounded square of [side] — for the looks with
+/// a photo or a window rather than a disc. The art draws itself square here
+/// (ArtShape) and shows the WHOLE photo, so nothing is cropped.
 Widget _squareArt(DiscArt art, double side, Color bg, double radius) =>
     ClipRRect(
       borderRadius: BorderRadius.circular(radius),
@@ -22,11 +22,7 @@ Widget _squareArt(DiscArt art, double side, Color bg, double radius) =>
         width: side,
         height: side,
         color: bg,
-        child: OverflowBox(
-          maxWidth: side * 1.42,
-          maxHeight: side * 1.42,
-          child: art(side * 1.42),
-        ),
+        child: ArtShape(radius: radius, child: art(side)),
       ),
     );
 

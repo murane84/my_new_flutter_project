@@ -98,45 +98,94 @@ class SongArt extends StatelessWidget {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
-  Widget _clip(Widget child) => SizedBox(
-        width: size,
-        height: size,
-        child: radius == null
-            ? ClipOval(child: child)
-            : ClipRRect(
-                borderRadius: BorderRadius.circular(radius!), child: child),
+  /// Big frames (Now Playing discs, Polaroid, Boombox…) show the WHOLE
+  /// cover: fitted inside, over a soft blurred copy of itself filling the
+  /// frame — a portrait or wide photo is never cropped. Small thumbnails
+  /// (rows, chips) keep the simple fill.
+  bool get _whole => size >= 72;
+
+  Widget _clip(BuildContext context, Widget child) {
+    final r = radius ?? ArtShape.radiusOf(context);
+    return SizedBox(
+      width: size,
+      height: size,
+      child: r == null
+          ? ClipOval(child: child)
+          : ClipRRect(borderRadius: BorderRadius.circular(r), child: child),
+    );
+  }
+
+  /// [fill] (a tiny, naturally blurry decode) under [sharp] (contain-fit),
+  /// darkened a touch so the photo stands out.
+  Widget _wholeStack(Widget fill, Widget sharp) => Stack(
+        fit: StackFit.expand,
+        children: [
+          fill,
+          ColoredBox(color: Colors.black.withValues(alpha: 0.22)),
+          sharp,
+        ],
       );
 
   @override
   Widget build(BuildContext context) {
     final px = decode ?? (size * 3).round().clamp(64, 720);
+    final whole = _whole;
     final online = ValueListenableBuilder<int>(
       valueListenable: CoverArt.instance.version,
       builder: (context, _, _) {
         final url =
             CoverArt.instance.urlFor(path, title: title, artist: artist);
         if (url == null) return fallback;
-        return _clip(CachedNetworkImage(
-          imageUrl: url,
-          fit: BoxFit.cover,
-          memCacheWidth: px,
-          placeholder: (_, _) => fallback,
-          errorWidget: (_, _, _) => fallback,
-        ));
+        Widget img(BoxFit fit, int w) => CachedNetworkImage(
+              imageUrl: url,
+              fit: fit,
+              memCacheWidth: w,
+              filterQuality: FilterQuality.medium,
+              placeholder: (_, _) => fallback,
+              errorWidget: (_, _, _) => fallback,
+            );
+        return _clip(
+            context,
+            whole
+                ? _wholeStack(img(BoxFit.cover, 24), img(BoxFit.contain, px))
+                : img(BoxFit.cover, px));
       },
     );
     final id = mediaId ?? ids[path];
     if (id == null || !_phone) return online;
-    return _clip(QueryArtworkWidget(
-      id: id,
-      type: ArtworkType.AUDIO,
-      artworkWidth: size,
-      artworkHeight: size,
-      size: px,
-      artworkFit: BoxFit.cover,
-      artworkBorder: BorderRadius.circular(radius ?? size / 2),
-      keepOldArtwork: true,
-      nullArtworkWidget: online,
-    ));
+    Widget art(BoxFit fit, int s, {Widget? none}) => QueryArtworkWidget(
+          id: id,
+          type: ArtworkType.AUDIO,
+          artworkWidth: size,
+          artworkHeight: size,
+          size: s,
+          artworkFit: fit,
+          artworkBorder: BorderRadius.zero,
+          keepOldArtwork: true,
+          nullArtworkWidget: none ?? const SizedBox.shrink(),
+        );
+    if (!whole) {
+      return _clip(context, art(BoxFit.cover, px, none: online));
+    }
+    // The sharp layer carries the "no cover in the file" fallback (online
+    // cover / note) so a song without one looks exactly as before.
+    return _clip(
+        context,
+        _wholeStack(art(BoxFit.cover, 24),
+            art(BoxFit.contain, px, none: online)));
   }
+}
+
+/// Lets a square frame ask the art inside it for a rounded square instead
+/// of a circle (SongArt's default) — Polaroid / Boombox windows.
+class ArtShape extends InheritedWidget {
+  const ArtShape({super.key, required this.radius, required super.child});
+
+  final double radius;
+
+  static double? radiusOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<ArtShape>()?.radius;
+
+  @override
+  bool updateShouldNotify(ArtShape old) => old.radius != radius;
 }

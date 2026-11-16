@@ -3,7 +3,8 @@ import 'package:flutter/foundation.dart';
 import '../utils/prefs_now.dart';
 
 /// Unsent composer text, per chat (saved by the chat page as
-/// `draft_<convKey>`: d<friendId> for a DM, g<conversationId> for a group).
+/// `draft_<convKey>`: `d<friendId>` for a DM, `g<conversationId>` for a
+/// group).
 /// The Circle list shows it on the chat's tile until it's sent or cleared.
 class Drafts {
   Drafts._();

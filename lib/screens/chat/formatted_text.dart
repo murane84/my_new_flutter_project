@@ -156,11 +156,6 @@ String displayMentions(String text) {
   });
 }
 
-bool _opensWithSelfTag(String text) {
-  final m = _mentionRe.firstMatch(text);
-  return m != null && m.start == 0 && _isSelfMention(m.group(0)!);
-}
-
 bool _isSelfMention(String token) {
   final t = token.substring(1).replaceAll('\u00A0', ' ').toLowerCase();
   if (t == 'all') return true;
@@ -1002,18 +997,8 @@ List<InlineSpan> previewSpans(
   // A leading type emoji (📞 Missed call, 🎵 Song, 📷 Photo…) becomes a real
   // icon: emoji glyphs take the preview's faded colour and some (🎵 is near
   // black on Windows) vanish on a dark theme. Icons stay crisp in both.
-  // Tagged me (or @all) → a small accent "@" leads the line, so a mention
-  // stands out in the list before the chat is even opened.
-  final lead = <InlineSpan>[
-    // (Not when the line already opens with that tag — "@ @all …" read
-    // twice.)
-    if (mention != null &&
-        mentionsMe(oneLine) &&
-        !_opensWithSelfTag(oneLine))
-      TextSpan(
-          text: '@ ',
-          style: base.copyWith(color: mention, fontWeight: FontWeight.w900)),
-  ];
+  // (A mention of me is flagged by the "@" badge in the tile's right
+  // column; the tags themselves stay accent-coloured in the line.)
   for (final e in _previewIcons.entries) {
     if (!oneLine.startsWith(e.key)) continue;
     var rest = oneLine.substring(e.key.length).trimLeft();
@@ -1075,7 +1060,6 @@ List<InlineSpan> previewSpans(
     ];
   }
   return [
-    ...lead,
     ..._previewInline(oneLine, base,
         codeBg: codeBg, highlightBg: highlightBg, mention: mention),
   ];

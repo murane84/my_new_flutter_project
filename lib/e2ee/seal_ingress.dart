@@ -167,8 +167,10 @@ class SealIngress {
 
   /// Sign-out: off the key directory, every key, session and text forgotten.
   static Future<void> signOut() async {
-    await SealDirectory.instance.signOut();
+    // Sessions first: they're filed under this device's id, which the
+    // directory sign-out forgets with the keys.
     await SealMessenger.instance.wipe();
+    await SealDirectory.instance.signOut();
     _me = null;
   }
 }

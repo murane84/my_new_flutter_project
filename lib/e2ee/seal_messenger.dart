@@ -103,10 +103,14 @@ class SealMessenger {
 
   static String _ikKey(String ikSigB64) =>
       base64Url.encode(base64Decode(ikSigB64)).replaceAll('=', '');
+  // Sessions belong to THIS device identity: another account signed in on
+  // the same phone (new keys, new device id) never picks them up — it would
+  // seal with someone else's session and nothing it sent could be opened.
+  String get _ns => _keys.deviceIdOrNull ?? 'none';
   String _sessKey(int uid, String ikSigB64) =>
-      'aluta_seal_s_${uid}_${_ikKey(ikSigB64)}';
-  String _peersKey(int uid) => 'aluta_seal_p_$uid';
-  static const String _uidsKey = 'aluta_seal_uids';
+      'aluta_seal_s_${_ns}_${uid}_${_ikKey(ikSigB64)}';
+  String _peersKey(int uid) => 'aluta_seal_p_${_ns}_$uid';
+  String get _uidsKey => 'aluta_seal_uids_$_ns';
 
   Future<List<String>> _peerIks(int uid) async {
     try {
@@ -438,6 +442,7 @@ class SealMessenger {
   /// Sign-out: forget every session and remembered text.
   Future<void> wipe() => _locked(() async {
         try {
+          await _keys.load(); // the namespace is this device's id
           final raw = await _sessions.read(_uidsKey);
           final uids =
               raw == null ? <int>[] : (jsonDecode(raw) as List).cast<int>();

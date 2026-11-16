@@ -246,6 +246,34 @@ void main() {
     expect(await read(b, next), 'pili');
   });
 
+  test('another account on the same phone never reuses its sessions',
+      () async {
+    final keyDisk = MemorySealStorage();
+    final sessDisk = MemorySealStorage();
+    Future<_Dev> signIn(int uid) async {
+      final keys = SealKeyStore(storage: keyDisk, clock: () => now);
+      await keys.ensure('user$uid');
+      final app = SealMessenger(
+          keys: keys,
+          directory: dir,
+          sessions: sessDisk,
+          plain: MemorySealStorage(),
+          clock: () => now);
+      final d = _Dev(uid, keys, app);
+      dir.people.putIfAbsent(uid, () => []).add(d);
+      dir.unspent[keys.deviceId] = await keys.addOpks(3);
+      return d;
+    }
+
+    final b = await device(bob, 'b');
+    final a = await signIn(alice);
+    expect(await read(b, await send(a, bob, 'kutoka alice')), 'kutoka alice');
+    // Carol signs in on Alice's phone (no sign-out in between).
+    final c = await signIn(carol);
+    expect(c.keys.deviceId, isNot(a.keys.deviceId));
+    expect(await read(b, await send(c, bob, 'kutoka carol')), 'kutoka carol');
+  });
+
   test('a message for another device says so', () async {
     final a = await device(alice, 'a');
     await device(bob, 'b');

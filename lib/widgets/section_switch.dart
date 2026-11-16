@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../services/section_transition.dart';
+import 'skeleton.dart' show SkeletonFlow;
 import '../utils/motion.dart';
 import '../utils/radii.dart';
 
@@ -42,6 +43,8 @@ class SectionSwitch extends StatelessWidget {
   }
 
   Widget _build(BuildContext context, SectionTransitionStyle s) {
+    // Skeletons in the arriving section wash the same way it travels.
+    SkeletonFlow.hintSection(child.key, s, forward: forward);
     final accent = Theme.of(context).colorScheme.primary;
     final dir = forward ? 1.0 : -1.0;
     // The device's "reduce motion" wins over any style: a plain, quick

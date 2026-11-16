@@ -23,7 +23,12 @@ bool emojiFloats(BuildContext context) {
 /// grow out of whatever opened it, even when the caller has no button
 /// context to hand.
 Offset? _lastPointer;
+DateTime? _lastPointerAt;
 bool _tracking = false;
+
+/// Where / when the last tap went down (skeleton washes start from it).
+Offset? get lastPointer => _lastPointer;
+DateTime? get lastPointerAt => _lastPointerAt;
 
 /// Start remembering where clicks land (call once at start-up).
 void startPointerTracking() {
@@ -48,7 +53,10 @@ void _trackPointer() {
   if (_tracking) return;
   _tracking = true;
   GestureBinding.instance.pointerRouter.addGlobalRoute((e) {
-    if (e is PointerDownEvent) _lastPointer = e.position;
+    if (e is PointerDownEvent) {
+      _lastPointer = e.position;
+      _lastPointerAt = DateTime.now();
+    }
   });
 }
 

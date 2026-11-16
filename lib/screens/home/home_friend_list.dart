@@ -160,9 +160,10 @@ extension _HomeFriendListView on HomePageState {
           if (_incomingBondRequests.isNotEmpty)
             _buildBondRequestsBanner(scheme),
           Expanded(
-            child: _isLoadingFriends
-                ? const SkeletonList()
-                : LayoutBuilder(
+            child: SkeletonGate(
+ loading: _isLoadingFriends,
+ skeleton: const SkeletonList(trailing: true),
+ child: LayoutBuilder(
                     builder: (context, constraints) {
                       // Two columns as soon as there's more than phone-ish
                       // width, so both layers show at once. Only true phone
@@ -225,7 +226,7 @@ extension _HomeFriendListView on HomePageState {
                         },
                       )]);
                     },
-                  ),
+                  )),
           ),
         ],
       ),

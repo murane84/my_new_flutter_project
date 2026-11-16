@@ -7821,9 +7821,10 @@ class _ChatPageState extends State<ChatPage>
                 Column(
                   children: [
                     Expanded(
-            child: _isLoading
-              ? const SkeletonChat()
-              : Stack(
+            child: SkeletonGate(
+ loading: _isLoading,
+ skeleton: const SkeletonChat(),
+ child: Stack(
                   children: [
                     // Bubbles fade out over the last ~10px above the
                     // composer instead of being cut off by a hard edge.
@@ -8164,7 +8165,7 @@ class _ChatPageState extends State<ChatPage>
                       ),
                     if (_viewerImages != null) _buildInlineViewer(),
                   ],
-                ),
+                )),
                     ),
                     // Input — floating straight on the wallpaper (no tint
                     // band): the watermark / photo shows right through behind

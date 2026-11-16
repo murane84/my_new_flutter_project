@@ -1054,7 +1054,6 @@ extension _ChatPageHelpers1 on _ChatPageState {
         // 🔒 Sealed text: `content` below is already unlocked (SealIngress).
         ex['e2ee'] = m['e2ee'];
         ex['e2ee_rev'] = m['e2ee_rev'];
-        ex['seal_state'] = m['seal_state'];
         // Secret hearts: receipt + timed-unseal state follow the server.
         ex['opened_at'] = m['opened_at'] ?? ex['opened_at'];
         // Merge (server on top of local) so an open I kept private (receipts
@@ -1079,8 +1078,15 @@ extension _ChatPageHelpers1 on _ChatPageState {
           // it sends an emptied tombstone (purged:true) — keep OUR local
           // content/media, which are now the durable copy.
           ex['purged'] = true;
+        } else if (m['seal_state'] != null &&
+            ex['seal_state'] == null &&
+            (ex['content'] ?? '').toString().isNotEmpty) {
+          // 🔒 This phone couldn't open the server's copy (keys reset,
+          // another device's message…) but already holds the text in its
+          // chat cache — keep it rather than show a lock over it.
         } else {
           // Otherwise take the server's content/media (real edits + media).
+          ex['seal_state'] = m['seal_state'];
           ex['content'] = m['content'];
           ex['message_type'] = m['message_type'];
           ex['media_url'] = m['media_url'];

@@ -117,19 +117,40 @@ class SealMessenger {
     }
   }
 
-  Future<SealSession?> _load(int uid, String ikSig) async {
+  /// Sessions kept per friend device besides the current one: when both
+  /// sides start a session at the same moment, messages can arrive on
+  /// either until they settle on one.
+  static const int keepOldSessions = 3;
+
+  /// The sessions with one friend device, current first.
+  Future<List<SealSession>> _loadAll(int uid, String ikSig) async {
     try {
       final s = await _sessions.read(_sessKey(uid, ikSig));
-      return s == null
-          ? null
-          : SealSession.fromJson(jsonDecode(s) as Map<String, dynamic>);
+      if (s == null) return [];
+      final j = jsonDecode(s) as Map<String, dynamic>;
+      if (j.containsKey('r')) return [SealSession.fromJson(j)];
+      return [
+        SealSession.fromJson(j['cur'] as Map<String, dynamic>),
+        for (final o in (j['old'] as List? ?? const []))
+          SealSession.fromJson(o as Map<String, dynamic>),
+      ];
     } catch (_) {
-      return null;
+      return [];
     }
   }
 
+  /// Make [s] the current session with that device (the one replies use).
   Future<void> _save(int uid, String ikSig, SealSession s) async {
-    await _sessions.write(_sessKey(uid, ikSig), jsonEncode(s.toJson()));
+    final kept = [
+      s,
+      ...(await _loadAll(uid, ikSig)).where((x) => x.sid != s.sid),
+    ].take(1 + keepOldSessions).toList();
+    await _sessions.write(
+        _sessKey(uid, ikSig),
+        jsonEncode({
+          'cur': kept.first.toJson(),
+          'old': [for (final o in kept.skip(1)) o.toJson()],
+        }));
     final iks = await _peerIks(uid);
     if (!iks.contains(ikSig)) {
       await _sessions.write(_peersKey(uid), jsonEncode([...iks, ikSig]));
@@ -170,7 +191,8 @@ class SealMessenger {
         final plain = utf8.encode(jsonEncode({'v': 1, 't': text}));
         final out = <String, String>{};
         Future<void> one(int uid, SealPeerDevice d) async {
-          var s = await _load(uid, d.ikSig);
+          final known = await _loadAll(uid, d.ikSig);
+          var s = known.isEmpty ? null : known.first;
           if (s == null) {
             final b = await _dir.bundlesFor(uid, deviceId: d.deviceId);
             final hit = b?.where((x) => x.deviceId == d.deviceId);
@@ -295,12 +317,13 @@ class SealMessenger {
     final pre = env.preKey;
     if (pre != null) {
       final ik = base64Encode(pre.ikSig);
-      final existing = await _load(from, ik);
-      if (existing != null) {
+      for (final existing in await _loadAll(from, ik)) {
         final s = commit ? existing : copyOf(existing);
         try {
           return await done(s, await s.decrypt(env), ik);
-        } on SealError {/* they started over: accept the new session */}
+        } on SealError {
+          continue; // not this one — maybe they started over
+        }
       }
       final spk = _keys.spkById(pre.spkId);
       if (spk == null) throw SealError('signed prekey gone');
@@ -312,13 +335,13 @@ class SealMessenger {
       return text;
     }
     for (final ik in await _peerIks(from)) {
-      final stored = await _load(from, ik);
-      if (stored == null) continue;
-      final s = commit ? stored : copyOf(stored);
-      try {
-        return await done(s, await s.decrypt(env), ik);
-      } on SealError {
-        continue;
+      for (final stored in await _loadAll(from, ik)) {
+        final s = commit ? stored : copyOf(stored);
+        try {
+          return await done(s, await s.decrypt(env), ik);
+        } on SealError {
+          continue;
+        }
       }
     }
     throw SealError('no session');

@@ -215,6 +215,37 @@ void main() {
     expect(await read(b, m), 'nimefika');
   });
 
+  test('both start at the same moment and still settle', () async {
+    final a = await device(alice, 'a');
+    final b = await device(bob, 'b');
+    // Neither has heard from the other: two sessions cross in flight.
+    final fromA = await send(a, bob, 'mambo');
+    final fromB = await send(b, alice, 'poa');
+    expect(await read(b, fromA), 'mambo');
+    expect(await read(a, fromB), 'poa');
+    for (var i = 0; i < 4; i++) {
+      final x = await send(a, bob, 'a$i');
+      final y = await send(b, alice, 'b$i');
+      expect(await read(b, x), 'a$i');
+      expect(await read(a, y), 'b$i');
+    }
+  });
+
+  test('the same first message delivered twice does not break the chat',
+      () async {
+    final a = await device(alice, 'a');
+    final b = await device(bob, 'b');
+    final first = await send(a, bob, 'kwanza');
+    expect(await read(b, first), 'kwanza');
+    // Seen again under another id (nothing remembered for it): it can't
+    // open twice, and the session that works must survive.
+    expect(await read(b, {...first, 'id': 999}), 'failed');
+    final reply = await send(b, alice, 'jibu');
+    expect(await read(a, reply), 'jibu');
+    final next = await send(a, bob, 'pili');
+    expect(await read(b, next), 'pili');
+  });
+
   test('a message for another device says so', () async {
     final a = await device(alice, 'a');
     await device(bob, 'b');

@@ -99,9 +99,13 @@ class SealEnvelope {
 
 /// A 1:1 session between this device and one device of a friend.
 class SealSession {
-  SealSession._(this.ratchet, this._pending, this.theirIdentity);
+  SealSession._(this.ratchet, this._pending, this.theirIdentity, this.sid);
 
   final SealRatchet ratchet;
+
+  /// Tells two sessions with the same device apart (both sides may start
+  /// one at the same moment; the store keeps the last few).
+  final String sid;
   PreKeyInfo? _pending;
 
   /// The friend device's Ed25519 identity key (for the safety number and to
@@ -115,7 +119,7 @@ class SealSession {
     final x = await x3dhInitiate(me, bundle, ephemeralSeed: ephemeralSeed);
     final r =
         await SealRatchet.initiator(x.sk, x.ad, bundle.spk, keys: keys);
-    return SealSession._(r, x.info, bundle.ikSig);
+    return SealSession._(r, x.info, bundle.ikSig, _newSid());
   }
 
   /// Bob: build the session from Alice's first message and open it.
@@ -130,7 +134,7 @@ class SealSession {
     if (info == null) throw SealError('not a first message');
     final x = await x3dhRespond(me, info, spk, opk);
     final r = SealRatchet.responder(x.sk, x.ad, spk.keys, keys: keys);
-    final s = SealSession._(r, null, info.ikSig);
+    final s = SealSession._(r, null, info.ikSig, _newSid());
     final clear = await r.decrypt(first.message.header, first.message.body);
     return (s, clear);
   }
@@ -148,10 +152,13 @@ class SealSession {
     return out;
   }
 
+  static String _newSid() => base64Encode(sealRandomBytes(9));
+
   Map<String, dynamic> toJson() => {
         'r': ratchet.toJson(),
         'pre': _pending?.toJson(),
         'id': base64Encode(theirIdentity),
+        'sid': sid,
       };
 
   static SealSession fromJson(Map<String, dynamic> j, {SealKeySource? keys}) =>
@@ -160,5 +167,6 @@ class SealSession {
           j['pre'] == null
               ? null
               : PreKeyInfo.fromJson(j['pre'] as Map<String, dynamic>),
-          base64Decode(j['id'] as String));
+          base64Decode(j['id'] as String),
+          j['sid'] as String? ?? 'first');
 }

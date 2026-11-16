@@ -229,6 +229,7 @@ class FriendsListScreenState extends State<FriendsListScreen> {
                             muted: textColor.withAlpha(120),
                             color: accentInk(Theme.of(context).colorScheme),
                             size: 20,
+                            compact: true,
                           ),
                         ),
                       Expanded(

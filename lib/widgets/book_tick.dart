@@ -40,6 +40,7 @@ class BookTick extends StatefulWidget {
     this.openedCount,
     this.onTap,
     this.size = 22,
+    this.compact = false,
   });
 
   final BookState state;
@@ -62,6 +63,10 @@ class BookTick extends StatefulWidget {
   final int? openedCount;
   final VoidCallback? onTap;
   final double size;
+
+  /// List size (chat previews): "sent" keeps the tilt and the motion lines
+  /// but drops the wings, which read as clutter that small.
+  final bool compact;
 
   @override
   State<BookTick> createState() => _BookTickState();
@@ -153,6 +158,7 @@ class _BookTickState extends State<BookTick>
             color: widget.color,
             kind: widget.kind,
             heart: widget.heart,
+            compact: widget.compact,
           ),
         ),
       );
@@ -206,6 +212,7 @@ class _BookPainter extends CustomPainter {
     required this.color,
     required this.kind,
     required this.heart,
+    this.compact = false,
   });
 
   final BookState from, to;
@@ -213,6 +220,7 @@ class _BookPainter extends CustomPainter {
   final Color muted, color;
   final BookKind kind;
   final bool heart;
+  final bool compact;
 
   static const _w = 1.15; // strokes a touch firmer at bubble size
 
@@ -384,7 +392,7 @@ class _BookPainter extends CustomPainter {
         canvas.scale(pop, pop);
         canvas.rotate(-12 * math.pi / 180);
         canvas.translate(-24, -27);
-        _wings(canvas, muted, flap, 0);
+        if (!compact) _wings(canvas, muted, flap, 0);
         _closed(canvas, muted, 1);
         canvas.restore();
         _trail(canvas, muted, tr, -3 * (1 - tr));
@@ -421,7 +429,7 @@ class _BookPainter extends CustomPainter {
         canvas.scale(pop, pop);
         canvas.rotate(tilt * math.pi / 180);
         canvas.translate(-24, -27);
-        _wings(canvas, muted, 0, fold);
+        if (!compact) _wings(canvas, muted, 0, fold);
         canvas.save();
         canvas.translate(24, 36);
         canvas.scale(1 + sq * 0.8, 1 - sq);
@@ -461,6 +469,7 @@ class _BookPainter extends CustomPainter {
       o.muted != muted ||
       o.color != color ||
       o.heart != heart ||
+      o.compact != compact ||
       o.kind != kind;
 }
 

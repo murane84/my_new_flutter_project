@@ -1680,6 +1680,7 @@ extension _HomePageHelpers1 on HomePageState {
                 muted: textColor.withAlpha(120),
                 color: accentInk(scheme),
                 size: 20,
+                compact: true,
               ),
             ),
           ),

@@ -7,10 +7,19 @@ name: CI
 #     on demand when you actually want a debug APK artifact.
 #   • superseded runs on the same ref are cancelled automatically.
 #   • pushes that touch only *.md are skipped.
+#   • main is skipped: deploy_web.bat pushes the SAME commit to main (Railway
+#     deploys main) and to the working branch — checking it twice only spent
+#     minutes. The working branch's run already covers it.
+#   • pushes that only carry the built web / admin bundles are skipped (no
+#     Dart source changed).
 on:
   push:
+    branches-ignore:
+      - main
     paths-ignore:
       - '**.md'
+      - 'my_aluta_api/webapp/**'
+      - 'my_aluta_api/adminapp/**'
   workflow_dispatch:
 
 concurrency:

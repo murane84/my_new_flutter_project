@@ -60,6 +60,7 @@ from routers import feedback as feedback_router
 from routers import free_music as free_music_router
 from routers import cover_art as cover_art_router
 from routers import e2ee_keys as e2ee_keys_router
+import e2ee_handover
 from websocket_routes import router as websocket_router
 import websocket_manager
 from sqlalchemy import text
@@ -193,6 +194,7 @@ app.include_router(feedback_router.router)
 app.include_router(free_music_router.router)
 app.include_router(cover_art_router.router)
 app.include_router(e2ee_keys_router.router)
+app.include_router(e2ee_handover.router)
 # Releases outside the Play Store: /download page, /app/latest (in-app update
 # check), /admin/release uploader. Files on the Railway volume, not Postgres.
 app.include_router(releases_router.router)
@@ -258,6 +260,11 @@ def ensure_media_schema():
         # link (added here too in case login_links was created before these).
         "ALTER TABLE login_links ADD COLUMN IF NOT EXISTS device_label VARCHAR",
         "ALTER TABLE login_links ADD COLUMN IF NOT EXISTS device_platform VARCHAR",
+        # 🔒 History hand-over at linking (e2ee_handover.py).
+        "ALTER TABLE login_links ADD COLUMN IF NOT EXISTS seal_pub VARCHAR",
+        "ALTER TABLE login_links ADD COLUMN IF NOT EXISTS sid VARCHAR",
+        "ALTER TABLE login_links ADD COLUMN IF NOT EXISTS handover_state VARCHAR",
+        "ALTER TABLE login_links ADD COLUMN IF NOT EXISTS handover TEXT",
         # Text-only stories: background colour (kind == "text"); added here in
         # case the stories table was created before this column existed.
         "ALTER TABLE stories ADD COLUMN IF NOT EXISTS background VARCHAR",

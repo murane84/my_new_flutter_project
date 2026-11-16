@@ -417,6 +417,13 @@ class LoginLink(Base):
     refresh_token = Column(Text, nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # 🔒 History hand-over (e2ee_handover.py): the computer's one-time public
+    # key (its fingerprint is inside `code`, i.e. the QR), the linked session,
+    # and the phone's sealed package until the computer collects it ONCE.
+    seal_pub = Column(String, nullable=True)
+    sid = Column(String, nullable=True)
+    handover_state = Column(String, nullable=True)   # wait | none | ready
+    handover = deferred(Column(Text, nullable=True))
 
     user = relationship("User", foreign_keys=[user_id], passive_deletes=True)
 

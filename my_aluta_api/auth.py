@@ -648,6 +648,8 @@ class LinkNewRequest(BaseModel):
     # The desktop describes itself so it shows nicely under "Linked devices".
     label: Optional[str] = None
     platform: Optional[str] = None
+    # 🔒 Its one-time X25519 key (b64) for the history hand-over.
+    seal_pub: Optional[str] = None
 
 
 class LinkNewResponse(BaseModel):
@@ -659,6 +661,8 @@ class LinkNewResponse(BaseModel):
 class LinkApprove(BaseModel):
     code: Optional[str] = None
     pair_code: Optional[str] = None
+    # A phone that will send the 🔒 history hand-over says so.
+    handover: Optional[bool] = None
 
 
 class DeviceOut(BaseModel):
@@ -687,8 +691,17 @@ def link_new(payload: Optional[LinkNewRequest] = None, db: Session = Depends(get
     # Opportunistic cleanup of expired/old links.
     db.query(LoginLink).filter(LoginLink.expires_at < now).delete()
     db.commit()
+    # 🔒 The code (shown as the QR) carries a fingerprint of the computer's
+    # hand-over key, so the phone that scans it can check the key it gets
+    # back is the one on this screen (the server can't swap it).
+    import e2ee_handover
+    pub = e2ee_handover.clean_pub(payload.seal_pub if payload else None)
+    code = secrets.token_urlsafe(24)
+    if pub:
+        code = f"{code}~{e2ee_handover.fingerprint(pub)}"
     link = LoginLink(
-        code=secrets.token_urlsafe(32),
+        code=code,
+        seal_pub=pub,
         pair_code=_gen_pair_code(db),
         status="pending",
         device_label=(payload.label if payload else None),
@@ -742,8 +755,18 @@ def link_approve(
     link.access_token = access_token
     link.refresh_token = refresh_token
     link.status = "approved"
+    link.sid = sid
+    # 🔒 History hand-over: only when scanned (the phone checks the key's
+    # fingerprint in the QR) by an app that sends one.
+    import e2ee_handover
+    scanned = bool(payload.code) and link.code == payload.code
+    handover = bool(link.seal_pub and scanned and payload.handover)
+    link.handover_state = "wait" if handover else "none"
+    if handover:
+        link.expires_at = now + e2ee_handover.WAIT
     db.commit()
-    return {"ok": True, "linked_as": current_user.username}
+    return {"ok": True, "linked_as": current_user.username,
+            **({"seal_pub": link.seal_pub} if handover else {})}
 
 
 @router.get("/devices", response_model=list[DeviceOut])

@@ -395,7 +395,56 @@ class SealMessenger {
       }
     }
     await _plain.write('aluta_seal_plain_$peer', jsonEncode(m));
+    await _notePlainPeer(peer);
   }
+
+  static const String _plainPeersKey = 'aluta_seal_plain_peers';
+
+  Future<List<int>> _plainPeers() async {
+    try {
+      final s = await _plain.read(_plainPeersKey);
+      return s == null ? [] : (jsonDecode(s) as List).cast<int>();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> _notePlainPeer(int peer) async {
+    final peers = await _plainPeers();
+    if (peers.contains(peer)) return;
+    await _plain.write(_plainPeersKey, jsonEncode([...peers, peer]));
+  }
+
+  /// Every text this device has unlocked or sent, by friend — what a newly
+  /// linked computer needs to read the sealed history ({peer: {id: [rev,
+  /// text]}}).
+  Future<Map<String, dynamic>> exportPlain() => _locked(() async => {
+        for (final peer in await _plainPeers())
+          '$peer': await _plainOf(peer),
+      });
+
+  /// Take in a phone's texts (the hand-over); a newer revision wins.
+  /// Returns how many texts were new here.
+  Future<int> importPlain(Map<String, dynamic> data) => _locked(() async {
+        var added = 0;
+        for (final e in data.entries) {
+          final peer = int.tryParse(e.key);
+          final rows = e.value;
+          if (peer == null || rows is! Map) continue;
+          final m = await _plainOf(peer);
+          for (final r in rows.entries) {
+            final v = r.value;
+            if (v is! List || v.length != 2) continue;
+            final have = m['${r.key}'];
+            if (have != null && _int(have[0]) >= _int(v[0])) continue;
+            m['${r.key}'] = [_int(v[0]), v[1].toString()];
+            added++;
+          }
+          await _plain.write('aluta_seal_plain_$peer', jsonEncode(m));
+          await _notePlainPeer(peer);
+        }
+        return added;
+      });
 
   /// My own sent / edited text (I have no envelope of my own).
   Future<void> rememberSent(int peer, int id, int rev, String text) =>
@@ -454,9 +503,15 @@ class SealMessenger {
             }
             await _sessions.delete(_peersKey(uid));
             await _plain.delete('aluta_seal_plain_$uid');
+            _plainCache.remove(uid);
             await _plain.delete('aluta_seal_held_$uid');
           }
           await _sessions.delete(_uidsKey);
+          for (final peer in await _plainPeers()) {
+            await _plain.delete('aluta_seal_plain_$peer');
+            await _plain.delete('aluta_seal_held_$peer');
+          }
+          await _plain.delete(_plainPeersKey);
         } catch (_) {}
         _devices.clear();
         _plainCache.clear();

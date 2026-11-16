@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,8 @@ import 'package:intl/intl.dart';
 import 'api_service.dart';
 import 'home_page.dart';
 import '../services/contact_names.dart';
+import '../e2ee/seal_handover.dart';
+import '../e2ee/seal_primitives.dart' show XKeys;
 import '../utils/toast_helper.dart';
 import '../utils/popup_shell.dart';
 import '../utils/readable.dart' show accentInk;
@@ -50,6 +53,9 @@ class _DesktopQrLoginScreenState extends State<DesktopQrLoginScreen> {
   String _pairCode = '';
   Timer? _poll;
   bool _finishing = false;
+  // 🔒 One-time key for this link: the phone that scans the QR seals the
+  // chat history to it (its fingerprint is inside the code).
+  XKeys? _linkKey;
 
   @override
   void initState() {
@@ -67,8 +73,15 @@ class _DesktopQrLoginScreenState extends State<DesktopQrLoginScreen> {
     _poll?.cancel();
     setState(() => _state = _QrState.loading);
     final me = _describeThisDevice();
-    final link = await ApiService()
-        .createLoginLink(label: me.label, platform: me.platform);
+    XKeys? key;
+    try {
+      key = await SealHandover.instance.newLinkKey();
+    } catch (_) {}
+    _linkKey = key;
+    final link = await ApiService().createLoginLink(
+        label: me.label,
+        platform: me.platform,
+        sealPub: key == null ? null : base64Encode(key.public));
     if (!mounted) return;
     if (link == null || (link['code'] ?? '').toString().isEmpty) {
       setState(() => _state = _QrState.error);
@@ -105,6 +118,9 @@ class _DesktopQrLoginScreenState extends State<DesktopQrLoginScreen> {
     await prefs.setString('username', (r['username'] ?? '').toString());
     // Desktop personalisation: pull the phone-uploaded saved-name map.
     ContactNames.instance.refresh();
+    // 🔒 Collect the phone's sealed chat history (arrives in the background).
+    final key = _linkKey;
+    if (key != null) unawaited(SealHandover.instance.receive(_code, key));
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
@@ -172,7 +188,12 @@ class _DesktopQrLoginScreenState extends State<DesktopQrLoginScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 10),
+                  Text('Scanning also brings your 🔒 encrypted chats over.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 12, color: scheme.onSurfaceVariant)),
+                  const SizedBox(height: 18),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -290,11 +311,24 @@ class _DeviceLinkScanScreenState extends State<DeviceLinkScanScreen> {
   }
 
   Future<void> _approve({String? code, String? pairCode}) async {
-    final ok =
-        await ApiService().approveLoginLink(code: code, pairCode: pairCode);
+    // Scanned (not typed): this phone also hands its 🔒 chat history over.
+    final res = await ApiService().approveLoginLinkFull(
+        code: code, pairCode: pairCode, handover: code != null);
     if (!mounted) return;
-    if (ok) {
-      showToast(context, 'Computer linked — you’re signed in there now.',
+    if (res != null) {
+      final pub = res['seal_pub'];
+      var sent = false;
+      if (code != null && pub is String) {
+        showToast(context, 'Bringing your chats over to the computer…',
+            type: ToastType.info);
+        sent = await SealHandover.instance.send(code: code, computerPub: pub);
+        if (!mounted) return;
+      }
+      showToast(
+          context,
+          sent
+              ? 'Computer linked — your chats are on their way there.'
+              : 'Computer linked — you’re signed in there now.',
           type: ToastType.success);
       Navigator.of(context).pop(true);
     } else {

@@ -55,6 +55,7 @@ import 'api_service.dart';
 import '../services/device_report.dart';
 import '../e2ee/seal_directory.dart';
 import '../e2ee/seal_ingress.dart';
+import '../e2ee/seal_handover.dart';
 import '../services/app_updater.dart';
 import '../services/bond_live.dart';
 import '../services/net_check.dart';
@@ -907,6 +908,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // End-to-end encryption keys (public parts) on the key directory: at
     // once on a just-linked / new device, else a few seconds in.
     SealDirectory.instance.syncSoon();
+    // A just-linked computer: the phone's 🔒 chat history arrives — refresh
+    // the Circle previews when it does.
+    SealHandover.instance.arrived.addListener(_onSealHandover);
     // What this install runs on (admin panel's device split). Once per run.
     DeviceReport.send();
     // Pick up any file downloads left unfinished (app killed / slept).
@@ -994,8 +998,13 @@ class HomePageState extends rp.ConsumerState<HomePage>
         .addPostFrameCallback((_) => _maybePromptRecoverySetup());
   }
 
+  void _onSealHandover() {
+    if (mounted) _fetchFriends(quiet: true);
+  }
+
   @override
   void dispose() {
+    SealHandover.instance.arrived.removeListener(_onSealHandover);
     if (HomePage.openDm == _openDmHook) HomePage.openDm = null;
     BlockList.instance.removeListener(_onBlockList);
     HardwareKeyboard.instance.removeHandler(_onCircleKey);

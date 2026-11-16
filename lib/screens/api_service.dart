@@ -706,7 +706,7 @@ class ApiService {
 
   /// Desktop: start a QR-login handshake. Returns {code, pair_code, expires_in}.
   Future<Map<String, dynamic>?> createLoginLink(
-      {String? label, String? platform}) async {
+      {String? label, String? platform, String? sealPub}) async {
     try {
       final resp = await http.post(
         Uri.parse('${await _baseUrl}/auth/link/new'),
@@ -714,6 +714,8 @@ class ApiService {
         body: jsonEncode({
           'label': ?label,
           'platform': ?platform,
+          // 🔒 one-time key for the chat-history hand-over
+          'seal_pub': ?sealPub,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
@@ -756,22 +758,36 @@ class ApiService {
   }
 
   /// Phone (signed in): authorise a desktop link by scanned code or typed pair.
-  Future<bool> approveLoginLink({String? code, String? pairCode}) async {
+  Future<bool> approveLoginLink({String? code, String? pairCode}) async =>
+      await approveLoginLinkFull(code: code, pairCode: pairCode) != null;
+
+  /// Like [approveLoginLink], returning the server's answer (null = failed):
+  /// with [handover] it carries the computer's `seal_pub` for the 🔒 chat
+  /// history hand-over.
+  Future<Map<String, dynamic>?> approveLoginLinkFull(
+      {String? code, String? pairCode, bool handover = false}) async {
     try {
       final token = await _getToken();
-      if (token == null) return false;
+      if (token == null) return null;
       final resp = await http.post(
         Uri.parse('${await _baseUrl}/auth/link/approve'),
         headers: _authHeaders(token),
         body: jsonEncode({
           'code': ?code,
           'pair_code': ?pairCode,
+          if (handover) 'handover': true,
         }),
       );
-      return resp.statusCode >= 200 && resp.statusCode < 300;
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
+      try {
+        final d = jsonDecode(resp.body);
+        return d is Map<String, dynamic> ? d : <String, dynamic>{};
+      } catch (_) {
+        return <String, dynamic>{};
+      }
     } catch (e) {
       _logger.e('approveLoginLink exception: $e');
-      return false;
+      return null;
     }
   }
 

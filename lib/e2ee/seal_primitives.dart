@@ -29,6 +29,11 @@ class SealSpec {
   /// Envelope type of a device's note-to-self copy: version ‖ 3 ‖ nonce (12)
   /// ‖ AES-256-GCM(self key, aad "AlutaSeal Self v1").
   static const int typeSelf = 3;
+
+  /// History hand-over to a newly linked computer: version ‖ 4 ‖ phone's
+  /// one-time key (32) ‖ nonce (12) ‖ AES-256-GCM(HKDF(DH), aad = info).
+  static const int typeHandover = 4;
+  static final List<int> infoHandover = ascii.encode('AlutaSeal Handover v1');
   static final List<int> selfAad = ascii.encode('AlutaSeal Self v1');
   static const int maxSkippedTotal = 2000;
 }
@@ -221,5 +226,55 @@ Future<Uint8List> openSelfBox(List<int> key, List<int> raw) async {
     return Uint8List.fromList(clear);
   } catch (_) {
     throw SealError('message could not be unlocked');
+  }
+}
+
+/// Fingerprint of a public key as carried in a link QR: the first 16 bytes
+/// of SHA-256, base64url without padding (matches the server).
+Future<String> sealFingerprint(List<int> publicKey) async {
+  final h = await Sha256().hash(publicKey);
+  return base64Url.encode(h.bytes.sublist(0, 16)).replaceAll('=', '');
+}
+
+Future<Uint8List> _handoverKey(
+        List<int> shared, List<int> computerPub, List<int> phonePub) =>
+    sealHkdf(sealZeros(32), shared,
+        sealConcat([SealSpec.infoHandover, computerPub, phonePub]), 32);
+
+/// Phone: seal [plain] to the linked computer's one-time key.
+Future<Uint8List> sealHandover(List<int> computerPub, List<int> plain) async {
+  final eph = await XKeys.generate();
+  final key = await _handoverKey(await eph.dh(computerPub), computerPub,
+      eph.public);
+  final nonce = sealRandomBytes(12);
+  final box = await _aes.encrypt(plain,
+      secretKey: SecretKey(key), nonce: nonce, aad: SealSpec.infoHandover);
+  return sealConcat([
+    [SealSpec.version, SealSpec.typeHandover],
+    eph.public,
+    nonce,
+    box.cipherText,
+    box.mac.bytes,
+  ]);
+}
+
+/// Computer: open a package sealed to its one-time key [mine].
+Future<Uint8List> openHandover(XKeys mine, List<int> raw) async {
+  if (raw.length < 2 + 32 + 12 + 16 ||
+      raw[0] != SealSpec.version ||
+      raw[1] != SealSpec.typeHandover) {
+    throw SealError('not a hand-over');
+  }
+  final phonePub = raw.sublist(2, 34);
+  final key = await _handoverKey(await mine.dh(phonePub), mine.public, phonePub);
+  try {
+    final clear = await _aes.decrypt(
+        SecretBox(raw.sublist(46, raw.length - 16),
+            nonce: raw.sublist(34, 46), mac: Mac(raw.sublist(raw.length - 16))),
+        secretKey: SecretKey(key),
+        aad: SealSpec.infoHandover);
+    return Uint8List.fromList(clear);
+  } catch (_) {
+    throw SealError('hand-over could not be unlocked');
   }
 }

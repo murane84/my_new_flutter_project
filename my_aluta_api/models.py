@@ -1555,6 +1555,39 @@ class E2eeDevice(Base):
                                        name="_e2ee_user_device_uc"),)
 
 
+class SealScopeKey(Base):
+    """🔒 Our Space key (e2ee_scope.py): one row per (scope, epoch) wrapped
+    for ONE device. The scope is the sorted member ids ("3,7"); the key itself
+    never reaches the server — only copies wrapped to each device's identity
+    and signed by the member device that wrapped them."""
+    __tablename__ = "seal_scope_keys"
+
+    id = Column(Integer, primary_key=True)
+    scope = Column(String(200), nullable=False, index=True)
+    epoch = Column(Integer, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                     nullable=False, index=True)
+    device_id = Column(String(64), nullable=False)
+    wrapped = Column(Text, nullable=False)
+    from_user = Column(Integer, nullable=False)
+    from_device = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("scope", "epoch", "user_id", "device_id",
+                                       name="_scope_key_device_uc"),)
+
+
+class SealScope(Base):
+    """Which epoch of a scope's key is current (the first device to create it
+    wins; everyone else uses that one)."""
+    __tablename__ = "seal_scopes"
+
+    scope = Column(String(200), primary_key=True)
+    epoch = Column(Integer, nullable=False, default=1)
+    created_by = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class E2eePreKey(Base):
     """One-time prekeys: each is handed out once, then deleted."""
     __tablename__ = "e2ee_prekeys"

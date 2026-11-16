@@ -171,6 +171,9 @@ def record_soundtrack_track(db: Session, pair_key_str: str, user_id,
     if artist:
         artist = artist[:200]
     memo = ((memo or "").strip() or None)
+    # A sealed memo (🔒 Our Space, e2ee_scope.py) must never be cut.
+    if memo and not memo.startswith("\U0001F512s1."):
+        memo = memo[:500]
     tl = title.lower()
     al = (artist or "").lower()
     match = None
@@ -187,7 +190,7 @@ def record_soundtrack_track(db: Session, pair_key_str: str, user_id,
     if match is not None:
         changed = False
         if memo and not match.memo:
-            match.memo = memo[:500]
+            match.memo = memo
             changed = True
         if ref and not match.ref:
             match.ref = ref
@@ -204,7 +207,7 @@ def record_soundtrack_track(db: Session, pair_key_str: str, user_id,
         return match, False
     track = PlaylistTrack(
         pair_key=pair_key_str, added_by=user_id, title=title, artist=artist,
-        ref=ref, source=source, memo=(memo[:500] if memo else None),
+        ref=ref, source=source, memo=memo,
         audio_url=audio_url,
     )
     db.add(track)

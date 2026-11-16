@@ -78,6 +78,33 @@ async def _lapse_guard(request: Request, db: Session = Depends(get_db)):
                    "— everything in it is safe.")
 
 
+# 🔒 Our Space words may arrive sealed on the devices (e2ee_scope.py):
+# "🔒s1.<scope>.<epoch>.<…>". Never cut a sealed value (it would no longer
+# open) — refuse one that is far too long instead — and never put one in a
+# notification line.
+SEALED = "\U0001F512s1."
+
+
+def _sealed(v) -> bool:
+    return isinstance(v, str) and v.startswith(SEALED)
+
+
+def _fit(v, n: int):
+    """Plain text: cut to n characters. Sealed: kept whole (≤ ~6× n)."""
+    if v is None:
+        return None
+    if _sealed(v):
+        if len(v) > n * 6 + 200:
+            raise HTTPException(status_code=413, detail="Too long")
+        return v
+    return v[:n]
+
+
+def _said(v) -> str:
+    """Text fit for a notification line ("" when sealed)."""
+    return "" if _sealed(v) else (v or "")
+
+
 router = APIRouter(prefix="/spaces", tags=["Our Space"],
                    dependencies=[Depends(_lapse_guard)])
 
@@ -618,7 +645,7 @@ def _notify_partner_moment(db: Session, space: RelationshipSpace,
                 "space_id": str(space.id),
                 "moment_id": str(moment.id),
                 "kind": moment.kind,
-                "caption": (moment.caption or "")[:140],
+                "caption": _said(moment.caption)[:140],
                 "song": song[:120],
                 "photo": photo[:300],
             })
@@ -1538,7 +1565,7 @@ def add_moment_comment(
     if not body:
         raise HTTPException(status_code=400, detail="A comment needs some text")
     comment = MomentComment(
-        moment_id=moment.id, author_id=current_user.id, body=body[:2000])
+        moment_id=moment.id, author_id=current_user.id, body=_fit(body, 2000))
     db.add(comment)
     db.commit()
     db.refresh(comment)
@@ -1591,7 +1618,7 @@ def edit_moment_comment(
     body = (payload.body or "").strip()
     if not body:
         raise HTTPException(status_code=400, detail="A comment needs some text")
-    comment.body = body[:2000]
+    comment.body = _fit(body, 2000)
     db.commit()
     db.refresh(comment)
     return _comment_dict(db, comment, current_user.id)
@@ -1846,7 +1873,7 @@ def annotate_track(
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
     memo = (payload.memo or "").strip()
-    track.memo = memo[:500] if memo else None
+    track.memo = _fit(memo, 500) if memo else None
     db.commit()
     db.refresh(track)
     return _track_dict(db, track, current_user.id)
@@ -2822,7 +2849,7 @@ def create_dedication(
         track_artist=(artist[:200] if artist else None),
         track_ref=((payload.track_ref or "").strip() or None),
         mood=(((payload.mood or "").strip())[:60] or None),
-        note=(((payload.note or "").strip())[:500] or None),
+        note=(_fit((payload.note or "").strip(), 500) or None),
         voice_note_url=((payload.voice_note_url or "").strip() or None),
     )
     db.add(d)
@@ -2916,7 +2943,7 @@ def create_capsule(
         track_title=(title[:200] if title else None),
         track_artist=(((payload.track_artist or "").strip())[:200] or None),
         track_ref=((payload.track_ref or "").strip() or None),
-        message=(message[:2000] if message else None),
+        message=(_fit(message, 2000) if message else None),
         media_url=((payload.media_url or "").strip() or None),
         unlock_at=ua,
         mode=mode,
@@ -3059,8 +3086,8 @@ def add_diary_entry(
         pair_key=pk,
         author_id=current_user.id,
         kind=kind,
-        title=title[:200] if title else None,
-        body=body[:4000],
+        title=_fit(title, 200) if title else None,
+        body=_fit(body, 4000),
         plan_date=plan_date,
         pinned=pinned,
         font=((payload.font or "").strip().lower()[:24] or None),
@@ -3109,11 +3136,11 @@ def edit_diary_entry(
             entry.kind = k
     if payload.title is not None:
         t = payload.title.strip()
-        entry.title = t[:200] if t else None
+        entry.title = _fit(t, 200) if t else None
     if payload.body is not None:
         b = payload.body.strip()
         if b:
-            entry.body = b[:4000]
+            entry.body = _fit(b, 4000)
     if payload.plan_date is not None:
         entry.plan_date = _parse_plan_date(payload.plan_date)
     if payload.pinned is not None:
@@ -3220,7 +3247,7 @@ def react_diary_entry(
             and _active_partner(db, space, current_user.id):
         try:
             who = current_user.username or "Your partner"
-            title = (entry.title or "").strip()
+            title = _said(entry.title).strip()
             _push(int(entry.author_id), "Our Diary 💞",
                   f"{who} reacted {emoji} to “{title}”" if title
                   else f"{who} reacted {emoji} to your memory",
@@ -3288,14 +3315,14 @@ def add_diary_comment(
     if not body:
         raise HTTPException(status_code=400, detail="A comment needs some text")
     comment = DiaryComment(
-        entry_id=entry.id, author_id=current_user.id, body=body[:2000])
+        entry_id=entry.id, author_id=current_user.id, body=_fit(body, 2000))
     db.add(comment)
     db.commit()
     db.refresh(comment)
     # Best-effort ping to the partner.
     if partner and _active_partner(db, space, current_user.id):
         who = current_user.username or "Someone"
-        title = (entry.title or "").strip()
+        title = _said(entry.title).strip()
         line = (f"{who} commented on “{title}”"
                 if title else f"{who} commented in your diary")
         try:
@@ -3380,7 +3407,7 @@ def edit_diary_comment(
     body = (payload.body or "").strip()
     if not body:
         raise HTTPException(status_code=400, detail="A comment needs some text")
-    comment.body = body[:2000]
+    comment.body = _fit(body, 2000)
     db.commit()
     db.refresh(comment)
     return _comment_dict(db, comment, current_user.id)

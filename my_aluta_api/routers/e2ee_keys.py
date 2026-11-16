@@ -199,6 +199,9 @@ def list_devices(user_id: int, db: Session = Depends(get_db),
     return {"devices": [{
         "device_id": d.device_id,
         "ik_sig": d.ik_sig,
+        # For wrapping Our Space keys to this device (signed by ik_sig).
+        "ik_dh": d.ik_dh,
+        "ik_dh_sig": d.ik_dh_sig,
         "label": d.label,
         "platform": d.platform,
         "identity_changed_at": (d.identity_changed_at.isoformat()

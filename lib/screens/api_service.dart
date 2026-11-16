@@ -11,6 +11,7 @@ import '../utils/app_config.dart';
 import '../utils/session_events.dart';
 import '../services/biometric_service.dart';
 import '../services/story_posting.dart';
+import '../e2ee/seal_ingress.dart';
 
 final _logger = Logger();
 
@@ -1308,7 +1309,10 @@ class ApiService {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final body = jsonDecode(response.body);
-        if (body is List) return body.whereType<Map<String, dynamic>>().toList();
+        if (body is List) {
+          return SealIngress.openAll(
+            body.whereType<Map<String, dynamic>>().toList());
+        }
         throw Exception('Invalid messages format');
       }
       // Throw so callers can catch and preserve cached messages
@@ -1338,7 +1342,10 @@ class ApiService {
       final response = await http.get(uri, headers: _authHeaders(token));
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        if (body is List) return body.whereType<Map<String, dynamic>>().toList();
+        if (body is List) {
+          return SealIngress.openAll(
+            body.whereType<Map<String, dynamic>>().toList());
+        }
       }
       return [];
     } catch (e) {
@@ -1400,6 +1407,30 @@ class ApiService {
       };
       if (conversationId == null) payload['receiver_id'] = receiverId;
 
+      // 🔒 1:1 text goes end-to-end encrypted when the friend's Aluta can
+      // read it (media, hearts, songs and groups follow). If it should be
+      // sealed but can't be right now, the send fails like a network error —
+      // never quietly in the clear.
+      Map<String, dynamic>? sealed;
+      if (conversationId == null &&
+          content.isNotEmpty &&
+          (messageType == null || messageType == 'text') &&
+          mediaUrl == null &&
+          heartMood == null &&
+          unlockAt == null &&
+          poll == null) {
+        try {
+          sealed = await SealIngress.sealFor(receiverId, content);
+        } catch (e) {
+          _logger.w('Seal failed: $e');
+          return null;
+        }
+        if (sealed != null) {
+          payload['content'] = '';
+          payload.addAll(sealed);
+        }
+      }
+
       final response = await http.post(
         uri,
         headers: _authHeaders(token),
@@ -1408,7 +1439,13 @@ class ApiService {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body);
-        if (data is Map<String, dynamic>) return data;
+        if (data is Map<String, dynamic>) {
+          if (sealed != null) {
+            data['content'] = content;
+            await SealIngress.sent(receiverId, data, content);
+          }
+          return data;
+        }
       }
       _logger.w('Send message failed: ${response.statusCode}');
       // A refusal (blocked / not someone you know) won't succeed on retry —
@@ -1585,14 +1622,27 @@ class ApiService {
     try {
       final token = await _getToken();
       if (token == null) return null;
+      // Sealed like any 1:1 text; the text itself stays on this phone.
+      final sealed = await SealIngress.sealFor(friendId, content);
       final resp = await http.post(
         Uri.parse('${await _baseUrl}/messages/hold-morning'),
         headers: _authHeaders(token),
-        body: jsonEncode({'receiver_id': friendId, 'content': content}),
+        body: jsonEncode({
+          'receiver_id': friendId,
+          'content': sealed == null ? content : '',
+          ...?sealed,
+        }),
       );
       if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
       final data = jsonDecode(resp.body);
-      return data is Map ? Map<String, dynamic>.from(data) : null;
+      if (data is! Map) return null;
+      final out = Map<String, dynamic>.from(data);
+      if (sealed != null) {
+        out['content'] = content;
+        final id = out['id'];
+        if (id is int) await SealIngress.rememberHeld(friendId, id, content);
+      }
+      return out;
     } catch (e) {
       _logger.w('holdForMorning failed: $e');
       return null;
@@ -1611,12 +1661,17 @@ class ApiService {
       if (resp.statusCode < 200 || resp.statusCode >= 300) return [];
       final data = jsonDecode(resp.body);
       final list = data is Map ? data['held'] : null;
-      return list is List
-          ? list
-              .whereType<Map>()
-              .map((m) => Map<String, dynamic>.from(m))
-              .toList()
-          : [];
+      if (list is! List) return [];
+      final out = list
+          .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .toList();
+      for (final h in out) {
+        if (h['e2ee'] == true) {
+          h['content'] = await SealIngress.heldText(friendId, h['id']);
+        }
+      }
+      return out;
     } catch (e) {
       _logger.w('heldFor failed: $e');
       return [];
@@ -1625,7 +1680,7 @@ class ApiService {
 
   /// Cancel a held message (before it goes out). Returns its text, or null
   /// when it was already delivered / failed.
-  Future<String?> cancelHeld(int id) async {
+  Future<String?> cancelHeld(int id, {int? friendId}) async {
     try {
       final token = await _getToken();
       if (token == null) return null;
@@ -1635,6 +1690,9 @@ class ApiService {
       );
       if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
       final data = jsonDecode(resp.body);
+      if (data is Map && data['e2ee'] == true && friendId != null) {
+        return SealIngress.heldText(friendId, id);
+      }
       return data is Map ? (data['content'] ?? '').toString() : '';
     } catch (e) {
       _logger.w('cancelHeld failed: $e');
@@ -3522,7 +3580,10 @@ class ApiService {
       final resp = await http.get(uri, headers: _authHeaders(token));
       if (resp.statusCode == 200) {
         final body = jsonDecode(resp.body);
-        if (body is List) return body.whereType<Map<String, dynamic>>().toList();
+        if (body is List) {
+          return SealIngress.openAll(
+            body.whereType<Map<String, dynamic>>().toList());
+        }
       }
       _logger.w('fetchConversationMessages($cid) HTTP ${resp.statusCode}: '
           '${resp.body.length > 300 ? resp.body.substring(0, 300) : resp.body}');
@@ -4116,21 +4177,35 @@ class ApiService {
   }
 
   // EDIT MESSAGE — sender-only, text messages. Returns the updated message map.
-  Future<Map<String, dynamic>?> editMessage(int messageId, String content) async {
+  /// Edit my message. [sealedFor]: the friend's id when the message is
+  /// end-to-end encrypted — the new text is sealed again.
+  Future<Map<String, dynamic>?> editMessage(int messageId, String content,
+      {int? sealedFor}) async {
     final token = await getToken();
+    Map<String, dynamic> body = {'content': content};
+    if (sealedFor != null) {
+      final sealed = await SealIngress.sealFor(sealedFor, content);
+      if (sealed == null) throw Exception('Failed to edit message');
+      body = {'envelopes': sealed['envelopes']};
+    }
     final response = await http.patch(
       Uri.parse('${await _baseUrl}/messages/$messageId/edit'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ${token ?? ''}',
       },
-      body: jsonEncode({'content': content}),
+      body: jsonEncode(body),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('Failed to edit message');
     }
     try {
-      return jsonDecode(response.body) as Map<String, dynamic>;
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (sealedFor != null) {
+        data['content'] = content;
+        await SealIngress.sent(sealedFor, data, content);
+      }
+      return data;
     } catch (_) {
       return null;
     }

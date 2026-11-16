@@ -4575,8 +4575,11 @@ class _ChatPageState extends State<ChatPage>
       _ctrl.clear();
     });
     try {
-      await ApiService()
-          .editMessage(id is int ? id : int.parse(id.toString()), newContent);
+      await ApiService().editMessage(
+          id is int ? id : int.parse(id.toString()), newContent,
+          // 🔒 A sealed message is edited sealed.
+          sealedFor:
+              editing['e2ee'] != null && !_isGroup ? widget.friendId : null);
     } catch (_) {
       if (mounted) {
         showToast(context, "Couldn't edit message", type: ToastType.error);
@@ -7924,12 +7927,18 @@ class _ChatPageState extends State<ChatPage>
                           // FIRST in the Column — otherwise "Today" appears
                           // beneath the first message of the day and that
                           // message looks grouped under "Yesterday".
+                          // 🔒 Where end-to-end encryption starts (or
+                          // starts again) in this chat.
+                          final sealStart = msg['e2ee'] != null &&
+                              (nextIdx >= _messages.length ||
+                                  _messages[nextIdx]['e2ee'] == null);
                           return Column(
                             children: [
                               if (showDate)
                                 _buildDateSeparator(dateLabel,
                                     song: _songOnDay(
                                         (msg['timestamp'] ?? '').toString())),
+                              if (sealStart) _buildSealNote(),
                               if (_unreadAnchorId != null &&
                                   msg['id'].toString() == _unreadAnchorId)
                                 _buildUnreadDivider(scheme, isDark),

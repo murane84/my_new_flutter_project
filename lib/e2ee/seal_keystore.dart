@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -85,6 +86,7 @@ class SealKeyStore {
   final Map<int, OneTimePreKey> _opks = {};
   int _nextOpkId = 1;
   int _nextSpkId = 1;
+  Uint8List? _selfKey;
 
   /// The spk id last accepted by the server (0 = not registered yet).
   int registeredSpkId = 0;
@@ -95,6 +97,10 @@ class SealKeyStore {
   SignedPreKey get currentSpk => _spks.first;
   int get opkCount => _opks.length;
   bool get isReady => _identity != null;
+
+  /// This device's own key for "note to self" copies of what it sends, so
+  /// it can reopen its own messages from the server.
+  Uint8List get selfKey => _selfKey!;
 
   /// Runs [f] with the store to itself (keys are read-modify-write).
   Future<T> _locked<T>(Future<T> Function() f) {
@@ -118,6 +124,7 @@ class SealKeyStore {
         final raw = await _read();
         if (raw != null && raw['owner'] == owner) {
           _fromJson(raw);
+          await _saveIfUpgraded();
           return;
         }
         _owner = owner;
@@ -125,6 +132,7 @@ class SealKeyStore {
             .encode(sealRandomBytes(16))
             .replaceAll('=', '');
         _identity = await SealIdentity.generate();
+        _selfKey = sealRandomBytes(32);
         _spks
           ..clear()
           ..add(await SignedPreKey.generate(_identity!, _nextSpkId++,
@@ -138,7 +146,10 @@ class SealKeyStore {
   Future<void> load() => _locked(() async {
         if (_identity != null) return;
         final raw = await _read();
-        if (raw != null) _fromJson(raw);
+        if (raw != null) {
+          _fromJson(raw);
+          await _saveIfUpgraded();
+        }
       });
 
   /// A fresh signed prekey once the current one is a week old; prekeys
@@ -197,6 +208,7 @@ class SealKeyStore {
         _owner = null;
         _deviceId = null;
         _identity = null;
+        _selfKey = null;
         _spks.clear();
         _opks.clear();
         registeredSpkId = 0;
@@ -231,6 +243,18 @@ class SealKeyStore {
     _nextOpkId = j['nextOpk'] as int;
     _nextSpkId = j['nextSpk'] as int;
     registeredSpkId = j['registered'] as int? ?? 0;
+    final sk = j['self'] as String?;
+    _selfKey = sk == null ? sealRandomBytes(32) : base64Decode(sk);
+    _upgraded = sk == null;
+  }
+
+  bool _upgraded = false;
+
+  /// Save once when an older stored copy just gained a field.
+  Future<void> _saveIfUpgraded() async {
+    if (!_upgraded) return;
+    _upgraded = false;
+    await _save();
   }
 
   Future<void> _save() => _storage.write(
@@ -245,5 +269,6 @@ class SealKeyStore {
         'nextOpk': _nextOpkId,
         'nextSpk': _nextSpkId,
         'registered': registeredSpkId,
+        'self': base64Encode(_selfKey!),
       }));
 }

@@ -18,6 +18,7 @@ import '../screens/api_service.dart';
 import '../screens/token_helper.dart' show getToken;
 import '../utils/app_config.dart';
 import '../utils/session_events.dart';
+import '../e2ee/seal_ingress.dart';
 
 /// A small picture for an Our Space photo alert (best-effort, ~3 s).
 Future<Uint8List?> _fetchPicture(String ref) async {
@@ -143,6 +144,8 @@ String _swapName(String text, String registered, String knownAs) =>
 Future<void> handleFcmData(Map<String, dynamic> data,
     {bool foreground = false}) async {
   try {
+    // 🔒 Sealed text: the phone reads its own copy for the banner.
+    data = await SealIngress.openPush(data);
     final type = (data['type'] ?? '').toString();
     // Their registered name as the server wrote it (and may have put inside
     // the title/body), and how *I* know them — used by every branch below.

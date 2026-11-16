@@ -8,6 +8,7 @@ import 'token_helper.dart';
 import 'api_service.dart';
 import '../utils/app_config.dart';
 import '../utils/session_events.dart';
+import '../e2ee/seal_ingress.dart';
 
 class WebSocketManager {
   final String userId;
@@ -36,6 +37,7 @@ class WebSocketManager {
   bool get isConnected => _connected;
 
   Timer? _heartbeatTimer;
+  Future<void> _inbox = Future<void>.value();
 
   final ApiService _api = ApiService();
   final Logger _logger = Logger();
@@ -86,14 +88,19 @@ class WebSocketManager {
 
       _channel!.stream.listen(
         (rawMessage) {
-          try {
-            final event = jsonDecode(rawMessage as String);
-            if (event is Map<String, dynamic>) {
-              onEventReceived(event);
+          // One event at a time, in order: a sealed message is unlocked
+          // (🔒 end-to-end) before anyone reads it.
+          _inbox = _inbox.then((_) async {
+            try {
+              final event = jsonDecode(rawMessage as String);
+              if (event is Map<String, dynamic>) {
+                await SealIngress.openEvent(event);
+                if (!_isClosed) onEventReceived(event);
+              }
+            } catch (e) {
+              _logger.e('Error parsing WS event: $e');
             }
-          } catch (e) {
-            _logger.e('Error parsing WS event: $e');
-          }
+          });
         },
         onDone: _onDisconnected,
         onError: (error) {

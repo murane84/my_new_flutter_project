@@ -108,8 +108,8 @@ void main() {
     final bPhone = await device(bob, 'b-phone');
 
     final m1 = await send(aPhone, bob, 'Habari za jioni? 🎶');
-    expect(jsonDecode(m1['envelopes'] as String), hasLength(2),
-        reason: "Bob's phone + Alice's own computer");
+    expect(jsonDecode(m1['envelopes'] as String), hasLength(3),
+        reason: "Bob's phone, Alice's computer, the phone's own copy");
     expect(await read(bPhone, m1), 'Habari za jioni? 🎶');
     expect(await read(bPhone, m1), 'Habari za jioni? 🎶',
         reason: 'reopening never decrypts twice');
@@ -196,7 +196,23 @@ void main() {
     now = now.add(const Duration(minutes: 2)); // device list refreshes
     final m = await send(a, bob, 'baada');
     expect(await read(b2, m), 'baada');
-    expect(jsonDecode(m['envelopes'] as String), hasLength(1));
+    expect(jsonDecode(m['envelopes'] as String), hasLength(2),
+        reason: "Bob's new phone + Alice's own copy");
+  });
+
+  test('my own copy reopens from the server after the app forgot it',
+      () async {
+    final a = await device(alice, 'a');
+    final b = await device(bob, 'b');
+    final m = await send(a, bob, 'nimefika');
+    final again = SealMessenger(
+        keys: a.keys,
+        directory: dir,
+        sessions: MemorySealStorage(),
+        plain: MemorySealStorage());
+    final r = await again.open(Map<String, dynamic>.from(m), alice);
+    expect(r.text, 'nimefika');
+    expect(await read(b, m), 'nimefika');
   });
 
   test('a message for another device says so', () async {

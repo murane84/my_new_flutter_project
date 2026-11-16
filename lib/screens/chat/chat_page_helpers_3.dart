@@ -2377,6 +2377,46 @@ extension _ChatPageHelpers3 on _ChatPageState {
 
   /// [song]: the song we listened to together that day — "Yesterday ·
   /// ♪ Mgambo", tap the song to play it.
+  /// 🔒 The quiet note where a chat becomes end-to-end encrypted.
+  Widget _buildSealNote() {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 4, 28, 10),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius: BorderRadius.circular(Radii.lg),
+            border: Border.all(color: scheme.onSurface.withAlpha(30)),
+          ),
+          child: Text.rich(
+            TextSpan(children: [
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Icon(Icons.lock_rounded,
+                      size: 13, color: accentInk(scheme)),
+                ),
+              ),
+              const TextSpan(
+                  text: 'Messages are end-to-end encrypted. '
+                      'Only the two of you can read them.'),
+            ]),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: scheme.onSurfaceVariant,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w500,
+              height: 1.35,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDateSeparator(String label, {String? song}) {
     final scheme = Theme.of(context).colorScheme;
     final lineColor = scheme.onSurface.withAlpha(35);

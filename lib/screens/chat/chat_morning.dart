@@ -115,7 +115,7 @@ extension _ChatMorning on _ChatPageState {
   Future<void> _cancelHeld(Map<String, dynamic> h) async {
     final id = (h['id'] as num?)?.toInt();
     if (id == null) return;
-    final back = await ApiService().cancelHeld(id);
+    final back = await ApiService().cancelHeld(id, friendId: widget.friendId);
     if (!mounted) return;
     if (back == null) {
       showToast(context, 'It has already gone out', type: ToastType.info);

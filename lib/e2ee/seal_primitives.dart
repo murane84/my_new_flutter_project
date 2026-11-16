@@ -25,6 +25,11 @@ class SealSpec {
   /// Most message keys kept for one chain gap / in total (late or
   /// out-of-order messages).
   static const int maxSkip = 1000;
+
+  /// Envelope type of a device's note-to-self copy: version ‖ 3 ‖ nonce (12)
+  /// ‖ AES-256-GCM(self key, aad "AlutaSeal Self v1").
+  static const int typeSelf = 3;
+  static final List<int> selfAad = ascii.encode('AlutaSeal Self v1');
   static const int maxSkippedTotal = 2000;
 }
 
@@ -181,6 +186,38 @@ Future<Uint8List> openAead(List<int> mk, List<int> sealed, List<int> aad) async 
             mac: Mac(sealed.sublist(sealed.length - 16))),
         secretKey: SecretKey(km.sublist(0, 32)),
         aad: aad);
+    return Uint8List.fromList(clear);
+  } catch (_) {
+    throw SealError('message could not be unlocked');
+  }
+}
+
+/// Seal [plain] for this device only (its own sent messages).
+Future<Uint8List> sealSelfBox(List<int> key, List<int> plain) async {
+  final nonce = sealRandomBytes(12);
+  final box = await _aes.encrypt(plain,
+      secretKey: SecretKey(key), nonce: nonce, aad: SealSpec.selfAad);
+  return sealConcat([
+    [SealSpec.version, SealSpec.typeSelf],
+    nonce,
+    box.cipherText,
+    box.mac.bytes,
+  ]);
+}
+
+/// Open a note-to-self copy made by [sealSelfBox].
+Future<Uint8List> openSelfBox(List<int> key, List<int> raw) async {
+  if (raw.length < 2 + 12 + 16 ||
+      raw[0] != SealSpec.version ||
+      raw[1] != SealSpec.typeSelf) {
+    throw SealError('not a self copy');
+  }
+  try {
+    final clear = await _aes.decrypt(
+        SecretBox(raw.sublist(14, raw.length - 16),
+            nonce: raw.sublist(2, 14), mac: Mac(raw.sublist(raw.length - 16))),
+        secretKey: SecretKey(key),
+        aad: SealSpec.selfAad);
     return Uint8List.fromList(clear);
   } catch (_) {
     throw SealError('message could not be unlocked');

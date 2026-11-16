@@ -54,6 +54,7 @@ import '../widgets/now_glow.dart';
 import 'api_service.dart';
 import '../services/device_report.dart';
 import '../e2ee/seal_directory.dart';
+import '../e2ee/seal_ingress.dart';
 import '../services/app_updater.dart';
 import '../services/bond_live.dart';
 import '../services/net_check.dart';
@@ -3270,6 +3271,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
       // Don't let a purge-blanked server preview erase a good local one, and
       // rebuild any still-empty preview from the durable local chat cache.
       _preservePreviews(friends, _allFriends);
+      // 🔒 The server only says "🔒 Message" for sealed text: show this
+      // phone's own unlocked copy.
+      await SealIngress.previews(friends, (f) => int.tryParse('${f['id']}'));
       await _hydratePreviewsFromCache(friends, group: false);
       // Save fresh data to cache
       await _saveFriendsCache(friends);
@@ -3890,7 +3894,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     try {
       await FcmService.instance.unregisterToken();
     } catch (_) {}
-    await SealDirectory.instance.signOut();
+    await SealIngress.signOut();
     NowPlayingPresence.instance.stop();
     LiveInbox.instance.clearAll(); // no messages carried into another account
     BlockList.instance.clear(); // …nor whom this account blocked
@@ -4697,7 +4701,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Stop pushes reaching this device for the account we're leaving (done while
     // the token is still valid, before logoutUser clears it). Best-effort.
     await FcmService.instance.unregisterToken();
-    await SealDirectory.instance.signOut();
+    await SealIngress.signOut();
     NowPlayingPresence.instance.stop();
     LiveInbox.instance.clearAll(); // no messages carried into another account
     BlockList.instance.clear(); // …nor whom this account blocked

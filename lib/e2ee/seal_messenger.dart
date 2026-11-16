@@ -196,6 +196,9 @@ class SealMessenger {
         if (!out.keys.any((k) => k.startsWith('$peerUid:'))) {
           throw lastError ?? SealError('no device');
         }
+        // A note-to-self copy, so this phone can reopen what it sent.
+        out['$myUid:${_keys.deviceId}'] =
+            base64Encode(await sealSelfBox(_keys.selfKey, plain));
         for (final d in mine) {
           try {
             await one(myUid, d);
@@ -265,12 +268,25 @@ class SealMessenger {
     });
   }
 
+  static String _textOf(List<int> clear) {
+    final j = jsonDecode(utf8.decode(clear)) as Map<String, dynamic>;
+    return (j['t'] ?? '').toString();
+  }
+
   Future<String> _decrypt(int from, String b64, {required bool commit}) async {
-    final env = SealEnvelope.fromBase64(b64);
+    final List<int> raw;
+    try {
+      raw = base64Decode(b64);
+    } on FormatException {
+      throw SealError('not base64');
+    }
+    if (raw.length > 2 && raw[1] == SealSpec.typeSelf) {
+      return _textOf(await openSelfBox(_keys.selfKey, raw));
+    }
+    final env = SealEnvelope.decode(raw);
     Future<String> done(SealSession s, List<int> clear, String ik) async {
       if (commit) await _save(from, ik, s);
-      final j = jsonDecode(utf8.decode(clear)) as Map<String, dynamic>;
-      return (j['t'] ?? '').toString();
+      return _textOf(clear);
     }
 
     SealSession copyOf(SealSession s) => SealSession.fromJson(

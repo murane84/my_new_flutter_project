@@ -1051,6 +1051,9 @@ extension _ChatPageHelpers1 on _ChatPageState {
         ex['edited'] = m['edited'];
         ex['reactions'] = m['reactions'];
         ex['pinned_until'] = m['pinned_until'];
+        // 🔒 Sealed text: `content` below is already unlocked (SealIngress).
+        ex['e2ee'] = m['e2ee'];
+        ex['e2ee_rev'] = m['e2ee_rev'];
         // Secret hearts: receipt + timed-unseal state follow the server.
         ex['opened_at'] = m['opened_at'] ?? ex['opened_at'];
         // Merge (server on top of local) so an open I kept private (receipts

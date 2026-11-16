@@ -2,7 +2,8 @@
 
 An encrypted DM arrives with EMPTY `content`, `e2ee` = the Seal version, and
 `envelopes` = JSON {"<user id>:<device id>": "<base64 SealEnvelope>"} — one per
-device of the receiver, plus the sender's OTHER devices. The server stores and
+device of the receiver, plus the sender's other devices and a note-to-self
+copy for the sending device itself. The server stores and
 forwards them unread. Every viewer gets all of a message's envelopes (ciphertext
 only, harmless to share) and each device opens its own.
 
@@ -50,7 +51,8 @@ def clean(raw, allowed_uids, receiver_uid: int) -> str:
             b = base64.b64decode(v, validate=True)
         except (binascii.Error, ValueError):
             _bad("Bad envelope")
-        if len(b) < 2 + 40 + 16 or b[0] != VERSION:
+        # Shortest: a device's note-to-self copy (version, type, nonce, tag).
+        if len(b) < 2 + 12 + 16 or b[0] != VERSION:
             _bad("Bad envelope")
         out[f"{uid}:{dev}"] = v
     if not any(k.startswith(f"{int(receiver_uid)}:") for k in out):

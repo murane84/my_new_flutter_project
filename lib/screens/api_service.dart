@@ -2029,6 +2029,11 @@ class ApiService {
   /// caller's request fails rather than send the words in the clear.
   Future<String?> _sealSpaceText(int spaceId, String? text) async {
     if (text == null || text.trim().isEmpty) return text;
+    // Never save a 🔒 placeholder back over the real words.
+    if (text.contains(SealSpace.waitingForKey) ||
+        text.contains(SealSpace.unlockFailed)) {
+      throw StateError('locked text');
+    }
     if (SealSpace.instance.scopeOfSpace(spaceId) == null) {
       await getSpace(spaceId); // learns its members
     }

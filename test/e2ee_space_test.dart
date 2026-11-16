@@ -64,11 +64,14 @@ class _Scopes implements SealScopeApi {
     final epoch = epochs[scope];
     if (epoch == null) return {'epoch': null, 'keys': [], 'missing': []};
     final c = copies[scope] ?? {};
-    final mine = c['$me:$deviceId'];
+    final mine = [
+      for (final e in c.entries)
+        if (e.key.endsWith('|$me:$deviceId')) e.value
+    ];
     final missing = <Map<String, dynamic>>[];
     for (final uid in SealScope.membersOf(scope)!) {
       for (final d in await dir.devicesOf(uid) ?? const <SealPeerDevice>[]) {
-        if (!c.containsKey('$uid:${d.deviceId}')) {
+        if (!c.containsKey('$epoch|$uid:${d.deviceId}')) {
           missing.add({
             'user_id': uid,
             'device_id': d.deviceId,
@@ -81,7 +84,7 @@ class _Scopes implements SealScopeApi {
     }
     return {
       'epoch': epoch,
-      'keys': [if (mine != null) mine],
+      'keys': mine,
       'missing': missing,
     };
   }
@@ -90,7 +93,8 @@ class _Scopes implements SealScopeApi {
     final from = body['from_device'] as String;
     final c = copies.putIfAbsent(scope, () => {});
     for (final w in (body['wraps'] as List).cast<Map<String, dynamic>>()) {
-      c.putIfAbsent('${w['user_id']}:${w['device_id']}', () => {
+      c.putIfAbsent('${body['epoch']}|${w['user_id']}:${w['device_id']}',
+          () => {
             'epoch': body['epoch'],
             'wrapped': w['wrapped'],
             'from_user': dir.uidOf(from),
@@ -101,8 +105,8 @@ class _Scopes implements SealScopeApi {
 
   @override
   Future<int> create(String scope, Map<String, dynamic> body) async {
-    if (epochs.containsKey(scope)) return 409;
-    epochs[scope] = 1;
+    if (body['epoch'] != (epochs[scope] ?? 0) + 1) return 409;
+    epochs[scope] = body['epoch'] as int;
     _put(scope, body);
     return 200;
   }
@@ -274,6 +278,7 @@ void main() {
       final body = jsonEncode({
         'id': 5,
         'owner_id': 1,
+        'is_primary': true,
         'members': [
           {'id': 2, 'username': 'b'}
         ],
@@ -288,6 +293,33 @@ void main() {
       expect(b.space.scopeOfSpace(5), '1,2');
       final reply = await b.space.sealForSpace(5, 'Ndiyo!');
       expect(await a.space.open(reply), 'Ndiyo!');
+    });
+
+    test('a group chat answer is never taken for a Space', () async {
+      final b = await device(2);
+      await b.space.openJson({
+        'id': 9,
+        'members': [
+          {'id': 1},
+          {'id': 2},
+          {'id': 3}
+        ],
+      });
+      expect(b.space.scopeOfSpace(9), isNull);
+    });
+
+    test('a new phone nobody has served yet can still write (next key)',
+        () async {
+      final a = await device(1);
+      final b = await device(2);
+      final old = await a.space.seal([1, 2], 'ya zamani');
+      final phone = await device(1); // reinstalled, no hand-over
+      expect(await phone.space.open(old), SealSpace.waitingForKey);
+      final fresh = await phone.space.seal([1, 2], 'mpya');
+      expect(SealScope.keyOf(fresh)!.$2, 2);
+      expect(await b.space.open(fresh), 'mpya');
+      expect(await a.space.open(fresh), 'mpya');
+      expect(await b.space.open(old), 'ya zamani', reason: 'old key kept');
     });
 
     test("a linked computer takes the phone's keys over", () async {

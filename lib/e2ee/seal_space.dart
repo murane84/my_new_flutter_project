@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
@@ -171,7 +170,14 @@ class SealSpace {
   void noteSpace(Map<String, dynamic> space) {
     final id = space['id'];
     final members = space['members'];
-    if (id is! int || members is! List) return;
+    // Only a Space answer (owner + is_primary): a group chat's JSON also has
+    // an id and members, and must never be taken for a Space.
+    if (id is! int ||
+        members is! List ||
+        space['owner_id'] is! int ||
+        !space.containsKey('is_primary')) {
+      return;
+    }
     final ids = <int>{
       if (space['owner_id'] is int) space['owner_id'] as int,
       for (final m in members)
@@ -295,7 +301,7 @@ class SealSpace {
     final known = cur == null ? null : held[scope]?[cur];
     final asked = _lastAsked[scope];
     final fresh =
-        asked != null && DateTime.now().difference(asked).inMinutes < 2;
+        asked != null && DateTime.now().difference(asked).inSeconds < 30;
     if (known != null && fresh) return (cur!, known);
     for (var attempt = 0; attempt < 2; attempt++) {
       final j = await _api.fetch(scope, _keys.deviceId);
@@ -307,28 +313,34 @@ class SealSpace {
       if (epoch != null) {
         unawaited(_serveMissing(scope, j).catchError((_) {}));
         final k = held[scope]?[epoch];
-        return k == null ? null : (epoch, k);
+        if (k != null) return (epoch, k);
+        // No copy of the current key here (a new phone nobody has served
+        // yet): reading waits, but writing moves the group on to a new key
+        // rather than staying stuck.
+        if (!make) return null;
+      } else if (!make) {
+        return null;
       }
-      if (!make) return null;
-      // Nobody has made this group's key yet: make it, wrapped for every
-      // member device (this one included).
+      // Make the group's (next) key, wrapped for every member device (this
+      // one included).
+      final next = (epoch ?? 0) + 1;
       final members = SealScope.membersOf(scope)!;
       final key = sealRandomBytes(32);
       final devices = await _allDevices(members);
-      final wraps = await _wrapFor(scope, 1, key, devices);
+      final wraps = await _wrapFor(scope, next, key, devices);
       // This device keeps a copy too (it must be on the key directory).
       if (!wraps.any((w) => w['device_id'] == _keys.deviceId)) return null;
       final code = await _api.create(scope, {
-        'epoch': 1,
+        'epoch': next,
         'from_device': _keys.deviceId,
         'wraps': wraps,
       });
       if (code == 200) {
-        held.putIfAbsent(scope, () => {})[1] = key;
-        _current[scope] = 1;
+        held.putIfAbsent(scope, () => {})[next] = key;
+        _current[scope] = next;
         _lastAsked[scope] = DateTime.now();
         await _saveHeld();
-        return (1, key);
+        return (next, key);
       }
       if (code != 409) return null;
       // Another device was first: loop once and take theirs.

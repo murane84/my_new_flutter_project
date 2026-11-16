@@ -8,8 +8,12 @@ checks the signature against the key directory before trusting it).
 
     GET  /e2ee/scopes/{scope}?device_id=   my copies + current epoch + which
                                            member devices still need a copy
-    POST /e2ee/scopes/{scope}/create       first key (epoch 1): the first
-                                           device to ask wins, others get 409
+    POST /e2ee/scopes/{scope}/create       a new key: epoch 1 for a new group,
+                                           or current+1 when a member device
+                                           has no copy left to write with (a
+                                           new phone nobody has served yet) —
+                                           the first device to ask wins, the
+                                           others get 409 and take that one
     POST /e2ee/scopes/{scope}/wraps        copies for more devices (only ones
                                            that have none yet — first wins)
 """
@@ -125,23 +129,36 @@ def get_scope(scope: str, device_id: str, db: Session = Depends(get_db),
 def create_scope(scope: str, body: WrapsIn, db: Session = Depends(get_db),
                  me: User = Depends(get_current_user)):
     members = _members(scope, me, db)
-    if body.epoch != 1:
-        raise HTTPException(status_code=400, detail="Bad epoch")
     _check_wraps(db, me, members, body)
     if not any(w.user_id == me.id and w.device_id == body.from_device
                for w in body.wraps):
         raise HTTPException(status_code=400, detail="Keep a copy for yourself")
-    if db.query(SealScope).filter(SealScope.scope == scope).first():
-        raise HTTPException(status_code=409, detail="Already has a key")
-    try:
-        db.add(SealScope(scope=scope, epoch=1, created_by=me.id))
-        db.flush()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="Already has a key")
+    s = db.query(SealScope).filter(SealScope.scope == scope).first()
+    if s is None:
+        if body.epoch != 1:
+            raise HTTPException(status_code=409, detail="Not the next key")
+        try:
+            db.add(SealScope(scope=scope, epoch=1, created_by=me.id))
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="Already has a key")
+    else:
+        if body.epoch != s.epoch + 1:
+            raise HTTPException(status_code=409, detail="Not the next key")
+        # Only one device moves the group on (compare-and-set).
+        moved = (db.query(SealScope)
+                 .filter(SealScope.scope == scope,
+                         SealScope.epoch == s.epoch)
+                 .update({SealScope.epoch: body.epoch,
+                          SealScope.created_by: me.id},
+                         synchronize_session=False))
+        if moved != 1:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="Not the next key")
     _insert(db, scope, me, body)
     db.commit()
-    return {"ok": True, "epoch": 1}
+    return {"ok": True, "epoch": body.epoch}
 
 
 @router.post("/{scope}/wraps")

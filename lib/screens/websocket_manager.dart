@@ -98,7 +98,7 @@ class WebSocketManager {
               if (event is Map<String, dynamic>) {
                 await SealIngress.openEvent(event);
                 // 🔒 Our Space words inside the event (moments, diary…).
-                if ((rawMessage as String).contains(SealScope.prefix)) {
+                if (rawMessage.contains(SealScope.prefix)) {
                   await SealSpace.instance.openJson(event);
                 }
                 if (!_isClosed) onEventReceived(event);

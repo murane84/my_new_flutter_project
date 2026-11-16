@@ -16,8 +16,8 @@ import 'seal_x3dh.dart';
 /// device's identity and signed by the device that wrapped it.
 ///
 /// A sealed text field is a plain string the server stores as-is:
-///   "🔒s1.<scope>.<epoch>.<base64url(nonce ‖ AES-256-GCM ‖ tag)>"
-/// with aad "AlutaSpace v1|<scope>|<epoch>", so it names its own key and
+///   `🔒s1.{scope}.{epoch}.{base64url(nonce ‖ AES-256-GCM ‖ tag)}`
+/// with aad `AlutaSpace v1|{scope}|{epoch}`, so it names its own key and
 /// can't be moved to another group.
 class SealScope {
   SealScope._();

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../widgets/skeleton.dart';
+
 import 'admin_api.dart';
 import 'admin_tools.dart';
 import 'admin_widgets.dart';
@@ -185,8 +187,8 @@ class _AdminOverviewState extends State<AdminOverview> {
           ],
           if (_loadedAt == null && _loading)
             const Padding(
-              padding: EdgeInsets.all(40),
-              child: Center(child: CircularProgressIndicator()),
+              padding: EdgeInsets.all(4),
+              child: SkeletonCards(cards: 4),
             ),
           if (o != null) ..._usersBlock(o, p),
           if (_signups != null) ...[

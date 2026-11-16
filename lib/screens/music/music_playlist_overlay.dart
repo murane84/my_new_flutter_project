@@ -2742,19 +2742,19 @@ class _PlaylistOverlayState extends State<_PlaylistOverlay>
     );
   }
 
-  Widget _loadingView(ColorScheme scheme) => Center(
+  // Song rows taking shape (cover + title + artist), with what's happening.
+  Widget _loadingView(ColorScheme scheme) => SingleChildScrollView(
+        physics: const NeverScrollableScrollPhysics(),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 30,
-              height: 30,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2.6, color: scheme.primary),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Text('Scanning your music…',
+                  style:
+                      TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
             ),
-            const SizedBox(height: 14),
-            Text('Scanning your music…',
-                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
+            const SkeletonList(rows: 8, avatar: 44, square: true),
           ],
         ),
       );

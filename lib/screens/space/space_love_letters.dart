@@ -44,8 +44,8 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
           if (snap.connectionState != ConnectionState.done &&
               snap.data == null) {
             return const Padding(
-              padding: EdgeInsets.all(40),
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: SkeletonList(rows: 4, avatar: 42),
             );
           }
           final letters = snap.data ?? const [];

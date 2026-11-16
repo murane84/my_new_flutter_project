@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'admin_api.dart';
 import 'admin_widgets.dart';
 import '../utils/radii.dart';
+import '../widgets/skeleton.dart';
 
 /// System → "Server health" + "Clean-up tools" (Admin Phase 3).
 ///
@@ -186,8 +187,8 @@ class _AdminToolsSectionState extends State<AdminToolsSection> {
           ),
           child: h == null
               ? const Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Center(child: CircularProgressIndicator()))
+                  padding: EdgeInsets.all(4),
+                  child: SkeletonCards(cards: 2, height: 80))
               : AdminStatGrid(children: [
                   AdminStat(
                       label: 'Up since the last deploy',

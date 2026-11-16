@@ -78,6 +78,7 @@ import '../services/account_prefs.dart';
 import '../widgets/pill_search.dart';
 import '../services/haptics.dart';
 import '../widgets/edge_scroll_row.dart';
+import '../widgets/skeleton.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
 import '../utils/adaptive_sheet.dart';

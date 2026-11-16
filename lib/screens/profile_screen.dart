@@ -23,6 +23,7 @@ import '../widgets/recent_photo_picker.dart';
 import '../utils/prefs_now.dart';
 import 'package:image_picker/image_picker.dart';
 import '../utils/radii.dart';
+import '../widgets/skeleton.dart';
 
 /// Profile popup: edit username / phone / password (email is fixed), or
 /// permanently delete the account and wipe all data from the server. Rendered
@@ -563,8 +564,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final scheme = Theme.of(context).colorScheme;
     if (_loading) {
       return const Padding(
-        padding: EdgeInsets.all(40),
-        child: Center(child: CircularProgressIndicator()),
+        padding: EdgeInsets.all(8),
+        child: SkeletonProfile(),
       );
     }
     final pwMatch = _newPw.text.isNotEmpty && _newPw.text == _confirmPw.text;

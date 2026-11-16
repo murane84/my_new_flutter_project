@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'admin_api.dart';
 import 'admin_widgets.dart';
 import '../utils/radii.dart';
+import '../widgets/skeleton.dart';
 
 /// Admin devices: approve / deny requests (6-character code + password),
 /// remove devices, end a probation early, new recovery codes.
@@ -299,8 +300,8 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
           ],
           if (_loading && _devices.isEmpty)
             const Padding(
-              padding: EdgeInsets.all(40),
-              child: Center(child: CircularProgressIndicator()),
+              padding: EdgeInsets.all(4),
+              child: SkeletonList(rows: 6, avatar: 36, trailing: true),
             ),
           for (final d in active) ...[
             _DeviceCard(
@@ -654,8 +655,8 @@ class _AdminAuditPageState extends State<AdminAuditPage> {
             ),
           if (_loading)
             const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
+              padding: EdgeInsets.all(4),
+              child: SkeletonList(rows: 3, avatar: 32),
             ),
               ],
             ),

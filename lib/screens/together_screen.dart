@@ -9,6 +9,7 @@ import '../utils/session_events.dart';
 import '../utils/toast_helper.dart';
 import '../utils/popup_shell.dart';
 import '../utils/radii.dart';
+import '../widgets/skeleton.dart';
 
 /// Aluta plans — Together (for me) and Bigger Our Space (for a pair).
 ///
@@ -410,10 +411,7 @@ class _TogetherScreenState extends State<TogetherScreen> {
 
   Widget _cta(ColorScheme scheme) {
     if (!_known) {
-      return const Center(
-          child: Padding(
-              padding: EdgeInsets.all(12),
-              child: CircularProgressIndicator(strokeWidth: 2)));
+      return const SkeletonCards(cards: 3);
     }
     final t = _planDef('together');
     final p = _planDef('together_plus');

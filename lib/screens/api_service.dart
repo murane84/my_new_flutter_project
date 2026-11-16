@@ -12,6 +12,7 @@ import '../utils/session_events.dart';
 import '../services/biometric_service.dart';
 import '../services/story_posting.dart';
 import '../e2ee/seal_ingress.dart';
+import '../e2ee/seal_space.dart';
 
 final _logger = Logger();
 
@@ -2021,6 +2022,36 @@ class ApiService {
 
   /// My pinned Spaces (hero first). Light shape: id, name, theme, is_primary,
   /// members, close_since, moment_count.
+
+  /// 🔒 Seal Our Space words for [spaceId]'s members (SealSpace). Plain only
+  /// when a member's Aluta can't read sealed Our Space yet (or the Space is
+  /// just you); throws when it should be sealed but can't be right now — the
+  /// caller's request fails rather than send the words in the clear.
+  Future<String?> _sealSpaceText(int spaceId, String? text) async {
+    if (text == null || text.trim().isEmpty) return text;
+    if (SealSpace.instance.scopeOfSpace(spaceId) == null) {
+      await getSpace(spaceId); // learns its members
+    }
+    if (SealSpace.instance.scopeOfSpace(spaceId) == null) return text;
+    try {
+      return await SealSpace.instance.sealForSpace(spaceId, text);
+    } on SealSpaceNotReady {
+      return text;
+    }
+  }
+
+  /// Same, for the bond with [partnerId] (you and them).
+  Future<String?> _sealPairText(int partnerId, String? text) async {
+    if (text == null || text.trim().isEmpty) return text;
+    final me = await SealIngress.myUid();
+    if (me == null) return text;
+    try {
+      return await SealSpace.instance.seal([me, partnerId], text);
+    } on SealSpaceNotReady {
+      return text;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> listSpaces() async {
     try {
       final token = await _getToken();
@@ -2030,7 +2061,7 @@ class ApiService {
         headers: _authHeaders(token),
       ).timeout(const Duration(seconds: 15));
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map && data['spaces'] is List) {
           return (data['spaces'] as List)
               .whereType<Map>()
@@ -2055,7 +2086,7 @@ class ApiService {
         headers: _authHeaders(token),
       ).timeout(const Duration(seconds: 15));
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map && data['tracks'] is List) {
           return (data['tracks'] as List)
               .whereType<Map>()
@@ -2092,7 +2123,7 @@ class ApiService {
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
         return null;
       }
@@ -2101,7 +2132,7 @@ class ApiService {
             ? 'You already have a Space with this person.'
             : 'Upgrade to Together to pin more Spaces.';
         try {
-          final d = jsonDecode(resp.body);
+          final d = await SealSpace.instance.decode(resp.body);
           if (d is Map && d['detail'] is String) detail = d['detail'];
         } catch (_) {}
         return {
@@ -2135,14 +2166,14 @@ class ApiService {
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
         return null;
       }
       if (resp.statusCode == 402 || resp.statusCode == 409) {
         String detail = 'Could not send that request.';
         try {
-          final d = jsonDecode(resp.body);
+          final d = await SealSpace.instance.decode(resp.body);
           if (d is Map && d['detail'] is String) detail = d['detail'];
         } catch (_) {}
         return {
@@ -2167,7 +2198,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       return {'incoming': [], 'outgoing': []};
@@ -2188,14 +2219,14 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
         return null;
       }
       if (resp.statusCode == 402 || resp.statusCode == 409) {
         String detail = 'Could not accept that request.';
         try {
-          final d = jsonDecode(resp.body);
+          final d = await SealSpace.instance.decode(resp.body);
           if (d is Map && d['detail'] is String) detail = d['detail'];
         } catch (_) {}
         return {
@@ -2252,7 +2283,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       return null;
@@ -2284,7 +2315,7 @@ class ApiService {
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       return null;
@@ -2323,7 +2354,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       return null;
@@ -2342,6 +2373,8 @@ class ApiService {
     String? ref,
   }) async {
     try {
+      // 🔒 Our Space words are sealed for its members.
+      caption = (await _sealPairText(partnerId, caption))!;
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(
@@ -2356,7 +2389,7 @@ class ApiService {
       if (resp.statusCode == 413) SessionEvents.instance.markSpaceFull();
       if (resp.statusCode == 402) SessionEvents.instance.markSpaceReadOnly();
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       return null;
@@ -2373,6 +2406,8 @@ class ApiService {
     String? caption,
   }) async {
     try {
+      // 🔒 Our Space words are sealed for its members.
+      caption = await _sealSpaceText(spaceId, caption);
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(
@@ -2387,7 +2422,7 @@ class ApiService {
       if (resp.statusCode == 413) SessionEvents.instance.markSpaceFull();
       if (resp.statusCode == 402) SessionEvents.instance.markSpaceReadOnly();
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       return null;
@@ -2429,7 +2464,7 @@ class ApiService {
         body: jsonEncode({'emoji': emoji}),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       return null;
@@ -2451,7 +2486,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         final list = (data is Map ? data['comments'] : data) as List?;
         return (list ?? const [])
             .whereType<Map>()
@@ -2468,6 +2503,8 @@ class ApiService {
   Future<Map<String, dynamic>?> addMomentComment(
       int spaceId, int momentId, String body) async {
     try {
+      // 🔒 Our Space words are sealed for its members.
+      body = (await _sealSpaceText(spaceId, body))!;
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(
@@ -2477,7 +2514,7 @@ class ApiService {
         body: jsonEncode({'body': body}),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       return null;
@@ -2490,6 +2527,8 @@ class ApiService {
   Future<Map<String, dynamic>?> editMomentComment(
       int spaceId, int momentId, int commentId, String body) async {
     try {
+      // 🔒 Our Space words are sealed for its members.
+      body = (await _sealSpaceText(spaceId, body))!;
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.patch(
@@ -2499,7 +2538,7 @@ class ApiService {
         body: jsonEncode({'body': body}),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       return null;
@@ -2566,7 +2605,7 @@ class ApiService {
       if (code >= 200 && code < 300) return (ok: true, retry: false, msg: '');
       String? detail;
       try {
-        final d = jsonDecode(resp.body);
+        final d = await SealSpace.instance.decode(resp.body);
         if (d is Map && d['detail'] is String) detail = d['detail'] as String;
       } catch (_) {
         // Not JSON — fall back to the generic wording below.
@@ -2634,6 +2673,8 @@ class ApiService {
     String? audioUrl,
   }) async {
     try {
+      // 🔒 Our Space words are sealed for its members.
+      memo = await _sealSpaceText(spaceId, memo);
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(
@@ -2649,7 +2690,7 @@ class ApiService {
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       return null;
@@ -2683,6 +2724,8 @@ class ApiService {
   Future<Map<String, dynamic>?> annotateTrack(
       int spaceId, int trackId, String? memo) async {
     try {
+      // 🔒 Our Space words are sealed for its members.
+      memo = await _sealSpaceText(spaceId, memo);
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.patch(
@@ -2691,7 +2734,7 @@ class ApiService {
         body: jsonEncode({'memo': memo ?? ''}),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       return null;
@@ -2712,7 +2755,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode < 200 || resp.statusCode >= 300) return false;
-      final d = jsonDecode(resp.body);
+      final d = await SealSpace.instance.decode(resp.body);
       return d is Map && d['sent'] == true;
     } catch (e) {
       _logger.w('sendHeartbeat failed: $e');
@@ -2732,7 +2775,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final d = jsonDecode(resp.body);
+        final d = await SealSpace.instance.decode(resp.body);
         if (d is Map<String, dynamic>) return d;
       }
       return null;
@@ -2775,7 +2818,7 @@ class ApiService {
           )
           .timeout(const Duration(seconds: 12));
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final d = jsonDecode(resp.body);
+        final d = await SealSpace.instance.decode(resp.body);
         if (d is Map<String, dynamic>) return d;
       }
       return null;
@@ -2800,7 +2843,7 @@ class ApiService {
           )
           .timeout(const Duration(seconds: 8));
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final d = jsonDecode(resp.body);
+        final d = await SealSpace.instance.decode(resp.body);
         final list = d is Map ? d['partners'] : null;
         if (list is List) {
           return [
@@ -2835,7 +2878,7 @@ class ApiService {
       }
       String? detail;
       try {
-        final d = jsonDecode(resp.body);
+        final d = await SealSpace.instance.decode(resp.body);
         if (d is Map && d['detail'] is String) detail = d['detail'] as String;
       } catch (_) {
         // Not JSON — the generic wording below.
@@ -2858,7 +2901,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final d = jsonDecode(resp.body);
+        final d = await SealSpace.instance.decode(resp.body);
         if (d is Map<String, dynamic>) return d;
       }
       return null;
@@ -2878,7 +2921,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final d = jsonDecode(resp.body);
+        final d = await SealSpace.instance.decode(resp.body);
         if (d is Map<String, dynamic>) return d;
       }
       return null;
@@ -2899,7 +2942,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final d = jsonDecode(resp.body);
+        final d = await SealSpace.instance.decode(resp.body);
         if (d is Map<String, dynamic>) return d;
       }
       return null;
@@ -2918,7 +2961,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final d = jsonDecode(resp.body);
+        final d = await SealSpace.instance.decode(resp.body);
         if (d is Map<String, dynamic>) return d;
       }
       return null;
@@ -2938,6 +2981,8 @@ class ApiService {
     String? mood,
   }) async {
     try {
+      // 🔒 Our Space words are sealed for its members.
+      answerText = await _sealSpaceText(spaceId, answerText);
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(
@@ -2952,7 +2997,7 @@ class ApiService {
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final d = jsonDecode(resp.body);
+        final d = await SealSpace.instance.decode(resp.body);
         if (d is Map<String, dynamic>) return d;
       }
       return null;
@@ -2972,7 +3017,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final d = jsonDecode(resp.body);
+        final d = await SealSpace.instance.decode(resp.body);
         if (d is Map<String, dynamic>) return d;
       }
       return null;
@@ -2993,6 +3038,8 @@ class ApiService {
     String? voiceNoteUrl,
   }) async {
     try {
+      // 🔒 Our Space words are sealed for its members.
+      note = await _sealSpaceText(spaceId, note);
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(
@@ -3010,7 +3057,7 @@ class ApiService {
       if (resp.statusCode == 413) SessionEvents.instance.markSpaceFull();
       if (resp.statusCode == 402) SessionEvents.instance.markSpaceReadOnly();
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final d = jsonDecode(resp.body);
+        final d = await SealSpace.instance.decode(resp.body);
         if (d is Map<String, dynamic>) return d;
       }
       return null;
@@ -3030,7 +3077,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         final list = (data is Map ? data['capsules'] : data) as List?;
         return (list ?? const [])
             .whereType<Map>()
@@ -3056,6 +3103,8 @@ class ApiService {
     String mode = 'message',
   }) async {
     try {
+      // 🔒 Our Space words are sealed for its members.
+      message = await _sealSpaceText(spaceId, message);
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(
@@ -3074,7 +3123,7 @@ class ApiService {
       if (resp.statusCode == 413) SessionEvents.instance.markSpaceFull();
       if (resp.statusCode == 402) SessionEvents.instance.markSpaceReadOnly();
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final d = jsonDecode(resp.body);
+        final d = await SealSpace.instance.decode(resp.body);
         if (d is Map<String, dynamic>) return d;
       }
       return null;
@@ -3094,7 +3143,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final d = jsonDecode(resp.body);
+        final d = await SealSpace.instance.decode(resp.body);
         if (d is Map<String, dynamic>) return d;
       }
       return null;
@@ -3130,7 +3179,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final d = jsonDecode(resp.body);
+        final d = await SealSpace.instance.decode(resp.body);
         if (d is Map<String, dynamic>) return d;
       }
       return null;
@@ -3152,7 +3201,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final d = jsonDecode(resp.body);
+        final d = await SealSpace.instance.decode(resp.body);
         if (d is Map<String, dynamic>) return d;
       }
       return null;
@@ -3174,7 +3223,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         final list = (data is Map ? data['entries'] : data) as List?;
         return (list ?? const [])
             .whereType<Map>()
@@ -3202,6 +3251,9 @@ class ApiService {
     String? sourceThumb,
   }) async {
     try {
+      // 🔒 Our Space words are sealed for its members.
+      body = (await _sealSpaceText(spaceId, body))!;
+      title = await _sealSpaceText(spaceId, title);
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(
@@ -3219,7 +3271,7 @@ class ApiService {
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       return null;
@@ -3242,6 +3294,9 @@ class ApiService {
     String? font,
   }) async {
     try {
+      // 🔒 Our Space words are sealed for its members.
+      body = await _sealSpaceText(spaceId, body);
+      title = await _sealSpaceText(spaceId, title);
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.patch(
@@ -3257,7 +3312,7 @@ class ApiService {
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       return null;
@@ -3296,7 +3351,7 @@ class ApiService {
         body: jsonEncode({'emoji': emoji}),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       return null;
@@ -3317,7 +3372,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         final list = (data is Map ? data['comments'] : data) as List?;
         return (list ?? const [])
             .whereType<Map>()
@@ -3335,6 +3390,8 @@ class ApiService {
   Future<Map<String, dynamic>?> addDiaryComment(
       int spaceId, int entryId, String body) async {
     try {
+      // 🔒 Our Space words are sealed for its members.
+      body = (await _sealSpaceText(spaceId, body))!;
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(
@@ -3343,7 +3400,7 @@ class ApiService {
         body: jsonEncode({'body': body}),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       return null;
@@ -3357,6 +3414,8 @@ class ApiService {
   Future<Map<String, dynamic>?> editDiaryComment(
       int spaceId, int entryId, int commentId, String body) async {
     try {
+      // 🔒 Our Space words are sealed for its members.
+      body = (await _sealSpaceText(spaceId, body))!;
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.patch(
@@ -3366,7 +3425,7 @@ class ApiService {
         body: jsonEncode({'body': body}),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       return null;
@@ -3934,7 +3993,7 @@ class ApiService {
       final streamed = await req.send();
       final resp = await http.responseFrom(streamed);
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is Map<String, dynamic>) return data;
       }
       _logger.w('Space background upload failed: ${resp.statusCode}');
@@ -3955,7 +4014,7 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (res.statusCode >= 200 && res.statusCode < 300) {
-        final data = jsonDecode(res.body);
+        final data = await SealSpace.instance.decode(res.body);
         if (data is Map<String, dynamic>) return data;
       }
     } catch (e) {

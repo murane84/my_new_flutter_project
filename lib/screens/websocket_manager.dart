@@ -9,6 +9,8 @@ import 'api_service.dart';
 import '../utils/app_config.dart';
 import '../utils/session_events.dart';
 import '../e2ee/seal_ingress.dart';
+import '../e2ee/seal_scope.dart';
+import '../e2ee/seal_space.dart';
 
 class WebSocketManager {
   final String userId;
@@ -95,6 +97,10 @@ class WebSocketManager {
               final event = jsonDecode(rawMessage as String);
               if (event is Map<String, dynamic>) {
                 await SealIngress.openEvent(event);
+                // 🔒 Our Space words inside the event (moments, diary…).
+                if ((rawMessage as String).contains(SealScope.prefix)) {
+                  await SealSpace.instance.openJson(event);
+                }
                 if (!_isClosed) onEventReceived(event);
               }
             } catch (e) {

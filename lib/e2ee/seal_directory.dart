@@ -6,6 +6,7 @@ import '../screens/token_helper.dart';
 import '../utils/app_config.dart';
 import '../utils/net.dart' as http;
 import 'seal_keystore.dart';
+import 'seal_space.dart';
 import 'seal_x3dh.dart';
 
 /// One friend device's bundle as the server returns it.
@@ -18,9 +19,11 @@ class SealDeviceBundle {
 
 /// One device of a person, as listed by the key directory.
 class SealPeerDevice {
-  SealPeerDevice(this.deviceId, this.ikSig);
+  SealPeerDevice(this.deviceId, this.ikSig, {this.ikDh, this.ikDhSig});
   final String deviceId;
   final String ikSig; // base64 Ed25519 identity
+  final String? ikDh; // base64 X25519 identity (to wrap Our Space keys for)
+  final String? ikDhSig; // ikDh signed by ikSig
 }
 
 /// What the messenger needs from the key directory (a fake in tests).
@@ -96,6 +99,8 @@ class SealDirectory implements SealKeyDirectory {
     final fresh = !keys.isReady || keys.registeredSpkId == 0;
     if (!fresh) await Future<void>.delayed(const Duration(seconds: 8));
     await sync();
+    // Give member devices that joined later their Our Space keys.
+    await SealSpace.instance.serveAll();
   }
 
   /// Register / refresh this device and keep one-time prekeys topped up.
@@ -177,7 +182,8 @@ class SealDirectory implements SealKeyDirectory {
           as List;
       return [
         for (final d in list.cast<Map<String, dynamic>>())
-          SealPeerDevice(d['device_id'] as String, d['ik_sig'] as String)
+          SealPeerDevice(d['device_id'] as String, d['ik_sig'] as String,
+              ikDh: d['ik_dh'] as String?, ikDhSig: d['ik_dh_sig'] as String?)
       ];
     } catch (e) {
       debugPrint('Seal devices: $e');

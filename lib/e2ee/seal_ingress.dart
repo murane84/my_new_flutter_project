@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'seal_directory.dart';
 import 'seal_messenger.dart';
 import 'seal_primitives.dart';
+import 'seal_scope.dart';
+import 'seal_space.dart';
 
 /// The one door for sealed 1:1 text. Every message map from the server
 /// (history fetch, socket event, push) passes [open] before the app reads
@@ -86,6 +88,11 @@ class SealIngress {
   /// phone can read it, without moving any session (the chat opens it for
   /// real). Returns the data to show.
   static Future<Map<String, dynamic>> openPush(Map<String, dynamic> data) async {
+    if (data.values.any(SealScope.isSealed)) {
+      // 🔒 Our Space words in a push (the server avoids it, but never show
+      // a sealed string as text).
+      data = await SealSpace.instance.openJson(Map<String, dynamic>.from(data));
+    }
     if (data['e2ee'] == null) return data;
     final out = Map<String, dynamic>.from(data);
     try {
@@ -167,9 +174,10 @@ class SealIngress {
 
   /// Sign-out: off the key directory, every key, session and text forgotten.
   static Future<void> signOut() async {
-    // Sessions first: they're filed under this device's id, which the
-    // directory sign-out forgets with the keys.
+    // Sessions and Our Space keys first: they're filed under this device's
+    // id, which the directory sign-out forgets with the keys.
     await SealMessenger.instance.wipe();
+    await SealSpace.instance.wipe();
     await SealDirectory.instance.signOut();
     _me = null;
   }

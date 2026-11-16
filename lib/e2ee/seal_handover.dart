@@ -10,6 +10,7 @@ import 'seal_directory.dart';
 import 'seal_keystore.dart';
 import 'seal_messenger.dart';
 import 'seal_primitives.dart';
+import 'seal_space.dart';
 
 /// 🔒 History hand-over when a computer is linked by QR.
 ///
@@ -67,12 +68,14 @@ class SealHandover {
         return false;
       }
       final plain = await SealMessenger.instance.exportPlain();
-      if (plain.isEmpty) {
+      // …and the Our Space keys this phone holds.
+      final scopes = await SealSpace.instance.exportKeys();
+      if (plain.isEmpty && scopes.isEmpty) {
         await release();
         return false;
       }
-      final pkg = await sealHandover(
-          pub, utf8.encode(jsonEncode({'v': 1, 'plain': plain})));
+      final pkg = await sealHandover(pub,
+          utf8.encode(jsonEncode({'v': 1, 'plain': plain, 'scopes': scopes})));
       final r = await http.post(Uri.parse('$base/e2ee/handover'),
           headers: headers,
           body: jsonEncode({'code': code, 'package': base64Encode(pkg)}));
@@ -123,6 +126,11 @@ class SealHandover {
             final body = jsonDecode(utf8.decode(clear)) as Map<String, dynamic>;
             final n = await SealMessenger.instance
                 .importPlain((body['plain'] as Map).cast<String, dynamic>());
+            final scopes = body['scopes'];
+            if (scopes is Map) {
+              await SealSpace.instance
+                  .importKeys(scopes.cast<String, dynamic>());
+            }
             arrived.value++;
             return n;
           }

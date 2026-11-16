@@ -53,6 +53,7 @@ import '../widgets/net_gate.dart';
 import '../widgets/now_glow.dart';
 import 'api_service.dart';
 import '../services/device_report.dart';
+import '../e2ee/seal_directory.dart';
 import '../services/app_updater.dart';
 import '../services/bond_live.dart';
 import '../services/net_check.dart';
@@ -902,6 +903,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // authed home only mounts after login, so this doubles as "register on
     // login" and re-registers on every relaunch (token can rotate).
     FcmService.instance.registerToken();
+    // End-to-end encryption keys (public parts) on the key directory; a few
+    // seconds in so it never competes with start-up.
+    Future<void>.delayed(const Duration(seconds: 8), SealDirectory.instance.sync);
     // What this install runs on (admin panel's device split). Once per run.
     DeviceReport.send();
     // Pick up any file downloads left unfinished (app killed / slept).
@@ -3886,6 +3890,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     try {
       await FcmService.instance.unregisterToken();
     } catch (_) {}
+    await SealDirectory.instance.signOut();
     NowPlayingPresence.instance.stop();
     LiveInbox.instance.clearAll(); // no messages carried into another account
     BlockList.instance.clear(); // …nor whom this account blocked
@@ -4692,6 +4697,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Stop pushes reaching this device for the account we're leaving (done while
     // the token is still valid, before logoutUser clears it). Best-effort.
     await FcmService.instance.unregisterToken();
+    await SealDirectory.instance.signOut();
     NowPlayingPresence.instance.stop();
     LiveInbox.instance.clearAll(); // no messages carried into another account
     BlockList.instance.clear(); // …nor whom this account blocked

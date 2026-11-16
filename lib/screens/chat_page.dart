@@ -4108,7 +4108,10 @@ class _ChatPageState extends State<ChatPage>
     }
 
     List<_MenuAction> buildFull(BuildContext ctx) {
-      final deleted = msg['is_deleted'] == true;
+      // A 🔒 copy this phone couldn't open is treated like a tombstone: no
+      // reply / copy / forward of the placeholder text.
+      final deleted =
+          msg['is_deleted'] == true || msg['seal_state'] != null;
       final isTextMsg = (msg['message_type'] ?? 'text') == 'text';
       final isHeart = (msg['message_type'] ?? 'text') == 'heart';
       // A sent heart nobody has opened yet can still be taken back.

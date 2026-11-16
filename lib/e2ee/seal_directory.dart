@@ -88,7 +88,7 @@ class SealDirectory implements SealKeyDirectory {
 
   /// Register / refresh this device and keep one-time prekeys topped up.
   /// Call when the signed-in home mounts.
-  Future<void> sync() async {
+  Future<void> sync({bool retried = false}) async {
     if (_syncing) return;
     _syncing = true;
     try {
@@ -121,9 +121,12 @@ class SealDirectory implements SealKeyDirectory {
               '?device_id=${Uri.encodeQueryComponent(keys.deviceId)}'),
           headers: h);
       if (c.statusCode == 404) {
-        // The server forgot this device (removed as stale): register again.
+        // The server forgot this device (made room for a newer one): put it
+        // back now — until then friends can't seal anything for it.
         await keys.markRegistered(0);
-        return;
+        if (retried) return;
+        _syncing = false;
+        return sync(retried: true);
       }
       if (c.statusCode != 200) return;
       final have = (jsonDecode(c.body) as Map<String, dynamic>)['count'] as int;

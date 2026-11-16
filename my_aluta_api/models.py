@@ -159,6 +159,13 @@ class Message(Base):
     # Small validated extras (message_meta.py), e.g. a song bed under a
     # voice note / a good-night lullaby: {"bed": {"title", "url", "clip"}}.
     meta = Column(Text, nullable=True)
+    # ── End-to-end encryption (e2ee_msgs.py) ─────────────────────────────────
+    # Set = the text is sealed: `content` stays empty and `envelopes` holds one
+    # encrypted copy per device ({"<uid>:<device>": b64}); `e2ee_rev` counts
+    # edits so devices re-open the new text.
+    e2ee = Column(Integer, nullable=True)
+    e2ee_rev = Column(Integer, nullable=True, default=0)
+    envelopes = Column(Text, nullable=True)
 
     # New fields for visibility
     visible_to_sender = Column(Boolean, default=True)
@@ -1136,6 +1143,9 @@ class HeldMessage(Base):
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)
     deliver_after = Column(DateTime(timezone=True), index=True, nullable=False)
+    # Encrypted hold: content "" and the sealed copies (e2ee_msgs.py).
+    e2ee = Column(Integer, nullable=True)
+    envelopes = Column(Text, nullable=True)
 
 
 class UserSetting(Base):

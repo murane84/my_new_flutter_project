@@ -69,6 +69,11 @@ def create_message(db: Session, sender_id: int, message: MessageCreate) -> Messa
         media_size=message.media_size,
         media_duration=message.media_duration,
         meta=clean_meta(getattr(message, "meta", None)),
+        # Sealed text: validated by the caller (e2ee_msgs.clean).
+        e2ee=getattr(message, "e2ee", None) or None,
+        e2ee_rev=0,
+        envelopes=(getattr(message, "envelopes", None)
+                   if getattr(message, "e2ee", None) else None),
         timestamp=datetime.now(timezone.utc),
         is_read=False,
         delivered=False,
@@ -310,6 +315,11 @@ def list_preview(msg) -> str:
     # A heart/secret note NEVER previews its content (list + push stay secret).
     if (getattr(msg, "message_type", None) or "").lower() == "heart":
         return "❤️ Secret message"
+    # End-to-end encrypted: the server can't read it (the app previews it
+    # from its own unlocked copy).
+    if getattr(msg, "e2ee", None):
+        from e2ee_msgs import LOCKED_PREVIEW
+        return LOCKED_PREVIEW
     content = (msg.content or "").strip()
     # A reply stores the quoted message first ("> …" lines, a blank line),
     # then the answer: preview the ANSWER (the list said "You: <their words>"
@@ -418,6 +428,7 @@ def get_friends_with_unread_counts(db: Session, user_id: int):
                 # label ("📷 Photo", "🎞️ GIF", "🎤 Voice note", "📎 File") for
                 # media messages with empty content, else the text content.
                 last_message=list_preview(last_message),
+                last_message_id=last_message.id if last_message else None,
                 unread_count=unread_count,
                 last_sender_id=last_message.sender_id if last_message else None,
                 last_message_delivered=last_message.delivered if last_message else None,

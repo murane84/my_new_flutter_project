@@ -8,6 +8,7 @@ it, so it is never stuck if they don't open the app.
 from datetime import datetime, timedelta, timezone
 
 from database import SessionLocal
+import e2ee_msgs
 from models import HeldMessage, UserClock, User
 
 MORNING_HOUR = 5
@@ -63,11 +64,12 @@ def _deliver(db, row: HeldMessage) -> None:
     from websocket_manager import safe_notify_user
     from push import send_push_to_user
     held_id, sid, rid, content = row.id, row.sender_id, row.receiver_id, row.content
+    e2ee, envelopes = getattr(row, "e2ee", None), getattr(row, "envelopes", None)
     # Remove the hold first, so a second trigger can never send it twice.
     db.delete(row)
     db.commit()
     msg = crud.create_message(db, sender_id=sid, message=schemas.MessageCreate(
-        receiver_id=rid, content=content))
+        receiver_id=rid, content=content, e2ee=e2ee, envelopes=envelopes))
     # A block made since it was held: same as a live send — kept for the
     # sender, never delivered (no socket, no push, hidden from them).
     if crud.blocked_either(db, sid, rid):
@@ -92,6 +94,7 @@ def _deliver(db, row: HeldMessage) -> None:
             "sender_name": (sender.username if sender else None) or "New message",
             "message_id": str(msg.id),
             "body": crud.list_preview(msg),
+            **e2ee_msgs.push_fields(msg, int(rid)),
         })
     except Exception:
         pass

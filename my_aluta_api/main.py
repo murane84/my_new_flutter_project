@@ -220,6 +220,12 @@ def ensure_media_schema():
         "ALTER TABLE relationship_spaces ADD COLUMN IF NOT EXISTS background_url VARCHAR",
         # Conversation features: reactions / edit marker / delete tombstone.
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS reactions TEXT",
+        # End-to-end encryption (e2ee_msgs.py).
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS e2ee INTEGER",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS e2ee_rev INTEGER DEFAULT 0",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS envelopes TEXT",
+        "ALTER TABLE held_messages ADD COLUMN IF NOT EXISTS e2ee INTEGER",
+        "ALTER TABLE held_messages ADD COLUMN IF NOT EXISTS envelopes TEXT",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited BOOLEAN DEFAULT FALSE",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE",

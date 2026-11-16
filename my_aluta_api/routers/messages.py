@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from websocket_manager import safe_notify_user
 from push import send_push_to_user
 import crud_conversations
+import e2ee_msgs
 import hearts
 
 router = APIRouter(
@@ -100,6 +101,24 @@ def _fanout_others(db, msg, me: int, event: dict):
                   if isinstance(data, dict) else event)
             safe_notify_user(int(uid), ev)
 
+def _seal_check(message, sender_id: int) -> None:
+    """🔒 Sealed text (e2ee_msgs.py): content stays empty and each device gets
+    its own encrypted copy. 1:1 text only for now (media, hearts, songs and
+    groups follow); anything else is refused rather than sent half-sealed."""
+    if not message.e2ee:
+        message.envelopes = None
+        return
+    if message.e2ee != e2ee_msgs.VERSION or not message.receiver_id:
+        raise HTTPException(status_code=400, detail="Unsupported encryption")
+    if ((message.message_type or "text") != "text" or (message.content or "")
+            or message.heart_mood or message.unlock_at or message.media_url):
+        raise HTTPException(status_code=400,
+                            detail="Only text can be sealed for now")
+    message.envelopes = e2ee_msgs.clean(
+        message.envelopes, [sender_id, int(message.receiver_id)],
+        int(message.receiver_id))
+
+
 # 1️⃣ SEND MESSAGE
 @router.post("/", response_model=schemas.MessageWithSender)
 def send_message(message: schemas.MessageCreate, background: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -119,6 +138,7 @@ def send_message(message: schemas.MessageCreate, background: BackgroundTasks, db
             db, current_user.id, int(message.receiver_id)):
         raise HTTPException(status_code=403,
                             detail="You can only message people you know")
+    _seal_check(message, current_user.id)
     db_message = crud.create_message(db, sender_id=current_user.id, message=message)
     if they_blocked:
         db_message.visible_to_receiver = False
@@ -162,6 +182,8 @@ def send_message(message: schemas.MessageCreate, background: BackgroundTasks, db
                 **({"quiet": "1"}
                    if '"quiet"' in (getattr(db_message, "meta", None) or "")
                    else {}),
+                # Sealed text: the phone opens its own copy for the banner.
+                **e2ee_msgs.push_fields(db_message, int(message.receiver_id)),
             },
         )
 
@@ -201,8 +223,17 @@ def hold_for_morning(body: dict, db: Session = Depends(get_db),
     import morning
     rid = int((body or {}).get("receiver_id") or 0)
     content = ((body or {}).get("content") or "").strip()
-    if rid <= 0 or rid == current_user.id or not content:
+    e2ee = int((body or {}).get("e2ee") or 0) or None
+    if rid <= 0 or rid == current_user.id or not (content or e2ee):
         raise HTTPException(status_code=400, detail="Nothing to hold")
+    envelopes = None
+    if e2ee:
+        if e2ee != e2ee_msgs.VERSION:
+            raise HTTPException(status_code=400,
+                                detail="Unsupported encryption")
+        content = ""
+        envelopes = e2ee_msgs.clean((body or {}).get("envelopes"),
+                                    [current_user.id, rid], rid)
     if len(content) > 8000:
         raise HTTPException(status_code=400, detail="Too long")
     # Same block rule as sending now (release also checks at delivery time).
@@ -216,7 +247,7 @@ def hold_for_morning(body: dict, db: Session = Depends(get_db),
     if morning.is_their_morning(off):
         # It's already morning there — no point waiting a whole day.
         row = HeldMessage(sender_id=current_user.id, receiver_id=rid,
-                          content=content,
+                          content=content, e2ee=e2ee, envelopes=envelopes,
                           deliver_after=datetime.now(timezone.utc))
         db.add(row)
         db.commit()
@@ -224,11 +255,12 @@ def hold_for_morning(body: dict, db: Session = Depends(get_db),
         return {"sent_now": True}
     when = morning.next_morning_utc(off)
     row = HeldMessage(sender_id=current_user.id, receiver_id=rid,
-                      content=content, deliver_after=when)
+                      content=content, e2ee=e2ee, envelopes=envelopes,
+                      deliver_after=when)
     db.add(row)
     db.commit()
     db.refresh(row)
-    return {"id": row.id, "content": row.content,
+    return {"id": row.id, "content": row.content, "e2ee": bool(row.e2ee),
             "deliver_after": when.isoformat()}
 
 
@@ -245,7 +277,7 @@ def my_held_for(friend_id: int, db: Session = Depends(get_db),
         d = r.deliver_after
         if d is not None and d.tzinfo is None:
             d = d.replace(tzinfo=timezone.utc)
-        out.append({"id": r.id, "content": r.content,
+        out.append({"id": r.id, "content": r.content, "e2ee": bool(r.e2ee),
                     "deliver_after": d.isoformat() if d else None})
     return {"held": out}
 
@@ -259,10 +291,11 @@ def cancel_held(held_id: int, db: Session = Depends(get_db),
         HeldMessage.sender_id == current_user.id).first()
     if row is None:
         raise HTTPException(status_code=404, detail="Already delivered")
-    content = row.content
+    content, sealed = row.content, bool(row.e2ee)
     db.delete(row)
     db.commit()
-    return {"cancelled": True, "content": content}
+    # A sealed hold's text lives only on the sender's phone.
+    return {"cancelled": True, "content": content, "e2ee": sealed}
 
 
 # 🔎 SEARCH MESSAGES (across the user's DMs + groups)
@@ -519,6 +552,7 @@ def delete_single_message(message_id: int, delete_for_all: bool = Query(False), 
         message.media_duration = None
         message.meta = None
         message.reactions = None
+        message.envelopes = None
         db.commit()
         _fanout_others(db, message, current_user.id, {
             "type": "message_deleted",
@@ -704,7 +738,19 @@ def edit_message(
                 detail="This message is too old to edit",
             )
 
-    message.content = payload.content or ""
+    if message.e2ee:
+        # Sealed: the new text comes as new envelopes; devices re-open it
+        # because the revision moved on.
+        if not payload.envelopes or (payload.content or ""):
+            raise HTTPException(status_code=400,
+                                detail="A sealed message is edited sealed")
+        message.envelopes = e2ee_msgs.clean(
+            payload.envelopes, [message.sender_id, message.receiver_id],
+            message.receiver_id)
+        message.e2ee_rev = (message.e2ee_rev or 0) + 1
+        message.content = ""
+    else:
+        message.content = payload.content or ""
     message.edited = True
     db.commit()
     db.refresh(message)

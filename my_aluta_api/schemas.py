@@ -78,10 +78,14 @@ class MessageCreate(BaseModel):
     heart_save: Optional[bool] = None   # let the receiver save its media
     # Song bed / lullaby (message_meta.py): {"bed": {...}}.
     meta: Optional[str] = None
+    # End-to-end encrypted text (e2ee_msgs.py): content "" + sealed copies.
+    e2ee: Optional[int] = None
+    envelopes: Optional[str] = None
 
 
 class MessageEdit(BaseModel):
     content: Optional[str] = ""
+    envelopes: Optional[str] = None     # an encrypted message's new copies
 
 
 class Message(BaseModel):
@@ -113,6 +117,9 @@ class Message(BaseModel):
     heart_save: Optional[bool] = False  # sender allows saving its media
     poll: Optional[str] = None          # JSON poll state (polls.py)
     meta: Optional[str] = None          # JSON extras (message_meta.py)
+    e2ee: Optional[int] = None          # sealed text (e2ee_msgs.py)
+    e2ee_rev: Optional[int] = None
+    envelopes: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -149,6 +156,9 @@ class MessageWithSender(BaseModel):
     heart_save: Optional[bool] = False  # sender allows saving its media
     poll: Optional[str] = None          # JSON poll state (polls.py)
     meta: Optional[str] = None          # JSON extras (message_meta.py)
+    e2ee: Optional[int] = None          # sealed text (e2ee_msgs.py)
+    e2ee_rev: Optional[int] = None
+    envelopes: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -158,6 +168,9 @@ class FriendWithUnread(BaseModel):
     is_online: bool
     last_timestamp: Optional[str] = None
     last_message: Optional[str] = None
+    # The last message's id: an encrypted one previews from the device's own
+    # unlocked copy (the server only says "🔒 Message").
+    last_message_id: Optional[int] = None
     unread_count: int
     last_sender_id: Optional[int] = None             # ✅ Add this
     last_message_delivered: Optional[bool] = None    # ✅ Add this
@@ -276,6 +289,7 @@ class ConversationOut(BaseModel):
     # Convenience fields the chat list needs.
     other_user: Optional[PublicUser] = None   # for DMs: the OTHER member (not me)
     last_message: Optional[str] = None
+    last_message_id: Optional[int] = None
     last_timestamp: Optional[datetime] = None
     last_sender_id: Optional[int] = None
     unread_count: int = 0

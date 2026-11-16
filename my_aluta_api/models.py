@@ -1540,6 +1540,9 @@ class E2eeDevice(Base):
     # Set when a device_id comes back with a different identity (reinstall),
     # so friends can be told "security code changed".
     identity_changed_at = Column(DateTime(timezone=True), nullable=True)
+    # The linked-computer session (DeviceSession.sid) this install signed in
+    # with, so signing that computer out from the phone takes its keys too.
+    sid = Column(String, nullable=True, index=True)
 
     __table_args__ = (UniqueConstraint("user_id", "device_id",
                                        name="_e2ee_user_device_uc"),)

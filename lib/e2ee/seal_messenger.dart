@@ -66,7 +66,9 @@ class SealMessenger {
   static final SealMessenger instance = SealMessenger();
 
   static const int plainCap = 3000; // per friend, like the chat cache
-  static const Duration devicesFresh = Duration(minutes: 1);
+  /// How long a device list is trusted: short, so a just-linked computer
+  /// (or a friend's new phone) gets sealed copies within seconds.
+  static const Duration devicesFresh = Duration(seconds: 20);
 
   final SealKeyStore? _keysOverride;
   final SealKeyDirectory? _dirOverride;

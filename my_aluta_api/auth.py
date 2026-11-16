@@ -798,6 +798,12 @@ def revoke_device(
     if not s:
         raise HTTPException(status_code=404, detail="Device not found")
     s.revoked = True
+    # Its end-to-end keys go with it: friends stop sealing for a computer
+    # that can no longer sign in.
+    from models import E2eeDevice
+    db.query(E2eeDevice).filter(E2eeDevice.user_id == current_user.id,
+                                E2eeDevice.sid == s.sid).delete(
+        synchronize_session=False)
     db.commit()
     return {"ok": True}
 

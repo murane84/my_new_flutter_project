@@ -20,11 +20,13 @@ from typing import List, Optional
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import APIRouter, Depends, HTTPException
+from jose import JWTError, jwt
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 import crud
-from auth import get_current_user
+from auth import get_current_user, oauth2_scheme
+from config import ALGORITHM, SECRET_KEY
 from database import get_db
 from models import E2eeDevice, E2eePreKey, User
 
@@ -84,9 +86,18 @@ def _mine(db: Session, me: User, device_id: str) -> E2eeDevice:
     return d
 
 
+def _sid_of(token: str):
+    """The linked-computer session id in this token (None on a phone)."""
+    try:
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM]).get("sid")
+    except JWTError:
+        return None
+
+
 @router.put("/device")
 def put_device(body: DeviceIn, db: Session = Depends(get_db),
-               me: User = Depends(get_current_user)):
+               me: User = Depends(get_current_user),
+               token: str = Depends(oauth2_scheme)):
     ik_sig = _b64(body.ik_sig, 32)
     _verify(ik_sig, IKDH_PREFIX + _b64(body.ik_dh, 32),
             _b64(body.ik_dh_sig, 64))
@@ -111,6 +122,7 @@ def put_device(body: DeviceIn, db: Session = Depends(get_db),
     d.ik_sig, d.ik_dh, d.ik_dh_sig = body.ik_sig, body.ik_dh, body.ik_dh_sig
     d.spk_id, d.spk, d.spk_sig = body.spk_id, body.spk, body.spk_sig
     d.label, d.platform = body.label, body.platform
+    d.sid = _sid_of(token)
     d.updated_at = d.last_seen_at = now
     db.commit()
     return {"ok": True}

@@ -86,6 +86,18 @@ class SealDirectory implements SealKeyDirectory {
     return {'Authorization': 'Bearer $t', 'Content-Type': 'application/json'};
   }
 
+  /// Start-up: a device that isn't on the key directory yet (just linked,
+  /// new phone) registers at once — friends can't seal anything for it
+  /// until it does; otherwise a few seconds in, out of start-up's way.
+  Future<void> syncSoon() async {
+    try {
+      await keys.load();
+    } catch (_) {}
+    final fresh = !keys.isReady || keys.registeredSpkId == 0;
+    if (!fresh) await Future<void>.delayed(const Duration(seconds: 8));
+    await sync();
+  }
+
   /// Register / refresh this device and keep one-time prekeys topped up.
   /// Call when the signed-in home mounts.
   Future<void> sync({bool retried = false}) async {

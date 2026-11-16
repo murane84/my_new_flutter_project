@@ -904,9 +904,9 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // authed home only mounts after login, so this doubles as "register on
     // login" and re-registers on every relaunch (token can rotate).
     FcmService.instance.registerToken();
-    // End-to-end encryption keys (public parts) on the key directory; a few
-    // seconds in so it never competes with start-up.
-    Future<void>.delayed(const Duration(seconds: 8), SealDirectory.instance.sync);
+    // End-to-end encryption keys (public parts) on the key directory: at
+    // once on a just-linked / new device, else a few seconds in.
+    SealDirectory.instance.syncSoon();
     // What this install runs on (admin panel's device split). Once per run.
     DeviceReport.send();
     // Pick up any file downloads left unfinished (app killed / slept).

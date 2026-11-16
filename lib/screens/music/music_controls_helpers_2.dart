@@ -10,20 +10,27 @@ extension _MusicControlsHelpers2 on _MusicControlsState {
   // only — desktop/web have no MediaStore art, so it stays on the theme colour).
   Future<void> _resolveArtAccent(int id) async {
     if (!_isMobile) return;
-    if (_artAccentForId == id && _artAccentVN.value != null) return;
+    final path = (_currentIndex >= 0 && _currentIndex < _playlist.length)
+        ? _playlist[_currentIndex]
+        : null;
+    if (_artAccentForId == id &&
+        _artAccentVN.value != null &&
+        (path == null || (audioHandler?.hasArt(path) ?? true))) {
+      return;
+    }
     try {
       final bytes = await _audioQuery.queryArtwork(
         id,
         ArtworkType.AUDIO,
         format: ArtworkFormat.JPEG,
-        size: 200,
+        size: 512,
       );
       if (bytes == null || bytes.isEmpty) return;
-      // The file has a cover → the lock screen shows it too (the song's
-      // own media uri: Android reads its embedded art as the thumbnail).
-      if (_currentIndex >= 0 && _currentIndex < _playlist.length) {
-        audioHandler?.setArt(_playlist[_currentIndex],
-            Uri.parse('content://media/external/audio/media/$id'));
+      // The file has a cover → the notification, lock screen and car show
+      // it too (saved as a small image file the system can always read).
+      final h = audioHandler;
+      if (path != null && h != null) {
+        unawaited(h.setArtBytes(path, id, bytes));
       }
       final palette = await PaletteGenerator.fromImageProvider(
         MemoryImage(bytes),

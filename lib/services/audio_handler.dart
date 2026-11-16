@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -64,6 +65,33 @@ class AlutaAudioHandler extends BaseAudioHandler {
   // Song → its cover (the file's own, or the one found online), so the lock
   // screen shows the same picture as the player. Kept small.
   final Map<String, Uri> _artFor = <String, Uri>{};
+
+  bool hasArt(String id) => _artFor.containsKey(id);
+
+  /// The song's OWN cover (bytes read from the file): saved once as a small
+  /// image the system can always open — a content:// audio uri showed as
+  /// Android's plain music note on many phones. Old covers are pruned.
+  Future<void> setArtBytes(String id, int key, Uint8List bytes) async {
+    if (bytes.isEmpty) return;
+    try {
+      final dir = Directory('${(await getTemporaryDirectory()).path}/covers');
+      if (!await dir.exists()) await dir.create(recursive: true);
+      final file = File('${dir.path}/$key.jpg');
+      if (!await file.exists() || await file.length() != bytes.length) {
+        await file.writeAsBytes(bytes, flush: true);
+        // Keep the folder small: the 40 newest covers.
+        final all = dir.listSync().whereType<File>().toList()
+          ..sort((a, b) =>
+              b.statSync().modified.compareTo(a.statSync().modified));
+        for (final old in all.skip(40)) {
+          try {
+            old.deleteSync();
+          } catch (_) {}
+        }
+      }
+      setArt(id, Uri.file(file.path));
+    } catch (_) {}
+  }
 
   /// The cover for song [id]; applied now if it's the song showing.
   void setArt(String id, Uri art) {

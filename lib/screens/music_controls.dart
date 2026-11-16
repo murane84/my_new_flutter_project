@@ -137,7 +137,8 @@ class MusicControls extends ConsumerStatefulWidget {
 
 class _MusicControlsState extends ConsumerState<MusicControls>
     with TickerProviderStateMixin, WidgetsBindingObserver {
-  late final AudioPlayer _player;
+  // Not final: a stuck engine is replaced by a fresh one (see _rebuildPlayer).
+  late AudioPlayer _player;
   // Riverpod subscription that replaces liveSessionNotifier.addListener.
   ProviderSubscription<LiveSession>? _liveSub;
 
@@ -448,17 +449,7 @@ class _MusicControlsState extends ConsumerState<MusicControls>
     PlayerStyleController.instance.addListener(_applyCoverAccent);
     // On Android, build the player with an equalizer + loudness pipeline so
     // the Equalizer screen can actually shape the sound. Elsewhere it's plain.
-    if (Platform.isAndroid) {
-      _equalizer = AndroidEqualizer();
-      _loudness = AndroidLoudnessEnhancer();
-      _player = AudioPlayer(
-        audioPipeline: AudioPipeline(
-          androidAudioEffects: [_loudness!, _equalizer!],
-        ),
-      );
-    } else {
-      _player = AudioPlayer();
-    }
+    _player = _makePlayer();
 
     _discCtrl = AnimationController(
       duration: const Duration(seconds: 15),
@@ -1628,6 +1619,17 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _uriMapBuilt = false; // force a fresh URI resolve on the retry
       err = await _openSource(path);
     }
+    // Still failing on a file that IS there → the engine itself is likely
+    // stuck (seen after a long time in the background: every song "can't
+    // play", the old one keeps going, Next/Prev seem dead until a restart).
+    // Rebuild the player once and try again before blaming the file.
+    if (err != null &&
+        err != 'missing' &&
+        mounted &&
+        DateTime.now().difference(_lastRebuild) > const Duration(seconds: 30)) {
+      await _rebuildPlayer();
+      if (mounted) err = await _openSource(path);
+    }
     if (err != null) {
       _switching = false;
       if (_pruneIfMissing(path)) {
@@ -1665,6 +1667,41 @@ class _MusicControlsState extends ConsumerState<MusicControls>
       _switching = false;
     });
     if (_isMobile) _fetchMetadata(path);
+  }
+
+  /// A fresh player (Android: with the equalizer + loudness pipeline so the
+  /// Equalizer screen can shape the sound; elsewhere plain).
+  AudioPlayer _makePlayer() {
+    if (Platform.isAndroid) {
+      _equalizer = AndroidEqualizer();
+      _loudness = AndroidLoudnessEnhancer();
+      return AudioPlayer(
+        audioPipeline: AudioPipeline(
+          androidAudioEffects: [_loudness!, _equalizer!],
+        ),
+      );
+    }
+    return AudioPlayer();
+  }
+
+  DateTime _lastRebuild = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Replace a stuck engine with a fresh one: stop + dispose the old (which
+  /// also stops any song it kept playing), re-attach every listener, put the
+  /// equalizer back. Settings like speed and volume re-apply on the next open.
+  Future<void> _rebuildPlayer() async {
+    _lastRebuild = DateTime.now();
+    final old = _player;
+    _player = _makePlayer();
+    _listenPlayer();
+    try {
+      await old.stop();
+    } catch (_) {}
+    try {
+      await old.dispose();
+    } catch (_) {}
+    if (Platform.isAndroid) unawaited(_restoreEqualizer());
+    if (mounted) setState(() {});
   }
 
   DateTime _resumeSavedAt = DateTime.fromMillisecondsSinceEpoch(0);

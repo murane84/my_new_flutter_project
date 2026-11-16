@@ -1506,6 +1506,50 @@ class UserWake(Base):
     first_at = Column(DateTime(timezone=True), nullable=False)
 
 
+# ── End-to-end encryption (Aluta Seal) ───────────────────────────────────────
+# Only PUBLIC keys live here. Each signed-in app install is one device with its
+# own identity; friends' phones fetch a bundle per device to start a session.
+class E2eeDevice(Base):
+    __tablename__ = "e2ee_devices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                     index=True, nullable=False)
+    device_id = Column(String(64), nullable=False)   # random, made by the app
+    ik_sig = Column(String, nullable=False)          # Ed25519 identity (b64)
+    ik_dh = Column(String, nullable=False)           # X25519 identity (b64)
+    ik_dh_sig = Column(String, nullable=False)
+    spk_id = Column(Integer, nullable=False)
+    spk = Column(String, nullable=False)
+    spk_sig = Column(String, nullable=False)
+    label = Column(String, nullable=True)
+    platform = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Set when a device_id comes back with a different identity (reinstall),
+    # so friends can be told "security code changed".
+    identity_changed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (UniqueConstraint("user_id", "device_id",
+                                       name="_e2ee_user_device_uc"),)
+
+
+class E2eePreKey(Base):
+    """One-time prekeys: each is handed out once, then deleted."""
+    __tablename__ = "e2ee_prekeys"
+
+    id = Column(Integer, primary_key=True)
+    device_pk = Column(Integer, ForeignKey("e2ee_devices.id",
+                                           ondelete="CASCADE"),
+                       index=True, nullable=False)
+    key_id = Column(Integer, nullable=False)
+    pub = Column(String, nullable=False)
+
+    __table_args__ = (UniqueConstraint("device_pk", "key_id",
+                                       name="_e2ee_prekey_uc"),)
+
+
 # ── Receipt times ────────────────────────────────────────────────────────────
 # Every path that flips `delivered` / `is_read` on a loaded Message gets its
 # time stamped here, so the book ticks can say "Delivered 6:09 · Opened 6:12"

@@ -207,8 +207,8 @@ def list_devices(user_id: int, db: Session = Depends(get_db),
         # For wrapping Our Space keys to this device (signed by ik_sig).
         "ik_dh": d.ik_dh,
         "ik_dh_sig": d.ik_dh_sig,
-        "label": d.label,
-        "platform": d.platform,
+        # No label / platform: someone who can only message you (one-sided
+        # contact) learns nothing about which devices you use.
         "identity_changed_at": (d.identity_changed_at.isoformat()
                                 if d.identity_changed_at else None),
     } for d in _live_devices(db, user_id)]}

@@ -276,33 +276,43 @@ class SealSpace {
   }
 
   /// Wrap the current key for member devices that don't have it yet.
+  /// Wrap every key this device holds for member devices that lack it —
+  /// older keys too, so a device that joined later can open what was
+  /// written before it.
   Future<void> _serveMissing(String scope, Map<String, dynamic> j) async {
-    final epoch = j['epoch'] as int?;
-    final key = epoch == null ? null : (await _heldKeys())[scope]?[epoch];
-    final missing = (j['missing'] as List? ?? const [])
-        .cast<Map<String, dynamic>>();
-    if (key == null || missing.isEmpty) return;
-    final wraps = await _wrapFor(scope, epoch!, key, missing);
-    if (wraps.isEmpty) return;
-    await _api.addWraps(scope, {
-      'epoch': epoch,
-      'from_device': _keys.deviceId,
-      'wraps': wraps,
-    });
+    final current = j['epoch'] as int?;
+    final held = (await _heldKeys())[scope] ?? const <int, Uint8List>{};
+    final byEpoch = <int, List<Map<String, dynamic>>>{};
+    for (final m in (j['missing'] as List? ?? const [])
+        .cast<Map<String, dynamic>>()) {
+      final e = m['epoch'] as int? ?? current;
+      if (e != null) byEpoch.putIfAbsent(e, () => []).add(m);
+    }
+    for (final e in byEpoch.entries) {
+      final key = held[e.key];
+      if (key == null) continue;
+      final wraps = await _wrapFor(scope, e.key, key, e.value);
+      if (wraps.isEmpty) continue;
+      await _api.addWraps(scope, {
+        'epoch': e.key,
+        'from_device': _keys.deviceId,
+        'wraps': wraps,
+      });
+    }
   }
 
   /// The current (epoch, key) of [scope], making the first key when the
   /// group has none. Null when this device must wait for a member's device
   /// to give it the key.
   Future<(int, Uint8List)?> _currentKey(String scope,
-      {bool make = true}) async {
+      {bool make = true, bool force = false}) async {
     final held = await _heldKeys();
     final cur = _current[scope];
     final known = cur == null ? null : held[scope]?[cur];
     final asked = _lastAsked[scope];
     final fresh =
         asked != null && DateTime.now().difference(asked).inSeconds < 30;
-    if (known != null && fresh) return (cur!, known);
+    if (known != null && fresh && !force) return (cur!, known);
     for (var attempt = 0; attempt < 2; attempt++) {
       final j = await _api.fetch(scope, _keys.deviceId);
       if (j == null) {
@@ -380,14 +390,21 @@ class SealSpace {
   }
 
   /// Open one sealed field (a note when it can't be opened yet).
-  Future<String> open(String sealed) => _locked(() async {
+  Future<String> open(String sealed) => _open(sealed, null);
+
+  /// [asked]: groups already looked up during this answer — a page full of
+  /// fields waiting for the same key asks the server once, not per field.
+  Future<String> _open(String sealed, Set<String>? asked) =>
+      _locked(() async {
         final k = SealScope.keyOf(sealed);
         if (k == null) return sealed;
         final held = await _heldKeys();
         var key = held[k.$1]?[k.$2];
-        if (key == null) {
+        if (key == null && (asked == null || asked.add('${k.$1}#${k.$2}'))) {
           try {
-            await _currentKey(k.$1, make: false);
+            // Ask the server even if the current key is fresh here: this
+            // field may use a newer (or older) key we haven't taken in yet.
+            await _currentKey(k.$1, make: false, force: true);
           } catch (_) {}
           key = held[k.$1]?[k.$2];
         }
@@ -402,13 +419,14 @@ class SealSpace {
   /// Open every sealed string inside a decoded JSON answer, in place, and
   /// remember the members of any Space it describes. Returns [json].
   Future<T> openJson<T>(T json) async {
+    final asked = <String>{};
     Future<void> walk(Object? v) async {
       if (v is Map) {
         if (v is Map<String, dynamic>) noteSpace(v);
         for (final key in v.keys.toList()) {
           final x = v[key];
           if (SealScope.isSealed(x)) {
-            v[key] = await open(x as String);
+            v[key] = await _open(x as String, asked);
           } else {
             await walk(x);
           }
@@ -417,7 +435,7 @@ class SealSpace {
         for (var i = 0; i < v.length; i++) {
           final x = v[i];
           if (SealScope.isSealed(x)) {
-            v[i] = await open(x as String);
+            v[i] = await _open(x as String, asked);
           } else {
             await walk(x);
           }

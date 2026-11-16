@@ -71,8 +71,10 @@ class _Scopes implements SealScopeApi {
     final missing = <Map<String, dynamic>>[];
     for (final uid in SealScope.membersOf(scope)!) {
       for (final d in await dir.devicesOf(uid) ?? const <SealPeerDevice>[]) {
-        if (!c.containsKey('$epoch|$uid:${d.deviceId}')) {
+        for (var e = 1; e <= epoch; e++) {
+          if (c.containsKey('$e|$uid:${d.deviceId}')) continue;
           missing.add({
+            'epoch': e,
             'user_id': uid,
             'device_id': d.deviceId,
             'ik_sig': d.ikSig,
@@ -113,7 +115,8 @@ class _Scopes implements SealScopeApi {
 
   @override
   Future<int> addWraps(String scope, Map<String, dynamic> body) async {
-    if (epochs[scope] != body['epoch']) return 409;
+    final cur = epochs[scope];
+    if (cur == null || (body['epoch'] as int) > cur) return 409;
     _put(scope, body);
     return 200;
   }
@@ -320,6 +323,9 @@ void main() {
       expect(await b.space.open(fresh), 'mpya');
       expect(await a.space.open(fresh), 'mpya');
       expect(await b.space.open(old), 'ya zamani', reason: 'old key kept');
+      // …and a member device gives the new phone the older key too.
+      await a.space.serveAll();
+      expect(await phone.space.open(old), 'ya zamani');
     });
 
     test("a linked computer takes the phone's keys over", () async {

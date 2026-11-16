@@ -14,8 +14,9 @@ checks the signature against the key directory before trusting it).
                                            new phone nobody has served yet) —
                                            the first device to ask wins, the
                                            others get 409 and take that one
-    POST /e2ee/scopes/{scope}/wraps        copies for more devices (only ones
-                                           that have none yet — first wins)
+    POST /e2ee/scopes/{scope}/wraps        copies of any of its keys for more
+                                           devices (only ones that have none
+                                           yet — first wins)
 """
 from typing import List
 
@@ -106,16 +107,22 @@ def get_scope(scope: str, device_id: str, db: Session = Depends(get_db),
                     SealScopeKey.user_id == me.id,
                     SealScopeKey.device_id == device_id)
             .order_by(SealScopeKey.epoch).all())
-    have = {(r.user_id, r.device_id) for r in db.query(
-        SealScopeKey.user_id, SealScopeKey.device_id).filter(
-        SealScopeKey.scope == scope, SealScopeKey.epoch == s.epoch).all()}
+    # Every key of the group a live member device lacks — older ones too,
+    # so a device that joined later can open what was written before it.
+    have_by = {}
+    for e, u, dv in db.query(SealScopeKey.epoch, SealScopeKey.user_id,
+                             SealScopeKey.device_id).filter(
+            SealScopeKey.scope == scope).all():
+        have_by.setdefault(e, set()).add((u, dv))
     missing = []
     for uid in members:
         for d in _live_devices(db, uid):
-            if (uid, d.device_id) not in have:
-                missing.append({"user_id": uid, "device_id": d.device_id,
-                                "ik_sig": d.ik_sig, "ik_dh": d.ik_dh,
-                                "ik_dh_sig": d.ik_dh_sig})
+            for e in range(1, s.epoch + 1):
+                if (uid, d.device_id) not in have_by.get(e, set()):
+                    missing.append({"epoch": e, "user_id": uid,
+                                    "device_id": d.device_id,
+                                    "ik_sig": d.ik_sig, "ik_dh": d.ik_dh,
+                                    "ik_dh_sig": d.ik_dh_sig})
     return {
         "epoch": s.epoch,
         "keys": [{"epoch": k.epoch, "wrapped": k.wrapped,
@@ -166,12 +173,12 @@ def add_wraps(scope: str, body: WrapsIn, db: Session = Depends(get_db),
               me: User = Depends(get_current_user)):
     members = _members(scope, me, db)
     s = db.query(SealScope).filter(SealScope.scope == scope).first()
-    if s is None or body.epoch != s.epoch:
-        raise HTTPException(status_code=409, detail="Not the current key")
+    if s is None or not (1 <= body.epoch <= s.epoch):
+        raise HTTPException(status_code=409, detail="No such key")
     _check_wraps(db, me, members, body)
     # Only a device that holds the key can wrap it: it must have its own copy.
     held = db.query(SealScopeKey.id).filter(
-        SealScopeKey.scope == scope, SealScopeKey.epoch == s.epoch,
+        SealScopeKey.scope == scope, SealScopeKey.epoch == body.epoch,
         SealScopeKey.user_id == me.id,
         SealScopeKey.device_id == body.from_device).first()
     if held is None:

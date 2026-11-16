@@ -180,7 +180,12 @@ def _may_reach(db: Session, me: User, user_id: int) -> bool:
     if i_blocked:
         raise HTTPException(status_code=403,
                             detail="Unblock them to send a message")
-    return crud.may_reach(db, me.id, user_id)
+    if crud.may_reach(db, me.id, user_id):
+        return True
+    # Members of the same Space seal its words for each other even when they
+    # aren't contacts (a group Space).
+    from e2ee_scope import share_a_space
+    return share_a_space(db, me.id, user_id)
 
 
 def _live_devices(db: Session, user_id: int):

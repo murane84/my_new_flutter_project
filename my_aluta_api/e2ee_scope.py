@@ -37,6 +37,30 @@ MAX_MEMBERS = 20
 MAX_WRAPPED = 400          # base64 of the 158-byte wrapped key
 
 
+def space_groups(db: Session, uid: int) -> List[set]:
+    """The member sets (owner + members) of every Space [uid] is in."""
+    from models import RelationshipSpace, SpaceMember
+    ids = {r[0] for r in db.query(SpaceMember.space_id).filter(
+        SpaceMember.user_id == uid).all()}
+    ids |= {r[0] for r in db.query(RelationshipSpace.id).filter(
+        RelationshipSpace.owner_id == uid).all()}
+    out = []
+    for sid in ids:
+        sp = db.query(RelationshipSpace).filter(
+            RelationshipSpace.id == sid).first()
+        if sp is None:
+            continue
+        members = {r[0] for r in db.query(SpaceMember.user_id).filter(
+            SpaceMember.space_id == sid).all()}
+        members.add(sp.owner_id)
+        out.append(members)
+    return out
+
+
+def share_a_space(db: Session, a: int, b: int) -> bool:
+    return any(b in g for g in space_groups(db, a))
+
+
 def _members(scope: str, me: User, db: Session) -> List[int]:
     try:
         ids = [int(x) for x in scope.split(",")]
@@ -47,10 +71,14 @@ def _members(scope: str, me: User, db: Session) -> List[int]:
         raise HTTPException(status_code=400, detail="Bad scope")
     if me.id not in ids:
         raise HTTPException(status_code=403, detail="Not your space")
-    for uid in ids:
-        if uid != me.id and not crud.may_reach(db, me.id, uid):
-            raise HTTPException(status_code=403, detail="Not your space")
-    return ids
+    # Exactly the people of one of my Spaces (a group Space's members need
+    # not be each other's contacts) — or, for two people, anyone I can reach.
+    if set(ids) in space_groups(db, me.id):
+        return ids
+    if len(ids) == 2 and crud.may_reach(db, me.id, [x for x in ids
+                                                     if x != me.id][0]):
+        return ids
+    raise HTTPException(status_code=403, detail="Not your space")
 
 
 class WrapIn(BaseModel):

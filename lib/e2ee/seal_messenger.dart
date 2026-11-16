@@ -470,6 +470,17 @@ class SealMessenger {
         return _recall(peer, id);
       }))?.$2;
 
+  /// A message's remembered text by id alone (any friend) — for the
+  /// sender's peek at their own timed heart.
+  Future<String?> textOfAny(int id) => _locked(() async {
+        await _keys.load();
+        for (final peer in await _plainPeers()) {
+          final t = await _recall(peer, id);
+          if (t != null) return t.$2;
+        }
+        return null;
+      });
+
   static int? _heldIdOf(Object? meta) {
     if (meta is! String || !meta.contains('"held"')) return null;
     try {

@@ -40,6 +40,9 @@ class SealIngress {
   /// Unlock [m] in place: `content` becomes the text (or a 🔒 note).
   static Future<void> open(Map<String, dynamic> m) async {
     if (!isSealed(m)) return;
+    // A timed heart whose moment hasn't come: the server still holds its
+    // locked copies — it stays covered (for its sender too) until then.
+    if (m['message_type'] == 'heart' && m['envelopes'] == null) return;
     final me = await myUid();
     SealOpened r;
     try {
@@ -164,6 +167,10 @@ class SealIngress {
   static Future<void> sent(int peer, Map<String, dynamic> msg, String text) =>
       SealMessenger.instance
           .rememberSent(peer, _int(msg['id']), _int(msg['e2ee_rev']), text);
+
+  /// My own sealed message's text by id (e.g. peeking at my timed heart).
+  static Future<String?> textOfMessage(int id) =>
+      SealMessenger.instance.textOfAny(id);
 
   /// A morning message's text, kept on this phone until it goes out.
   static Future<void> rememberHeld(int peer, int heldId, String text) =>

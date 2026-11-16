@@ -1265,7 +1265,14 @@ class ApiService {
           headers: _authHeaders(token));
       if (res.statusCode >= 200 && res.statusCode < 300) {
         final body = jsonDecode(res.body);
-        if (body is Map<String, dynamic>) return body;
+        if (body is Map<String, dynamic>) {
+          // 🔒 Sealed: the note lives on my own devices only.
+          if (body['e2ee'] == true) {
+            body['content'] =
+                await SealIngress.textOfMessage(messageId) ?? '';
+          }
+          return body;
+        }
       }
     } catch (_) {}
     return null;
@@ -1429,13 +1436,17 @@ class ApiService {
       // sealed but can't be right now, the send fails like a network error —
       // never quietly in the clear.
       Map<String, dynamic>? sealed;
-      if (conversationId == null &&
-          content.isNotEmpty &&
-          (messageType == null || messageType == 'text') &&
+      final plainText = (messageType == null || messageType == 'text') &&
           mediaUrl == null &&
           heartMood == null &&
-          unlockAt == null &&
-          poll == null) {
+          unlockAt == null;
+      // A 1:1 secret heart's note (Dedicate from the player too) is sealed
+      // like text; its photo / song file follows with media.
+      final heartNote = messageType == 'heart' && heartFor == null;
+      if (conversationId == null &&
+          content.isNotEmpty &&
+          poll == null &&
+          (plainText || heartNote)) {
         try {
           sealed = await SealIngress.sealFor(receiverId, content);
         } catch (e) {
@@ -2413,6 +2424,8 @@ class ApiService {
     try {
       // 🔒 Our Space words are sealed for its members.
       caption = await _sealSpaceText(spaceId, caption);
+      // A kept heart carries its words inside its ref (the snapshot).
+      if (kind == 'heart') ref = await _sealSpaceText(spaceId, ref);
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(
@@ -2443,6 +2456,10 @@ class ApiService {
     try {
       final token = await _getToken();
       if (token == null) return false;
+      // 🔒 A kept heart's snapshot carries its words: sealed like the rest.
+      if (ref.contains('"snap"')) {
+        ref = (await _sealSpaceText(spaceId, ref))!;
+      }
       final resp = await http.patch(
         Uri.parse('${await _baseUrl}/spaces/$spaceId/moments/$momentId/ref'),
         headers: _authHeaders(token),
@@ -4082,7 +4099,10 @@ class ApiService {
       );
       if (r.statusCode >= 200 && r.statusCode < 300) {
         final d = jsonDecode(r.body);
-        if (d is Map<String, dynamic>) return d;
+        if (d is Map<String, dynamic>) {
+          await SealIngress.open(d); // 🔒 a sealed heart's note
+          return d;
+        }
       }
     } catch (e) {
       _logger.e('heart $action exception: $e');
@@ -4102,7 +4122,11 @@ class ApiService {
       if (r.statusCode >= 200 && r.statusCode < 300) {
         final d = jsonDecode(r.body);
         if (d is List) {
-          return d.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
+          // 🔒 Sealed hearts' notes open on this phone.
+          return SealIngress.openAll(d
+              .whereType<Map>()
+              .map((m) => Map<String, dynamic>.from(m))
+              .toList());
         }
       }
     } catch (e) {

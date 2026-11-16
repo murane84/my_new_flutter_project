@@ -27,7 +27,6 @@ import 'screens/register_screen.dart';
 import 'screens/auth_page.dart';
 import 'screens/lock_screen.dart';
 import 'services/biometric_service.dart';
-import 'screens/friends_list_screen.dart';
 import 'screens/chat_page.dart';
 import 'screens/music_controls.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -549,8 +548,6 @@ class MyApp extends StatelessWidget {
                 return _fade(const PreloadScreen());
               case HomePage.routeName:
                 return _fade(const HomePage());
-              case FriendsListScreen.routeName:
-                return _slide(const FriendsListScreen());
               case ChatPage.routeName:
                 final args = settings.arguments as Map<String, dynamic>;
                 return _slide(ChatPage(

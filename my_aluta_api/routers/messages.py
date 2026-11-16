@@ -102,18 +102,23 @@ def _fanout_others(db, msg, me: int, event: dict):
             safe_notify_user(int(uid), ev)
 
 def _seal_check(message, sender_id: int) -> None:
-    """🔒 Sealed text (e2ee_msgs.py): content stays empty and each device gets
-    its own encrypted copy. 1:1 text only for now (media, hearts, songs and
-    groups follow); anything else is refused rather than sent half-sealed."""
+    """🔒 Sealed words (e2ee_msgs.py): content stays empty and each device
+    gets its own encrypted copy. 1:1 text and 1:1 secret hearts (their note;
+    a heart's photo / song file follows with media) — anything else is
+    refused rather than sent half-sealed."""
     if not message.e2ee:
         message.envelopes = None
         return
     if message.e2ee != e2ee_msgs.VERSION or not message.receiver_id:
         raise HTTPException(status_code=400, detail="Unsupported encryption")
-    if ((message.message_type or "text") != "text" or (message.content or "")
-            or message.heart_mood or message.unlock_at or message.media_url):
+    kind = (message.message_type or "text")
+    if message.content or kind not in ("text", "heart"):
         raise HTTPException(status_code=400,
-                            detail="Only text can be sealed for now")
+                            detail="Only text and hearts can be sealed for now")
+    if kind == "text" and (message.heart_mood or message.unlock_at
+                           or message.media_url):
+        raise HTTPException(status_code=400,
+                            detail="Only text and hearts can be sealed for now")
     message.envelopes = e2ee_msgs.clean(
         message.envelopes, [sender_id, int(message.receiver_id)],
         int(message.receiver_id))
@@ -855,6 +860,14 @@ def heart_sealed_preview(
     m = _heart_or_404(db, message_id, current_user.id)
     if int(m.sender_id) != int(current_user.id):
         raise HTTPException(status_code=403, detail="Only the sender can peek")
+    # 🔒 A sealed heart's note is only on the sender's own devices (the
+    # server holds just its locked copies): the app shows its own text.
+    if getattr(m, "e2ee", None):
+        return {"sealed": hearts.is_sealed(m), "e2ee": True, "content": "",
+                "unlock_at": m.unlock_at.isoformat() if m.unlock_at else None,
+                "media_url": m.media_url, "media_name": m.media_name,
+                "media_mime": m.media_mime, "media_size": m.media_size,
+                "media_duration": m.media_duration}
     if not hearts.is_sealed(m):
         return {
             "sealed": False, "content": m.content or "",

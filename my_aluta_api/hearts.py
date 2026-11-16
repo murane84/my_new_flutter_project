@@ -20,8 +20,10 @@
                  its note + media; every other copy is redacted server-side
                  (`redact`), and the attachment route refuses them the file.
 
-Note text is NOT encrypted at rest; a sealed heart is protected by the server
-withholding it, an open heart by the client's cover / unlock gate.
+A 1:1 heart's note is end-to-end encrypted (e2ee_msgs.py): `content` is
+empty and its per-device copies are `envelopes` — for a timed heart they wait
+in `sealed_content` until the moment. Group hearts are still plain (protected
+by the server withholding them, an open heart by the client's cover gate).
 """
 import json
 import logging
@@ -128,7 +130,12 @@ def unseal(msg) -> bool:
     ua = _aware(msg.unlock_at)
     if ua is not None and ua > datetime.now(timezone.utc):
         return False
-    msg.content = msg.sealed_content or ""
+    if getattr(msg, "e2ee", None):
+        # 🔒 Sealed heart: what was held back is its locked copies.
+        msg.envelopes = msg.sealed_content or None
+        msg.content = ""
+    else:
+        msg.content = msg.sealed_content or ""
     msg.sealed_content = None
     if getattr(msg, "sealed_media", None):
         try:

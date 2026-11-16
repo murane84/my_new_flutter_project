@@ -82,6 +82,12 @@ def create_message(db: Session, sender_id: int, message: MessageCreate) -> Messa
     )
     # A timed heart's photo/clip stays sealed with its note (hearts.py).
     hearts_seal_media(db_message)
+    # 🔒 A sealed TIMED heart: its locked copies wait with the server until
+    # the moment too (unseal hands them out), so not even a modified app
+    # can open the note early.
+    if db_message.e2ee and db_message.sealed_content is not None:
+        db_message.sealed_content = db_message.envelopes or ""
+        db_message.envelopes = None
     db.add(db_message)
     db.commit()
     db.refresh(db_message)

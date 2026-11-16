@@ -76,7 +76,8 @@ def push_fields(msg, uid: int) -> dict:
     if not getattr(msg, "e2ee", None):
         return {}
     out = {"e2ee": str(msg.e2ee), "e2ee_rev": str(msg.e2ee_rev or 0)}
-    env = json.dumps(for_user(msg.envelopes, uid), separators=(",", ":"))
-    if len(env) <= PUSH_BUDGET:
+    mine = for_user(msg.envelopes, uid)   # none while a timed heart waits
+    env = json.dumps(mine, separators=(",", ":"))
+    if mine and len(env) <= PUSH_BUDGET:
         out["env"] = env
     return out

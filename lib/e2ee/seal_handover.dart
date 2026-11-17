@@ -27,6 +27,26 @@ class SealHandover {
   /// Bumps when a package arrived (lists can refresh their previews).
   final ValueNotifier<int> arrived = ValueNotifier<int>(0);
 
+  /// Largest package body before sealing (base64 then stays under the
+  /// server's 24 MB).
+  static const int maxPlainBytes = 17 * 1024 * 1024;
+
+  /// Each chat's [keep] newest texts ({peer: {id: [rev, text]}}).
+  static Map<String, dynamic> newestOnly(Map<String, dynamic> plain, int keep) {
+    final out = <String, dynamic>{};
+    for (final e in plain.entries) {
+      final rows = e.value;
+      if (rows is! Map) continue;
+      final ids = rows.keys.map((k) => int.tryParse('$k') ?? 0).toList()
+        ..sort();
+      out[e.key] = {
+        for (final id in ids.skip(ids.length > keep ? ids.length - keep : 0))
+          '$id': rows['$id'],
+      };
+    }
+    return out;
+  }
+
   /// Computer: how long to wait for the phone's package.
   static const Duration waitFor = Duration(minutes: 4);
 
@@ -74,8 +94,17 @@ class SealHandover {
         await release();
         return false;
       }
-      final pkg = await sealHandover(pub,
-          utf8.encode(jsonEncode({'v': 1, 'plain': plain, 'scopes': scopes})));
+      // The server takes a package up to ~24 MB (base64). A very chatty
+      // phone sends each chat's newest texts, as many as fit, rather than
+      // nothing at all.
+      var body = utf8.encode(
+          jsonEncode({'v': 1, 'plain': plain, 'scopes': scopes}));
+      for (final keep in const [1000, 300, 100, 30]) {
+        if (body.length <= maxPlainBytes) break;
+        body = utf8.encode(jsonEncode(
+            {'v': 1, 'plain': newestOnly(plain, keep), 'scopes': scopes}));
+      }
+      final pkg = await sealHandover(pub, body);
       final r = await http.post(Uri.parse('$base/e2ee/handover'),
           headers: headers,
           body: jsonEncode({'code': code, 'package': base64Encode(pkg)}));

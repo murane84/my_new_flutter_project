@@ -22,6 +22,16 @@ void main() {
     expect(await sealFingerprint(pub), 'MAyclgO5Kks57TlYv5JAEQ');
   });
 
+  test('a very large history keeps each chat\'s newest texts', () {
+    final plain = {
+      '7': {for (var i = 1; i <= 50; i++) '$i': [0, 't$i']},
+      '9': {'3': [0, 'x']},
+    };
+    final cut = SealHandover.newestOnly(plain, 10);
+    expect((cut['7'] as Map).keys, [for (var i = 41; i <= 50; i++) '$i']);
+    expect((cut['9'] as Map).keys, ['3']);
+  });
+
   test('the fingerprint is read from the link code', () {
     expect(SealHandover.fingerprintOf('abc~MAyclgO5Kks57TlYv5JAEQ'),
         'MAyclgO5Kks57TlYv5JAEQ');

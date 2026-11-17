@@ -84,7 +84,12 @@ class SealIngress {
   static Future<void> openEvent(Map<String, dynamic> event) async {
     for (final k in const ['data', 'message']) {
       final d = event[k];
-      if (d is Map<String, dynamic> && d['e2ee'] != null) await open(d);
+      if (d is Map<String, dynamic> && d['e2ee'] != null) {
+        // The server says a timed heart's moment has come: trust that over
+        // this phone's clock.
+        if (event['type'] == 'heart_unsealed') d['__due'] = true;
+        await open(d);
+      }
     }
   }
 
@@ -92,7 +97,7 @@ class SealIngress {
   /// phone can read it, without moving any session (the chat opens it for
   /// real). Returns the data to show.
   static bool _stillTimed(Map<String, dynamic> m) {
-    if (m['message_type'] != 'heart') return false;
+    if (m['message_type'] != 'heart' || m['__due'] == true) return false;
     final ua = DateTime.tryParse('${m['unlock_at'] ?? ''}');
     return ua != null && DateTime.now().toUtc().isBefore(ua.toUtc());
   }

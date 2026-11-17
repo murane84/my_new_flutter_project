@@ -4102,7 +4102,10 @@ class ApiService {
       if (r.statusCode >= 200 && r.statusCode < 300) {
         final d = jsonDecode(r.body);
         if (d is Map<String, dynamic>) {
-          await SealIngress.open(d); // 🔒 a sealed heart's note
+          // 🔒 A sealed heart's note; an answered unseal means its moment
+          // has come (by the server's clock, not this phone's).
+          if (action == 'unseal') d['__due'] = true;
+          await SealIngress.open(d);
           return d;
         }
       }

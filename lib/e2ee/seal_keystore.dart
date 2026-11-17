@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../screens/token_helper.dart';
 import 'seal_primitives.dart';
 import 'seal_x3dh.dart';
 
@@ -59,11 +60,34 @@ class MemorySealStorage implements SealStorage {
 /// This device's Aluta Seal keys for one signed-in account: identity, the
 /// current + previous signed prekeys, and the unused one-time prekeys.
 class SealKeyStore {
-  SealKeyStore({SealStorage? storage, DateTime Function()? clock})
+  SealKeyStore(
+      {SealStorage? storage,
+      DateTime Function()? clock,
+      Future<String?> Function()? currentOwner})
       : _storage = storage ?? _PlatformStorage(),
-        _clock = clock ?? DateTime.now;
+        _clock = clock ?? DateTime.now,
+        _currentOwner = currentOwner;
 
-  static final SealKeyStore instance = SealKeyStore();
+  static final SealKeyStore instance =
+      SealKeyStore(currentOwner: _tokenOwner);
+
+  /// The signed-in account (the session token's subject), so keys made for
+  /// another account on this device are never used — not even for the few
+  /// seconds before the new account's own keys are made.
+  static Future<String?> _tokenOwner() async {
+    try {
+      final parts = (await getToken() ?? '').split('.');
+      if (parts.length != 3) return null;
+      final body = jsonDecode(
+              utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))))
+          as Map<String, dynamic>;
+      return body['sub']?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  final Future<String?> Function()? _currentOwner;
 
   /// Secure storage on phones / desktop, localStorage on web.
   static SealStorage platformStorage() => _PlatformStorage();
@@ -147,13 +171,27 @@ class SealKeyStore {
 
   /// Load whatever keys this device holds, without making new ones.
   Future<void> load() => _locked(() async {
-        if (_identity != null) return;
+        final want = await _currentOwner?.call();
+        if (_identity != null) {
+          if (want == null || want == _owner) return;
+          _forget(); // another account signed in: not these keys
+        }
         final raw = await _read();
-        if (raw != null) {
+        if (raw != null && (want == null || raw['owner'] == want)) {
           _fromJson(raw);
           await _saveIfUpgraded();
         }
       });
+
+  void _forget() {
+    _owner = null;
+    _deviceId = null;
+    _identity = null;
+    _selfKey = null;
+    _spks.clear();
+    _opks.clear();
+    registeredSpkId = 0;
+  }
 
   /// A fresh signed prekey once the current one is a week old; prekeys
   /// older than [spkKeepFor] are forgotten. True when it rotated.

@@ -85,6 +85,26 @@ void main() {
     expect(a.opkById(500), isNotNull);
   });
 
+  test("another account's keys are never loaded, even before its own exist",
+      () async {
+    var who = 'anna@aluta';
+    SealKeyStore signedIn() =>
+        SealKeyStore(
+            storage: disk, clock: () => now, currentOwner: () async => who);
+    final a = signedIn();
+    await a.ensure('anna@aluta');
+    final annaKey = a.identity.sig.public;
+    who = 'ben@aluta'; // session expired, Ben signs in on the same phone
+    await a.load();
+    expect(a.isReady, isFalse, reason: "Anna's keys stay put");
+    final fresh = signedIn();
+    await fresh.load();
+    expect(fresh.isReady, isFalse);
+    await fresh.ensure('ben@aluta');
+    expect(fresh.isReady, isTrue);
+    expect(fresh.identity.sig.public, isNot(annaKey));
+  });
+
   test('wipe forgets everything', () async {
     final a = store();
     await a.ensure('me@aluta');

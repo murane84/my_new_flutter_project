@@ -24,6 +24,7 @@ import '../utils/prefs_now.dart';
 import 'package:image_picker/image_picker.dart';
 import '../utils/radii.dart';
 import '../widgets/skeleton.dart';
+import '../e2ee/seal_ingress.dart';
 
 /// Profile popup: edit username / phone / password (email is fixed), or
 /// permanently delete the account and wipe all data from the server. Rendered
@@ -532,6 +533,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final res = await ApiService().deleteAccount();
     if (!mounted) return;
     if (res['success'] == true) {
+      // 🔒 The account is gone: its end-to-end keys, sessions, Our Space
+      // keys and unlocked texts go from this device too (they live in
+      // secure storage, which clearing the settings doesn't touch).
+      try {
+        await SealIngress.signOut();
+      } catch (_) {}
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.clear();

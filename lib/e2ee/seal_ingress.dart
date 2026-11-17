@@ -20,13 +20,13 @@ class SealIngress {
   static const String lockedNoKey = '🔒 Sent before this device was set up';
   static const String lockedFailed = "🔒 Couldn't unlock this message";
 
-  static int? _me;
-
+  /// The signed-in person's id — read fresh every time (never cached here):
+  /// after a session expires someone else may sign in without the app
+  /// restarting, and sealing for the wrong id would break every message.
   static Future<int?> myUid() async {
-    if (_me != null) return _me;
     try {
       final s = (await SharedPreferences.getInstance()).getString('my_user_id');
-      return _me = int.tryParse(s ?? '');
+      return int.tryParse(s ?? '');
     } catch (_) {
       return null;
     }
@@ -200,6 +200,5 @@ class SealIngress {
     await SealMessenger.instance.wipe();
     await SealSpace.instance.wipe();
     await SealDirectory.instance.signOut();
-    _me = null;
   }
 }

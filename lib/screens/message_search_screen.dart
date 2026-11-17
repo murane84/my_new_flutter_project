@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
 import 'api_service.dart';
+import '../e2ee/seal_ingress.dart';
 import 'chat_page.dart';
 import '../services/contact_names.dart';
 import '../utils/avatar_widget.dart';
@@ -180,6 +182,17 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
             ? null
             : _day(_range!.end).add(const Duration(days: 1)));
     if (!mounted || q != _lastTerm || sig != _sig) return;
+    // 🔒 End-to-end encrypted chats: the server holds only sealed copies, so
+    // their words are found here, in this device's own copy of each chat.
+    final mine = await _sealedHits(q);
+    if (!mounted || q != _lastTerm || sig != _sig) return;
+    if (mine.isNotEmpty) {
+      final seen = {for (final r in res) r['id']?.toString()};
+      res.addAll(mine.where((r) => !seen.contains(r['id']?.toString())));
+      res.sort((a, b) => (b['timestamp'] ?? '')
+          .toString()
+          .compareTo((a['timestamp'] ?? '').toString()));
+    }
     // The same filters checked here too, so they hold even against a server
     // that doesn't know them yet: only group / direct chats, and the period.
     final from = _range == null ? null : _day(_range!.start);
@@ -206,6 +219,92 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
       _expanded.clear();
       _activityOpen = false;
     });
+  }
+
+  /// This device's chats, read once per search screen (chat id → messages).
+  Map<String, List<Map<String, dynamic>>>? _myChats;
+
+  /// 🔒 Sealed 1:1 texts that match [q], shaped like the server's results.
+  /// Groups aren't sealed (the server finds them); hearts stay out, as their
+  /// words are private even here.
+  Future<List<Map<String, dynamic>>> _sealedHits(String q) async {
+    if (q.length < 2 || (_kind != null && _kind != 'link')) return const [];
+    if (_inChat?['group'] == true || (_inChat == null && _chatKind == 'group')) {
+      return const [];
+    }
+    final me = await SealIngress.myUid();
+    if (me == null) return const [];
+    final prefs = await warmPrefsNow();
+    if (prefs == null) return const [];
+    final chats = _myChats ??= () {
+      final out = <String, List<Map<String, dynamic>>>{};
+      final prefix = 'chat_cache_${me}_';
+      for (final key in prefs.getKeys()) {
+        if (!key.startsWith(prefix)) continue;
+        final fid = key.substring(prefix.length);
+        if (int.tryParse(fid) == null) continue; // a group ("g…")
+        try {
+          final list = jsonDecode(prefs.getString(key) ?? '[]') as List;
+          out[fid] = [
+            for (final m in list)
+              if (m is Map &&
+                  m['e2ee'] != null &&
+                  m['is_deleted'] != true &&
+                  m['seal_state'] == null &&
+                  m['message_type'] != 'heart')
+                Map<String, dynamic>.from(m)
+          ];
+        } catch (_) {}
+      }
+      return out;
+    }();
+    final only = _inChat?['id']?.toString();
+    final since = _sinceDays == null || _range != null
+        ? null
+        : DateTime.now().subtract(Duration(days: _sinceDays!));
+    final k = q.toLowerCase();
+    final hits = <Map<String, dynamic>>[];
+    for (final e in chats.entries) {
+      if (only != null && e.key != only) continue;
+      final f = widget.people.firstWhere((p) => p['id']?.toString() == e.key,
+          orElse: () => const <String, dynamic>{});
+      for (final m in e.value) {
+        final c = (m['content'] ?? '').toString();
+        if (!c.toLowerCase().contains(k)) continue;
+        if (_kind == 'link' &&
+            !(c.contains('http://') ||
+                c.contains('https://') ||
+                c.contains('www.'))) {
+          continue;
+        }
+        final fromMe = m['sender_id']?.toString() == '$me';
+        if (_sender == 'me' && !fromMe) continue;
+        if (_sender == 'others' && fromMe) continue;
+        final raw = m['timestamp']?.toString();
+        if (since != null &&
+            (raw == null ||
+                raw.isEmpty ||
+                parseServerTime(raw).toLocal().isBefore(since))) {
+          continue;
+        }
+        hits.add({
+          'id': m['id'],
+          'content': c,
+          'timestamp': raw,
+          'sender_id': m['sender_id'],
+          'message_type': 'text',
+          'media_name': '',
+          'media_mime': '',
+          'sender_name': fromMe ? '' : (f['username'] ?? '').toString(),
+          'is_group': false,
+          'conversation_id': m['conversation_id'],
+          'friend_id': int.parse(e.key),
+          'friend_name': (f['username'] ?? 'Chat').toString(),
+          'friend_avatar': (f['avatar_url'] ?? '').toString(),
+        });
+      }
+    }
+    return hits;
   }
 
   // ── Ranking ─────────────────────────────────────────────────────────────

@@ -122,6 +122,20 @@ class SealIngress {
       // a sealed string as text).
       data = await SealSpace.instance.openJson(Map<String, dynamic>.from(data));
     }
+    // Someone reacted to my sealed message: the server only knows
+    // "🔒 Message" — this phone has my own words.
+    if (data['type'] == 'reaction' &&
+        (data['body'] ?? '').toString() == serverPreview) {
+      final out = Map<String, dynamic>.from(data);
+      try {
+        final t = await SealMessenger.instance
+            .textOfAny(_int(data['message_id']));
+        out['body'] = t == null || t.isEmpty ? '' : _withoutQuote(t);
+      } catch (_) {
+        out['body'] = '';
+      }
+      return out;
+    }
     if (data['e2ee'] == null) return data;
     // A heart never shows its note in a banner ("❤️ Secret message").
     if (data['msg_kind'] == 'heart') return data;

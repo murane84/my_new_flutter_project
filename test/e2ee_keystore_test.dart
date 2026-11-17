@@ -74,6 +74,17 @@ void main() {
     expect(b.opkById(made[0].id)!.keys.public, made[0].keys.public);
   });
 
+  test('one-time prekeys never handed in are not kept forever', () async {
+    final a = store();
+    await a.ensure('me@aluta');
+    for (var i = 0; i < 5; i++) {
+      await a.addOpks(100);
+    }
+    expect(a.opkCount, SealKeyStore.opkKeep);
+    expect(a.opkById(1), isNull, reason: 'the oldest went first');
+    expect(a.opkById(500), isNotNull);
+  });
+
   test('wipe forgets everything', () async {
     final a = store();
     await a.ensure('me@aluta');

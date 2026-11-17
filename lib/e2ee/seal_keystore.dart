@@ -71,6 +71,9 @@ class SealKeyStore {
   static const String _key = 'aluta_seal_keys_v1';
   static const Duration spkRotateAfter = Duration(days: 7);
 
+  /// One-time prekeys kept on the device (the server holds ≤ 100).
+  static const int opkKeep = 400;
+
   /// An old signed prekey stays usable this long for first messages that
   /// were sent to it before the rotation reached them.
   static const Duration spkKeepFor = Duration(days: 30);
@@ -176,6 +179,15 @@ class SealKeyStore {
           final k = await OneTimePreKey.generate(_nextOpkId++);
           _opks[k.id] = k;
           made.add(k);
+        }
+        // Keys handed out for a first message that never came stay here
+        // forever otherwise. The server holds at most 100 (topped up below
+        // 20), so anything older than the newest [opkKeep] went out long ago.
+        if (_opks.length > opkKeep) {
+          final ids = _opks.keys.toList()..sort();
+          for (final id in ids.take(_opks.length - opkKeep)) {
+            _opks.remove(id);
+          }
         }
         await _save();
         return made;

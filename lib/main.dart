@@ -223,6 +223,7 @@ Future<void> _bootstrapServices() {
     } catch (_) {}
     try {
       await initNotifications();
+      listenForInlineRepliesHere();
     } catch (_) {}
     // Push notifications (Android/iOS only). Firebase reads its config from
     // android/app/google-services.json; if that or the Firebase project isn't

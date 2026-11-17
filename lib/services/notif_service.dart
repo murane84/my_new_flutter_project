@@ -14,6 +14,8 @@ import 'group_meta.dart' show GroupMeta;
 import 'quiet_hours.dart';
 import 'web_notify_stub.dart'
     if (dart.library.js_interop) 'web_notify_web.dart';
+import 'inline_reply_bridge_stub.dart'
+    if (dart.library.isolate) 'inline_reply_bridge_io.dart';
 
 /// Native bridge (see android MainActivity) for OS state the notification
 /// plugin can't report — currently the full-screen-intent grant.
@@ -429,6 +431,10 @@ void _onNotifResponse(NotificationResponse r) {
 /// sent — Home refreshes that card ("✓ You: …", unread cleared).
 void Function(int? friendId, int? conversationId)? onInlineReplySent;
 
+/// APP isolate (once, at start-up): send inline replies typed while Aluta
+/// runs in the background here, not from the notification's isolate.
+void listenForInlineRepliesHere() => listenForInlineReplies(_sendInlineReply);
+
 /// Send what was typed into a notification's Reply box to that DM / group,
 /// mark the thread read, and clear the banner. Works from the background
 /// isolate too (app closed). On failure the banner says so — tap opens chat.
@@ -538,7 +544,11 @@ Future<void> _onNotifBgResponse(NotificationResponse r) async {
   try {
     DartPluginRegistrant.ensureInitialized(); // secure storage + prefs here
   } catch (_) {}
-  await _sendInlineReply(_decodePayload(r.payload), r.input);
+  final p = _decodePayload(r.payload);
+  // 🔒 Aluta running in the background: it sends the reply itself (one
+  // encrypted session, one sender at a time). Closed: send it from here.
+  if (await handInlineReplyToApp(p, r.input)) return;
+  await _sendInlineReply(p, r.input);
 }
 
 /// On cold start, returns the call action the user tapped in the notification

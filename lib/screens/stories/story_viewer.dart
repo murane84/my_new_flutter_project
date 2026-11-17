@@ -2100,7 +2100,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       if (bonded && keepable)
         _actionChip('💞', partner ? 'Add to our moments' : 'Keep', () async {
           _pause();
-          final err = await ApiService().keepStoryInSpace(item.id);
+          final err = await ApiService().keepStoryInSpace(item.id,
+              authorId: item.authorId, caption: item.caption);
           if (!mounted) return;
           if (err == null) _floatUp('💞');
           showToast(

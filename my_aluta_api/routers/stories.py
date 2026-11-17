@@ -15,7 +15,9 @@ asset id here. Those bytes are served back FRIEND-SCOPED at
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from typing import Optional
+
+from fastapi import APIRouter, Body, Depends, HTTPException, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -519,6 +521,7 @@ def react_to_story(
 @router.post("/{story_id}/keep")
 def keep_story_in_space(
     story_id: str,
+    body: Optional[dict] = Body(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -561,10 +564,22 @@ def keep_story_in_space(
         kind = "note"
     if kind is None:
         raise HTTPException(status_code=400, detail="This status can't be kept")
-    # Already kept → don't pin it twice.
-    dup = db.query(PinnedMoment).filter(
+    # 🔒 The app seals the words for the two of us (Our Space words are
+    # sealed); the server's copy of the status expires with it. Only a
+    # sealed field replaces the caption, never other words.
+    sealed = (body or {}).get("caption")
+    if caption and isinstance(sealed, str) and sealed.startswith(
+            f"🔒s1.{min(me, author)},{max(me, author)}.") \
+            and len(sealed) <= 6000:
+        caption = sealed
+    # Already kept → don't pin it twice (a sealed caption differs each time,
+    # so the kind + ref decide; a sealed note has nothing else to match).
+    dup_q = db.query(PinnedMoment).filter(
         PinnedMoment.space_id == space.id, PinnedMoment.kind == kind,
-        PinnedMoment.ref == ref, PinnedMoment.caption == caption).first()
+        PinnedMoment.ref == ref)
+    if caption != sealed:
+        dup_q = dup_q.filter(PinnedMoment.caption == caption)
+    dup = dup_q.first() if (caption != sealed or ref is not None) else None
     if dup is not None:
         return {"ok": True, "moment_id": dup.id, "already": True}
     moment = PinnedMoment(space_id=space.id, author_id=me, kind=kind,

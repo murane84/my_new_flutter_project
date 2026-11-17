@@ -164,8 +164,11 @@ void main() {
     expect(await b.app.textOf(alice, keep['id'] as int), 'baki');
     expect(await a.app.textOf(bob, alsoGone['id'] as int), isNull);
     final handed = jsonEncode(await b.app.exportPlain());
-    expect(handed.contains('futa'), isFalse);
+    expect(handed.contains('"futa"'), isFalse,
+        reason: 'deleted for everyone');
     expect(handed.contains('baki'), isTrue);
+    expect(handed.contains('futa pia'), isTrue,
+        reason: "Alice's delete-for-me doesn't touch Bob's phone");
 
     await b.app.forgetChat(alice); // chat cleared
     expect(jsonEncode(await b.app.exportPlain()).contains('baki'), isFalse);

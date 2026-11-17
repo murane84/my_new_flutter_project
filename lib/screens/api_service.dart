@@ -4600,13 +4600,26 @@ class ApiService {
 
   /// Keep a bonded partner's status in our Space (a pinned moment).
   /// Returns null on success, else a short reason to show.
-  Future<String?> keepStoryInSpace(String storyId) async {
+  /// 🔒 Its words become Our Space words: sealed for the two of you, like
+  /// every other moment (the status itself expires).
+  Future<String?> keepStoryInSpace(String storyId,
+      {int? authorId, String? caption}) async {
     try {
+      String? sealed;
+      if (authorId != null && (caption ?? '').trim().isNotEmpty) {
+        try {
+          sealed = await _sealPairText(authorId, caption);
+        } catch (_) {
+          return 'Couldn\'t keep it — check your connection';
+        }
+        if (sealed == caption) sealed = null; // they can't read sealed yet
+      }
       final token = await _getToken();
       if (token == null) return 'Please sign in again';
       final resp = await http.post(
         Uri.parse('${await _baseUrl}/stories/$storyId/keep'),
         headers: _authHeaders(token),
+        body: jsonEncode({'caption': ?sealed}),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) return null;
       try {

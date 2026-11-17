@@ -678,7 +678,7 @@ List<Widget> _legalBody(BuildContext context, String raw) {
 // the backend CURRENT_POLICY_VERSION is bumped), update this content too.
 const String _privacy = '''
 Aluta — Privacy Policy
-Development / Beta build · Last updated: 13 November 2026
+Development / Beta build · Last updated: 17 November 2026
 
 Aluta is an app in active development, provided for early testing. Features and
 data practices change frequently, and it is not yet intended for public
@@ -697,9 +697,10 @@ information. It is a good-faith draft by the developer, not legal advice.
 - Messages and shared media: the text, photos, files, voice notes and GIFs you
   send and receive, with metadata such as timestamps, read/delivery status,
   reactions and replies. Media is stored on our server so it can be delivered.
-  Note: messages and media are NOT end-to-end encrypted in this build — they
-  travel over encrypted connections (HTTPS/WSS) and are served only to authorised
-  participants.
+  The words of 1:1 text messages and secret-heart notes are end-to-end
+  encrypted: the server keeps only locked copies it cannot read. Photos, files,
+  voice notes, songs and group chats are not end-to-end encrypted yet; they travel
+  over encrypted connections (HTTPS/WSS) and are served only to participants.
 - Stories: the ephemeral photo, video, text or "now playing" Stories you post and
   a list of which friends viewed them. Stories expire about 24 hours after posting.
 - Shared Spaces and diary ("Our Space"): when you and another person pin a bond,
@@ -778,9 +779,17 @@ from the Profile page; contact us for help exercising your data rights.
 We use encrypted connections (HTTPS/WSS), store passwords only as hashes, and
 serve media through authenticated, participant-checked endpoints. However, no
 method of transmission or storage is completely secure, and because this is a
-development build you should not share highly sensitive information through it.
-Messages are readable on our server (not end-to-end encrypted); end-to-end
-encryption is a planned future improvement.
+development build, think twice before sharing highly sensitive information.
+
+End-to-end encryption: 1:1 text messages (including edits and notification
+replies), secret-heart notes, Our Space words (moments, diary, notes, memos, kept
+hearts and statuses) and Listen Together chat are locked on your device and can be
+read only on the devices of the people they're for — not by our server. Private
+keys never leave your devices; linking a computer by QR sends your history locked
+for that computer only; an encrypted chat never falls back to plain text. Not yet
+end-to-end encrypted: photos, videos, voice notes, files, songs (and titles),
+group chats, Stories, reactions, and Space names and pictures. The server still
+sees who you talk to and when, so it can deliver messages.
 
 7. Children
 Aluta is not directed to children. You must be at least the age of digital
@@ -805,7 +814,7 @@ For any privacy questions or requests, use Help & feedback in the app menu
 
 const String _terms = '''
 Aluta — Terms of Service
-Development / Beta build · Last updated: 13 November 2026
+Development / Beta build · Last updated: 17 November 2026
 
 Aluta is in active development, provided for early testing. Features change
 frequently, data may be reset, and the service may be unavailable or contain
@@ -817,9 +826,10 @@ The Service is a pre-release, development build offered "as is" and "as
 available", for testing and feedback, without warranties of any kind to the
 maximum extent permitted by law. Features may change or be removed at any time,
 and data (including messages, media and accounts) may be lost or reset during
-development — do not rely on the Service to store anything important. Because
-messages are not end-to-end encrypted in this build, do not use it for highly
-sensitive or confidential information.
+development — do not rely on the Service to store anything important. 1:1 text
+messages, secret-heart notes, Our Space words and Listen Together chat are
+end-to-end encrypted; photos, files, voice notes, songs and group chats are not
+yet, so think twice before sharing highly sensitive information.
 
 2. Eligibility and your account
 You must be at least the age of digital consent in your country (and at least 13)
@@ -898,7 +908,7 @@ Help & feedback in the app ("Get help"), or email support@ozilane.com.
 
 const String _about = '''
 About Aluta
-Development / Beta build · Last updated: 13 November 2026
+Development / Beta build · Last updated: 17 November 2026
 
 Aluta is a social app that brings your conversations and your music into one
 place — private and group chat, voice and group calls, ephemeral Stories, a
@@ -909,7 +919,8 @@ the web.
 # What you can do today
 - Chat and media: one-to-one and group chats with photos, files, voice notes and
   GIFs, reactions, replies, edit and delete, pinned messages, typing indicators
-  and read receipts. Messages are not end-to-end encrypted in this beta.
+  and read receipts. 1:1 text messages are end-to-end encrypted (photos, voice
+  notes and group chats come next).
 - Voice and group calls: peer-to-peer calls that are never recorded, answerable
   from Bluetooth and car head units.
 - Stories: post a photo, short video, text card or "now playing" moment that

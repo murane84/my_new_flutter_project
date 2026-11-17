@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'seal_directory.dart';
+import 'seal_keystore.dart';
 import 'seal_messenger.dart';
 import 'seal_primitives.dart';
 import 'seal_scope.dart';
 import 'seal_space.dart';
+import 'seal_tab.dart';
 
 /// The one door for sealed 1:1 text. Every message map from the server
 /// (history fetch, socket event, push) passes [open] before the app reads
@@ -220,6 +222,16 @@ class SealIngress {
 
   static Future<String> heldText(int peer, Object? heldId) async =>
       await SealMessenger.instance.recallHeld(peer, _int(heldId)) ?? '🔒';
+
+  /// Web: this browser tab is in use again — read back what another tab
+  /// changed meanwhile (sessions, keys, texts), then catch up.
+  static void watchTabs() => SealTab.start(() async {
+        await (await SharedPreferences.getInstance()).reload();
+        await SealKeyStore.instance.reload();
+        SealMessenger.instance.dropCaches();
+        SealSpace.instance.dropCaches();
+        await SealDirectory.instance.syncSoon();
+      });
 
   /// A message deleted (for me or for everyone): forget its unlocked text.
   static Future<void> forget(List<int> ids, {int? peer}) async {

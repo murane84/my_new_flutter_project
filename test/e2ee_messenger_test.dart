@@ -198,6 +198,13 @@ void main() {
     now = now.add(const Duration(minutes: 1)); // past the device-list cache
     await expectLater(
         a.app.seal(bob, alice, 'hi'), throwsA(isA<SealPeerAway>()));
+
+    // A computer linked by QR knows the chat was sealed from its texts.
+    final pc = await device(alice, 'pc');
+    await pc.app.importPlain(await a.app.exportPlain());
+    await expectLater(
+        pc.app.seal(bob, alice, 'hi'), throwsA(isA<SealPeerAway>()));
+
     dir.people[bob] = [b];
     now = now.add(const Duration(minutes: 1));
     expect(await read(b, await send(a, bob, 'tena')), 'tena');

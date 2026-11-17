@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../screens/token_helper.dart';
 import 'seal_primitives.dart';
+import 'seal_tab.dart';
 import 'seal_x3dh.dart';
 
 /// Where this device's private keys live: the phone's secure storage
@@ -183,6 +184,18 @@ class SealKeyStore {
         }
       });
 
+  /// Read the keys again from storage (another browser tab may have
+  /// changed them while it was the one in use).
+  Future<void> reload() async {
+    await _locked(() async => _forget());
+    await load();
+  }
+
+  /// Keys change only in the tab in use (see [SealTab]).
+  static void _mustBeInUse() {
+    if (!SealTab.inUse) throw SealError('Aluta is in use in another tab');
+  }
+
   void _forget() {
     _owner = null;
     _deviceId = null;
@@ -196,6 +209,7 @@ class SealKeyStore {
   /// A fresh signed prekey once the current one is a week old; prekeys
   /// older than [spkKeepFor] are forgotten. True when it rotated.
   Future<bool> rotateSpkIfDue() => _locked(() async {
+        _mustBeInUse();
         final now = _clock();
         var changed = false;
         if (now.difference(_spks.first.createdAt) >= spkRotateAfter) {
@@ -212,6 +226,7 @@ class SealKeyStore {
 
   /// Makes [n] new one-time prekeys and returns them (to upload).
   Future<List<OneTimePreKey>> addOpks(int n) => _locked(() async {
+        _mustBeInUse();
         final made = <OneTimePreKey>[];
         for (var i = 0; i < n; i++) {
           final k = await OneTimePreKey.generate(_nextOpkId++);
@@ -245,10 +260,12 @@ class SealKeyStore {
 
   /// Removes a one-time prekey once a first message that used it opened.
   Future<void> takeOpk(int id) => _locked(() async {
+        _mustBeInUse();
         if (_opks.remove(id) != null) await _save();
       });
 
   Future<void> markRegistered(int spkId) => _locked(() async {
+        _mustBeInUse();
         registeredSpkId = spkId;
         await _save();
       });

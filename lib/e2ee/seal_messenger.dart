@@ -7,6 +7,7 @@ import 'seal_directory.dart';
 import 'seal_keystore.dart';
 import 'seal_primitives.dart';
 import 'seal_session.dart';
+import 'seal_tab.dart';
 
 /// How a sealed message turned out on this device.
 enum SealOpenStatus {
@@ -197,11 +198,16 @@ class SealMessenger {
   /// still being set up is "not now", not "plain".
   Future<Map<String, String>> seal(int peerUid, int myUid, String text) =>
       _locked(() async {
+        if (!SealTab.inUse) throw SealError('Aluta is in use in another tab');
         await _keys.load();
         final theirs = await _devicesOf(peerUid);
         if (theirs == null) throw SealError('offline');
         if (theirs.isEmpty) {
-          if (_keys.isReady && (await _peerIks(peerUid)).isNotEmpty) {
+          // Sealed before: a session here, or sealed texts (a computer
+          // linked by QR has the phone's texts, not its sessions).
+          if (_keys.isReady &&
+              ((await _peerIks(peerUid)).isNotEmpty ||
+                  (await _plainOf(peerUid)).isNotEmpty)) {
             throw SealPeerAway();
           }
           throw SealNotSupported();
@@ -256,8 +262,16 @@ class SealMessenger {
 
   /// Unlock a message map from the server (or the chat cache). Safe to call
   /// again and again: text is remembered by id + edit revision.
+  /// (A browser tab not in use only reads: nothing moves — see [SealTab].)
   Future<SealOpened> open(Map<String, dynamic> m, int myUid) =>
-      _open(m, myUid, commit: true);
+      _open(m, myUid, commit: SealTab.inUse);
+
+  /// Forget what's cached in memory (another browser tab was in use).
+  void dropCaches() {
+    _plainCache.clear();
+    _heldCache.clear();
+    _devices.clear();
+  }
 
   /// Read a sealed text for a notification without moving any session on
   /// (the chat opens it for real later). Used by the background isolate.
@@ -499,6 +513,7 @@ class SealMessenger {
   /// everyone): off this device, and never in a later hand-over. [peer]
   /// null looks in every chat.
   Future<void> forget(Iterable<int> ids, {int? peer}) => _locked(() async {
+        if (!SealTab.inUse) return; // the tab in use catches up from the list
         final gone = {for (final i in ids) '$i'};
         if (gone.isEmpty) return;
         await _keys.load();
@@ -514,6 +529,7 @@ class SealMessenger {
 
   /// Forget every unlocked text of the chat with [peer] (chat cleared).
   Future<void> forgetChat(int peer) => _locked(() async {
+        if (!SealTab.inUse) return;
         await _keys.load();
         final m = await _plainOf(peer);
         if (m.isEmpty) return;

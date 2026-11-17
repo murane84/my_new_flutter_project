@@ -10,6 +10,7 @@ import 'seal_directory.dart';
 import 'seal_keystore.dart';
 import 'seal_primitives.dart';
 import 'seal_scope.dart';
+import 'seal_tab.dart';
 
 /// What [SealSpace] needs from the server's scope-key store (a fake in tests).
 abstract class SealScopeApi {
@@ -149,7 +150,16 @@ class SealSpace {
     return _held = out;
   }
 
+  /// Forget what's cached in memory (another browser tab was in use).
+  void dropCaches() {
+    _held = null;
+    _current.clear();
+  }
+
   Future<void> _saveHeld() async {
+    // Only the browser tab in use writes (see [SealTab]); another keeps
+    // what it learned in memory.
+    if (!SealTab.inUse) return;
     final h = _held ?? {};
     await _store.write(
         _storeKey,
@@ -366,6 +376,7 @@ class SealSpace {
   /// can't be right now (don't send it plain then).
   Future<String> seal(Iterable<int> members, String text) => _locked(() async {
         if (text.isEmpty || SealScope.isSealed(text)) return text;
+        if (!SealTab.inUse) throw SealError('Aluta is in use in another tab');
         await _keys.load();
         final ids = members.toSet().toList();
         if (ids.length < 2) throw SealSpaceNotReady();

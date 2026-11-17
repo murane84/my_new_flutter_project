@@ -7,6 +7,7 @@ import '../utils/app_config.dart';
 import '../utils/net.dart' as http;
 import 'seal_keystore.dart';
 import 'seal_space.dart';
+import 'seal_tab.dart';
 import 'seal_x3dh.dart';
 
 /// One friend device's bundle as the server returns it.
@@ -106,7 +107,7 @@ class SealDirectory implements SealKeyDirectory {
   /// Register / refresh this device and keep one-time prekeys topped up.
   /// Call when the signed-in home mounts.
   Future<void> sync({bool retried = false}) async {
-    if (_syncing) return;
+    if (_syncing || !SealTab.inUse) return;
     _syncing = true;
     try {
       final h = await _headers();

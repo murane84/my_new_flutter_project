@@ -572,14 +572,15 @@ def keep_story_in_space(
             f"🔒s1.{min(me, author)},{max(me, author)}.") \
             and len(sealed) <= 6000:
         caption = sealed
-    # Already kept → don't pin it twice (a sealed caption differs each time,
-    # so the kind + ref decide; a sealed note has nothing else to match).
+    # Already kept → don't pin it twice. A photo / song / GIF is known by its
+    # ref; a note by its words — unless they're sealed (they differ each
+    # time), then there's nothing to match.
     dup_q = db.query(PinnedMoment).filter(
         PinnedMoment.space_id == space.id, PinnedMoment.kind == kind,
         PinnedMoment.ref == ref)
-    if caption != sealed:
+    if ref is None:
         dup_q = dup_q.filter(PinnedMoment.caption == caption)
-    dup = dup_q.first() if (caption != sealed or ref is not None) else None
+    dup = dup_q.first() if (ref is not None or caption != sealed) else None
     if dup is not None:
         return {"ok": True, "moment_id": dup.id, "already": True}
     moment = PinnedMoment(space_id=space.id, author_id=me, kind=kind,

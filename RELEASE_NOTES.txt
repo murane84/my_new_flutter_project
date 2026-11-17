@@ -1,9 +1,11 @@
-Chat list tiles are cleaner: the call button is gone (swipe right to call), so names and messages get more room.
-Unread counts, pins and mutes now sit neatly under the time; the headphones button shows unread messages on its corner.
-Leave a message half-written and the chat list shows "✎ Draft:" until you send it.
-Tap a message's book to see when it was delivered and opened: the card now scrolls with its message and points at the book.
-In the chat list, a message on its way shows a calmer tilted book.
-The phone's music notification and lock screen now show the song's own cover.
-Next and previous no longer get stuck repeating one song; Aluta recovers its player by itself.
-Player styles show the whole cover photo; portrait and wide covers are no longer cut off.
-Slow pages now show a soft preview of their layout that moves with your transition, then the content blends in.
+Your 1:1 text messages are now end-to-end encrypted: only you and your friend can read them, not even Aluta's server.
+Secret hearts and timed hearts (and Dedicate from the music player) are encrypted the same way.
+Our Space words are encrypted for the people in the Space: moments, diary, notes, memos, kept hearts and kept statuses.
+Listen Together chat lines and GIF reactions are encrypted for the room.
+Link a computer with the QR code and your encrypted chat history comes with it.
+An encrypted chat never goes back to unencrypted: if your friend isn't signed in anywhere, Aluta asks you to try again later.
+Replying from a notification is encrypted too.
+Search now finds words in your encrypted chats (searched on your own device).
+Delete for me, delete for everyone and clear chat also remove the words from your device.
+On the web, encrypted chats work in one tab at a time: click a tab to use it there.
+Photos, voice notes, songs and group chats aren't encrypted yet; they're coming next.

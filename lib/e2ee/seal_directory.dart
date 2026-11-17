@@ -144,7 +144,7 @@ class SealDirectory implements SealKeyDirectory {
         await keys.markRegistered(0);
         if (retried) return;
         _syncing = false;
-        return sync(retried: true);
+        return await sync(retried: true);
       }
       if (c.statusCode != 200) return;
       final have = (jsonDecode(c.body) as Map<String, dynamic>)['count'] as int;

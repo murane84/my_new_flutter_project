@@ -1335,7 +1335,7 @@ class ApiService {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final body = jsonDecode(response.body);
         if (body is List) {
-          return SealIngress.openAll(
+          return await SealIngress.openAll(
             body.whereType<Map<String, dynamic>>().toList());
         }
         throw Exception('Invalid messages format');
@@ -1368,7 +1368,7 @@ class ApiService {
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         if (body is List) {
-          return SealIngress.openAll(
+          return await SealIngress.openAll(
             body.whereType<Map<String, dynamic>>().toList());
         }
       }
@@ -1726,7 +1726,7 @@ class ApiService {
       if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
       final data = jsonDecode(resp.body);
       if (data is Map && data['e2ee'] == true && friendId != null) {
-        return SealIngress.heldText(friendId, id);
+        return await SealIngress.heldText(friendId, id);
       }
       return data is Map ? (data['content'] ?? '').toString() : '';
     } catch (e) {
@@ -3685,7 +3685,7 @@ class ApiService {
       if (resp.statusCode == 200) {
         final body = jsonDecode(resp.body);
         if (body is List) {
-          return SealIngress.openAll(
+          return await SealIngress.openAll(
             body.whereType<Map<String, dynamic>>().toList());
         }
       }
@@ -4133,7 +4133,7 @@ class ApiService {
         final d = jsonDecode(r.body);
         if (d is List) {
           // 🔒 Sealed hearts' notes open on this phone.
-          return SealIngress.openAll(d
+          return await SealIngress.openAll(d
               .whereType<Map>()
               .map((m) => Map<String, dynamic>.from(m))
               .toList());

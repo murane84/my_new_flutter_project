@@ -278,6 +278,27 @@ def hard_delete_user(db: Session, user: User) -> None:
             synchronize_session=False
         )
 
+    # 🔒 Morning messages still waiting from / for this account (they have
+    # no link to the user row), and the Our Space key groups it belonged to
+    # with every member's copy: nothing sealed outlives the account.
+    from sqlalchemy import or_
+    from models import HeldMessage, SealScope, SealScopeKey
+    db.query(HeldMessage).filter(
+        (HeldMessage.sender_id == user.id)
+        | (HeldMessage.receiver_id == user.id)
+    ).delete(synchronize_session=False)
+    uid = str(user.id)
+    gone = [s for (s,) in db.query(SealScope.scope).filter(or_(
+        SealScope.scope.like(f"{uid},%"),
+        SealScope.scope.like(f"%,{uid}"),
+        SealScope.scope.like(f"%,{uid},%"),
+    )).all() if uid in s.split(",")]
+    if gone:
+        db.query(SealScopeKey).filter(SealScopeKey.scope.in_(gone)).delete(
+            synchronize_session=False)
+        db.query(SealScope).filter(SealScope.scope.in_(gone)).delete(
+            synchronize_session=False)
+
     # Deleting the user cascades their messages (ORM relationship) and their
     # friend / mute / block rows (FK ON DELETE CASCADE).
     db.delete(user)

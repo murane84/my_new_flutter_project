@@ -72,6 +72,13 @@ class SealIngress {
   /// session moves forward the way it was written).
   static Future<List<Map<String, dynamic>>> openAll(
       List<Map<String, dynamic>> list) async {
+    // Deleted for everyone (perhaps while this phone was away): its text
+    // goes from this device too.
+    final gone = [
+      for (final m in list)
+        if (m['e2ee'] != null && m['is_deleted'] == true) _int(m['id'])
+    ];
+    if (gone.isNotEmpty) await forget(gone);
     final sealed = list.where(isSealed).toList()
       ..sort((a, b) => _int(a['id']).compareTo(_int(b['id'])));
     for (final m in sealed) {
@@ -82,6 +89,13 @@ class SealIngress {
 
   /// A socket event: its message travels under `data` (or `message`).
   static Future<void> openEvent(Map<String, dynamic> event) async {
+    final type = event['type'];
+    if (type == 'message_deleted' || type == 'delete') {
+      final d = event['data'];
+      final id = event['message_id'] ?? (d is Map ? d['message_id'] : null);
+      if (id != null) await forget([_int(id)]);
+      return;
+    }
     for (final k in const ['data', 'message']) {
       final d = event[k];
       if (d is Map<String, dynamic> && d['e2ee'] != null) {
@@ -192,6 +206,20 @@ class SealIngress {
 
   static Future<String> heldText(int peer, Object? heldId) async =>
       await SealMessenger.instance.recallHeld(peer, _int(heldId)) ?? '🔒';
+
+  /// A message deleted (for me or for everyone): forget its unlocked text.
+  static Future<void> forget(List<int> ids, {int? peer}) async {
+    try {
+      await SealMessenger.instance.forget(ids, peer: peer);
+    } catch (_) {}
+  }
+
+  /// A chat cleared: forget all of its unlocked texts on this device.
+  static Future<void> forgetChat(int peer) async {
+    try {
+      await SealMessenger.instance.forgetChat(peer);
+    } catch (_) {}
+  }
 
   /// Sign-out: off the key directory, every key, session and text forgotten.
   static Future<void> signOut() async {

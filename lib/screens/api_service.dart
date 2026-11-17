@@ -4230,6 +4230,7 @@ class ApiService {
     if (response.statusCode != 200) {
       throw Exception('Failed to delete chat');
     }
+    await SealIngress.forgetChat(friendId); // 🔒 its unlocked texts too
   }
 
   Future<void> deleteMessagesWithFriend(
@@ -4245,6 +4246,7 @@ class ApiService {
     if (response.statusCode != 200) {
       throw Exception('Failed to delete messages');
     }
+    await SealIngress.forgetChat(friendId); // 🔒 its unlocked texts too
   }
 
   Future<void> deleteSingleMessage(
@@ -4261,6 +4263,7 @@ class ApiService {
     if (response.statusCode != 200) {
       throw Exception('Failed to delete message');
     }
+    await SealIngress.forget([messageId]); // 🔒 its unlocked text too
   }
 
   // REACT TO MESSAGE — toggle the current user's emoji on a message.

@@ -70,6 +70,41 @@ void main() {
         reason: 'not signed by one of the host\'s devices');
   });
 
+  test('only the host can switch the room to plain, and not twice', () async {
+    final hostKeys = await person(1);
+    final guestKeys = await person(2);
+    final mallory = await person(3);
+    final host = SealRoom('s-1', keys: hostKeys, directory: dir);
+    final guest = SealRoom('s-1', keys: guestKeys, directory: dir);
+
+    final forged = await SealRoom('s-1', keys: mallory, directory: dir)
+        .modeMessage(false, 3);
+    expect(await guest.takeMode(forged!, 1), isFalse,
+        reason: 'another guest');
+    expect(await guest.takeMode({...forged, 'from': 1}, 1), isFalse,
+        reason: 'not signed by the host');
+    expect(await guest.takeMode({'type': 'room_e2ee', 'on': false}, 1),
+        isFalse,
+        reason: 'unsigned (the server)');
+    expect(guest.sealedRoom, isTrue);
+
+    final off = jsonDecode(jsonEncode(await host.modeMessage(false, 1)))
+        as Map<String, dynamic>;
+    final on = await host.modeMessage(true, 1);
+    expect(await guest.takeMode(off, 1), isTrue);
+    expect(guest.sealedRoom, isFalse);
+    expect(await guest.takeMode({...off, 'on': true}, 1), isFalse,
+        reason: 'the signature covers on/off');
+    expect(await guest.takeMode(on!, 1), isTrue);
+    expect(guest.sealedRoom, isTrue);
+    expect(await guest.takeMode(off, 1), isFalse, reason: 'an old note');
+    expect(guest.sealedRoom, isTrue);
+
+    final other = SealRoom('s-2', keys: guestKeys, directory: dir);
+    expect(await other.takeMode(off, 1), isFalse,
+        reason: 'a note from another session');
+  });
+
   test('a guest on an older Aluta gets no key', () async {
     final hostKeys = await person(1);
     final host = SealRoom('s-1', keys: hostKeys, directory: dir);

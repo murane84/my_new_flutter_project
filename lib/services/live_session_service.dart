@@ -2575,8 +2575,14 @@ class LiveSessionController {
       return;
     }
     if (type == 'room_e2ee') {
-      _sealRoom.sealedRoom = msg['on'] == true;
-      if (!_sealRoom.sealedRoom) _flushRoomHeld();
+      // Only the host's signed note counts (never another guest's, never the
+      // host's own echo).
+      final room = _sealRoom;
+      if (role == LiveRole.listener &&
+          await room.takeMode(msg, hostUserId) &&
+          !room.sealedRoom) {
+        _flushRoomHeld();
+      }
       return;
     }
     final sealedField = type == 'comment' && SealRoom.isSealed(msg['text'])
@@ -2759,7 +2765,7 @@ class LiveSessionController {
           room.keyless.remove(peerId);
           if (room.keyless.isEmpty && !room.sealedRoom && room.hasKey) {
             room.sealedRoom = true;
-            _sendControl({'type': 'room_e2ee', 'on': true});
+            unawaited(_sendRoomMode(true));
           }
         }
       }
@@ -3086,7 +3092,6 @@ class LiveSessionController {
     if (role == LiveRole.host && !await room.ensureHostKey()) {
       // This device has no end-to-end keys: the room speaks plainly.
       room.sealedRoom = false;
-      _sendControl({'type': 'room_e2ee', 'on': false});
       _sendControl(msg);
       return;
     }
@@ -3108,6 +3113,28 @@ class LiveSessionController {
     if (at != null && DateTime.now().difference(at).inSeconds < 5) return;
     _roomAskedAt = DateTime.now();
     _sendControl({'type': 'room_key_request', 'to': host, 'from': _myUserId});
+    unawaited(_plainIfHostHasNoKeys(host));
+  }
+
+  /// GUEST: a host with no end-to-end keys at all (an older Aluta) can't
+  /// give a key or sign a note: speak plainly with them, as chats do.
+  Future<void> _plainIfHostHasNoKeys(int host) async {
+    final room = _sealRoom;
+    final devices = await SealDirectory.instance.devicesOf(host);
+    if (devices == null || devices.isNotEmpty) return;
+    if (hostUserId != host || !identical(room, _room) || !room.sealedRoom) {
+      return;
+    }
+    room.sealedRoom = false;
+    _flushRoomHeld();
+  }
+
+  /// HOST: tell the room it's plain ([on] false) or sealed again — signed.
+  Future<void> _sendRoomMode(bool on, {int? to}) async {
+    final me = _myUserId;
+    if (me == null) return;
+    final m = await _sealRoom.modeMessage(on, me, to: to);
+    if (m != null) _sendControl(m);
   }
 
   /// HOST: give guest [uid] the room's key — or, when they can't take one
@@ -3118,10 +3145,8 @@ class LiveSessionController {
     if (uid == null || me == null || role != LiveRole.host) return;
     final room = _sealRoom;
     if (!await room.ensureHostKey()) {
-      if (room.sealedRoom) {
-        room.sealedRoom = false;
-        _sendControl({'type': 'room_e2ee', 'on': false});
-      }
+      // No keys here: guests see that in the directory and speak plainly.
+      room.sealedRoom = false;
       return;
     }
     final devices = await SealDirectory.instance.devicesOf(uid);
@@ -3130,7 +3155,7 @@ class LiveSessionController {
       room.keyless.add(uid);
       if (room.sealedRoom) {
         room.sealedRoom = false;
-        _sendControl({'type': 'room_e2ee', 'on': false});
+        await _sendRoomMode(false);
       }
       if (retry) {
         final session = sessionId;
@@ -3149,12 +3174,12 @@ class LiveSessionController {
       // couldn't, seal the room again.
       if (room.keyless.remove(uid) && room.keyless.isEmpty && !room.sealedRoom) {
         room.sealedRoom = true;
-        _sendControl({'type': 'room_e2ee', 'on': true});
+        await _sendRoomMode(true);
         return;
       }
     }
     // A late joiner learns the room is plain right now.
-    if (!room.sealedRoom) _sendControl({'type': 'room_e2ee', 'on': false, 'to': uid});
+    if (!room.sealedRoom) await _sendRoomMode(false, to: uid);
   }
 
   /// The key arrived (or the room went plain): let held lines through.
@@ -3203,6 +3228,10 @@ class LiveSessionController {
     // Close every peer connection + data channel (host peers and listener side).
     await _closeAllPeers();
     _incoming.clear();
+    // 🔒 The room's key dies with the session.
+    _room = null;
+    _roomHeldIn.clear();
+    _roomHeldOut.clear();
     _listenerStarted = false;
     _listenerBaseMs = 0;
     // Reset cache/prefetch transfer state so a later session starts clean.

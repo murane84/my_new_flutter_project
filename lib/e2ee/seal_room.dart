@@ -20,6 +20,10 @@ import 'seal_scope.dart';
 ///
 /// A guest on an older Aluta can't take a key: the host then tells the room
 /// to speak plainly until that guest leaves (like chats with an older app).
+/// That "plain / sealed again" note is signed by the host's device and
+/// numbered, so neither another guest nor the server can switch a room to
+/// plain. Only a host with no end-to-end keys at all (the directory lists no
+/// device for them) makes guests speak plainly without a signed note.
 class SealRoom {
   SealRoom(this.session, {SealKeyStore? keys, SealKeyDirectory? directory})
       : _keys = keys ?? SealKeyStore.instance,
@@ -39,6 +43,9 @@ class SealRoom {
 
   /// HOST: guests who can't take a key (older Aluta).
   final Set<int> keyless = {};
+
+  int _modeSent = 0; // HOST: number of the last plain / sealed note
+  int _modeSeen = 0; // GUEST: newest note taken
 
   bool get hasKey => _key != null;
   String get _scope => 'live:$session';
@@ -121,6 +128,57 @@ class SealRoom {
       'from_device': _keys.deviceId,
       'keys': copies,
     };
+  }
+
+  List<int> _modeText(bool on, int seq) =>
+      utf8.encode('AlutaLive mode v1|$session|${on ? 1 : 0}|$seq');
+
+  /// HOST: the signed `room_e2ee` note (sealed again [on], or plain). With
+  /// [to] it repeats the current note to one late guest. Null when this
+  /// device has no keys to sign with.
+  Future<Map<String, dynamic>?> modeMessage(bool on, int myUid,
+      {int? to}) async {
+    await _keys.load();
+    if (!_keys.isReady) return null;
+    final seq = to == null || _modeSent == 0 ? ++_modeSent : _modeSent;
+    final sig = await _keys.identity.sig.sign(_modeText(on, seq));
+    return {
+      'type': 'room_e2ee',
+      'on': on,
+      'seq': seq,
+      'from': myUid,
+      'from_device': _keys.deviceId,
+      'sig': base64Encode(sig),
+      'to': ?to,
+    };
+  }
+
+  /// GUEST: take a `room_e2ee` note — only the host's, signed by one of the
+  /// host's devices, and newer than the last one. True when it was taken
+  /// ([sealedRoom] then follows it).
+  Future<bool> takeMode(Map<String, dynamic> msg, int? hostId) async {
+    try {
+      final seq = msg['seq'];
+      final sig = msg['sig'];
+      if (hostId == null || msg['from'] != hostId) return false;
+      if (seq is! int || seq <= _modeSeen || sig is! String) return false;
+      final on = msg['on'] == true;
+      SealPeerDevice? sender;
+      for (final d in await _dir.devicesOf(hostId) ?? const <SealPeerDevice>[]) {
+        if (d.deviceId == msg['from_device']) sender = d;
+      }
+      if (sender == null) return false;
+      if (!await sealVerify(base64Decode(sender.ikSig), _modeText(on, seq),
+          base64Decode(sig))) {
+        return false;
+      }
+      if (seq <= _modeSeen) return false; // a newer one landed meanwhile
+      _modeSeen = seq;
+      sealedRoom = on;
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// GUEST: take the key from a `room_key` message — only from [hostId],

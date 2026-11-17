@@ -149,6 +149,28 @@ void main() {
     expect(await read(b, m2), 'tena');
   });
 
+  test('a deleted message leaves the phone and the hand-over', () async {
+    final a = await device(alice, 'a');
+    final b = await device(bob, 'b');
+    final keep = await send(a, bob, 'baki');
+    final gone = await send(a, bob, 'futa');
+    final alsoGone = await send(a, bob, 'futa pia');
+    for (final m in [keep, gone, alsoGone]) {
+      await read(b, m);
+    }
+    await b.app.forget([gone['id'] as int]); // deleted for everyone
+    await a.app.forget([alsoGone['id'] as int], peer: bob); // for me
+    expect(await b.app.textOf(alice, gone['id'] as int), isNull);
+    expect(await b.app.textOf(alice, keep['id'] as int), 'baki');
+    expect(await a.app.textOf(bob, alsoGone['id'] as int), isNull);
+    final handed = jsonEncode(await b.app.exportPlain());
+    expect(handed.contains('futa'), isFalse);
+    expect(handed.contains('baki'), isTrue);
+
+    await b.app.forgetChat(alice); // chat cleared
+    expect(jsonEncode(await b.app.exportPlain()).contains('baki'), isFalse);
+  });
+
   test('an edit is a new revision', () async {
     final a = await device(alice, 'a');
     final b = await device(bob, 'b');

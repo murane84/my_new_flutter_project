@@ -481,6 +481,32 @@ class SealMessenger {
         return null;
       });
 
+  /// Forget the unlocked texts of deleted messages (for me or for
+  /// everyone): off this device, and never in a later hand-over. [peer]
+  /// null looks in every chat.
+  Future<void> forget(Iterable<int> ids, {int? peer}) => _locked(() async {
+        final gone = {for (final i in ids) '$i'};
+        if (gone.isEmpty) return;
+        await _keys.load();
+        for (final p in peer != null ? [peer] : await _plainPeers()) {
+          final m = await _plainOf(p);
+          final before = m.length;
+          m.removeWhere((k, _) => gone.contains(k));
+          if (m.length != before) {
+            await _plain.write(_plainKey(p), jsonEncode(m));
+          }
+        }
+      });
+
+  /// Forget every unlocked text of the chat with [peer] (chat cleared).
+  Future<void> forgetChat(int peer) => _locked(() async {
+        await _keys.load();
+        final m = await _plainOf(peer);
+        if (m.isEmpty) return;
+        m.clear();
+        await _plain.write(_plainKey(peer), jsonEncode(m));
+      });
+
   static int? _heldIdOf(Object? meta) {
     if (meta is! String || !meta.contains('"held"')) return null;
     try {

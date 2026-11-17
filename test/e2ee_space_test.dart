@@ -265,6 +265,18 @@ void main() {
           a.space.seal([1, 9], 'x'), throwsA(isA<SealSpaceNotReady>()));
     });
 
+    test('a sealed Space stays sealed when a member has no keys', () async {
+      final a = await device(1);
+      await device(2);
+      final first = await a.space.seal([1, 2], 'kwanza');
+      final b = dir.people.remove(2)!; // signed out (or the server says so)
+      final next = await a.space.seal([1, 2], 'pili');
+      expect(SealScope.isSealed(next), isTrue);
+      dir.people[2] = b;
+      expect(await b.first.space.open(first), 'kwanza');
+      expect(await b.first.space.open(next), 'pili');
+    });
+
     test('offline: it refuses to seal rather than send plain', () async {
       final a = await device(1);
       await device(2);

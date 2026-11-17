@@ -32,6 +32,13 @@ class SealOpened {
 /// The friend has no encryption keys yet (an older Aluta): send as before.
 class SealNotSupported implements Exception {}
 
+/// The friend's chat was end-to-end encrypted, but none of their devices
+/// has keys right now (signed out everywhere — or a server pretending so).
+/// Never a reason to send in the clear: the send fails instead.
+class SealPeerAway extends SealError {
+  SealPeerAway() : super('friend has no keys right now');
+}
+
 /// Prefs-backed plaintext memory (the chat cache already holds the same text).
 class _PrefsStorage implements SealStorage {
   @override
@@ -183,16 +190,23 @@ class SealMessenger {
 
   /// Seal [text] for every device of [peerUid] and this person's other
   /// devices. Returns the envelopes ({"uid:device": b64}) to send.
-  /// Throws [SealNotSupported] when the friend has no keys yet (send plain),
-  /// or a [SealError] / network error when it can't seal right now (don't
-  /// send plain then — the friend expects sealed text).
+  /// Throws [SealNotSupported] only when the friend has never had keys (an
+  /// older Aluta: send plain), or a [SealError] / network error when it
+  /// can't seal right now — don't send plain then. Once a chat has been
+  /// sealed it never goes back to plain ([SealPeerAway]); and my own keys
+  /// still being set up is "not now", not "plain".
   Future<Map<String, String>> seal(int peerUid, int myUid, String text) =>
       _locked(() async {
         await _keys.load();
-        if (!_keys.isReady) throw SealNotSupported();
         final theirs = await _devicesOf(peerUid);
         if (theirs == null) throw SealError('offline');
-        if (theirs.isEmpty) throw SealNotSupported();
+        if (theirs.isEmpty) {
+          if (_keys.isReady && (await _peerIks(peerUid)).isNotEmpty) {
+            throw SealPeerAway();
+          }
+          throw SealNotSupported();
+        }
+        if (!_keys.isReady) throw SealError('my keys are not ready yet');
         final mine = (await _devicesOf(myUid) ?? const <SealPeerDevice>[])
             .where((d) => d.deviceId != _keys.deviceId);
         final plain = utf8.encode(jsonEncode({'v': 1, 't': text}));

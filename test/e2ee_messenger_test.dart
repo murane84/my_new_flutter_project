@@ -190,6 +190,19 @@ void main() {
         throwsA(isA<SealNotSupported>()));
   });
 
+  test('a sealed chat never falls back to plain', () async {
+    final a = await device(alice, 'a');
+    final b = await device(bob, 'b');
+    expect(await read(b, await send(a, bob, 'siri')), 'siri');
+    dir.people.remove(bob); // signed out everywhere (or the server says so)
+    now = now.add(const Duration(minutes: 1)); // past the device-list cache
+    await expectLater(
+        a.app.seal(bob, alice, 'hi'), throwsA(isA<SealPeerAway>()));
+    dir.people[bob] = [b];
+    now = now.add(const Duration(minutes: 1));
+    expect(await read(b, await send(a, bob, 'tena')), 'tena');
+  });
+
   test('a tampered copy fails, the next one still opens', () async {
     final a = await device(alice, 'a');
     final b = await device(bob, 'b');

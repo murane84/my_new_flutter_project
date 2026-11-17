@@ -367,15 +367,21 @@ class SealSpace {
   Future<String> seal(Iterable<int> members, String text) => _locked(() async {
         if (text.isEmpty || SealScope.isSealed(text)) return text;
         await _keys.load();
-        if (!_keys.isReady) throw SealSpaceNotReady();
         final ids = members.toSet().toList();
         if (ids.length < 2) throw SealSpaceNotReady();
+        final scope = SealScope.of(ids);
+        // Once this Space has been sealed it stays sealed: a member with no
+        // keys right now (signed out — or a server saying so) doesn't turn
+        // it back to plain.
+        final sealedBefore = _keys.isReady &&
+            ((await _heldKeys())[scope]?.isNotEmpty ?? false);
         for (final uid in ids) {
           final d = await _dir.devicesOf(uid);
           if (d == null) throw SealError('offline');
-          if (d.isEmpty) throw SealSpaceNotReady();
+          if (d.isEmpty && !sealedBefore) throw SealSpaceNotReady();
         }
-        final scope = SealScope.of(ids);
+        // My own keys still being set up: "not now", never plain.
+        if (!_keys.isReady) throw SealError('my keys are not ready yet');
         final k = await _currentKey(scope);
         if (k == null) throw SealError('no key for this space yet');
         return SealScope.seal(k.$2, scope, k.$1, text);

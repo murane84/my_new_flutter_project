@@ -12,6 +12,7 @@ import '../utils/session_events.dart';
 import '../services/biometric_service.dart';
 import '../services/story_posting.dart';
 import '../e2ee/seal_ingress.dart';
+import '../e2ee/seal_messenger.dart' show SealPeerAway;
 import '../e2ee/seal_space.dart';
 
 final _logger = Logger();
@@ -1451,6 +1452,10 @@ class ApiService {
           sealed = await SealIngress.sealFor(receiverId, content);
         } catch (e) {
           _logger.w('Seal failed: $e');
+          if (e is SealPeerAway) {
+            lastSendRefusal =
+                "They aren't signed in to Aluta right now — try again later";
+          }
           return null;
         }
         if (sealed != null) {

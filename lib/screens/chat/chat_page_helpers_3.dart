@@ -1573,7 +1573,15 @@ extension _ChatPageHelpers3 on _ChatPageState {
       final legacy = t == 'live' || t == 'call' || t == 'song'
           ? _stripQuote((m['content'] as String?) ?? '').trim()
           : '';
-      if (label == q || (legacy.isNotEmpty && legacy == q)) {
+      // …and video / voice replies made before the labels matched the list.
+      final oldLabel = label == '🎬 Video'
+          ? '🎥 Video'
+          : label == '🎤 Voice note'
+              ? '🎤 Voice message'
+              : '';
+      if (label == q ||
+          (legacy.isNotEmpty && legacy == q) ||
+          (oldLabel.isNotEmpty && oldLabel == q)) {
         exact.add(m);
       } else if (_quoteKey(label) == qFirst ||
           (heartQuote && (m['message_type'] ?? '').toString() == 'heart')) {
@@ -2603,7 +2611,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
   }
 
   // Short label describing a message for a reply quote/preview — media messages
-  // get a typed label (📷 Photo / 🎤 Voice message / 📎 name) instead of blank.
+  // get a typed label (📷 Photo / 🎤 Voice note / 📎 name) instead of blank —
+  // the same words the chat list uses.
   String _replyQuoteText(Map<String, dynamic> msg) {
     final type = (msg['message_type'] as String?) ?? 'text';
     // A secret heart never shows its note outside the heart itself — not in a
@@ -2626,9 +2635,9 @@ extension _ChatPageHelpers3 on _ChatPageState {
         case 'image':
           return '📷 Photo';
         case 'video':
-          return '🎥 Video';
+          return '🎬 Video';
         case 'audio':
-          return '🎤 Voice message';
+          return '🎤 Voice note';
         default:
           return '📎 ${(msg['media_name'] as String?) ?? 'File'}';
       }

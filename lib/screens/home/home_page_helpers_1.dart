@@ -1320,7 +1320,8 @@ extension _HomePageHelpers1 on HomePageState {
       case 'gif':
         return '🎞️ GIF';
       case 'file':
-        return name.isNotEmpty ? '📎 $name' : '📎 File';
+        // Same as the server's preview: the name as attached, then a caption.
+        return withText(name.isNotEmpty ? '📎 $name' : '📎 File');
       case 'poll':
         return text.isEmpty ? '📊 Poll' : '📊 $text';
       case 'location':

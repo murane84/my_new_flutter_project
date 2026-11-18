@@ -378,6 +378,9 @@ def list_preview(msg) -> str:
         return f"{'🎞️ GIF' if 'gif' in mime else '📷 Photo'} · {content}"
     if content and mtype == "video":
         return f"🎬 Video · {content}"
+    if content and mtype == "file":
+        # The file's name as attached, then its caption (as photos do).
+        return f"📎 {name or 'File'} · {content}"
     if content:
         return content
     if mtype == "image":

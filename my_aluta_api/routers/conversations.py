@@ -409,7 +409,11 @@ def message_seen_by(
     return cc.seen_by(db, cid, mid, exclude_user=current_user.id)
 
 
-@router.get("/{cid}/messages/{mid}/info", response_model=schemas.MessageInfoOut)
+# exclude_none: `opened` only travels for a secret heart. Apps up to 1.0.17
+# took the key's mere presence to mean "heart" and showed every message as
+# opened by nobody — leaving it out fixes their book card too.
+@router.get("/{cid}/messages/{mid}/info", response_model=schemas.MessageInfoOut,
+            response_model_exclude_none=True)
 def message_info(
     cid: int,
     mid: int,

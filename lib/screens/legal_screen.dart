@@ -786,8 +786,9 @@ replies), secret-heart notes, Our Space words (moments, diary, notes, memos, kep
 hearts and statuses) and Listen Together chat are locked on your device and can be
 read only on the devices of the people they're for — not by our server. Private
 keys never leave your devices; linking a computer by QR sends your history locked
-for that computer only; an encrypted chat never falls back to plain text. Not yet
-end-to-end encrypted: photos, videos, voice notes, files, songs (and titles),
+for that computer only; once a chat has been encrypted on your device it never
+falls back to plain text (a friend still on an older Aluta, with no keys, gets
+plain text until they update). Not yet end-to-end encrypted: photos, videos, voice notes, files, songs (and titles),
 group chats, Stories, reactions, and Space names and pictures. The server still
 sees who you talk to and when, so it can deliver messages.
 

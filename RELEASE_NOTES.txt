@@ -1,11 +1,2 @@
-Your 1:1 text messages are now end-to-end encrypted: only you and your friend can read them, not even Aluta's server.
-Secret hearts and timed hearts (and Dedicate from the music player) are encrypted the same way.
-Our Space words are encrypted for the people in the Space: moments, diary, notes, memos, kept hearts and kept statuses.
-Listen Together chat lines and GIF reactions are encrypted for the room.
-Link a computer with the QR code and your encrypted chat history comes with it.
-An encrypted chat never goes back to unencrypted: if your friend isn't signed in anywhere, Aluta asks you to try again later.
-Replying from a notification is encrypted too.
-Search now finds words in your encrypted chats (searched on your own device).
-Delete for me, delete for everyone and clear chat also remove the words from your device.
-On the web, encrypted chats work in one tab at a time: click a tab to use it there.
-Photos, voice notes, songs and group chats aren't encrypted yet; they're coming next.
+Privacy Policy, Terms and About now explain end-to-end encryption: what's encrypted, what isn't yet, and what our server still sees.
+You'll be asked to review and accept the updated Privacy Policy and Terms once.

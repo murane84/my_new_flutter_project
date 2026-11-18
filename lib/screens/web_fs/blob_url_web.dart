@@ -35,6 +35,26 @@ bool downloadBytes(Uint8List bytes, String name, String contentType) {
   }
 }
 
+/// Show [bytes] in a new browser tab (a PDF, photo, video…). False when the
+/// browser blocked the tab — the caller downloads it instead.
+bool openBytesInTab(Uint8List bytes, String contentType) {
+  final url = makeBlobUrl(bytes, contentType);
+  if (url.isEmpty) return false;
+  try {
+    // A blocked tab comes back closed (or not at all — that throws below).
+    final w = html.window.open(url, '_blank');
+    if (w.closed == true) {
+      revokeBlobUrl(url);
+      return false;
+    }
+    Future<void>.delayed(const Duration(minutes: 5), () => revokeBlobUrl(url));
+    return true;
+  } catch (_) {
+    revokeBlobUrl(url);
+    return false;
+  }
+}
+
 void revokeBlobUrl(String url) {
   try {
     html.Url.revokeObjectUrl(url);

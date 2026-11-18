@@ -5,3 +5,4 @@ String makeBlobUrl(Uint8List bytes, String contentType) => '';
 void revokeBlobUrl(String url) {}
 bool downloadBytes(Uint8List bytes, String name, String contentType) =>
     false;
+bool openBytesInTab(Uint8List bytes, String contentType) => false;

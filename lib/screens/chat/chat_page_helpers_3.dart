@@ -270,6 +270,37 @@ extension _ChatPageHelpers3 on _ChatPageState {
         if (ext.isNotEmpty) name = '$name$ext';
       }
 
+      // Web: no files or system viewers in a browser — a PDF, photo, video,
+      // song or text opens in a new tab; anything else (or a blocked tab)
+      // is downloaded.
+      if (kIsWeb) {
+        final res = await appBusy.run(
+            () => http.get(Uri.parse(url), headers: mediaAuthHeaders(url)));
+        if (res.statusCode != 200 || res.bodyBytes.isEmpty) {
+          if (mounted) {
+            final gone = res.statusCode == 404 || res.statusCode == 410;
+            showToast(context,
+                gone
+                    ? 'This file has left the server (24 h) — ask to resend'
+                    : 'Could not open — try again',
+                type: ToastType.error);
+            if (gone) _offerResendPill(msg);
+          }
+          return;
+        }
+        final m = mime.isNotEmpty
+            ? mime
+            : (res.headers['content-type'] ?? 'application/octet-stream');
+        final viewable = m.startsWith('image/') ||
+            m.startsWith('video/') ||
+            m.startsWith('audio/') ||
+            m.startsWith('text/') ||
+            m == 'application/pdf';
+        if (viewable && openBytesInTab(res.bodyBytes, m)) return;
+        await _saveBytesToDevice(res.bodyBytes, name);
+        return;
+      }
+
       final dir = await getTemporaryDirectory();
       // Each attachment gets its OWN temp subfolder, keyed by the unique
       // attachment id in its URL, so two files that share a display name

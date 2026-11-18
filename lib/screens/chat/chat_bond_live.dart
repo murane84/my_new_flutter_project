@@ -240,12 +240,13 @@ extension _ChatBondLive on _ChatPageState {
       showDragHandle: true,
       builder: (c) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          if (!kIsWeb)
-            ListTile(
-              leading: const Icon(Icons.photo_camera_rounded),
-              title: const Text('Take my half'),
-              onTap: () => Navigator.pop(c, ImageSource.camera),
-            ),
+          // Aluta's own camera works in the browser too (it explains when
+          // the page or the permission doesn't allow it).
+          ListTile(
+            leading: const Icon(Icons.photo_camera_rounded),
+            title: const Text('Take my half'),
+            onTap: () => Navigator.pop(c, ImageSource.camera),
+          ),
           ListTile(
             leading: const Icon(Icons.photo_library_rounded),
             title: const Text('Choose a photo'),

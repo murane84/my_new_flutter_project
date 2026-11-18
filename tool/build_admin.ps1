@@ -5,6 +5,9 @@
 #
 # Then commit my_aluta_api\adminapp and push (Railway redeploys).
 $ErrorActionPreference = 'Stop'
+# Read and write UTF-8 explicitly (no BOM): Windows PowerShell 5 otherwise
+# reads these files as ANSI and turns "—" into "â€”" on the admin page.
+$utf8 = New-Object System.Text.UTF8Encoding($false)
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
@@ -13,7 +16,7 @@ if ($LASTEXITCODE -ne 0) { throw "flutter build failed" }
 
 # Give the installable app its own name / colours (the web/ template says "Aluta").
 $manifestPath = Join-Path $root 'build\admin\manifest.json'
-$m = Get-Content $manifestPath -Raw | ConvertFrom-Json
+$m = [System.IO.File]::ReadAllText($manifestPath, $utf8) | ConvertFrom-Json
 $m.name = 'Aluta Admin'
 $m.short_name = 'Aluta Admin'
 $m.description = 'Aluta backoffice (owner only)'
@@ -24,10 +27,10 @@ $m.orientation = 'any'
 $m | Add-Member -NotePropertyName id -NotePropertyValue '/admin/' -Force
 $m | Add-Member -NotePropertyName scope -NotePropertyValue '/admin/' -Force
 $m.start_url = '/admin/'
-$m | ConvertTo-Json -Depth 6 | Set-Content $manifestPath -Encoding UTF8
+[System.IO.File]::WriteAllText($manifestPath, ($m | ConvertTo-Json -Depth 6), $utf8)
 
 $indexPath = Join-Path $root 'build\admin\index.html'
-$html = Get-Content $indexPath -Raw
+$html = [System.IO.File]::ReadAllText($indexPath, $utf8)
 $html = $html -replace '<title>[^<]*</title>', '<title>Aluta Admin</title>'
 # Private: never indexed, never canonical to the public site.
 $html = $html -replace '<meta name="robots" content="[^"]*">', '<meta name="robots" content="noindex, nofollow">'
@@ -39,7 +42,7 @@ $html = $html -replace '#C62828', '#0F0F14'
 # the app shows its own "Install Aluta Admin" card from it.
 $catcher = '<script>(function(){if(window.__alutaInstallWired)return;window.__alutaInstallWired=true;window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__alutaInstall=e;if(window.__alutaOnInstallReady)window.__alutaOnInstallReady();});window.addEventListener("appinstalled",function(){window.__alutaInstall=null;window.__alutaInstalled=true;if(window.__alutaOnInstallReady)window.__alutaOnInstallReady();});})();</script>'
 $html = $html -replace '</head>', "$catcher</head>"
-Set-Content $indexPath $html -Encoding UTF8
+[System.IO.File]::WriteAllText($indexPath, $html, $utf8)
 
 $dest = Join-Path $root 'my_aluta_api\adminapp'
 if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }

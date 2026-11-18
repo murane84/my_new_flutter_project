@@ -1041,7 +1041,7 @@ Column(
                     ],
                   );
 
-      // ── Android tall hero: the song card grows to fill the space under
+      // ── Tall hero (phones and the desktop app): the song card grows to fill the space under
       // the header with a big spinning disc, the title, the live lyric line
       // and what's up next, so there is no empty band above the controls.
       // [h] = the height the song card gets. The optional rows (Dedicate,
@@ -1469,7 +1469,10 @@ Column(
           padding: const EdgeInsets.fromLTRB(12, 14, 12, 0),
         ),
       );
-      if (tall && !kIsWeb && Platform.isAndroid) {
+      // Phones and the desktop app alike: on a tall panel the song card fills
+      // the room (a big disc) and the controls sit right under it — no empty
+      // bands above and below a small card on a big screen.
+      if (tall && !kIsWeb) {
         return Padding(
           padding: EdgeInsets.fromLTRB(0, 6, 0, isNarrow ? 8 : 12),
           child: Column(

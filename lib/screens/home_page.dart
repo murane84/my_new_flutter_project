@@ -907,7 +907,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
     FcmService.instance.registerToken();
     // End-to-end encryption keys (public parts) on the key directory: at
     // once on a just-linked / new device, else a few seconds in.
-    SealDirectory.instance.syncSoon();
+    // Then the push token again, now naming this device's keys (a push
+    // carries this phone's own sealed copy of a message).
+    SealDirectory.instance
+        .syncSoon()
+        .then((_) => FcmService.instance.registerToken());
     SealIngress.watchTabs(); // web: one browser tab moves keys at a time
     // A just-linked computer: the phone's 🔒 chat history arrives — refresh
     // the Circle previews when it does.

@@ -361,6 +361,7 @@ class TrackOverridesOut(BaseModel):
 class DeviceTokenIn(BaseModel):
     token: str
     platform: Optional[str] = None  # "android" | "ios" | "web"
+    seal_device: Optional[str] = None  # its end-to-end device id (if any)
 
 
 # ---------------------- STORIES SCHEMAS ----------------------

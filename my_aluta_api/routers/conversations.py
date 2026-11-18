@@ -352,7 +352,9 @@ def send_message(
             int(uid),
             {
                 "type": "mention" if is_mention else "new_message",
-                "conversation_id": str(cid),
+                # A 1:1 thread reads as a DM on the phone (one bundle per
+                # person), never as a nameless "group".
+                "conversation_id": str(cid) if is_group else "",
                 "sender_id": str(current_user.id),
                 "sender_name": (current_user.username or "New message"),
                 "group_title": gt,

@@ -101,13 +101,18 @@ def push_available() -> bool:
 
 
 def _tokens_for(user_id: int, platform: Optional[str] = None) -> list[str]:
+    return [t for t, _ in _tokens_with_device(user_id, platform)]
+
+
+def _tokens_with_device(user_id: int, platform: Optional[str] = None):
+    """[(token, its end-to-end device id or None)]."""
     db = SessionLocal()
     try:
         q = db.query(DeviceToken).filter(DeviceToken.user_id == user_id)
         if platform:
             q = q.filter(DeviceToken.platform == platform)
         rows = q.all()
-        return [r.token for r in rows]
+        return [(r.token, getattr(r, "seal_device", None)) for r in rows]
     except Exception:  # noqa: BLE001
         return []
     finally:
@@ -190,7 +195,12 @@ def send_push_to_user(
                 "missing FIREBASE_PROJECT_ID, or google-auth not installed)."
             )
             return
-        tokens = _tokens_for(user_id, platform)
+        # 🔒 Each phone's own sealed copy of a message (e2ee_msgs.push_fields).
+        by_device = (data or {}).get("__env_by_device") or {}
+        data = {k: v for k, v in (data or {}).items() if k != "__env_by_device"}
+        pairs = _tokens_with_device(user_id, platform)
+        seal_of = dict(pairs)
+        tokens = [t for t, _ in pairs]
         if not tokens:
             print(
                 f"[push] SKIP user={user_id} type={kind}: user has 0 "
@@ -229,10 +239,16 @@ def send_push_to_user(
             print(f"[push] stripped reserved FCM data key(s): {_bad}")
         sent = 0
         for token in tokens:
+            tdata = str_data
+            own = by_device.get(seal_of.get(token) or "")
+            if own:
+                tdata = {**str_data,
+                         "env": json.dumps({seal_of[token]: own},
+                                           separators=(",", ":"))}
             body = {
                 "message": {
                     "token": token,
-                    "data": str_data,
+                    "data": tdata,
                     # High priority so a data-only message wakes a dozing app.
                     "android": {"priority": "high"},
                 }

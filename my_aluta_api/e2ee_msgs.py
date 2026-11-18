@@ -80,4 +80,11 @@ def push_fields(msg, uid: int) -> dict:
     env = json.dumps(mine, separators=(",", ":"))
     if mine and len(env) <= PUSH_BUDGET:
         out["env"] = env
+    if mine:
+        # push.py gives each phone its OWN copy (by its token's device), so
+        # a person with many devices still gets a readable banner.
+        out[ENV_BY_DEVICE] = mine
     return out
+
+
+ENV_BY_DEVICE = "__env_by_device"

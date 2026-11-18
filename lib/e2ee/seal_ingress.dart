@@ -159,6 +159,21 @@ class SealIngress {
       final r = await SealMessenger.instance.peek(m, me);
       if (r.status == SealOpenStatus.ok && (r.text ?? '').isNotEmpty) {
         out['body'] = _withoutQuote(r.text!);
+        return out;
+      }
+      // Aluta running in the background may have opened this very message
+      // a moment ago (its live connection got it too), moving the session
+      // past it: its text is then saved on this phone — read it back.
+      for (final wait in const [600, 1500]) {
+        await Future<void>.delayed(Duration(milliseconds: wait));
+        await (await SharedPreferences.getInstance()).reload();
+        SealMessenger.instance.dropCaches();
+        final t = await SealMessenger.instance
+            .textOf(_int(data['sender_id']), _int(data['message_id']));
+        if (t != null && t.isNotEmpty) {
+          out['body'] = _withoutQuote(t);
+          break;
+        }
       }
     } catch (_) {/* keep "🔒 Message" */}
     return out;

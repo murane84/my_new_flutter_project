@@ -31,16 +31,19 @@ def save_device_token(
     if not token:
         return {"ok": False, "detail": "empty token"}
     now = datetime.now(timezone.utc)
+    seal = (payload.seal_device or "").strip()[:64] or None
     row = db.query(DeviceToken).filter(DeviceToken.token == token).first()
     if row:
         row.user_id = current_user.id
         row.platform = payload.platform
+        row.seal_device = seal
         row.updated_at = now
     else:
         db.add(DeviceToken(
             user_id=current_user.id,
             token=token,
             platform=payload.platform,
+            seal_device=seal,
             updated_at=now,
         ))
     db.commit()

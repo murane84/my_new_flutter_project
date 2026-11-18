@@ -230,6 +230,7 @@ def ensure_media_schema():
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS envelopes TEXT",
         "ALTER TABLE held_messages ADD COLUMN IF NOT EXISTS e2ee INTEGER",
         "ALTER TABLE held_messages ADD COLUMN IF NOT EXISTS envelopes TEXT",
+        "ALTER TABLE device_tokens ADD COLUMN IF NOT EXISTS seal_device VARCHAR(64)",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited BOOLEAN DEFAULT FALSE",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE",

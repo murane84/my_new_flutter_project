@@ -12,6 +12,7 @@ import '../utils/session_events.dart';
 import '../services/biometric_service.dart';
 import '../services/story_posting.dart';
 import '../e2ee/seal_ingress.dart';
+import '../e2ee/seal_keystore.dart' show SealKeyStore;
 import '../e2ee/seal_messenger.dart' show SealPeerAway;
 import '../e2ee/seal_space.dart';
 
@@ -28,6 +29,16 @@ class ApiService {
   // Delegates to the platform-aware token store (web-safe).
   Future<String?> _getToken() async => getToken();
 
+  /// This device's end-to-end id (null until its keys exist).
+  Future<String?> _sealDeviceId() async {
+    try {
+      await SealKeyStore.instance.load();
+      return SealKeyStore.instance.deviceIdOrNull;
+    } catch (_) {
+      return null;
+    }
+  }
+
   String _platformName() {
     if (kIsWeb) return 'web';
     return defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android';
@@ -42,7 +53,12 @@ class ApiService {
       final resp = await http.post(
         Uri.parse('${await _baseUrl}/devices/token'),
         headers: _authHeaders(t),
-        body: jsonEncode({'token': token, 'platform': _platformName()}),
+        body: jsonEncode({
+          'token': token,
+          'platform': _platformName(),
+          // 🔒 So each push carries this phone's own sealed copy.
+          'seal_device': ?await _sealDeviceId(),
+        }),
       );
       return resp.statusCode >= 200 && resp.statusCode < 300;
     } catch (e) {

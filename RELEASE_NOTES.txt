@@ -1,2 +1,11 @@
-Privacy Policy, Terms and About now explain end-to-end encryption: what's encrypted, what isn't yet, and what our server still sees.
-You'll be asked to review and accept the updated Privacy Policy and Terms once.
+Web app: download photos, videos, PDFs and any file from a chat; tapping a PDF, photo or video opens it in a new tab.
+Web app: record and send voice notes (chats, secret hearts, Our Space moments and dedications), and Identify song can listen through the mic.
+File names with underscores now read exactly as attached in the chat list (no more slanted words).
+A file sent with a caption shows its name and caption in the chat list and notifications.
+Reply quotes use the same words as the chat list (🎬 Video, 🎤 Voice note).
+On a big screen, the music player's song card now fills the panel with a large disc: no empty bands above and below.
+The admin page's loading text shows its dashes properly.
+Tapping a message's book now shows who opened it correctly (groups and 1:1).
+Notifications for encrypted messages show the words again, and all of one person's messages stack together.
+New encrypted messages show their words in the chat list straight away.
+Windows and web: "Take my half" on a duo status opens the camera; on Windows the profile camera works too.

@@ -6,7 +6,8 @@
 # Then commit my_aluta_api\adminapp and push (Railway redeploys).
 $ErrorActionPreference = 'Stop'
 # Read and write UTF-8 explicitly (no BOM): Windows PowerShell 5 otherwise
-# reads these files as ANSI and turns "—" into "â€”" on the admin page.
+# reads these files as ANSI and garbles every dash and accent on the admin
+# page. (This script itself stays plain ASCII for the same reason.)
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root

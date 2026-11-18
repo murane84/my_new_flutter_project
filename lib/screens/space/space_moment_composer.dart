@@ -63,11 +63,7 @@ class _MomentComposerState extends State<_MomentComposer> {
     final p = _voicePath;
     _voicePath = null;
     _voiceMs = 0;
-    if (p != null) {
-      try {
-        File(p).delete();
-      } catch (_) {}
-    }
+    unawaited(VoiceRec.discard(p));
     if (_recording) {
       try {
         _rec.stop();
@@ -337,14 +333,7 @@ class _MomentComposerState extends State<_MomentComposer> {
         }
         return;
       }
-      final dir = await getTemporaryDirectory();
-      final path =
-          '${dir.path}/moment_${DateTime.now().millisecondsSinceEpoch}.m4a';
-      await _rec.start(
-        const RecordConfig(
-            encoder: AudioEncoder.aacLc, bitRate: 128000, sampleRate: 44100),
-        path: path,
-      );
+      await VoiceRec.start(_rec, 'moment'); // a browser records in memory
       if (!mounted) return;
       setState(() {
         _recording = true;
@@ -399,14 +388,14 @@ class _MomentComposerState extends State<_MomentComposer> {
         return;
       }
       try {
-        final b = await File(_voicePath!).readAsBytes();
+        final b = await VoiceRec.bytesOf(_voicePath!);
         if (b.isEmpty) throw Exception('empty');
         if (!mounted) return;
         Navigator.pop(context, {
           'kind': 'voice',
           '_bytes': b,
-          '_filename': _voicePath!.replaceAll('\\', '/').split('/').last,
-          '_mime': 'audio/mp4',
+          '_filename': 'moment_voice.${VoiceRec.ext}',
+          '_mime': VoiceRec.mime,
           'caption': text.isEmpty ? null : text,
         });
       } catch (_) {

@@ -11,7 +11,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:record/record.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 
 import 'api_service.dart';
@@ -23,6 +22,7 @@ import 'token_helper.dart' show getToken, mediaAuthHeaders;
 import '../services/now_playing_presence.dart';
 import '../services/steady_listening.dart';
 import '../utils/toast_helper.dart';
+import '../utils/voice_rec.dart';
 import '../utils/time_utils.dart' show parseServerTime;
 import '../services/heart_lock.dart';
 import 'chat/heart_message.dart' show HeartMood, showHeartGenie, heartOpensLabel;

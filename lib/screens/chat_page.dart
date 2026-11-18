@@ -90,6 +90,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../utils/net.dart' as http;
 import 'web_fs/blob_url.dart' show downloadBytes, openBytesInTab;
+import '../utils/voice_rec.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 import 'package:url_launcher/url_launcher.dart';
@@ -3201,14 +3202,8 @@ class _ChatPageState extends State<ChatPage>
         }
         return;
       }
-      final dir = await getTemporaryDirectory();
-      final path =
-          '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
-      await _recorder.start(
-        const RecordConfig(
-            encoder: AudioEncoder.aacLc, bitRate: 128000, sampleRate: 44100),
-        path: path,
-      );
+      // A temp file on devices; in memory in a browser (VoiceRec).
+      await VoiceRec.start(_recorder, 'voice');
       _recordMs = 0;
       _recordMsVN.value = 0;
       // Recording over music → remember the song for the note's caption.
@@ -3242,12 +3237,7 @@ class _ChatPageState extends State<ChatPage>
     _recordTimer?.cancel();
     _recordPresenceTimer?.cancel();
     try {
-      final p = await _recorder.stop();
-      if (p != null) {
-        try {
-          await File(p).delete();
-        } catch (_) {}
-      }
+      await VoiceRec.discard(await _recorder.stop());
     } catch (_) {}
     if (mounted) {
       setState(() {
@@ -3271,10 +3261,8 @@ class _ChatPageState extends State<ChatPage>
     try {
       final path = await _recorder.stop();
       if (path == null) return;
-      final bytes = await File(path).readAsBytes();
-      try {
-        await File(path).delete();
-      } catch (_) {}
+      final bytes = await VoiceRec.bytesOf(path);
+      await VoiceRec.discard(path);
       if (bytes.isEmpty || durationMs < 700) {
         if (mounted) showToast(context, 'Hold longer to record');
         return;
@@ -3283,8 +3271,8 @@ class _ChatPageState extends State<ChatPage>
       if (_heartMode) {
         rebuildWith(() => _heartAttach = _HeartAttach(
             bytes: bytes,
-            name: 'heart_voice_$durationMs.m4a',
-            mime: 'audio/mp4',
+            name: 'heart_voice_$durationMs.${VoiceRec.ext}',
+            mime: VoiceRec.mime,
             kind: 'voice',
             durationMs: durationMs));
         if (mounted) {
@@ -3300,8 +3288,8 @@ class _ChatPageState extends State<ChatPage>
       if (bed != null) rebuildWith(() => _pendingBed = null);
       await _uploadAndSend(
         bytes: bytes,
-        filename: 'voice_$durationMs.m4a',
-        mime: 'audio/mp4',
+        filename: 'voice_$durationMs.${VoiceRec.ext}',
+        mime: VoiceRec.mime,
         type: 'audio',
         durationMs: durationMs,
         caption: hello

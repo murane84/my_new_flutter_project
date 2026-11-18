@@ -417,14 +417,7 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
         }
         return;
       }
-      final dir = await getTemporaryDirectory();
-      final path =
-          '${dir.path}/ded_${DateTime.now().millisecondsSinceEpoch}.m4a';
-      await _rec.start(
-        const RecordConfig(
-            encoder: AudioEncoder.aacLc, bitRate: 128000, sampleRate: 44100),
-        path: path,
-      );
+      await VoiceRec.start(_rec, 'ded'); // a browser records in memory
       if (!mounted) return;
       setState(() {
         _recording = true;
@@ -445,11 +438,7 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
   void _clearVoice() {
     final p = _voicePath;
     setState(() => _voicePath = null);
-    if (p != null) {
-      try {
-        File(p).delete();
-      } catch (_) {}
-    }
+    unawaited(VoiceRec.discard(p));
   }
 
   String _fmtMs(int ms) {
@@ -520,12 +509,12 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
     String? voiceUrl;
     if (_voicePath != null) {
       try {
-        final bytes = await File(_voicePath!).readAsBytes();
+        final bytes = await VoiceRec.bytesOf(_voicePath!);
         if (bytes.isNotEmpty) {
           final up = await ApiService().uploadMedia(
             bytes: bytes,
-            filename: _voicePath!.replaceAll('\\', '/').split('/').last,
-            mime: 'audio/mp4',
+            filename: 'dedication_voice.${VoiceRec.ext}',
+            mime: VoiceRec.mime,
           );
           voiceUrl = up?['url'] as String?;
         }

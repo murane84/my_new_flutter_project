@@ -2387,8 +2387,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
         (iso == null || '$iso'.isEmpty) ? '' : _timeOnly('$iso');
     List<Map> list(String k) =>
         ((info[k] as List?) ?? const []).whereType<Map>().toList();
-    // A secret heart counts who OPENED it, not who saw the chat.
-    final heart = info.containsKey('opened');
+    // A secret heart counts who OPENED it, not who saw the chat. (The
+    // server always sends the `opened` key — null for anything but a heart —
+    // so its presence alone would count every message by "opened".)
+    final heart = info['opened'] is List;
     final read = heart ? list('opened') : list('read');
     final got = heart
         ? [...list('read'), ...list('delivered')]

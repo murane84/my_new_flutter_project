@@ -809,7 +809,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
         }
         return false;
       }
-      return _saveBytesToDevice(res.bodyBytes, name);
+      return await _saveBytesToDevice(res.bodyBytes, name);
     } catch (_) {
       if (mounted) {
         showToast(context, 'Could not download — try again',

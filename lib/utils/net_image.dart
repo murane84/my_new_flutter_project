@@ -108,7 +108,13 @@ ImageProvider authNetworkImageProvider(
     base = CachedNetworkImageProvider(url, headers: headers);
   }
   if (cacheSize != null) {
-    return ResizeImage(base, width: cacheSize, height: cacheSize);
+    // Keep the photo's own shape: an exact square decode squeezed every
+    // portrait / landscape photo into a square (stretched faces in avatars).
+    // `fit` shrinks it to fit a box twice the size, so even the shorter side
+    // stays sharp when the circle crops it (BoxFit.cover).
+    final box = (cacheSize * 2).clamp(64, 1024);
+    return ResizeImage(base,
+        width: box, height: box, policy: ResizeImagePolicy.fit);
   }
   return base;
 }

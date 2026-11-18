@@ -65,6 +65,20 @@ const List<_Marker> _markers = [
   _Marker('~', 'strike', wordGuard: true),
 ];
 
+final RegExp _wordChar = RegExp(r'[\p{L}\p{N}]', unicode: true);
+
+/// *bold*, _italic_ and ~strike~ only around whole words, the way WhatsApp
+/// reads them: never inside a word, so a file name like
+/// "Report_Existing_Problems.pdf" or snake_case stays as written.
+bool _guardOk(String s, int open, int close, _Marker m, String inner) {
+  if (!m.wordGuard) return true;
+  if (inner.startsWith(' ') || inner.endsWith(' ')) return false;
+  if (open > 0 && _wordChar.hasMatch(s[open - 1])) return false;
+  final after = close + m.token.length;
+  if (after < s.length && _wordChar.hasMatch(s[after])) return false;
+  return true;
+}
+
 _Marker? _markerAt(String s, int i) {
   for (final m in _markers) {
     if (i + m.token.length <= s.length &&
@@ -258,9 +272,7 @@ List<InlineSpan> _parseInline(
       if (close < 0 || close <= i + m.token.length) continue; // empty
       final inner = s.substring(i + m.token.length, close);
       if (inner.trim().isEmpty) continue;
-      if (m.wordGuard && (inner.startsWith(' ') || inner.endsWith(' '))) {
-        continue;
-      }
+      if (!_guardOk(s, i, close, m, inner)) continue;
       found = _Found(i, close, m, inner);
       break;
     }
@@ -750,9 +762,7 @@ List<InlineSpan> _composerSpans(
       if (close < 0 || close <= i + m.token.length) continue;
       final inner = s.substring(i + m.token.length, close);
       if (inner.trim().isEmpty) continue;
-      if (m.wordGuard && (inner.startsWith(' ') || inner.endsWith(' '))) {
-        continue;
-      }
+      if (!_guardOk(s, i, close, m, inner)) continue;
       found = _Found(i, close, m, inner);
       break;
     }
@@ -826,9 +836,7 @@ String _stripInline(String s) {
       if (close < 0 || close <= i + m.token.length) continue;
       final inner = s.substring(i + m.token.length, close);
       if (inner.trim().isEmpty) continue;
-      if (m.wordGuard && (inner.startsWith(' ') || inner.endsWith(' '))) {
-        continue;
-      }
+      if (!_guardOk(s, i, close, m, inner)) continue;
       found = _Found(i, close, m, inner);
       break;
     }
@@ -910,9 +918,7 @@ List<InlineSpan> _previewInline(
       if (close < 0 || close <= i + m.token.length) continue;
       final inner = s.substring(i + m.token.length, close);
       if (inner.trim().isEmpty) continue;
-      if (m.wordGuard && (inner.startsWith(' ') || inner.endsWith(' '))) {
-        continue;
-      }
+      if (!_guardOk(s, i, close, m, inner)) continue;
       found = _Found(i, close, m, inner);
       break;
     }
@@ -1055,8 +1061,12 @@ List<InlineSpan> previewSpans(
             ]),
           ),
         ),
-      ..._previewInline(rest, base,
-          codeBg: codeBg, highlightBg: highlightBg, mention: mention),
+      // A file reads by its name exactly as attached (no formatting).
+      if (e.key == '📎')
+        TextSpan(text: rest, style: base)
+      else
+        ..._previewInline(rest, base,
+            codeBg: codeBg, highlightBg: highlightBg, mention: mention),
     ];
   }
   return [

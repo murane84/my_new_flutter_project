@@ -403,6 +403,14 @@ def list_preview(msg) -> str:
     return content
 
 
+def _sealed_preview(msg, uid):
+    from e2ee_msgs import sealed_preview
+    try:
+        return sealed_preview(msg, uid)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def get_friends_with_unread_counts(db: Session, user_id: int):
     friends = get_all_users(db, user_id)
     friends_with_data = []
@@ -435,6 +443,7 @@ def get_friends_with_unread_counts(db: Session, user_id: int):
                 # media messages with empty content, else the text content.
                 last_message=list_preview(last_message),
                 last_message_id=last_message.id if last_message else None,
+                last_sealed=_sealed_preview(last_message, user_id),
                 unread_count=unread_count,
                 last_sender_id=last_message.sender_id if last_message else None,
                 last_message_delivered=last_message.delivered if last_message else None,

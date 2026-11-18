@@ -88,3 +88,27 @@ def push_fields(msg, uid: int) -> dict:
 
 
 ENV_BY_DEVICE = "__env_by_device"
+
+
+def sealed_preview(msg, uid: int):
+    """The last message as the app needs it to open a list preview itself:
+    only [uid]'s own sealed copies. None for anything that isn't a sealed,
+    live 1:1 text (a heart never previews its note)."""
+    if (msg is None or not getattr(msg, "e2ee", None)
+            or getattr(msg, "is_deleted", False)
+            or (getattr(msg, "message_type", None) or "text") != "text"):
+        return None
+    mine = for_user(msg.envelopes, uid)
+    if not mine:
+        return None
+    return json.dumps({
+        "id": msg.id,
+        "sender_id": msg.sender_id,
+        "receiver_id": msg.receiver_id,
+        "e2ee": msg.e2ee,
+        "e2ee_rev": msg.e2ee_rev or 0,
+        "message_type": "text",
+        "meta": getattr(msg, "meta", None),
+        "envelopes": json.dumps({f"{int(uid)}:{d}": e for d, e in mine.items()},
+                                separators=(",", ":")),
+    }, separators=(",", ":"))

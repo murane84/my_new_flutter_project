@@ -201,8 +201,16 @@ class SealIngress {
       final id = _int(r['last_message_id']);
       if (peer == null || id == 0) continue;
       try {
-        final t = await SealMessenger.instance.textOf(peer, id);
-        if (t != null && t.isNotEmpty) r['last_message'] = t;
+        var t = await SealMessenger.instance.textOf(peer, id);
+        // Not opened on this device yet: the list brings its sealed copy,
+        // so open it now (the chat would anyway) rather than show a lock.
+        final sealed = r['last_sealed'];
+        if ((t == null || t.isEmpty) && sealed is String && sealed.isNotEmpty) {
+          final m = jsonDecode(sealed) as Map<String, dynamic>;
+          await open(m);
+          if (m['seal_state'] == null) t = (m['content'] ?? '').toString();
+        }
+        if (t != null && t.isNotEmpty) r['last_message'] = _withoutQuote(t);
       } catch (_) {}
     }
   }

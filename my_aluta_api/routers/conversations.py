@@ -87,6 +87,8 @@ def _conversation_out(db: Session, conv: Conversation, me: int) -> schemas.Conve
         other_user=other_user,
         last_message=(crud.list_preview(last) if last else None),
         last_message_id=(last.id if last else None),
+        last_sealed=(crud._sealed_preview(last, me)
+                     if last is not None and not conv.is_group else None),
         last_timestamp=(last.timestamp if last else None),
         last_sender_id=(last.sender_id if last else None),
         unread_count=cc.unread_count(db, conv.id, me),

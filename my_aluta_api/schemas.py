@@ -171,6 +171,9 @@ class FriendWithUnread(BaseModel):
     # The last message's id: an encrypted one previews from the device's own
     # unlocked copy (the server only says "🔒 Message").
     last_message_id: Optional[int] = None
+    # 🔒 The last message's sealed copies for MY devices (JSON), so the list
+    # can show its words at once instead of "🔒 Message" until the chat loads.
+    last_sealed: Optional[str] = None
     unread_count: int
     last_sender_id: Optional[int] = None             # ✅ Add this
     last_message_delivered: Optional[bool] = None    # ✅ Add this
@@ -290,6 +293,7 @@ class ConversationOut(BaseModel):
     other_user: Optional[PublicUser] = None   # for DMs: the OTHER member (not me)
     last_message: Optional[str] = None
     last_message_id: Optional[int] = None
+    last_sealed: Optional[str] = None   # see FriendWithUnread.last_sealed
     last_timestamp: Optional[datetime] = None
     last_sender_id: Optional[int] = None
     unread_count: int = 0

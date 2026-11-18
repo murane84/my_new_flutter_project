@@ -21,7 +21,7 @@ import '../widgets/avatar_flight.dart';
 import '../widgets/photo_viewer.dart';
 import '../widgets/recent_photo_picker.dart';
 import '../utils/prefs_now.dart';
-import 'package:image_picker/image_picker.dart';
+import 'stories/camera_capture.dart' show capturePhoto;
 import '../utils/radii.dart';
 import '../widgets/skeleton.dart';
 import '../e2ee/seal_ingress.dart';
@@ -279,11 +279,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _takeAvatarPhoto() async {
     try {
-      final shot = await ImagePicker().pickImage(
-          source: ImageSource.camera,
-          preferredCameraDevice: CameraDevice.front,
-          maxWidth: 1600,
-          imageQuality: 88);
+      // Aluta's own camera: works on phones, the desktop app and the web
+      // (the system picker has no camera on Windows).
+      final shot = await capturePhoto(context);
       if (shot == null) return;
       final bytes = await shot.readAsBytes();
       if (bytes.isEmpty || !mounted) return;

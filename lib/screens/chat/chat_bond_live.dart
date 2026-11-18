@@ -255,8 +255,12 @@ extension _ChatBondLive on _ChatPageState {
       ),
     );
     if (src == null || !mounted) return;
-    final picked = await ImagePicker()
-        .pickImage(source: src, maxWidth: 1600, imageQuality: 88);
+    // The camera is Aluta's own (it works on the desktop app too — the
+    // system picker has no camera there, so the tap used to do nothing).
+    final picked = src == ImageSource.camera
+        ? await capturePhoto(context)
+        : await ImagePicker()
+            .pickImage(source: src, maxWidth: 1600, imageQuality: 88);
     if (picked == null || !mounted) return;
     rebuildWith(() => _duoBusy = true);
     try {

@@ -538,6 +538,9 @@ extension _ChatPageHelpers3 on _ChatPageState {
         if (who.isNotEmpty) _songFrom[meta] = who;
       }
     }
+    // Web: no files or temp folders in a browser — fetch it and hand it to
+    // the browser's own download.
+    if (kIsWeb) return _downloadOnWeb(msg, fullMediaUrl(rel), outName, mime);
     try {
       if (mounted) showToast(context, 'Preparing download…');
 
@@ -755,9 +758,48 @@ extension _ChatPageHelpers3 on _ChatPageState {
   /// location picker on mobile, and — because `bytes` is passed — writes the
   /// file itself, returning the chosen path (null if the user cancels). If the
   /// platform doesn't support the dialog, we fall back to the share/save sheet.
+  /// Web: fetch a message's file and let the browser download it.
+  Future<bool> _downloadOnWeb(Map<String, dynamic> msg, String url,
+      String name, String? mime) async {
+    try {
+      if (mounted) showToast(context, 'Preparing download…');
+      final res = await appBusy.run(
+          () => http.get(Uri.parse(url), headers: mediaAuthHeaders(url)));
+      if (res.statusCode != 200 || res.bodyBytes.isEmpty) {
+        if (mounted) {
+          showToast(context,
+              res.statusCode == 404 || res.statusCode == 410
+                  ? 'This file has left the server (24 h) — ask to resend'
+                  : 'Could not download — try again',
+              type: ToastType.error);
+          if (res.statusCode == 404 || res.statusCode == 410) {
+            _offerResendPill(msg);
+          }
+        }
+        return false;
+      }
+      return _saveBytesToDevice(res.bodyBytes, name);
+    } catch (_) {
+      if (mounted) {
+        showToast(context, 'Could not download — try again',
+            type: ToastType.error);
+      }
+      return false;
+    }
+  }
+
   Future<bool> _saveBytesToDevice(List<int> bytes, String fname,
       {bool image = false, track_meta.TrackMeta? meta}) async {
     final data = Uint8List.fromList(bytes);
+    // Web: the browser's own download (Save dialog or Downloads folder).
+    if (kIsWeb) {
+      final ok = downloadBytes(data, fname, 'application/octet-stream');
+      if (mounted) {
+        showToast(context, ok ? 'Downloaded' : 'Could not download',
+            type: ok ? ToastType.success : ToastType.error);
+      }
+      return ok;
+    }
     // On a phone, drop images straight into the photo gallery (easy to find,
     // like WhatsApp) instead of a file-save dialog.
     if (image && _isMobile) {

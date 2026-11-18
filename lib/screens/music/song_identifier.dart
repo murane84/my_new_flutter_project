@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:record/record.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api_service.dart';
@@ -15,6 +14,7 @@ import '../../utils/readable.dart' show accentInk;
 import '../../utils/radii.dart';
 import '../../utils/adaptive_sheet.dart';
 import '../../utils/depth.dart';
+import '../../utils/voice_rec.dart';
 
 /// Shazam-style "what's this song?" flow. The user first picks a SOURCE:
 ///  - "From this phone" — captures the device's own audio output (what another
@@ -111,17 +111,9 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
         if (mounted) setState(() => _phase = _Phase.denied);
         return;
       }
-      final dir = await getTemporaryDirectory();
-      _clipPath =
-          '${dir.path}/aluta_id_${DateTime.now().millisecondsSinceEpoch}.m4a';
-      await _recorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.aacLc,
-          bitRate: 128000,
-          sampleRate: 44100,
-        ),
-        path: _clipPath!,
-      );
+      // A temp file on devices; in memory in a browser (VoiceRec).
+      _clipPath = null;
+      await VoiceRec.start(_recorder, 'aluta_id');
       _tick = Timer.periodic(const Duration(milliseconds: 100), (_) {
         if (!mounted) return;
         setState(() => _elapsedMs += 100);
@@ -145,16 +137,13 @@ class _SongIdentifierSheetState extends State<_SongIdentifierSheet>
         if (mounted) setState(() => _phase = _Phase.error);
         return;
       }
-      final file = File(clip);
-      final bytes = await file.readAsBytes();
-      try {
-        await file.delete();
-      } catch (_) {}
+      final bytes = await VoiceRec.bytesOf(clip);
+      await VoiceRec.discard(clip);
       if (bytes.isEmpty) {
         if (mounted) setState(() => _phase = _Phase.error);
         return;
       }
-      await _identifyBytes(bytes, 'clip.m4a', 'audio/mp4');
+      await _identifyBytes(bytes, 'clip.${VoiceRec.ext}', VoiceRec.mime);
     } catch (_) {
       if (mounted) setState(() => _phase = _Phase.error);
     } finally {

@@ -361,9 +361,12 @@ def search_messages(
     query = db.query(Message).filter(Message.is_deleted == False)  # noqa: E712
     if len(term) >= 2:
         # Text matches the words; a media message also by its file name.
+        # (A sealed file's name is only "sealed" here — never match that;
+        # the app searches its own opened copy.)
         query = query.filter(or_(
             Message.content.icontains(term, autoescape=True),
-            Message.media_name.icontains(term, autoescape=True),
+            (func.coalesce(Message.e2ee, 0) == 0)
+            & Message.media_name.icontains(term, autoescape=True),
         ))
     mime = func.coalesce(Message.media_mime, "")
     mtype = func.coalesce(Message.message_type, "text")

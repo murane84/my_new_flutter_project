@@ -2793,7 +2793,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
         case 'audio':
           return '🎤 Voice note';
         default:
-          return '📎 ${(msg['media_name'] as String?) ?? 'File'}';
+          // (A sealed file not opened here has no real name to show.)
+          return msg['media_mime'] == SealMedia.uploadMime
+              ? '📎 File'
+              : '📎 ${(msg['media_name'] as String?) ?? 'File'}';
       }
     }
     // Structured cards store JSON in `content`; show a friendly label instead.

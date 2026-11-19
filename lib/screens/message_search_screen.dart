@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import 'api_service.dart';
+import '../e2ee/seal_media.dart';
 import '../e2ee/seal_ingress.dart';
 import 'chat_page.dart';
 import '../services/contact_names.dart';
@@ -186,9 +187,19 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
     // their words are found here, in this device's own copy of each chat.
     final mine = await _sealedHits(q);
     if (!mounted || q != _lastTerm || sig != _sig) return;
+    // A sealed photo / file the server found (by kind) carries no name or
+    // caption — this device's own copy replaces it; one this device never
+    // opened shows as just its kind.
+    for (final r in res) {
+      if (r['media_mime'] == SealMedia.uploadMime) {
+        r['media_name'] = '';
+        r['media_mime'] = '';
+      }
+    }
     if (mine.isNotEmpty) {
-      final seen = {for (final r in res) r['id']?.toString()};
-      res.addAll(mine.where((r) => !seen.contains(r['id']?.toString())));
+      final ours = {for (final r in mine) r['id']?.toString()};
+      res.removeWhere((r) => ours.contains(r['id']?.toString()));
+      res.addAll(mine);
       res.sort((a, b) => (b['timestamp'] ?? '')
           .toString()
           .compareTo((a['timestamp'] ?? '').toString()));
@@ -228,7 +239,9 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
   /// Groups aren't sealed (the server finds them); hearts stay out, as their
   /// words are private even here.
   Future<List<Map<String, dynamic>>> _sealedHits(String q) async {
-    if (q.length < 2 || (_kind != null && _kind != 'link')) return const [];
+    // Words, or a kind to browse (sealed photos, videos, voice notes and
+    // files too — their names and captions are only on this device).
+    if ((q.length < 2 && _kind == null) || _kind == 'song') return const [];
     if (_inChat?['group'] == true || (_inChat == null && _chatKind == 'group')) {
       return const [];
     }
@@ -270,13 +283,26 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
           orElse: () => const <String, dynamic>{});
       for (final m in e.value) {
         final c = (m['content'] ?? '').toString();
-        if (!c.toLowerCase().contains(k)) continue;
-        if (_kind == 'link' &&
-            !(c.contains('http://') ||
-                c.contains('https://') ||
-                c.contains('www.'))) {
+        final type = (m['message_type'] ?? 'text').toString();
+        final media = const ['image', 'video', 'audio', 'file'].contains(type);
+        final name = media ? (m['media_name'] ?? '').toString() : '';
+        if (k.length >= 2 &&
+            !c.toLowerCase().contains(k) &&
+            !name.toLowerCase().contains(k)) {
           continue;
         }
+        final ok = switch (_kind) {
+          null => true,
+          'link' => !media &&
+              (c.contains('http://') ||
+                  c.contains('https://') ||
+                  c.contains('www.')),
+          'media' => type == 'image' || type == 'video',
+          'voice' => type == 'audio',
+          'file' => type == 'file',
+          _ => false,
+        };
+        if (!ok) continue;
         final fromMe = m['sender_id']?.toString() == '$me';
         if (_sender == 'me' && !fromMe) continue;
         if (_sender == 'others' && fromMe) continue;
@@ -292,9 +318,9 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
           'content': c,
           'timestamp': raw,
           'sender_id': m['sender_id'],
-          'message_type': 'text',
-          'media_name': '',
-          'media_mime': '',
+          'message_type': media ? type : 'text',
+          'media_name': name,
+          'media_mime': media ? (m['media_mime'] ?? '').toString() : '',
           'sender_name': fromMe ? '' : (f['username'] ?? '').toString(),
           'is_group': false,
           'conversation_id': m['conversation_id'],

@@ -659,6 +659,9 @@ class _ChatPageState extends State<ChatPage>
   List<String> _mentionCache = const [];
   List<Map<String, dynamic>>? _seenCacheOf;
   String? _seenCache;
+  // 🔒 Where the "end-to-end encrypted" note goes (see _sealNotes).
+  List<Map<String, dynamic>>? _sealNotesOf;
+  Map<String, bool> _sealNotes = const {};
   // The message field has focus → the composer pill shows its brand ring.
   bool _composerFocused = false;
   // ── Unread divider (chat/chat_unread.dart) ─────────────────────────────────
@@ -1580,6 +1583,7 @@ class _ChatPageState extends State<ChatPage>
   void setState(VoidCallback fn) {
     _mentionCacheOf = null;
     _seenCacheOf = null;
+    _sealNotesOf = null;
     super.setState(fn);
   }
 
@@ -7921,16 +7925,17 @@ class _ChatPageState extends State<ChatPage>
                           // message looks grouped under "Yesterday".
                           // 🔒 Where end-to-end encryption starts (or
                           // starts again) in this chat.
-                          final sealStart = msg['e2ee'] != null &&
-                              (nextIdx >= _messages.length ||
-                                  _messages[nextIdx]['e2ee'] == null);
+                          // Once per chat, and again only after a real
+                          // break (plain text between sealed ones).
+                          final sealNote = _sealNoteFor(msg);
                           return Column(
                             children: [
                               if (showDate)
                                 _buildDateSeparator(dateLabel,
                                     song: _songOnDay(
                                         (msg['timestamp'] ?? '').toString())),
-                              if (sealStart) _buildSealNote(),
+                              if (sealNote != null)
+                                _buildSealNote(again: sealNote),
                               if (_unreadAnchorId != null &&
                                   msg['id'].toString() == _unreadAnchorId)
                                 _buildUnreadDivider(scheme, isDark),

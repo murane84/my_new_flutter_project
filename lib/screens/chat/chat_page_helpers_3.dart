@@ -2461,7 +2461,38 @@ extension _ChatPageHelpers3 on _ChatPageState {
   /// [song]: the song we listened to together that day — "Yesterday ·
   /// ♪ Mgambo", tap the song to play it.
   /// 🔒 The quiet note where a chat becomes end-to-end encrypted.
-  Widget _buildSealNote() {
+  /// The 🔒 note above [msg]: null = none, false = "encrypted" (where it
+  /// started), true = "encrypted again" (after plain text in between).
+  /// Media, hearts, songs and call / Listen Together logs aren't sealed
+  /// yet and never restart it; only a plain TEXT message does (a friend on
+  /// an older Aluta). Computed once per message list.
+  bool? _sealNoteFor(Map<String, dynamic> msg) {
+    if (_isGroup) return null;
+    if (!identical(_sealNotesOf, _messages)) {
+      final notes = <String, bool>{};
+      var sealedBefore = false; // an earlier sealed text in this run
+      var everSealed = false;
+      // _messages is newest first: walk oldest → newest.
+      for (var i = _messages.length - 1; i >= 0; i--) {
+        final m = _messages[i];
+        if (m['is_deleted'] == true) continue;
+        final text = (m['message_type'] ?? 'text').toString() == 'text';
+        if (!text) continue;
+        if (m['e2ee'] != null) {
+          if (!sealedBefore) notes['${m['id']}'] = everSealed;
+          sealedBefore = true;
+          everSealed = true;
+        } else {
+          sealedBefore = false; // plain text: the next sealed one says so
+        }
+      }
+      _sealNotes = notes;
+      _sealNotesOf = _messages;
+    }
+    return _sealNotes['${msg['id']}'];
+  }
+
+  Widget _buildSealNote({bool again = false}) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(28, 4, 28, 10),
@@ -2485,9 +2516,12 @@ extension _ChatPageHelpers3 on _ChatPageState {
               ),
               // Honest about today's reach: text only (photos, voice notes,
               // songs, hearts and Our Space follow in later phases).
-              const TextSpan(
-                  text: 'Text messages are end-to-end encrypted. '
-                      'Only the two of you can read them.'),
+              TextSpan(
+                  text: again
+                      ? 'Text messages are end-to-end encrypted again. '
+                          'Only the two of you can read them.'
+                      : 'Text messages are end-to-end encrypted. '
+                          'Only the two of you can read them.'),
             ]),
             textAlign: TextAlign.center,
             style: TextStyle(

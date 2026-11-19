@@ -3505,7 +3505,10 @@ class _ChatPageState extends State<ChatPage>
       // The gallery now scrolls through photos AND videos (chronological).
       if (t == 'image' || t == 'video') {
         final rel = (m['media_url'] as String?) ?? '';
-        if (rel.isNotEmpty) {
+        // (A sealed one this device couldn't open has nothing to show.)
+        final locked = m['media_mime'] == SealMedia.uploadMime &&
+            !SealMedia.isSealed(rel);
+        if (rel.isNotEmpty && !locked) {
           images.add(fullMediaUrl(rel));
           imgMsgs.add(m);
         }
@@ -4177,8 +4180,11 @@ class _ChatPageState extends State<ChatPage>
     List<_MenuAction> buildFull(BuildContext ctx) {
       // A 🔒 copy this phone couldn't open is treated like a tombstone: no
       // reply / copy / forward of the placeholder text.
-      final deleted =
-          msg['is_deleted'] == true || msg['seal_state'] != null;
+      final deleted = msg['is_deleted'] == true ||
+          msg['seal_state'] != null ||
+          // (sealed media this device can't open: same)
+          (msg['media_mime'] == SealMedia.uploadMime &&
+              !SealMedia.isSealed(msg['media_url'] as String?));
       final isTextMsg = (msg['message_type'] ?? 'text') == 'text';
       final isHeart = (msg['message_type'] ?? 'text') == 'heart';
       // A sent heart nobody has opened yet can still be taken back.
@@ -5327,6 +5333,11 @@ class _ChatPageState extends State<ChatPage>
       final content = (m['content'] ?? '').toString();
       final ts = (m['timestamp'] ?? '').toString();
 
+      // 🔒 Sealed media this device couldn't open: nothing to show here (the
+      // thread shows its locked tile).
+      if (m['media_mime'] == SealMedia.uploadMime && !SealMedia.isSealed(rel)) {
+        continue;
+      }
       if ((type == 'image' || type == 'video') && rel.isNotEmpty) {
         final full = fullMediaUrl(rel);
         // A sealed clip has no server poster (the server can't see it).

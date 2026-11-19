@@ -286,20 +286,13 @@ class _ReplyBannerViewState extends State<_ReplyBannerView>
         if (mounted) showToast(context, 'Hold longer to record');
         return;
       }
-      final api = ApiService();
-      final up = await api.uploadMedia(
-          bytes: bytes, filename: 'voice_$ms.m4a', mime: 'audio/mp4');
-      final url = up?['url'] as String?;
-      final res = url == null
-          ? null
-          : await api.sendMessage(widget.friendId ?? 0, '',
-              conversationId: widget.conversationId,
-              messageType: 'audio',
-              mediaUrl: url,
-              mediaName: (up?['name'] ?? 'voice_$ms.m4a') as String?,
-              mediaMime: 'audio/mp4',
-              mediaSize: (up?['size'] as num?)?.toInt(),
-              mediaDuration: ms);
+      // 🔒 Locked on this phone for a 1:1 friend, like the chat's own.
+      final res = await ApiService().sendMediaTo(widget.friendId ?? 0, bytes,
+          type: 'audio',
+          filename: 'voice_$ms.m4a',
+          mime: 'audio/mp4',
+          durationMs: ms,
+          conversationId: widget.conversationId);
       if (!mounted) return;
       if (res == null) {
         showToast(context, "Couldn't send the voice note",

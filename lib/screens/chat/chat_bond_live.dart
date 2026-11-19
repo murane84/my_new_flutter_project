@@ -266,11 +266,13 @@ extension _ChatBondLive on _ChatPageState {
     rebuildWith(() => _duoBusy = true);
     try {
       final url = fullMediaUrl(rel);
-      final theirs = await http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
-      if (theirs.statusCode != 200) throw Exception('their half');
+      // (Their half may be a sealed photo: opened on this phone.)
+      final theirs =
+          await MediaStore.instance.bytes(url, mediaAuthHeaders(url));
+      if (theirs == null || theirs.isEmpty) throw Exception('their half');
       final mine = await picked.readAsBytes();
       // Theirs on the left, mine on the right (decoded off the UI thread).
-      final jpg = await compute(_composeDuo, (theirs.bodyBytes, mine));
+      final jpg = await compute(_composeDuo, (theirs, mine));
       if (jpg == null) throw Exception('compose');
       final assetId = await ApiService().uploadStoryMedia(
           bytes: jpg, filename: 'duo.jpg', mime: 'image/jpeg');

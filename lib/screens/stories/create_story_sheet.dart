@@ -515,18 +515,18 @@ class _MediaComposePageState extends State<_MediaComposePage> {
     if (bytes == null || _posting) return;
     setState(() => _posting = true);
     final mime = _mimeFor(widget.file, widget.kind);
-    final up = await ApiService().uploadMedia(
-        bytes: bytes, filename: widget.file.name, mime: mime);
-    final sent = up == null || up['url'] == null
-        ? null
-        : await ApiService().sendMessage(
-            partner.id, '📸 Duo status — add your half 💞',
-            messageType: 'image',
-            mediaUrl: up['url'].toString(),
-            mediaName: (up['name'] ?? widget.file.name).toString(),
-            mediaMime: (up['mime'] ?? mime).toString(),
-            mediaSize: (up['size'] as num?)?.toInt() ?? bytes.length,
-            meta: jsonEncode({'duo': 1}));
+    // 🔒 Locked on this phone when their Aluta can open it, like any photo.
+    Map<String, dynamic>? sent;
+    try {
+      sent = await ApiService().sendMediaTo(partner.id, bytes,
+          type: 'image',
+          filename: widget.file.name,
+          mime: mime,
+          content: '📸 Duo status — add your half 💞',
+          meta: jsonEncode({'duo': 1}));
+    } catch (_) {
+      sent = null;
+    }
     if (!mounted) return;
     setState(() => _posting = false);
     if (sent == null) {

@@ -2,10 +2,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
+import 'package:flutter/painting.dart' show PaintingBinding;
 import 'package:path_provider/path_provider.dart';
 
 import '../e2ee/seal_media.dart';
-import '../screens/web_fs/blob_url.dart' show makeBlobUrl;
+import '../screens/web_fs/blob_url.dart' show makeBlobUrl, revokeBlobUrl;
 import '../utils/net.dart' as http;
 import 'download_manager.dart';
 
@@ -229,6 +230,51 @@ class MediaStore {
     } catch (_) {}
   }
 
+  /// Where an opened sealed file is put, under its real name, for the
+  /// system viewer ("Open with…") — removed with the message, and at
+  /// sign-out. Null for ordinary media (or on the web).
+  Future<Directory?> openedDirFor(String url) async {
+    final key = SealMedia.keyOf(url);
+    if (key == null || kIsWeb) return null;
+    try {
+      final t = await getTemporaryDirectory();
+      return Directory('${t.path}/aluta_open/sealed/${_sealedId(key)}');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Sign-out: every opened sealed file leaves this device (disk, the
+  /// viewer copies, memory, decoded pictures).
+  Future<void> wipeSealed() async {
+    for (final b in _webBlobs.values) {
+      revokeBlobUrl(b);
+    }
+    _webSealed.clear();
+    _webBlobs.clear();
+    try {
+      PaintingBinding.instance.imageCache
+        ..clear()
+        ..clearLiveImages();
+    } catch (_) {}
+    if (kIsWeb) return;
+    try {
+      final d = await _base();
+      if (d != null) {
+        await for (final f in d.list()) {
+          if (f is File && f.uri.pathSegments.last.startsWith('s_')) {
+            await f.delete();
+          }
+        }
+      }
+    } catch (_) {}
+    try {
+      final t = await getTemporaryDirectory();
+      final o = Directory('${t.path}/aluta_open/sealed');
+      if (await o.exists()) await o.delete(recursive: true);
+    } catch (_) {}
+  }
+
   /// Drop the opened copy of sealed media locked with [key] (its message
   /// was deleted) — from disk, or from memory on the web.
   Future<void> removeSealed(List<int> key) async {
@@ -238,7 +284,11 @@ class MediaStore {
         return k != null && listEquals(k, key);
       }
       _webSealed.removeWhere((url, _) => same(url));
-      _webBlobs.removeWhere((url, _) => same(url));
+      _webBlobs.removeWhere((url, b) {
+        if (!same(url)) return false;
+        revokeBlobUrl(b);
+        return true;
+      });
       return;
     }
     try {
@@ -246,6 +296,11 @@ class MediaStore {
       if (d == null) return;
       final f = File('${d.path}/${_sealedId(key)}');
       if (await f.exists()) await f.delete();
+    } catch (_) {}
+    try {
+      final t = await getTemporaryDirectory();
+      final o = Directory('${t.path}/aluta_open/sealed/${_sealedId(key)}');
+      if (await o.exists()) await o.delete(recursive: true);
     } catch (_) {}
   }
 

@@ -284,6 +284,8 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
       for (final m in e.value) {
         final c = (m['content'] ?? '').toString();
         final type = (m['message_type'] ?? 'text').toString();
+        // A shared location / contact keeps JSON in its words: not a hit.
+        if (type == 'location' || type == 'contact') continue;
         final media = const ['image', 'video', 'audio', 'file'].contains(type);
         final name = media ? (m['media_name'] ?? '').toString() : '';
         if (k.length >= 2 &&

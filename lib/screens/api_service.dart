@@ -11,6 +11,7 @@ import '../utils/app_config.dart';
 import '../utils/session_events.dart';
 import '../services/biometric_service.dart';
 import '../services/story_posting.dart';
+import '../services/media_store.dart';
 import '../e2ee/seal_media.dart';
 import '../e2ee/seal_ingress.dart';
 import '../e2ee/seal_keystore.dart' show SealKeyStore;
@@ -1457,7 +1458,12 @@ class ApiService {
       // sealed but can't be right now, the send fails like a network error —
       // never quietly in the clear.
       Map<String, dynamic>? sealed;
-      final plainText = (messageType == null || messageType == 'text') &&
+      // (A shared location / contact card is sealed like text: its JSON
+      // lives in the words.)
+      final plainText = (messageType == null ||
+              messageType == 'text' ||
+              messageType == 'location' ||
+              messageType == 'contact') &&
           mediaUrl == null &&
           heartMood == null &&
           unlockAt == null;
@@ -3975,6 +3981,65 @@ class ApiService {
   /// Pass `ephemeral: true` for a shared song: the server marks the bytes for
   /// early purge (removed once the recipient caches the file locally and acks
   /// via [ackAttachmentCached], or after a 7-day TTL), keeping only a reference.
+  /// 🔒 Upload [bytes] and send them to [receiverId] as a photo / video /
+  /// voice note / file — locked on this phone first when their Aluta can
+  /// open it (the same rule as the chat composer). For the shortcuts that
+  /// send media outside the chat screen (a voice reply from the banner, a
+  /// status duo). Throws when it should be locked but can't be right now.
+  Future<Map<String, dynamic>?> sendMediaTo(
+    int receiverId,
+    List<int> bytes, {
+    required String type,
+    required String filename,
+    required String mime,
+    String content = '',
+    int? durationMs,
+    String? meta,
+    int? conversationId,
+  }) async {
+    Uint8List? key;
+    List<int> up = bytes;
+    if (conversationId == null &&
+        const ['image', 'video', 'audio', 'file'].contains(type) &&
+        bytes.length <= SealMedia.maxBytes &&
+        await SealIngress.canSealMedia(receiverId)) {
+      final (locked, k) = await SealMedia.sealInBackground(bytes);
+      up = locked;
+      key = k;
+    }
+    final u = await uploadMedia(
+      bytes: up,
+      filename: key != null ? 'sealed' : filename,
+      mime: key != null ? SealMedia.uploadMime : mime,
+      sealedKind: key != null ? type : null,
+    );
+    final url = u?['url'] as String?;
+    if (url == null || url.isEmpty) return null;
+    final sent = await sendMessage(
+      receiverId,
+      content,
+      messageType: type,
+      mediaUrl: url,
+      mediaName: key != null ? filename : (u?['name'] ?? filename) as String?,
+      mediaMime: key != null ? mime : (u?['mime'] ?? mime) as String?,
+      mediaSize: key != null
+          ? bytes.length
+          : (u?['size'] as num?)?.toInt() ?? bytes.length,
+      mediaDuration: durationMs,
+      conversationId: conversationId,
+      meta: meta,
+      mediaKey: key,
+    );
+    // My own copy opens at once from what I already hold.
+    final mu = sent?['media_url'];
+    if (key != null && mu is String) {
+      final full = mu.startsWith('http') ? mu : '${await _baseUrl}$mu';
+      unawaited(
+          MediaStore.instance.putBytes(full, Uint8List.fromList(bytes)));
+    }
+    return sent;
+  }
+
   Future<Map<String, dynamic>?> uploadMedia({
     required List<int> bytes,
     required String filename,

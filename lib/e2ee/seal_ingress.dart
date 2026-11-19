@@ -253,6 +253,8 @@ class SealIngress {
     final words = _withoutQuote(SealPayload.textOf(stored));
     final media = SealPayload.mediaOf(stored);
     if (media == null) {
+      // A shared location / contact keeps its label, never its JSON.
+      if (label != serverPreview && words.startsWith('{')) return label;
       return words.isNotEmpty || label == serverPreview ? words : label;
     }
     var head = label == serverPreview ? '' : label;
@@ -350,5 +352,6 @@ class SealIngress {
     await SealMessenger.instance.wipe();
     await SealSpace.instance.wipe();
     await SealDirectory.instance.signOut();
+    await MediaStore.instance.wipeSealed(); // opened photos / files too
   }
 }

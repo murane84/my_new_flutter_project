@@ -303,13 +303,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     }
     // A quick reaction also shows beside my name in their "Viewed by".
     if (quick != null) ApiService().reactToStory(item.id, quick);
-    final sent = gifUrl != null
-        ? await ApiService().sendMessage(to, content,
-            messageType: 'image',
-            mediaUrl: gifUrl,
-            mediaName: 'sticker.gif',
-            mediaMime: 'image/gif')
-        : await ApiService().sendMessage(to, content);
+    final sent = await _sendWithGif(to, content, gifUrl);
     if (!mounted) return;
     setState(() => _replySending = false);
     final name = _displayName();
@@ -1623,14 +1617,22 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     // The DM shows it as a quote: a warm "caught you" + which status.
     final content = '> 👀 Caught you on my status\n> ${_statusQuote(item)}'
         '\n\n${emoji ?? ''}';
-    final sent = gifUrl != null
-        ? await ApiService().sendMessage(v.userId, content,
-            messageType: 'image',
-            mediaUrl: gifUrl,
-            mediaName: 'sticker.gif',
-            mediaMime: 'image/gif')
-        : await ApiService().sendMessage(v.userId, content);
+    final sent = await _sendWithGif(v.userId, content, gifUrl);
     return sent != null;
+  }
+
+  /// 🔒 Words (sealed like any 1:1 text) and then the GIF on its own — a
+  /// GIF lives on GIPHY's servers and can't be sealed, so it never carries
+  /// the words in the clear.
+  Future<Map<String, dynamic>?> _sendWithGif(
+      int to, String content, String? gifUrl) async {
+    final words = await ApiService().sendMessage(to, content);
+    if (gifUrl == null || words == null) return words;
+    return ApiService().sendMessage(to, '',
+        messageType: 'image',
+        mediaUrl: gifUrl,
+        mediaName: 'sticker.gif',
+        mediaMime: 'image/gif');
   }
 
   Future<String?> _pickSticker(BuildContext ctx) => showAdaptiveSheet<String>(
@@ -2450,18 +2452,18 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     setState(() => _duoBusy = true);
     final bytes = await x.readAsBytes();
     final mime = x.mimeType ?? 'image/jpeg';
-    final up = await ApiService()
-        .uploadMedia(bytes: bytes, filename: x.name, mime: mime);
-    final sent = up == null || up['url'] == null
-        ? null
-        : await ApiService().sendMessage(partner.id,
-            '> ${_statusQuote(item)}\n\n📸 Duo — add your half 💞',
-            messageType: 'image',
-            mediaUrl: up['url'].toString(),
-            mediaName: (up['name'] ?? x.name).toString(),
-            mediaMime: (up['mime'] ?? mime).toString(),
-            mediaSize: (up['size'] as num?)?.toInt() ?? bytes.length,
-            meta: jsonEncode({'duo': 1}));
+    // 🔒 Locked on this phone when their Aluta can open it, like any photo.
+    Map<String, dynamic>? sent;
+    try {
+      sent = await ApiService().sendMediaTo(partner.id, bytes,
+          type: 'image',
+          filename: x.name,
+          mime: mime,
+          content: '> ${_statusQuote(item)}\n\n📸 Duo — add your half 💞',
+          meta: jsonEncode({'duo': 1}));
+    } catch (_) {
+      sent = null;
+    }
     if (!mounted) return;
     setState(() => _duoBusy = false);
     final first = _displayName().split(RegExp(r'\s+')).first;

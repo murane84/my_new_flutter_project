@@ -322,7 +322,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
       final seg = Uri.parse(url).pathSegments;
       final keyId = (seg.isNotEmpty ? seg.last : '${url.hashCode}')
           .replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
-      final holder = Directory('${dir.path}/aluta_open/$keyId');
+      // 🔒 A sealed file's opened copy sits where deleting the message (or
+      // signing out) clears it.
+      final holder = await MediaStore.instance.openedDirFor(url) ??
+          Directory('${dir.path}/aluta_open/$keyId');
       if (!await holder.exists()) await holder.create(recursive: true);
       final file = File('${holder.path}/$name');
       final expected = (msg['media_size'] as num?)?.toInt() ?? 0;

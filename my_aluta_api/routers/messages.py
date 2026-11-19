@@ -647,6 +647,10 @@ def react_to_message(
                     "emoji": emoji,
                     # Hearts stay secret; media shows its label.
                     "body": crud.list_preview(message)[:120],
+                    # 🔒 Sealed: the author's phone fills in its own words.
+                    **({"sealed": "1"} if getattr(message, "e2ee", None)
+                       and (message.message_type or "text") != "heart"
+                       else {}),
                 })
     except Exception as e:  # noqa: BLE001
         print(f"[react] push skipped: {e}")

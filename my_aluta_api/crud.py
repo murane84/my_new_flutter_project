@@ -325,11 +325,18 @@ def list_preview(msg) -> str:
         from e2ee_msgs import LOCKED_PREVIEW
         return LOCKED_PREVIEW
     if getattr(msg, "e2ee", None):
-        # Sealed media: its kind shows ("📷 Photo"); name and caption are
-        # inside the sealed copy.
+        # Sealed media: its kind shows, as for plain media ("📷 Photo",
+        # "🎤 0:12"); the name and caption are inside the sealed copy (the
+        # app adds them from its own opened copy).
         msg_kind = (msg.message_type or "").lower()
-        return {"image": "📷 Photo", "video": "🎬 Video",
-                "audio": "🎤 Voice note"}.get(msg_kind, "📎 File")
+        if msg_kind == "audio":
+            ms = getattr(msg, "media_duration", None) or 0
+            if ms and ms > 0:
+                sec = int(round(ms / 1000))
+                return f"🎤 {sec // 60}:{sec % 60:02d}"
+            return "🎤 Voice note"
+        return {"image": "📷 Photo", "video": "🎬 Video"}.get(
+            msg_kind, "📎 File")
     content = (msg.content or "").strip()
     # A reply stores the quoted message first ("> …" lines, a blank line),
     # then the answer: preview the ANSWER (the list said "You: <their words>"

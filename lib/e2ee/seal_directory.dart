@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../screens/token_helper.dart';
 import '../utils/app_config.dart';
@@ -20,11 +21,14 @@ class SealDeviceBundle {
 
 /// One device of a person, as listed by the key directory.
 class SealPeerDevice {
-  SealPeerDevice(this.deviceId, this.ikSig, {this.ikDh, this.ikDhSig});
+  SealPeerDevice(this.deviceId, this.ikSig,
+      {this.ikDh, this.ikDhSig, this.caps = const {}});
   final String deviceId;
   final String ikSig; // base64 Ed25519 identity
   final String? ikDh; // base64 X25519 identity (to wrap Our Space keys for)
   final String? ikDhSig; // ikDh signed by ikSig
+  /// What its Aluta can open beyond sealed text ("m1" = sealed media).
+  final Set<String> caps;
 }
 
 /// What the messenger needs from the key directory (a fake in tests).
@@ -104,6 +108,10 @@ class SealDirectory implements SealKeyDirectory {
     await SealSpace.instance.serveAll();
   }
 
+  /// What this app can open beyond sealed text, told to the directory so
+  /// friends know (m1 = sealed media v1, seal_media.dart).
+  static const String caps = 'm1';
+
   /// Register / refresh this device and keep one-time prekeys topped up.
   /// Call when the signed-in home mounts.
   Future<void> sync({bool retried = false}) async {
@@ -117,7 +125,11 @@ class SealDirectory implements SealKeyDirectory {
       final rotated = await keys.rotateSpkIfDue();
       final base = await AppConfig.baseUrl;
       final spk = keys.currentSpk;
-      if (rotated || keys.registeredSpkId != spk.id) {
+      final prefs = await SharedPreferences.getInstance();
+      final capsKey = 'aluta_seal_caps_${keys.deviceId}';
+      if (rotated ||
+          keys.registeredSpkId != spk.id ||
+          prefs.getString(capsKey) != caps) {
         final id = keys.identity;
         final r = await http.put(Uri.parse('$base/e2ee/device'),
             headers: h,
@@ -130,9 +142,11 @@ class SealDirectory implements SealKeyDirectory {
               'spk': base64Encode(spk.keys.public),
               'spk_sig': base64Encode(spk.sig),
               'platform': _platform,
+              'caps': caps,
             }));
         if (r.statusCode != 200) return;
         await keys.markRegistered(spk.id);
+        await prefs.setString(capsKey, caps);
       }
       final c = await http.get(
           Uri.parse('$base/e2ee/prekeys/count'
@@ -184,7 +198,12 @@ class SealDirectory implements SealKeyDirectory {
       return [
         for (final d in list.cast<Map<String, dynamic>>())
           SealPeerDevice(d['device_id'] as String, d['ik_sig'] as String,
-              ikDh: d['ik_dh'] as String?, ikDhSig: d['ik_dh_sig'] as String?)
+              ikDh: d['ik_dh'] as String?,
+              ikDhSig: d['ik_dh_sig'] as String?,
+              caps: {
+                for (final c in '${d['caps'] ?? ''}'.split(','))
+                  if (c.trim().isNotEmpty) c.trim()
+              })
       ];
     } catch (e) {
       debugPrint('Seal devices: $e');

@@ -268,6 +268,8 @@ extension _ChatPageHelpers1 on _ChatPageState {
     if (rel.isEmpty || rel.startsWith('http')) return rel;
     try {
       final url = fullMediaUrl(rel);
+      // Opened bytes (a sealed file is unlocked here, never re-uploaded
+      // locked without its key) — device copy first, then the server.
       List<int>? bytes;
       if (!kIsWeb) {
         try {
@@ -277,14 +279,13 @@ extension _ChatPageHelpers1 on _ChatPageState {
         } catch (_) {}
       }
       if (bytes == null || bytes.isEmpty) {
-        final res =
-            await http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
-        if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
-          bytes = res.bodyBytes;
-        }
+        bytes = await MediaStore.instance.bytes(url, mediaAuthHeaders(url));
       }
-      if (bytes == null || bytes.isEmpty) return rel;
-      final name = rel.split('/').last;
+      if (bytes == null || bytes.isEmpty) {
+        // Never hand a sealed address (it carries the key) onward.
+        return SealMedia.isSealed(rel) ? '' : rel;
+      }
+      final name = SealMedia.bare(rel).split('/').last;
       final up = await ApiService().uploadMedia(
         bytes: bytes,
         filename: name.isEmpty ? 'keepsake' : name,
@@ -292,9 +293,10 @@ extension _ChatPageHelpers1 on _ChatPageState {
         ephemeral: false,
       );
       final newUrl = (up?['url'] as String?) ?? '';
-      return newUrl.isNotEmpty ? newUrl : rel;
+      if (newUrl.isNotEmpty) return newUrl;
+      return SealMedia.isSealed(rel) ? '' : rel;
     } catch (_) {
-      return rel;
+      return SealMedia.isSealed(rel) ? '' : rel;
     }
   }
 
@@ -444,6 +446,11 @@ extension _ChatPageHelpers1 on _ChatPageState {
       final durable = await _durableMediaRef(
           rel, mime.isNotEmpty ? mime : (type == 'image' ? 'image/jpeg' : ''));
       if (!mounted) return;
+      if (durable.isEmpty && rel.isNotEmpty) {
+        showToast(context, 'Could not keep that — check your connection',
+            type: ToastType.error);
+        return;
+      }
       ref = (kind == 'song')
           ? jsonEncode({'title': _songTitleOf(msg), 'ref': durable})
           : durable;

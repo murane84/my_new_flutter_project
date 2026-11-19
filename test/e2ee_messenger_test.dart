@@ -20,12 +20,15 @@ class _Dev {
 class _FakeDirectory implements SealKeyDirectory {
   final Map<int, List<_Dev>> people = {};
   final Map<String, List<OneTimePreKey>> unspent = {};
+  /// Devices whose Aluta can open sealed media ("m1").
+  final Set<String> m1 = {};
 
   @override
   Future<List<SealPeerDevice>?> devicesOf(int userId) async => [
         for (final d in people[userId] ?? const <_Dev>[])
           SealPeerDevice(
-              d.keys.deviceId, base64Encode(d.keys.identity.sig.public))
+              d.keys.deviceId, base64Encode(d.keys.identity.sig.public),
+              caps: m1.contains(d.keys.deviceId) ? const {'m1'} : const {})
       ];
 
   @override
@@ -172,6 +175,46 @@ void main() {
 
     await b.app.forgetChat(alice); // chat cleared
     expect(jsonEncode(await b.app.exportPlain()).contains('baki'), isFalse);
+  });
+
+  test('sealed media: key, name and caption travel sealed', () async {
+    final a = await device(alice, 'a');
+    final aPc = await device(alice, 'a-pc');
+    final b = await device(bob, 'b');
+    expect(await a.app.canSealMedia(bob, alice), isFalse,
+        reason: 'no device has said it can open sealed media');
+    dir.m1.addAll([a.keys.deviceId, b.keys.deviceId]);
+    expect(await a.app.canSealMedia(bob, alice), isFalse,
+        reason: "Alice's computer can't open it yet");
+    dir.m1.add(aPc.keys.deviceId);
+    expect(await a.app.canSealMedia(bob, alice), isTrue);
+
+    const media = {'k': 'AAAA', 'n': 'picha.jpg', 'mm': 'image/jpeg'};
+    final env = await a.app.seal(bob, alice, 'pwani', media: media);
+    final m = {
+      'id': nextId++,
+      'sender_id': alice,
+      'receiver_id': bob,
+      'content': '',
+      'message_type': 'image',
+      'e2ee': 1,
+      'e2ee_rev': 0,
+      'envelopes': jsonEncode(env),
+    };
+    await a.app.rememberSent(
+        bob, m['id'] as int, 0, SealPayload.store('pwani', media));
+    for (final d in [b, aPc, a]) {
+      final r = await d.app.open(Map<String, dynamic>.from(m), d.uid);
+      expect(r.status, SealOpenStatus.ok);
+      expect(r.caption, 'pwani');
+      expect(r.media, media);
+    }
+    expect(await b.app.textOf(alice, m['id'] as int), 'pwani',
+        reason: 'search and lists see the caption, not the stored form');
+    final dropped = await b.app.forget([m['id'] as int]);
+    expect(dropped, [media], reason: 'its opened file goes too');
+    expect(SealPayload.textOf('plain'), 'plain');
+    expect(SealPayload.mediaOf('plain'), isNull);
   });
 
   test('an edit is a new revision', () async {

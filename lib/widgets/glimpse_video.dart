@@ -9,6 +9,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import '../screens/home_page.dart' show playbackBus;
 
+import '../e2ee/seal_media.dart';
 import '../services/media_store.dart';
 import '../utils/motion.dart';
 import '../utils/radii.dart';
@@ -126,14 +127,26 @@ class _GlimpseVideoState extends State<GlimpseVideo> {
     if (_c != null || _initing || _error) return;
     if (!kIsWeb && _file == null) return; // native needs a local file first
     _initing = true;
+    // 🔒 Sealed clip on the web: opened here, played from a local blob.
+    String src = widget.url;
+    if (kIsWeb && SealMedia.isSealed(src)) {
+      final local = await MediaStore.instance
+          .webSource(src, widget.headers, mime: 'video/mp4');
+      if (local == null) {
+        _initing = false;
+        if (mounted) setState(() => _error = true);
+        return;
+      }
+      src = local;
+    }
     final c = (!kIsWeb && _file != null)
         ? VideoPlayerController.file(
             _file!,
             videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
           )
         : VideoPlayerController.networkUrl(
-            Uri.parse(widget.url),
-            httpHeaders: widget.headers,
+            Uri.parse(src),
+            httpHeaders: src == widget.url ? widget.headers : const {},
             videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
           );
     try {

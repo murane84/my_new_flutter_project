@@ -66,7 +66,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
       aspectRatioFallback: 16 / 10,
       durationSecs: secs > 0 ? secs : null,
       caption: caption,
-      posterUrl: '$url/thumb',
+      posterUrl: SealMedia.isSealed(url) ? null : '$url/thumb',
       // Fullscreen opens the in-thread media gallery (swipe through every
       // photo/GIF/video here); its own control then opens the immersive player.
       onFullscreen: () => _openImageViewer(url),
@@ -94,7 +94,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
     // Live state comes from the app-wide DownloadManager (so it survives
     // leaving and re-opening the chat); the per-message flag only covers the
     // short "preparing" moment before the job starts.
-    final job = DownloadManager.instance.job(url);
+    // (A sealed file downloads locked under its bare address.)
+    final job = DownloadManager.instance.job(SealMedia.bare(url));
     final dlBusy = job != null || msg['__dlBusy'] == true;
     final dlP = job?.progress ?? (msg['__dlProgress'] as num?)?.toDouble();
     // "Owned" = the sender's own file (they always have it) OR a file this
@@ -168,7 +169,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
                     ? null
                     : () {
                         Haptics.selectionClick();
-                        DownloadManager.instance.cancel(url);
+                        DownloadManager.instance.cancel(SealMedia.bare(url));
                       },
                 child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -243,6 +244,18 @@ extension _ChatPageHelpers3 on _ChatPageState {
     return Icons.insert_drive_file_rounded;
   }
 
+  /// GET [url] for a browser hand-off — opened first when it's sealed
+  /// media (a 404 stands in when it can't be fetched or opened).
+  Future<http.Response> _fetchOpened(String url) async {
+    if (!SealMedia.isSealed(url)) {
+      return http.get(Uri.parse(url), headers: mediaAuthHeaders(url));
+    }
+    final data = await MediaStore.instance.bytes(url, mediaAuthHeaders(url));
+    return data == null
+        ? http.Response('', 404)
+        : http.Response.bytes(data, 200);
+  }
+
   Future<void> _openUrl(String url, Map<String, dynamic> msg) async {
     // Attachments are auth-protected: fetch the bytes WITH our token, save them
     // under the file's REAL name (with extension), and hand them to the system
@@ -250,7 +263,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
     // Reuse an already-downloaded copy when we can, and STREAM the fetch to disk
     // with a live % on the bubble (never buffer a big APK in RAM -> ANR).
     if (msg['__dlBusy'] == true) return;
-    if (DownloadManager.instance.isBusy(url)) {
+    if (DownloadManager.instance.isBusy(SealMedia.bare(url))) {
       showToast(context, 'Still downloading — it keeps going in the background');
       return;
     }
@@ -274,8 +287,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
       // song or text opens in a new tab; anything else (or a blocked tab)
       // is downloaded.
       if (kIsWeb) {
-        final res = await appBusy.run(
-            () => http.get(Uri.parse(url), headers: mediaAuthHeaders(url)));
+        // 🔒 A sealed file is opened here before the browser sees it.
+        final res = await appBusy.run(() => _fetchOpened(url));
         if (res.statusCode != 200 || res.bodyBytes.isEmpty) {
           if (mounted) {
             final gone = res.statusCode == 404 || res.statusCode == 410;
@@ -335,6 +348,21 @@ extension _ChatPageHelpers3 on _ChatPageState {
           if (cached.path != file.path) await cached.copy(file.path);
           ready = true;
         }
+      }
+
+      if (!ready && SealMedia.isSealed(url)) {
+        // 🔒 Sealed: fetched locked, opened on this phone, then handed over.
+        final opened = await appBusy.run(
+            () => MediaStore.instance.getFile(url, mediaAuthHeaders(url)));
+        if (opened == null) {
+          if (mounted) {
+            showToast(context, 'Could not open — try again',
+                type: ToastType.error);
+          }
+          return;
+        }
+        if (opened.path != file.path) await opened.copy(file.path);
+        ready = true;
       }
 
       if (!ready) {
@@ -457,7 +485,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
       }
       if (bytes == null || bytes.isEmpty) {
         final res = await appBusy.run(
-            () => http.get(Uri.parse(url), headers: mediaAuthHeaders(url)));
+            () => _fetchOpened(url));
         if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
           bytes = res.bodyBytes;
         }
@@ -589,7 +617,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
       final url = fullMediaUrl(rel);
 
       // 2) Locally-persisted media-store copy (survives the server purge).
-      if (!kIsWeb && id == null && onProgress == null) {
+      //    🔒 A sealed file only ever comes this way (fetched locked, opened
+      //    on this phone) — never as raw bytes from step 3.
+      final sealed = SealMedia.isSealed(url);
+      if (!kIsWeb && id == null && (onProgress == null || sealed)) {
         try {
           final f =
               await MediaStore.instance.getFile(url, mediaAuthHeaders(url));
@@ -597,6 +628,13 @@ extension _ChatPageHelpers3 on _ChatPageState {
             return await _saveFileToDevice(f, outName, type, meta: meta);
           }
         } catch (_) {}
+      }
+      if (sealed) {
+        if (mounted) {
+          showToast(context, 'Could not save — try again',
+              type: ToastType.error);
+        }
+        return false;
       }
 
       // 3) Stream the server copy to a temp file - never buffer a big file in
@@ -795,7 +833,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
     try {
       if (mounted) showToast(context, 'Preparing download…');
       final res = await appBusy.run(
-          () => http.get(Uri.parse(url), headers: mediaAuthHeaders(url)));
+          () => _fetchOpened(url));
       if (res.statusCode != 200 || res.bodyBytes.isEmpty) {
         if (mounted) {
           showToast(context,

@@ -91,6 +91,8 @@ import 'package:permission_handler/permission_handler.dart';
 import '../utils/net.dart' as http;
 import 'web_fs/blob_url.dart' show downloadBytes, openBytesInTab;
 import '../utils/voice_rec.dart';
+import '../e2ee/seal_ingress.dart' show SealIngress;
+import '../e2ee/seal_media.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 import 'package:url_launcher/url_launcher.dart';
@@ -2046,6 +2048,35 @@ class _ChatPageState extends State<ChatPage>
     );
   }
 
+  /// 🔒 [rel]'s file (opened, if it was sealed) locked afresh on this phone
+  /// for [peer] and uploaded: (address, key, opened bytes). Null when their
+  /// Aluta can't open sealed media yet, or it isn't a lockable kind.
+  Future<(String, Uint8List, Uint8List)?> _sealedCopyFor(
+      String rel, String type, int peer) async {
+    if (!const ['image', 'video', 'audio', 'file'].contains(type)) return null;
+    if (rel.startsWith('http')) return null; // external (e.g. a GIF)
+    if (!await SealIngress.canSealMedia(peer)) return null;
+    try {
+      final url = fullMediaUrl(rel);
+      final data =
+          await MediaStore.instance.bytes(url, mediaAuthHeaders(url));
+      if (data == null || data.isEmpty || data.length > SealMedia.maxBytes) {
+        return null;
+      }
+      final (locked, key) = await SealMedia.sealInBackground(data);
+      final up = await ApiService().uploadMedia(
+        bytes: locked,
+        filename: 'sealed',
+        mime: SealMedia.uploadMime,
+        sealedKind: type,
+      );
+      final u = (up?['url'] as String?) ?? '';
+      return u.isEmpty ? null : (u, key, data);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Returns true when it was sent. [doneToast] replaces the usual
   /// "Forwarded to …" (e.g. a resend says "Sent it again to …").
   Future<bool> _forwardTo(
@@ -2061,10 +2092,31 @@ class _ChatPageState extends State<ChatPage>
     // makes them the authorized recipient and survives the original's purge.
     final rel = (msg['media_url'] as String?) ?? '';
     String? outUrl = msg['media_url'] as String?;
+    int? outSize = (msg['media_size'] as num?)?.toInt();
+    Uint8List? outKey, outPlain;
     if (rel.isNotEmpty) {
-      outUrl =
-          await _durableMediaRef(rel, (msg['media_mime'] as String?) ?? '');
+      // 🔒 Locked afresh for them on this phone when their Aluta can open
+      // it (whether or not the original was sealed).
+      final fresh = await _sealedCopyFor(rel, type, fidInt);
+      final String copy;
+      if (fresh != null) {
+        copy = fresh.$1;
+        outKey = fresh.$2;
+        outPlain = fresh.$3;
+        outSize = fresh.$3.length;
+      } else {
+        copy =
+            await _durableMediaRef(rel, (msg['media_mime'] as String?) ?? '');
+      }
+      outUrl = copy;
       if (!mounted) return false;
+      if (copy.isEmpty) {
+        if (!quiet) {
+          showToast(context, 'Couldn’t forward that — check your connection',
+              type: ToastType.error);
+        }
+        return false;
+      }
     }
     try {
       final sent = await ApiService().sendMessage(
@@ -2074,10 +2126,17 @@ class _ChatPageState extends State<ChatPage>
         mediaUrl: outUrl,
         mediaName: msg['media_name'] as String?,
         mediaMime: msg['media_mime'] as String?,
-        mediaSize: (msg['media_size'] as num?)?.toInt(),
+        mediaSize: outSize,
         mediaDuration: (msg['media_duration'] as num?)?.toInt(),
+        mediaKey: outKey,
       );
       if (!mounted) return false;
+      if (sent != null && outPlain != null) {
+        final u = sent['media_url'];
+        if (u is String) {
+          unawaited(MediaStore.instance.putBytes(fullMediaUrl(u), outPlain));
+        }
+      }
       if (sent != null) {
         if (!quiet) {
           showToast(
@@ -5255,7 +5314,12 @@ class _ChatPageState extends State<ChatPage>
 
       if ((type == 'image' || type == 'video') && rel.isNotEmpty) {
         final full = fullMediaUrl(rel);
-        final thumb = type == 'video' ? '$full/thumb' : full;
+        // A sealed clip has no server poster (the server can't see it).
+        final thumb = type != 'video'
+            ? full
+            : SealMedia.isSealed(full)
+                ? ''
+                : '$full/thumb';
         final d = ts.isEmpty ? null : parseServerTime(ts);
         const months = [
           'January', 'February', 'March', 'April', 'May', 'June', 'July',
@@ -9060,6 +9124,10 @@ class _GalleryVideoState extends State<_GalleryVideo> {
         File? f = await MediaStore.instance.cached(widget.url);
         f ??= await MediaStore.instance
             .getFile(widget.url, mediaAuthHeaders(widget.url));
+        // 🔒 A sealed clip only ever plays opened, from the device.
+        if (f == null && SealMedia.isSealed(widget.url)) {
+          throw StateError('sealed clip unavailable');
+        }
         c = f != null
             ? VideoPlayerController.file(f,
                 videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true))
@@ -9067,8 +9135,13 @@ class _GalleryVideoState extends State<_GalleryVideo> {
                 httpHeaders: mediaAuthHeaders(widget.url),
                 videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true));
       } else {
-        c = VideoPlayerController.networkUrl(Uri.parse(widget.url),
-            httpHeaders: mediaAuthHeaders(widget.url),
+        final src = await MediaStore.instance.webSource(
+            widget.url, mediaAuthHeaders(widget.url),
+            mime: 'video/mp4');
+        if (src == null) throw StateError('sealed clip unavailable');
+        c = VideoPlayerController.networkUrl(Uri.parse(src),
+            httpHeaders:
+                src == widget.url ? mediaAuthHeaders(widget.url) : const {},
             videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true));
       }
       await c.initialize();
@@ -9785,6 +9858,10 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer>
         File? f = await MediaStore.instance.cached(widget.url);
         f ??= await MediaStore.instance
             .getFile(widget.url, mediaAuthHeaders(widget.url));
+        // 🔒 A sealed clip only ever plays opened, from the device.
+        if (f == null && SealMedia.isSealed(widget.url)) {
+          throw StateError('sealed clip unavailable');
+        }
         c = f != null
             ? VideoPlayerController.file(f,
                 videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true))
@@ -9794,9 +9871,14 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer>
                 videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
               );
       } else {
+        final src = await MediaStore.instance.webSource(
+            widget.url, mediaAuthHeaders(widget.url),
+            mime: 'video/mp4');
+        if (src == null) throw StateError('sealed clip unavailable');
         c = VideoPlayerController.networkUrl(
-          Uri.parse(widget.url),
-          httpHeaders: mediaAuthHeaders(widget.url),
+          Uri.parse(src),
+          httpHeaders:
+              src == widget.url ? mediaAuthHeaders(widget.url) : const {},
           videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
         );
       }

@@ -745,10 +745,25 @@ extension _ChatPageHelpers2 on _ChatPageState {
             }
           } catch (_) {/* keep the original bytes on any failure */}
         }
+        // 🔒 1:1 photos, videos, voice notes and files are locked on this
+        // phone before they leave it, when every device of theirs (and my
+        // other devices) can open them. The key travels sealed in the
+        // message; the server only ever stores locked bytes.
+        Uint8List? sealKey;
+        var upBytes = sendBytes;
+        if (widget.conversationId == null &&
+            const ['image', 'video', 'audio', 'file'].contains(type) &&
+            sendBytes.length <= SealMedia.maxBytes &&
+            await SealIngress.canSealMedia(widget.friendId)) {
+          final (locked, key) = await SealMedia.sealInBackground(sendBytes);
+          upBytes = locked;
+          sealKey = key;
+        }
         final up = await appBusy.run(() => ApiService().uploadMedia(
-            bytes: sendBytes,
-            filename: sendName,
-            mime: sendMime,
+            bytes: upBytes,
+            filename: sealKey != null ? 'sealed' : sendName,
+            mime: sealKey != null ? SealMedia.uploadMime : sendMime,
+            sealedKind: sealKey != null ? type : null,
             ephemeral: ephemeral,
             onProgress: (sent, total) => UploadManager.instance.progress(
                 convKey,
@@ -785,13 +800,29 @@ extension _ChatPageHelpers2 on _ChatPageState {
               caption,
               messageType: type,
               mediaUrl: up['url'] as String,
-              mediaName: (up['name'] ?? sendName) as String?,
-              mediaMime: (up['mime'] ?? sendMime) as String?,
-              mediaSize: (up['size'] as num?)?.toInt(),
+              mediaName: sealKey != null
+                  ? sendName
+                  : (up['name'] ?? sendName) as String?,
+              mediaMime: sealKey != null
+                  ? sendMime
+                  : (up['mime'] ?? sendMime) as String?,
+              mediaSize: sealKey != null
+                  ? sendBytes.length
+                  : (up['size'] as num?)?.toInt(),
               mediaDuration: durationMs,
               conversationId: widget.conversationId,
               meta: meta,
+              mediaKey: sealKey,
             ));
+        // My own copy opens from this phone at once (no download, no
+        // unlocking): the cache gets the bytes I already hold.
+        if (sent != null && sealKey != null) {
+          final u = sent['media_url'];
+          if (u is String) {
+            unawaited(MediaStore.instance
+                .putBytes(fullMediaUrl(u), Uint8List.fromList(sendBytes)));
+          }
+        }
         if (sent != null) {
           // Truly done now (uploaded AND the message was created). Fill the
           // ring to 100% and confirm with a "Sent" toast, then let the
@@ -962,11 +993,44 @@ extension _ChatPageHelpers2 on _ChatPageState {
     );
   }
 
+  Widget _lockedMediaTile(String type, Color textColor) {
+    final what = switch (type) {
+      'image' => 'photo',
+      'video' => 'video',
+      'audio' => 'voice note',
+      _ => 'file',
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock_outline_rounded,
+              size: 18, color: textColor.withValues(alpha: 0.7)),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text('Encrypted $what — can’t be opened on this device',
+                style: TextStyle(
+                    color: textColor.withValues(alpha: 0.75),
+                    fontSize: 13.5,
+                    fontStyle: FontStyle.italic)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _mediaContent(String type, String rel, Map<String, dynamic> msg,
       bool isMe, Color textColor, ColorScheme scheme, {String? caption}) {
     // Still uploading: show a local preview (images) or a compact placeholder.
     if (msg['__pending'] == true) {
       return _pendingMediaContent(type, msg, textColor);
+    }
+    // 🔒 Sealed media this phone hasn't opened (no key here): a quiet locked
+    // tile — never the locked bytes in a viewer or player.
+    if (msg['media_mime']?.toString() == SealMedia.uploadMime &&
+        !SealMedia.isSealed(rel)) {
+      return _lockedMediaTile(type, textColor);
     }
     final url = fullMediaUrl(rel);
     switch (type) {

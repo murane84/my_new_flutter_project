@@ -10,6 +10,7 @@ import '../screens/token_helper.dart' show mediaAuthHeaders;
 import '../utils/app_config.dart';
 import '../utils/time_utils.dart' show parseServerTime;
 import 'account_prefs.dart';
+import '../e2ee/seal_media.dart';
 import 'media_store.dart';
 
 /// "Save received photos & videos to my Gallery" (off by default).
@@ -124,6 +125,9 @@ class GalleryAutoSave extends ChangeNotifier {
     if (sender == null || sender == myId) return; // only what I RECEIVE
     final id = msg['id']?.toString() ?? '';
     if (id.isEmpty || id.startsWith('tmp-')) return;
+    // 🔒 Sealed media not opened on this phone yet (its key is still inside
+    // the sealed message): wait — it's considered again once opened.
+    if (msg['media_mime']?.toString() == SealMedia.uploadMime) return;
     if (_saved.contains(id) || !_busy.add(id)) return;
     final rel = (msg['media_url'] ?? '').toString();
     if (rel.isEmpty || rel.contains('giphy') || rel.contains('tenor')) {

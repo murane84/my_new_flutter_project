@@ -27,7 +27,49 @@ enum SealOpenStatus {
 class SealOpened {
   const SealOpened(this.status, [this.text]);
   final SealOpenStatus status;
+
+  /// What was sealed, as remembered: plain text, or [SealPayload] form
+  /// for a message carrying sealed media.
   final String? text;
+
+  /// The words (a sealed photo's caption, or the text).
+  String get caption => SealPayload.textOf(text);
+
+  /// A sealed photo / video / voice note / file: {k, n, mm} (key, name,
+  /// type), or null.
+  Map<String, dynamic>? get media => SealPayload.mediaOf(text);
+}
+
+/// How a sealed message is remembered on the device: plain text, or — when
+/// it carries sealed media — "\u0001" + JSON {t, m}, so its file key, real
+/// name and type stay with its words (and travel in a QR hand-over).
+class SealPayload {
+  SealPayload._();
+  static const String _mark = '\u0001';
+
+  static String store(String text, Map<String, dynamic>? media) =>
+      media == null ? text : '$_mark${jsonEncode({'t': text, 'm': media})}';
+
+  static String textOf(String? stored) {
+    if (stored == null) return '';
+    if (!stored.startsWith(_mark)) return stored;
+    try {
+      final j = jsonDecode(stored.substring(1)) as Map<String, dynamic>;
+      return (j['t'] ?? '').toString();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  static Map<String, dynamic>? mediaOf(String? stored) {
+    if (stored == null || !stored.startsWith(_mark)) return null;
+    try {
+      final m = (jsonDecode(stored.substring(1)) as Map<String, dynamic>)['m'];
+      return m is Map<String, dynamic> ? m : null;
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 /// The friend has no encryption keys yet (an older Aluta): send as before.
@@ -196,7 +238,8 @@ class SealMessenger {
   /// can't seal right now — don't send plain then. Once a chat has been
   /// sealed it never goes back to plain ([SealPeerAway]); and my own keys
   /// still being set up is "not now", not "plain".
-  Future<Map<String, String>> seal(int peerUid, int myUid, String text) =>
+  Future<Map<String, String>> seal(int peerUid, int myUid, String text,
+          {Map<String, dynamic>? media}) =>
       _locked(() async {
         if (!SealTab.inUse) throw SealError('Aluta is in use in another tab');
         await _keys.load();
@@ -215,7 +258,8 @@ class SealMessenger {
         if (!_keys.isReady) throw SealError('my keys are not ready yet');
         final mine = (await _devicesOf(myUid) ?? const <SealPeerDevice>[])
             .where((d) => d.deviceId != _keys.deviceId);
-        final plain = utf8.encode(jsonEncode({'v': 1, 't': text}));
+        final plain = utf8.encode(
+            jsonEncode({'v': 1, 't': text, 'm': ?media}));
         final out = <String, String>{};
         Future<void> one(int uid, SealPeerDevice d) async {
           final known = await _loadAll(uid, d.ikSig);
@@ -326,9 +370,25 @@ class SealMessenger {
     });
   }
 
+  /// Whether a photo / video / voice note / file for [peerUid] can go
+  /// sealed: every device of theirs, and my own other devices, can open
+  /// sealed media (an older Aluta would only see a broken file). False
+  /// when unsure — the file then goes as before.
+  Future<bool> canSealMedia(int peerUid, int myUid) => _locked(() async {
+        await _keys.load();
+        if (!_keys.isReady) return false;
+        final theirs = await _devicesOf(peerUid);
+        if (theirs == null || theirs.isEmpty) return false;
+        final mine = (await _devicesOf(myUid) ?? const <SealPeerDevice>[])
+            .where((d) => d.deviceId != _keys.deviceId);
+        return [...theirs, ...mine].every((d) => d.caps.contains('m1'));
+      });
+
   static String _textOf(List<int> clear) {
     final j = jsonDecode(utf8.decode(clear)) as Map<String, dynamic>;
-    return (j['t'] ?? '').toString();
+    final m = j['m'];
+    return SealPayload.store(
+        (j['t'] ?? '').toString(), m is Map<String, dynamic> ? m : null);
   }
 
   /// [keep] stores the text BEFORE the session moves on: if the app dies in
@@ -492,7 +552,14 @@ class SealMessenger {
       });
 
   /// The remembered text of a message, if this device unlocked / sent it.
-  Future<String?> textOf(int peer, int id) async =>
+  /// The remembered words of a message (a sealed photo: its caption).
+  Future<String?> textOf(int peer, int id) async {
+    final s = await storedOf(peer, id);
+    return s == null ? null : SealPayload.textOf(s);
+  }
+
+  /// As remembered, sealed media included ([SealPayload]).
+  Future<String?> storedOf(int peer, int id) async =>
       (await _locked(() async {
         await _keys.load();
         return _recall(peer, id);
@@ -504,7 +571,7 @@ class SealMessenger {
         await _keys.load();
         for (final peer in await _plainPeers()) {
           final t = await _recall(peer, id);
-          if (t != null) return t.$2;
+          if (t != null) return SealPayload.textOf(t.$2);
         }
         return null;
       });
@@ -512,29 +579,48 @@ class SealMessenger {
   /// Forget the unlocked texts of deleted messages (for me or for
   /// everyone): off this device, and never in a later hand-over. [peer]
   /// null looks in every chat.
-  Future<void> forget(Iterable<int> ids, {int? peer}) => _locked(() async {
-        if (!SealTab.inUse) return; // the tab in use catches up from the list
+  /// Returns the sealed media ({k, n, mm}) those messages carried, so
+  /// their opened files can go too.
+  Future<List<Map<String, dynamic>>> forget(Iterable<int> ids, {int? peer}) =>
+      _locked(() async {
+        final dropped = <Map<String, dynamic>>[];
+        // The tab in use catches up from the list.
+        if (!SealTab.inUse) return dropped;
         final gone = {for (final i in ids) '$i'};
-        if (gone.isEmpty) return;
+        if (gone.isEmpty) return dropped;
         await _keys.load();
         for (final p in peer != null ? [peer] : await _plainPeers()) {
           final m = await _plainOf(p);
           final before = m.length;
-          m.removeWhere((k, _) => gone.contains(k));
+          m.removeWhere((k, v) {
+            if (!gone.contains(k)) return false;
+            final media = SealPayload.mediaOf(v.length > 1 ? '${v[1]}' : null);
+            if (media != null) dropped.add(media);
+            return true;
+          });
           if (m.length != before) {
             await _plain.write(_plainKey(p), jsonEncode(m));
           }
         }
+        return dropped;
       });
 
-  /// Forget every unlocked text of the chat with [peer] (chat cleared).
-  Future<void> forgetChat(int peer) => _locked(() async {
-        if (!SealTab.inUse) return;
+  /// Forget every unlocked text of the chat with [peer] (chat cleared);
+  /// returns its sealed media, as [forget] does.
+  Future<List<Map<String, dynamic>>> forgetChat(int peer) =>
+      _locked(() async {
+        final dropped = <Map<String, dynamic>>[];
+        if (!SealTab.inUse) return dropped;
         await _keys.load();
         final m = await _plainOf(peer);
-        if (m.isEmpty) return;
+        if (m.isEmpty) return dropped;
+        for (final v in m.values) {
+          final media = SealPayload.mediaOf(v.length > 1 ? '${v[1]}' : null);
+          if (media != null) dropped.add(media);
+        }
         m.clear();
         await _plain.write(_plainKey(peer), jsonEncode(m));
+        return dropped;
       });
 
   static int? _heldIdOf(Object? meta) {

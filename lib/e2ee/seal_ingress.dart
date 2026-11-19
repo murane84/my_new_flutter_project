@@ -2,8 +2,10 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/media_store.dart';
 import 'seal_directory.dart';
 import 'seal_keystore.dart';
+import 'seal_media.dart';
 import 'seal_messenger.dart';
 import 'seal_primitives.dart';
 import 'seal_scope.dart';
@@ -59,8 +61,9 @@ class SealIngress {
       case SealOpenStatus.ok:
         // A timed heart is opened now (its key can't wait for the moment)
         // but stays covered — for its sender too — until unlock_at.
-        m['content'] = _stillTimed(m) ? '' : (r.text ?? '');
+        m['content'] = _stillTimed(m) ? '' : r.caption;
         m.remove('seal_state');
+        _attachMedia(m, r.media);
       case SealOpenStatus.noKey:
         m['content'] = lockedNoKey;
         m['seal_state'] = 'nokey';
@@ -68,6 +71,23 @@ class SealIngress {
         m['content'] = lockedFailed;
         m['seal_state'] = 'failed';
     }
+  }
+
+  /// A sealed photo / video / voice note / file: its key goes on the media
+  /// address (kept on this device), its real name and type back on the
+  /// message — so every viewer, player and download opens it.
+  static void _attachMedia(Map<String, dynamic> m, Map<String, dynamic>? media) {
+    final url = m['media_url'];
+    if (media == null || url is! String || url.isEmpty) return;
+    try {
+      final key = base64Url.decode(base64Url.normalize('${media['k']}'));
+      if (key.length != 32) return;
+      m['media_url'] = SealMedia.withKey(url, key);
+      final n = '${media['n'] ?? ''}'.trim();
+      if (n.isNotEmpty) m['media_name'] = n;
+      final t = '${media['mm'] ?? ''}'.trim();
+      if (t.isNotEmpty) m['media_mime'] = t;
+    } catch (_) {}
   }
 
   /// [open] every message of a fetched list (in order: oldest first, so a
@@ -157,8 +177,9 @@ class SealIngress {
             jsonEncode({for (final e in env.entries) '$me:${e.key}': e.value}),
       };
       final r = await SealMessenger.instance.peek(m, me);
-      if (r.status == SealOpenStatus.ok && (r.text ?? '').isNotEmpty) {
-        out['body'] = _withoutQuote(r.text!);
+      if (r.status == SealOpenStatus.ok) {
+        // Sealed media without a caption keeps the server's "📷 Photo".
+        if (r.caption.isNotEmpty) out['body'] = _withoutQuote(r.caption);
         return out;
       }
       // Aluta running in the background may have opened this very message
@@ -219,11 +240,13 @@ class SealIngress {
   /// envelopes}), or null when the friend can't read sealed text yet (send
   /// it plain, as before). Throws when it should be sealed but can't be
   /// right now — the caller treats that like a failed send.
-  static Future<Map<String, dynamic>?> sealFor(int peer, String text) async {
+  static Future<Map<String, dynamic>?> sealFor(int peer, String text,
+      {Map<String, dynamic>? media}) async {
     final me = await myUid();
     if (me == null || peer <= 0 || peer == me) return null;
     try {
-      final env = await SealMessenger.instance.seal(peer, me, text);
+      final env =
+          await SealMessenger.instance.seal(peer, me, text, media: media);
       return {'e2ee': SealSpec.version, 'envelopes': jsonEncode(env)};
     } on SealNotSupported {
       return null;
@@ -231,9 +254,25 @@ class SealIngress {
   }
 
   /// After a sealed send / edit: this phone remembers its own text.
-  static Future<void> sent(int peer, Map<String, dynamic> msg, String text) =>
-      SealMessenger.instance
-          .rememberSent(peer, _int(msg['id']), _int(msg['e2ee_rev']), text);
+  static Future<void> sent(int peer, Map<String, dynamic> msg, String text,
+          {Map<String, dynamic>? media}) =>
+      SealMessenger.instance.rememberSent(peer, _int(msg['id']),
+          _int(msg['e2ee_rev']), SealPayload.store(text, media));
+
+  /// Whether a file for [peer] can go sealed (every device can open it).
+  static Future<bool> canSealMedia(int peer) async {
+    final me = await myUid();
+    if (me == null || peer <= 0 || peer == me) return false;
+    try {
+      return await SealMessenger.instance.canSealMedia(peer, me);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Give a sent / opened message its sealed media's key and real name.
+  static void attachMedia(Map<String, dynamic> m, Map<String, dynamic> media) =>
+      _attachMedia(m, media);
 
   /// My own sealed message's text by id (e.g. peeking at my timed heart).
   static Future<String?> textOfMessage(int id) =>
@@ -259,15 +298,25 @@ class SealIngress {
   /// A message deleted (for me or for everyone): forget its unlocked text.
   static Future<void> forget(List<int> ids, {int? peer}) async {
     try {
-      await SealMessenger.instance.forget(ids, peer: peer);
+      _dropOpened(await SealMessenger.instance.forget(ids, peer: peer));
     } catch (_) {}
   }
 
   /// A chat cleared: forget all of its unlocked texts on this device.
   static Future<void> forgetChat(int peer) async {
     try {
-      await SealMessenger.instance.forgetChat(peer);
+      _dropOpened(await SealMessenger.instance.forgetChat(peer));
     } catch (_) {}
+  }
+
+  /// Opened copies of deleted sealed media leave this device too.
+  static void _dropOpened(List<Map<String, dynamic>> media) {
+    for (final m in media) {
+      try {
+        final key = base64Url.decode(base64Url.normalize('${m['k']}'));
+        if (key.length == 32) MediaStore.instance.removeSealed(key);
+      } catch (_) {}
+    }
   }
 
   /// Sign-out: off the key directory, every key, session and text forgotten.

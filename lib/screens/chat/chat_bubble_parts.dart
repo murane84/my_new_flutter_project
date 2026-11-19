@@ -505,8 +505,25 @@ class _VoiceNotePlayerState extends State<_VoiceNotePlayer> {
     if (_prepared) return true;
     setState(() => _loading = true);
     try {
-      final d = await _player.setUrl(widget.url,
-          headers: mediaAuthHeaders(widget.url));
+      Duration? d;
+      if (SealMedia.isSealed(widget.url)) {
+        // 🔒 A sealed voice note plays only opened: from the device file,
+        // or (web) from a local blob — never the locked bytes.
+        final hdrs = mediaAuthHeaders(widget.url);
+        if (kIsWeb) {
+          final src = await MediaStore.instance
+              .webSource(widget.url, hdrs, mime: 'audio/mp4');
+          if (src == null) throw StateError('sealed voice unavailable');
+          d = await _player.setUrl(src);
+        } else {
+          final f = await MediaStore.instance.getFile(widget.url, hdrs);
+          if (f == null) throw StateError('sealed voice unavailable');
+          d = await _player.setFilePath(f.path);
+        }
+      } else {
+        d = await _player.setUrl(widget.url,
+            headers: mediaAuthHeaders(widget.url));
+      }
       if (!mounted) return false;
       if (d != null) _dur = d;
       await _player.setSpeed(_speed);

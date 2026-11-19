@@ -11,6 +11,7 @@ import '../utils/app_config.dart';
 import '../utils/session_events.dart';
 import '../services/biometric_service.dart';
 import '../services/story_posting.dart';
+import '../e2ee/seal_media.dart';
 import '../e2ee/seal_ingress.dart';
 import '../e2ee/seal_keystore.dart' show SealKeyStore;
 import '../e2ee/seal_messenger.dart' show SealPeerAway;
@@ -1418,6 +1419,9 @@ class ApiService {
     bool? heartSave, // sender lets the receiver save the heart's media
     String? poll, // group poll spec JSON {q, options, multi}
     String? meta, // JSON extras, e.g. {"bed": {title, url, clip}}
+    // 🔒 The file at [mediaUrl] was locked on this phone with this key
+    // (SealMedia): the key, real name and type go inside the sealed copy.
+    List<int>? mediaKey,
   }) async {
     lastSendRefusal = null;
     try {
@@ -1460,12 +1464,23 @@ class ApiService {
       // A 1:1 secret heart's note (Dedicate from the player too) is sealed
       // like text; its photo / song file follows with media.
       final heartNote = messageType == 'heart' && heartFor == null;
+      final sealedMedia = mediaKey != null && mediaUrl != null
+          ? <String, dynamic>{
+              'k': base64Url.encode(mediaKey).replaceAll('=', ''),
+              'n': ?mediaName,
+              'mm': ?mediaMime,
+            }
+          : null;
+      if (sealedMedia != null && conversationId != null) {
+        return null; // a locked file never goes to a group
+      }
       if (conversationId == null &&
-          content.isNotEmpty &&
+          (content.isNotEmpty || sealedMedia != null) &&
           poll == null &&
-          (plainText || heartNote)) {
+          (plainText || heartNote || sealedMedia != null)) {
         try {
-          sealed = await SealIngress.sealFor(receiverId, content);
+          sealed = await SealIngress.sealFor(receiverId, content,
+              media: sealedMedia);
         } catch (e) {
           _logger.w('Seal failed: $e');
           if (e is SealPeerAway) {
@@ -1477,6 +1492,13 @@ class ApiService {
         if (sealed != null) {
           payload['content'] = '';
           payload.addAll(sealed);
+          if (sealedMedia != null) {
+            // The real name and type ride only inside the sealed copy.
+            payload['media_name'] = 'sealed';
+            payload['media_mime'] = SealMedia.uploadMime;
+          }
+        } else if (sealedMedia != null) {
+          return null; // a locked file needs its key sealed with it
         }
       }
 
@@ -1493,7 +1515,9 @@ class ApiService {
             // A timed heart stays covered for its sender too (as before):
             // the text waits on this phone until the moment.
             if (unlockAt == null) data['content'] = content;
-            await SealIngress.sent(receiverId, data, content);
+            if (sealedMedia != null) SealIngress.attachMedia(data, sealedMedia);
+            await SealIngress.sent(receiverId, data, content,
+                media: sealedMedia);
           }
           return data;
         }
@@ -3957,14 +3981,19 @@ class ApiService {
     required String mime,
     bool ephemeral = false,
     void Function(int sent, int total)? onProgress,
+    // 🔒 Locked bytes (SealMedia): the real kind, for the server's size cap.
+    String? sealedKind,
   }) async {
     try {
       final token = await _getToken();
       if (token == null) throw Exception('No access token');
 
       var uri = Uri.parse('${await _baseUrl}/upload/media');
-      if (ephemeral) {
-        uri = uri.replace(queryParameters: {'ephemeral': 'true'});
+      if (ephemeral || sealedKind != null) {
+        uri = uri.replace(queryParameters: {
+          if (ephemeral) 'ephemeral': 'true',
+          'kind': ?sealedKind,
+        });
       }
       final req = http.MultipartRequest('POST', uri)
         ..headers['Authorization'] = 'Bearer $token'

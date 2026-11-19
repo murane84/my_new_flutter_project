@@ -524,15 +524,19 @@ class _ConversationMediaScreenState extends State<ConversationMediaScreen>
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Image(
-                image: authNetworkImageProvider(m.thumbUrl, m.headers),
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => Container(
-                  color: scheme.surfaceContainerHighest,
-                  child: Icon(Icons.broken_image_outlined,
-                      color: scheme.onSurfaceVariant),
+              if (m.thumbUrl.isEmpty)
+                // 🔒 Sealed clip: no poster exists anywhere but the phones.
+                Container(color: const Color(0xFF15131B))
+              else
+                Image(
+                  image: authNetworkImageProvider(m.thumbUrl, m.headers),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => Container(
+                    color: scheme.surfaceContainerHighest,
+                    child: Icon(Icons.broken_image_outlined,
+                        color: scheme.onSurfaceVariant),
+                  ),
                 ),
-              ),
               if (m.isVideo)
                 const Center(
                   child: Icon(Icons.play_circle_fill_rounded,

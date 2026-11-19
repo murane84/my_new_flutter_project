@@ -1,8 +1,44 @@
 import 'dart:io' show Platform;
+import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show SynchronousFuture, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+
+import '../e2ee/seal_media.dart';
+import '../services/media_store.dart';
+
+/// 🔒 A sealed photo (SealMedia): fetched, opened on this device with the
+/// key its address carries, and shown from memory — no network loader can
+/// read locked bytes.
+class SealedImage extends ImageProvider<SealedImage> {
+  const SealedImage(this.url, this.headers);
+  final String url;
+  final Map<String, String> headers;
+
+  @override
+  Future<SealedImage> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture<SealedImage>(this);
+
+  @override
+  ImageStreamCompleter loadImage(SealedImage key, ImageDecoderCallback decode) =>
+      MultiFrameImageStreamCompleter(
+          codec: _load(decode), scale: 1.0, debugLabel: 'sealed image');
+
+  Future<ui.Codec> _load(ImageDecoderCallback decode) async {
+    final data = await MediaStore.instance.bytes(url, headers);
+    if (data == null || data.isEmpty) {
+      throw StateError('sealed image unavailable');
+    }
+    return decode(await ui.ImmutableBuffer.fromUint8List(data));
+  }
+
+  @override
+  bool operator ==(Object other) => other is SealedImage && other.url == url;
+
+  @override
+  int get hashCode => url.hashCode;
+}
 
 /// Desktop (Windows/Linux/macOS) can't use cached_network_image's disk cache —
 /// its backing store (sqflite) isn't available there, which showed up as broken
@@ -46,6 +82,23 @@ Widget authNetworkImage({
   int? cacheWidth,
   int? cacheHeight,
 }) {
+  if (SealMedia.isSealed(url)) {
+    return Image(
+      image: ResizeImage.resizeIfNeeded(
+          cacheWidth, cacheHeight, SealedImage(url, headers)),
+      width: width,
+      height: height,
+      fit: fit,
+      gaplessPlayback: true,
+      loadingBuilder: (ctx, child, progress) => progress == null
+          ? child
+          : (placeholder?.call(ctx) ?? _fallbackLoader()),
+      frameBuilder: (ctx, child, frame, sync) => frame == null && !sync
+          ? (placeholder?.call(ctx) ?? _fallbackLoader())
+          : child,
+      errorBuilder: (ctx, _, _) => error?.call(ctx) ?? _fallbackError(),
+    );
+  }
   if (kIsWeb) {
     return Image.network(
       _tokenUrl(url, headers),
@@ -100,7 +153,9 @@ ImageProvider authNetworkImageProvider(
     String url, Map<String, String> headers,
     {int? cacheSize}) {
   final ImageProvider base;
-  if (kIsWeb) {
+  if (SealMedia.isSealed(url)) {
+    base = SealedImage(url, headers);
+  } else if (kIsWeb) {
     base = NetworkImage(_tokenUrl(url, headers));
   } else if (_useNativeImage) {
     base = NetworkImage(url, headers: headers);

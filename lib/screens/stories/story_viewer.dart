@@ -145,6 +145,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   int _fxKey = 0;
   bool _confetti = false;
   bool _duoBusy = false;
+
+  // My own status: views counted now (the feed's count is from when the
+  // Status list loaded — someone who watched since wasn't in it yet).
+  final Map<String, int> _liveViews = {};
+  final Set<String> _viewsAsked = {};
   // The on-device copy lookup for the photo on screen — made once per
   // status, not on every rebuild (reactions / pause rebuild a lot).
   Future<File?>? _photoFuture;
@@ -1564,7 +1569,29 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     );
   }
 
+  /// Count who has watched my status right now (once per status per visit;
+  /// the viewers sheet refreshes it too).
+  Future<void> _refreshViews(StoryItem item) async {
+    if (!_viewsAsked.add(item.id)) return;
+    try {
+      final raw = await ApiService().fetchStoryViewers(item.id);
+      if (!mounted) return;
+      final n = raw
+          .map(StoryViewer.fromJson)
+          .where((v) => v.userId != widget.myUserId)
+          .length;
+      // Views only grow: a failed lookup (an empty list) never lowers it.
+      setState(() => _liveViews[item.id] = math.max(n, item.viewCount));
+    } catch (_) {
+      _viewsAsked.remove(item.id); // try again next time it shows
+    }
+  }
+
   Widget _authorFooter(StoryItem item) {
+    if (!_viewsAsked.contains(item.id)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _refreshViews(item));
+    }
+    final views = _liveViews[item.id] ?? item.viewCount;
     return InkWell(
       onTap: () => _showViewers(item),
       child: Padding(
@@ -1576,7 +1603,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
                 color: Colors.white, size: 18),
             const SizedBox(width: 6),
             Text(
-              item.viewCount == 1 ? '1 view' : '${item.viewCount} views',
+              views == 1 ? '1 view' : '$views views',
               style: const TextStyle(color: Colors.white, fontSize: 13),
             ),
             const SizedBox(width: 4),
@@ -1631,6 +1658,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         .map(StoryViewer.fromJson)
         .where((v) => v.userId != widget.myUserId)
         .toList();
+    // The footer's count follows the list it just showed.
+    if (viewers.length > (_liveViews[item.id] ?? item.viewCount)) {
+      setState(() => _liveViews[item.id] = viewers.length);
+    }
     // My person first, with a 💞 — the view that matters most.
     bool mine(StoryViewer v) => (StoryHooks.closeness?.call(v.userId) ?? 0) == 2;
     viewers.sort((a, b) => (mine(b) ? 1 : 0) - (mine(a) ? 1 : 0));

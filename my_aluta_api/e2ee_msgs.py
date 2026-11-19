@@ -23,6 +23,8 @@ PUSH_BUDGET = 2800              # envelope JSON that rides in a push (FCM ≤ 4 
 # Sealed media (seal_media.dart): the bytes are locked on the phone; the
 # message keeps its kind, the rest is inside the sealed copy.
 MEDIA_KINDS = ("image", "video", "audio", "file")
+# Shared cards whose JSON lives in `content` (sealed like text).
+CARD_KINDS = ("location", "contact")
 SEALED_MEDIA_MIME = "application/x-aluta-sealed"
 LOCKED_PREVIEW = "🔒 Message"   # what lists / pushes show for an encrypted text
 

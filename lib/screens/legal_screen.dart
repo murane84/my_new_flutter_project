@@ -782,8 +782,8 @@ serve media through authenticated, participant-checked endpoints. However, no
 method of transmission or storage is completely secure, and because this is a
 development build, think twice before sharing highly sensitive information.
 
-End-to-end encryption: 1:1 text messages (including edits and notification
-replies), secret-heart notes, Our Space words (moments, diary, notes, memos, kept
+End-to-end encryption: 1:1 text messages (including edits, notification
+replies, and shared locations and contacts), secret-heart notes, Our Space words (moments, diary, notes, memos, kept
 hearts and statuses) and Listen Together chat are locked on your device and can be
 read only on the devices of the people they're for — not by our server. Private
 keys never leave your devices; linking a computer by QR sends your history locked
@@ -791,7 +791,7 @@ for that computer only; once a chat has been encrypted on your device it never
 falls back to plain text (a friend still on an older Aluta, with no keys, gets
 plain text until they update). 1:1 photos, videos, voice notes and files (up to
 100 MB) are locked on your phone before they're sent, with their captions and
-names. Not yet end-to-end encrypted: songs (and titles), bigger files, group
+names (a secret heart's own photo or voice clip isn't yet). Not yet end-to-end encrypted: songs (and titles), bigger files, group
 chats, Stories, reactions, and Space names and pictures (a chat photo you keep in
 Our Space or share as your status is saved there as a normal copy). The server still
 sees who you talk to and when, so it can deliver messages.

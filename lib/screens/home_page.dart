@@ -54,6 +54,7 @@ import '../widgets/now_glow.dart';
 import 'api_service.dart';
 import '../services/device_report.dart';
 import '../e2ee/seal_directory.dart';
+import '../e2ee/seal_media.dart';
 import '../e2ee/seal_ingress.dart';
 import '../e2ee/seal_handover.dart';
 import '../services/app_updater.dart';
@@ -3101,12 +3102,28 @@ class HomePageState extends rp.ConsumerState<HomePage>
           userId: senderObj?['id'] ?? data['sender_id'],
           registered: registeredName);
       // A secret heart's note never goes into a notification.
-      final text = (data['message_type'] ?? '').toString() == 'heart'
-          ? '❤️ Sent you a secret heart'
-          // A reply: the banner / notification shows the answer, not the quote.
-          : withoutReplyQuote(
-              (data['content'] ?? data['text'] ?? data['message'] ?? '')
-                  .toString());
+      final mType = (data['message_type'] ?? 'text').toString();
+      final String text;
+      if (mType == 'heart') {
+        text = '❤️ Sent you a secret heart';
+      } else if (mType == 'text' || mType.isEmpty) {
+        // A reply: the banner / notification shows the answer, not the quote.
+        text = withoutReplyQuote(
+            (data['content'] ?? data['text'] ?? data['message'] ?? '')
+                .toString());
+      } else {
+        // Photos, videos, voice notes, files, songs, locations…: the same
+        // words the Circle list uses ("📷 Photo · caption", "📎 name"). A
+        // sealed one this device couldn't open shows just its kind — never
+        // a lock note or the placeholder name.
+        final d = Map<String, dynamic>.from(data);
+        if (d['seal_state'] != null) d['content'] = '';
+        if (d['media_mime'] == SealMedia.uploadMime) {
+          d['media_name'] = '';
+          d['media_mime'] = '';
+        }
+        text = _previewFromCachedMessage(d);
+      }
       // Badge the sender immediately (unless their chat is open) — the fetch
       // below reconciles to the server's authoritative count a moment later.
       final senderId = (senderObj?['id'] as num?)?.toInt() ??
@@ -6869,7 +6886,8 @@ class _WebQueueSheetState extends State<_WebQueueSheet> {
                 // Pill, like every search box (theme borders are 12 px boxes).
                 border: pillSearchBorder(scheme),
                 enabledBorder: pillSearchBorder(scheme),
-                focusedBorder: pillSearchBorder(scheme, focused: true),
+                focusedBorder: pillSearchBorder(scheme, focused: true),
+
                 // One compact height for every search pill (38 px, like Circle's).
                 isDense: true,
                 constraints: const BoxConstraints(minHeight: 38, maxHeight: 38),
@@ -6880,7 +6898,9 @@ class _WebQueueSheetState extends State<_WebQueueSheet> {
                 prefixIcon: const Icon(Icons.search_rounded, size: 20),
                 filled: true,
                 fillColor:
-                    scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                    scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+
+
               ),
             ),
           ),

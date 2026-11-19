@@ -183,10 +183,14 @@ void main() {
     final b = await device(bob, 'b');
     expect(await a.app.canSealMedia(bob, alice), isFalse,
         reason: 'no device has said it can open sealed media');
+    // (Device lists are cached for a few seconds: let them refresh.)
+    void later() => now = now.add(const Duration(seconds: 30));
     dir.m1.addAll([a.keys.deviceId, b.keys.deviceId]);
+    later();
     expect(await a.app.canSealMedia(bob, alice), isFalse,
         reason: "Alice's computer can't open it yet");
     dir.m1.add(aPc.keys.deviceId);
+    later();
     expect(await a.app.canSealMedia(bob, alice), isTrue);
 
     const media = {'k': 'AAAA', 'n': 'picha.jpg', 'mm': 'image/jpeg'};

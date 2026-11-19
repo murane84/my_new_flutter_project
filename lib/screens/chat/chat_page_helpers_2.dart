@@ -835,10 +835,16 @@ extension _ChatPageHelpers2 on _ChatPageState {
               type: ToastType.error);
         }
         UploadManager.instance.finish(convKey, tempId, sent);
-      } catch (_) {
+      } catch (e) {
         UploadManager.instance.finish(convKey, tempId, null);
         if (mounted) {
-          showToast(context, 'Upload failed — tap the ! to retry',
+          // 🔒 A sealed chat whose friend has no keys right now: say so, as
+          // a text send does (never sent unlocked).
+          showToast(
+              context,
+              e is SealPeerAway
+                  ? "They aren't signed in to Aluta right now — try again later"
+                  : 'Upload failed — tap the ! to retry',
               type: ToastType.error);
         }
       }

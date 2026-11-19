@@ -2510,12 +2510,19 @@ extension _ChatPageHelpers3 on _ChatPageState {
       final notes = <String, bool>{};
       var sealedBefore = false; // an earlier sealed text in this run
       var everSealed = false;
+      var media = false; // a sealed photo / voice note / file
       // _messages is newest first: walk oldest → newest.
       for (var i = _messages.length - 1; i >= 0; i--) {
         final m = _messages[i];
         if (m['is_deleted'] == true) continue;
         final text = (m['message_type'] ?? 'text').toString() == 'text';
-        if (!text) continue;
+        // A sealed photo / voice note / file counts like sealed text; plain
+        // media, songs, call logs never restart the run.
+        if (!text && m['e2ee'] == null) continue;
+        if (const ['image', 'video', 'audio', 'file']
+            .contains(m['message_type'])) {
+          media = true;
+        }
         if (m['e2ee'] != null) {
           if (!sealedBefore) notes['${m['id']}'] = everSealed;
           sealedBefore = true;
@@ -2525,6 +2532,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
         }
       }
       _sealNotes = notes;
+      _sealedMediaSeen = media;
       _sealNotesOf = _messages;
     }
     return _sealNotes['${msg['id']}'];
@@ -2552,14 +2560,13 @@ extension _ChatPageHelpers3 on _ChatPageState {
                       size: 13, color: accentInk(scheme)),
                 ),
               ),
-              // Honest about today's reach: text only (photos, voice notes,
-              // songs, hearts and Our Space follow in later phases).
+              // Honest about today's reach: messages, and photos / voice
+              // notes / files once both sides' Aluta can open them (songs and
+              // groups follow in later phases).
               TextSpan(
-                  text: again
-                      ? 'Text messages are end-to-end encrypted again. '
-                          'Only the two of you can read them.'
-                      : 'Text messages are end-to-end encrypted. '
-                          'Only the two of you can read them.'),
+                  text: '${_sealedMediaSeen ? 'Messages and media are' : 'Text messages are'}'
+                      ' end-to-end encrypted${again ? ' again' : ''}. '
+                      'Only the two of you can read them.'),
             ]),
             textAlign: TextAlign.center,
             style: TextStyle(

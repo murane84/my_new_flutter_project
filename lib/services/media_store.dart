@@ -159,7 +159,7 @@ class MediaStore {
     if (!kIsWeb) {
       if (key != null) {
         final f = await getFile(url, headers);
-        return f == null ? null : f.readAsBytes();
+        return f?.readAsBytes();
       }
       final hit = await cached(url);
       if (hit != null) return hit.readAsBytes();

@@ -92,6 +92,7 @@ import '../utils/net.dart' as http;
 import 'web_fs/blob_url.dart' show downloadBytes, openBytesInTab;
 import '../utils/voice_rec.dart';
 import '../e2ee/seal_ingress.dart' show SealIngress;
+import '../e2ee/seal_messenger.dart' show SealPeerAway;
 import '../e2ee/seal_media.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart' as ja;
@@ -664,6 +665,9 @@ class _ChatPageState extends State<ChatPage>
   // 🔒 Where the "end-to-end encrypted" note goes (see _sealNotes).
   List<Map<String, dynamic>>? _sealNotesOf;
   Map<String, bool> _sealNotes = const {};
+  // Whether this thread holds sealed photos / voice notes / files (so the
+  // note can honestly say media too).
+  bool _sealedMediaSeen = false;
   // The message field has focus → the composer pill shows its brand ring.
   bool _composerFocused = false;
   // ── Unread divider (chat/chat_unread.dart) ─────────────────────────────────
@@ -2055,26 +2059,24 @@ class _ChatPageState extends State<ChatPage>
       String rel, String type, int peer) async {
     if (!const ['image', 'video', 'audio', 'file'].contains(type)) return null;
     if (rel.startsWith('http')) return null; // external (e.g. a GIF)
+    // "Not right now" throws (the forward fails, never goes unlocked).
     if (!await SealIngress.canSealMedia(peer)) return null;
-    try {
-      final url = fullMediaUrl(rel);
-      final data =
-          await MediaStore.instance.bytes(url, mediaAuthHeaders(url));
-      if (data == null || data.isEmpty || data.length > SealMedia.maxBytes) {
-        return null;
-      }
-      final (locked, key) = await SealMedia.sealInBackground(data);
-      final up = await ApiService().uploadMedia(
-        bytes: locked,
-        filename: 'sealed',
-        mime: SealMedia.uploadMime,
-        sealedKind: type,
-      );
-      final u = (up?['url'] as String?) ?? '';
-      return u.isEmpty ? null : (u, key, data);
-    } catch (_) {
-      return null;
-    }
+    // From here it goes locked or not at all (a failure never falls back
+    // to an unlocked copy); only a file too big to lock goes as before.
+    final url = fullMediaUrl(rel);
+    final data = await MediaStore.instance.bytes(url, mediaAuthHeaders(url));
+    if (data == null || data.isEmpty) throw StateError('file unavailable');
+    if (data.length > SealMedia.maxBytes) return null;
+    final (locked, key) = await SealMedia.sealInBackground(data);
+    final up = await ApiService().uploadMedia(
+      bytes: locked,
+      filename: 'sealed',
+      mime: SealMedia.uploadMime,
+      sealedKind: type,
+    );
+    final u = (up?['url'] as String?) ?? '';
+    if (u.isEmpty) throw StateError('upload failed');
+    return (u, key, data);
   }
 
   /// Returns true when it was sent. [doneToast] replaces the usual
@@ -2097,7 +2099,20 @@ class _ChatPageState extends State<ChatPage>
     if (rel.isNotEmpty) {
       // 🔒 Locked afresh for them on this phone when their Aluta can open
       // it (whether or not the original was sealed).
-      final fresh = await _sealedCopyFor(rel, type, fidInt);
+      final (String, Uint8List, Uint8List)? fresh;
+      try {
+        fresh = await _sealedCopyFor(rel, type, fidInt);
+      } catch (e) {
+        if (mounted && !quiet) {
+          showToast(
+              context,
+              e is SealPeerAway
+                  ? "They aren't signed in to Aluta right now — try again later"
+                  : 'Couldn’t forward that — try again',
+              type: ToastType.error);
+        }
+        return false;
+      }
       final String copy;
       if (fresh != null) {
         copy = fresh.$1;

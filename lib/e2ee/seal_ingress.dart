@@ -147,14 +147,16 @@ class SealIngress {
     // Someone reacted to my sealed message: the server only knows
     // "🔒 Message" — this phone has my own words.
     if (data['type'] == 'reaction' &&
-        (data['body'] ?? '').toString() == serverPreview) {
+        ((data['body'] ?? '').toString() == serverPreview ||
+            data['sealed'] == '1')) {
       final out = Map<String, dynamic>.from(data);
+      final label = (data['body'] ?? '').toString();
       try {
-        final t = await SealMessenger.instance
-            .textOfAny(_int(data['message_id']));
-        out['body'] = t == null || t.isEmpty ? '' : _withoutQuote(t);
+        final s = await SealMessenger.instance
+            .storedOfAny(_int(data['message_id']));
+        out['body'] = previewOf(label, s);
       } catch (_) {
-        out['body'] = '';
+        out['body'] = label == serverPreview ? '' : label;
       }
       return out;
     }
@@ -178,8 +180,7 @@ class SealIngress {
       };
       final r = await SealMessenger.instance.peek(m, me);
       if (r.status == SealOpenStatus.ok) {
-        // Sealed media without a caption keeps the server's "📷 Photo".
-        if (r.caption.isNotEmpty) out['body'] = _withoutQuote(r.caption);
+        out['body'] = previewOf((data['body'] ?? '').toString(), r.text);
         return out;
       }
       // Aluta running in the background may have opened this very message
@@ -190,9 +191,9 @@ class SealIngress {
         await (await SharedPreferences.getInstance()).reload();
         SealMessenger.instance.dropCaches();
         final t = await SealMessenger.instance
-            .textOf(_int(data['sender_id']), _int(data['message_id']));
+            .storedOf(_int(data['sender_id']), _int(data['message_id']));
         if (t != null && t.isNotEmpty) {
-          out['body'] = _withoutQuote(t);
+          out['body'] = previewOf((data['body'] ?? '').toString(), t);
           break;
         }
       }
@@ -217,23 +218,48 @@ class SealIngress {
   static Future<void> previews(List<Map<String, dynamic>> rows,
       int? Function(Map<String, dynamic>) peerOf) async {
     for (final r in rows) {
-      if ((r['last_message'] ?? '').toString() != serverPreview) continue;
+      final label = (r['last_message'] ?? '').toString();
+      final sealed = r['last_sealed'];
+      // Sealed text ("🔒 Message"), or sealed media ("📷 Photo" — its name
+      // and caption are only on the phones).
+      if (label != serverPreview && !(sealed is String && sealed.isNotEmpty)) {
+        continue;
+      }
       final peer = peerOf(r);
       final id = _int(r['last_message_id']);
       if (peer == null || id == 0) continue;
       try {
-        var t = await SealMessenger.instance.textOf(peer, id);
+        var t = await SealMessenger.instance.storedOf(peer, id);
         // Not opened on this device yet: the list brings its sealed copy,
         // so open it now (the chat would anyway) rather than show a lock.
-        final sealed = r['last_sealed'];
         if ((t == null || t.isEmpty) && sealed is String && sealed.isNotEmpty) {
           final m = jsonDecode(sealed) as Map<String, dynamic>;
           await open(m);
-          if (m['seal_state'] == null) t = (m['content'] ?? '').toString();
+          if (m['seal_state'] == null) {
+            t = await SealMessenger.instance.storedOf(peer, id) ??
+                (m['content'] ?? '').toString();
+          }
         }
-        if (t != null && t.isNotEmpty) r['last_message'] = _withoutQuote(t);
+        if (t != null && t.isNotEmpty) r['last_message'] = previewOf(label, t);
       } catch (_) {}
     }
+  }
+
+  /// A list / banner line for a sealed message, from the server's [label]
+  /// and this phone's remembered [stored] form: the words for text; for
+  /// sealed media the same shape plain media has ("📷 Photo · caption",
+  /// "📎 report.pdf · caption").
+  static String previewOf(String label, String? stored) {
+    final words = _withoutQuote(SealPayload.textOf(stored));
+    final media = SealPayload.mediaOf(stored);
+    if (media == null) {
+      return words.isNotEmpty || label == serverPreview ? words : label;
+    }
+    var head = label == serverPreview ? '' : label;
+    final name = '${media['n'] ?? ''}'.trim();
+    if (head.startsWith('📎') && name.isNotEmpty) head = '📎 $name';
+    if (head.isEmpty) return words;
+    return words.isEmpty ? head : '$head · $words';
   }
 
   /// Seal [text] for friend [peer]: the extra fields to send ({e2ee,
@@ -260,14 +286,12 @@ class SealIngress {
           _int(msg['e2ee_rev']), SealPayload.store(text, media));
 
   /// Whether a file for [peer] can go sealed (every device can open it).
+  /// Throws [SealError] when it can't be told right now — the send then
+  /// fails (and can be retried) instead of going unlocked.
   static Future<bool> canSealMedia(int peer) async {
     final me = await myUid();
     if (me == null || peer <= 0 || peer == me) return false;
-    try {
-      return await SealMessenger.instance.canSealMedia(peer, me);
-    } catch (_) {
-      return false;
-    }
+    return SealMessenger.instance.canSealMedia(peer, me);
   }
 
   /// Give a sent / opened message its sealed media's key and real name.

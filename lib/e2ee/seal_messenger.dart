@@ -373,15 +373,32 @@ class SealMessenger {
   /// Whether a photo / video / voice note / file for [peerUid] can go
   /// sealed: every device of theirs, and my own other devices, can open
   /// sealed media (an older Aluta would only see a broken file). False
-  /// when unsure — the file then goes as before.
+  /// only when that's known (no keys, or a device without it — the file
+  /// goes as before); "not right now" (my keys still being set up, the
+  /// directory unreachable, another tab in use) throws [SealError] — the
+  /// send fails rather than go unlocked, as text does.
   Future<bool> canSealMedia(int peerUid, int myUid) => _locked(() async {
+        if (!SealTab.inUse) throw SealError('Aluta is in use in another tab');
         await _keys.load();
-        if (!_keys.isReady) return false;
         final theirs = await _devicesOf(peerUid);
-        if (theirs == null || theirs.isEmpty) return false;
-        final mine = (await _devicesOf(myUid) ?? const <SealPeerDevice>[])
-            .where((d) => d.deviceId != _keys.deviceId);
-        return [...theirs, ...mine].every((d) => d.caps.contains('m1'));
+        if (theirs == null) throw SealError('key directory unreachable');
+        if (theirs.isEmpty) {
+          // No keys any more after a sealed chat: never back to plain (as
+          // [seal] decides for text).
+          if (_keys.isReady &&
+              ((await _peerIks(peerUid)).isNotEmpty ||
+                  (await _plainOf(peerUid)).isNotEmpty)) {
+            throw SealPeerAway();
+          }
+          return false;
+        }
+        if (!_keys.isReady) throw SealError('my keys are not ready yet');
+        final mine = await _devicesOf(myUid);
+        if (mine == null) throw SealError('key directory unreachable');
+        return [
+          ...theirs,
+          ...mine.where((d) => d.deviceId != _keys.deviceId),
+        ].every((d) => d.caps.contains('m1'));
       });
 
   static String _textOf(List<int> clear) {
@@ -567,11 +584,17 @@ class SealMessenger {
 
   /// A message's remembered text by id alone (any friend) — for the
   /// sender's peek at their own timed heart.
-  Future<String?> textOfAny(int id) => _locked(() async {
+  Future<String?> textOfAny(int id) async {
+    final s = await storedOfAny(id);
+    return s == null ? null : SealPayload.textOf(s);
+  }
+
+  /// As remembered by id alone, sealed media included ([SealPayload]).
+  Future<String?> storedOfAny(int id) => _locked(() async {
         await _keys.load();
         for (final peer in await _plainPeers()) {
           final t = await _recall(peer, id);
-          if (t != null) return SealPayload.textOf(t.$2);
+          if (t != null) return t.$2;
         }
         return null;
       });

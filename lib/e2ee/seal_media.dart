@@ -17,7 +17,7 @@ import 'seal_primitives.dart';
 /// reordered, dropped or the file cut short without the open failing.
 ///
 /// In the app the key rides on the media address as a fragment
-/// ("/attachments/<id>#ask=<key>"): fragments are never sent to a server,
+/// (`/attachments/ID#ask=KEY`): fragments are never sent to a server,
 /// and every place that shows media by address can open it (see
 /// [SealMedia.keyOf] and the media cache).
 class SealMedia {

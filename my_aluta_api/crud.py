@@ -320,9 +320,16 @@ def list_preview(msg) -> str:
         return "❤️ Secret message"
     # End-to-end encrypted: the server can't read it (the app previews it
     # from its own unlocked copy).
-    if getattr(msg, "e2ee", None):
+    if getattr(msg, "e2ee", None) and \
+            (getattr(msg, "message_type", None) or "text") == "text":
         from e2ee_msgs import LOCKED_PREVIEW
         return LOCKED_PREVIEW
+    if getattr(msg, "e2ee", None):
+        # Sealed media: its kind shows ("📷 Photo"); name and caption are
+        # inside the sealed copy.
+        msg_kind = (msg.message_type or "").lower()
+        return {"image": "📷 Photo", "video": "🎬 Video",
+                "audio": "🎤 Voice note"}.get(msg_kind, "📎 File")
     content = (msg.content or "").strip()
     # A reply stores the quoted message first ("> …" lines, a blank line),
     # then the answer: preview the ANSWER (the list said "You: <their words>"

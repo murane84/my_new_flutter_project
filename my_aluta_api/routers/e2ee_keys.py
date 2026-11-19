@@ -66,6 +66,7 @@ class DeviceIn(BaseModel):
     spk_sig: str
     label: Optional[str] = Field(default=None, max_length=60)
     platform: Optional[str] = Field(default=None, max_length=20)
+    caps: Optional[str] = Field(default=None, max_length=80)
 
 
 class PreKeyIn(BaseModel):
@@ -122,6 +123,7 @@ def put_device(body: DeviceIn, db: Session = Depends(get_db),
     d.ik_sig, d.ik_dh, d.ik_dh_sig = body.ik_sig, body.ik_dh, body.ik_dh_sig
     d.spk_id, d.spk, d.spk_sig = body.spk_id, body.spk, body.spk_sig
     d.label, d.platform = body.label, body.platform
+    d.caps = body.caps
     d.sid = _sid_of(token)
     d.updated_at = d.last_seen_at = now
     db.commit()
@@ -207,6 +209,7 @@ def list_devices(user_id: int, db: Session = Depends(get_db),
         # For wrapping Our Space keys to this device (signed by ik_sig).
         "ik_dh": d.ik_dh,
         "ik_dh_sig": d.ik_dh_sig,
+        "caps": getattr(d, "caps", None) or "",
         # No label / platform: someone who can only message you (one-sided
         # contact) learns nothing about which devices you use.
         "identity_changed_at": (d.identity_changed_at.isoformat()

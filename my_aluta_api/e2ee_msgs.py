@@ -20,6 +20,10 @@ VERSION = 1
 MAX_DEVICES = 16                # envelopes per message (2 people × 6 + slack)
 MAX_ENVELOPE = 96 * 1024        # base64 characters per envelope
 PUSH_BUDGET = 2800              # envelope JSON that rides in a push (FCM ≤ 4 KB)
+# Sealed media (seal_media.dart): the bytes are locked on the phone; the
+# message keeps its kind, the rest is inside the sealed copy.
+MEDIA_KINDS = ("image", "video", "audio", "file")
+SEALED_MEDIA_MIME = "application/x-aluta-sealed"
 LOCKED_PREVIEW = "🔒 Message"   # what lists / pushes show for an encrypted text
 
 

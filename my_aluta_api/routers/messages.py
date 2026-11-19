@@ -103,8 +103,10 @@ def _fanout_others(db, msg, me: int, event: dict):
 
 def _seal_check(message, sender_id: int) -> None:
     """🔒 Sealed words (e2ee_msgs.py): content stays empty and each device
-    gets its own encrypted copy. 1:1 text and 1:1 secret hearts (their note;
-    a heart's photo / song file follows with media) — anything else is
+    gets its own encrypted copy. 1:1 text, 1:1 secret hearts (their note;
+    a heart's photo / song file follows with media) and 1:1 photos, videos,
+    voice notes and files whose bytes were locked on the phone (their key,
+    name and caption are inside the sealed copy) — anything else is
     refused rather than sent half-sealed."""
     if not message.e2ee:
         message.envelopes = None
@@ -112,9 +114,15 @@ def _seal_check(message, sender_id: int) -> None:
     if message.e2ee != e2ee_msgs.VERSION or not message.receiver_id:
         raise HTTPException(status_code=400, detail="Unsupported encryption")
     kind = (message.message_type or "text")
-    if message.content or kind not in ("text", "heart"):
+    if message.content or kind not in ("text", "heart") + e2ee_msgs.MEDIA_KINDS:
         raise HTTPException(status_code=400,
                             detail="Only text and hearts can be sealed for now")
+    if kind in e2ee_msgs.MEDIA_KINDS:
+        if not message.media_url:
+            raise HTTPException(status_code=400, detail="Sealed media needs its file")
+        # The real name and type are inside the sealed copy.
+        message.media_name = "sealed"
+        message.media_mime = e2ee_msgs.SEALED_MEDIA_MIME
     if kind == "text" and (message.heart_mood or message.unlock_at
                            or message.media_url):
         raise HTTPException(status_code=400,

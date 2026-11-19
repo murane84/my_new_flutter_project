@@ -3,6 +3,7 @@ import subprocess
 import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from fastapi import (
     APIRouter, UploadFile, File, Depends, HTTPException, Response, Request,
@@ -393,6 +394,7 @@ def _can_access(
 async def upload_media(
     file: UploadFile = File(...),
     ephemeral: bool = False,
+    kind: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -407,6 +409,12 @@ async def upload_media(
     if not data:
         raise HTTPException(status_code=400, detail="Empty file")
     _mime = (file.content_type or "").lower()
+    # 🔒 Locked on the phone (sealed media): the bytes are unreadable here,
+    # so the size check follows the kind the app says it is.
+    _sealed = _mime == "application/x-aluta-sealed"
+    if _sealed:
+        _mime = {"image": "image/", "audio": "audio/", "video": "video/"}.get(
+            (kind or "").lower(), "application/")
     # Files and videos: the sender's plan sets the size (a light free amount,
     # more with Together). Photos / voice / songs keep the fixed cap.
     import billing
@@ -417,6 +425,8 @@ async def upload_media(
         _cap = MAX_BYTES
     else:
         _cap = min(FILE_MAX_BYTES, _plan_cap)
+    if _sealed:
+        _cap += _cap // 2048 + 64  # the lock's own few bytes per 64 KiB
     if len(data) > _cap:
         _mb = _cap // (1024 * 1024)
         _hint = ("" if _mime.startswith("image/") or _mime.startswith("audio/")

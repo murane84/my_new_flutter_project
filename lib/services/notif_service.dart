@@ -282,6 +282,16 @@ Future<void> cancelAlutaNotification(int id) async {
   } catch (_) {}
 }
 
+/// Sign-out: nothing of this account stays in the notification shade
+/// (banners hold unlocked words and media labels).
+Future<void> cancelAllAlutaNotifications() async {
+  if (kIsWeb) return;
+  try {
+    if (!_ready) await initNotifications();
+    await _fln.cancelAll();
+  } catch (_) {}
+}
+
 /// Public: tidy the shade's per-person headers (called when Aluta comes back
 /// to the front — a tapped banner auto-clears but its header would stay).
 Future<void> tidyNotificationBundles() async {

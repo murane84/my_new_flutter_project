@@ -1621,18 +1621,21 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     return sent != null;
   }
 
-  /// 🔒 Words (sealed like any 1:1 text) and then the GIF on its own — a
+  /// 🔒 The GIF on its own, then the words (sealed like any 1:1 text) — a
   /// GIF lives on GIPHY's servers and can't be sealed, so it never carries
-  /// the words in the clear.
+  /// the words in the clear. Words last, so the Circle list and the banner
+  /// show what was said, not just "🎞️ GIF".
   Future<Map<String, dynamic>?> _sendWithGif(
       int to, String content, String? gifUrl) async {
-    final words = await ApiService().sendMessage(to, content);
-    if (gifUrl == null || words == null) return words;
-    return ApiService().sendMessage(to, '',
-        messageType: 'image',
-        mediaUrl: gifUrl,
-        mediaName: 'sticker.gif',
-        mediaMime: 'image/gif');
+    if (gifUrl != null) {
+      final gif = await ApiService().sendMessage(to, '',
+          messageType: 'image',
+          mediaUrl: gifUrl,
+          mediaName: 'sticker.gif',
+          mediaMime: 'image/gif');
+      if (gif == null) return null;
+    }
+    return ApiService().sendMessage(to, content);
   }
 
   Future<String?> _pickSticker(BuildContext ctx) => showAdaptiveSheet<String>(

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/media_store.dart';
+import '../services/notif_service.dart' show cancelAllAlutaNotifications;
 import 'seal_directory.dart';
 import 'seal_keystore.dart';
 import 'seal_media.dart';
@@ -353,5 +354,6 @@ class SealIngress {
     await SealSpace.instance.wipe();
     await SealDirectory.instance.signOut();
     await MediaStore.instance.wipeSealed(); // opened photos / files too
+    await cancelAllAlutaNotifications(); // banners hold unlocked words
   }
 }

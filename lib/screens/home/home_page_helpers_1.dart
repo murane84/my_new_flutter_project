@@ -1287,6 +1287,18 @@ extension _HomePageHelpers1 on HomePageState {
   /// A friend-list preview string for a cached chat message.
   String _previewFromCachedMessage(Map<String, dynamic> m) {
     final type = (m['message_type'] ?? 'text').toString();
+    // 🔒 Sealed media this device couldn't open: just its kind (as the
+    // banner and the server's list say) — never the lock note or the
+    // placeholder file name.
+    if (type != 'text' &&
+        (m['seal_state'] != null || m['media_mime'] == SealMedia.uploadMime)) {
+      m = Map<String, dynamic>.from(m);
+      if (m['seal_state'] != null) m['content'] = '';
+      if (m['media_mime'] == SealMedia.uploadMime) {
+        m['media_name'] = '';
+        m['media_mime'] = '';
+      }
+    }
     // A reply (photo / voice / sticker too): its text without the quote.
     final text = withoutReplyQuote((m['content'] ?? '').toString().trim());
     final name = (m['media_name'] ?? '').toString().trim();

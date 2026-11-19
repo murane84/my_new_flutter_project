@@ -3116,13 +3116,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
         // words the Circle list uses ("📷 Photo · caption", "📎 name"). A
         // sealed one this device couldn't open shows just its kind — never
         // a lock note or the placeholder name.
-        final d = Map<String, dynamic>.from(data);
-        if (d['seal_state'] != null) d['content'] = '';
-        if (d['media_mime'] == SealMedia.uploadMime) {
-          d['media_name'] = '';
-          d['media_mime'] = '';
-        }
-        text = _previewFromCachedMessage(d);
+        text = _previewFromCachedMessage(data);
       }
       // Badge the sender immediately (unless their chat is open) — the fetch
       // below reconciles to the server's authoritative count a moment later.

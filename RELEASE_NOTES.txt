@@ -1,11 +1,11 @@
-Web app: download photos, videos, PDFs and any file from a chat; tapping a PDF, photo or video opens it in a new tab.
-Web app: record and send voice notes (chats, secret hearts, Our Space moments and dedications), and Identify song can listen through the mic.
-File names with underscores now read exactly as attached in the chat list (no more slanted words).
-A file sent with a caption shows its name and caption in the chat list and notifications.
-Reply quotes use the same words as the chat list (🎬 Video, 🎤 Voice note).
-On a big screen, the music player's song card now fills the panel with a large disc: no empty bands above and below.
-The admin page's loading text shows its dashes properly.
-Tapping a message's book now shows who opened it correctly (groups and 1:1).
-Notifications for encrypted messages show the words again, and all of one person's messages stack together.
-New encrypted messages show their words in the chat list straight away.
-Windows and web: "Take my half" on a duo status opens the camera; on Windows the profile camera works too.
+Profile pictures and story rings keep the photo's real shape: no more squeezed or stretched faces.
+🔒 Photos, videos, voice notes and files in 1:1 chats are now end-to-end encrypted — locked on your phone before they're sent, so only you and your friend can open them. (This turns on once both of you are on this version on every device.)
+📎 Encrypted files show their real name and caption in your Circle list and notifications.
+👁 Your status shows its real view count straight away.
+🔒 The "end-to-end encrypted" note appears once per chat instead of after every photo or song.
+📄 Privacy Policy and Terms updated for encrypted media.
+🔍 Search finds encrypted photos, voice notes and files by their name and caption.
+🔔 Notifications for photos, videos, voice notes and files say what was sent ("📷 Photo · caption", "📎 report.pdf") — on phone, computer and web.
+📍 Shared locations and contacts in 1:1 chats are end-to-end encrypted too.
+🔒 Voice replies from the message banner and duo photos are encrypted like everything else in the chat.
+🧹 Signing out removes every unlocked photo, file and notification from this device.

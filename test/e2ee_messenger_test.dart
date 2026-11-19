@@ -221,6 +221,46 @@ void main() {
     expect(SealPayload.mediaOf('plain'), isNull);
   });
 
+  test('a computer linked by QR opens older sealed photos too', () async {
+    final a = await device(alice, 'a');
+    final b = await device(bob, 'b');
+    dir.m1.addAll([a.keys.deviceId, b.keys.deviceId]);
+    const media = {'k': 'BBBB', 'n': 'harusi.mp4', 'mm': 'video/mp4'};
+    final env = await b.app.seal(alice, bob, 'siku ile', media: media);
+    final m = {
+      'id': nextId++,
+      'sender_id': bob,
+      'receiver_id': alice,
+      'content': '',
+      'message_type': 'video',
+      'e2ee': 1,
+      'e2ee_rev': 0,
+      'envelopes': jsonEncode(env),
+    };
+    expect((await a.app.open(Map<String, dynamic>.from(m), alice)).media,
+        media);
+    // Linked after it was sent: no envelope of its own — the phone's
+    // hand-over carries the key, name and caption.
+    final pc = await device(alice, 'a-pc');
+    expect((await pc.app.open(Map<String, dynamic>.from(m), alice)).status,
+        SealOpenStatus.noKey);
+    await pc.app.importPlain(await a.app.exportPlain());
+    final r = await pc.app.open(Map<String, dynamic>.from(m), alice);
+    expect(r.status, SealOpenStatus.ok);
+    expect(r.caption, 'siku ile');
+    expect(r.media, media);
+
+    // The computer can open sealed media too: the phone seals for it.
+    dir.m1.add(pc.keys.deviceId);
+    now = now.add(const Duration(minutes: 1));
+    expect(await a.app.canSealMedia(bob, alice), isTrue);
+    // Bob signed out everywhere: the computer, too, never sends unlocked.
+    dir.people.remove(bob);
+    now = now.add(const Duration(minutes: 1));
+    await expectLater(
+        pc.app.canSealMedia(bob, alice), throwsA(isA<SealPeerAway>()));
+  });
+
   test('an edit is a new revision', () async {
     final a = await device(alice, 'a');
     final b = await device(bob, 'b');

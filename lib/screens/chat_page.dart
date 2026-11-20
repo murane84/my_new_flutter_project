@@ -95,6 +95,7 @@ import '../e2ee/seal_ingress.dart' show SealIngress;
 import '../e2ee/seal_messenger.dart' show SealPeerAway;
 import '../e2ee/seal_media.dart';
 import '../e2ee/seal_verify.dart';
+import '../e2ee/seal_space.dart' show SealSpace;
 import 'verify_encryption_screen.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart' as ja;
@@ -805,6 +806,10 @@ class _ChatPageState extends State<ChatPage>
     _initChat();
     if (!_isGroup) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refreshSealCheck());
+    } else {
+      // 🔒 A group sharing its history: newcomers get the earlier keys this
+      // phone holds (a no-op otherwise).
+      unawaited(SealSpace.instance.serveHistory(_cid));
     }
     _loadMySpaces();
     _loadRitualFlags();

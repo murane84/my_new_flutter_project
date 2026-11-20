@@ -3969,11 +3969,15 @@ class ApiService {
   /// Update group settings (name, avatar, admins-only posting). Admin only
   /// (server-enforced).
   Future<bool> updateGroup(int cid,
-      {String? title, String? avatarUrl, bool? adminsOnly}) async {
+      {String? title,
+      String? avatarUrl,
+      bool? adminsOnly,
+      bool? shareHistory}) async {
     return _convAction('PATCH', '/conversations/$cid', body: {
       'title': ?title,
       'avatar_url': ?avatarUrl,
       'admins_only': ?adminsOnly,
+      'share_history': ?shareHistory,
     });
   }
 

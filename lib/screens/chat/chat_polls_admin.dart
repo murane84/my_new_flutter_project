@@ -162,10 +162,18 @@ extension _ChatPollsAdmin on _ChatPageState {
       }
       return true;
     }
+    if (type == 'history_shared') {
+      // 🔒 A member's phone handed me this group's earlier keys: read them.
+      _loadMessages();
+      return true;
+    }
     if (type == 'conversation_updated') {
       if (event['admins_only'] is bool) {
         rebuildWith(() => _adminsOnly = event['admins_only'] as bool);
       }
+      // 🔒 Someone may have joined a group that shares its history: hand
+      // them the earlier keys this phone holds (the server says who needs).
+      unawaited(SealSpace.instance.serveHistory(_cid));
       _loadGroupMembers(); // roles may have changed
       return true;
     }
@@ -740,7 +748,8 @@ extension _ChatPollsAdmin on _ChatPageState {
                         // Pill, like every search box (theme borders are 12 px boxes).
                         border: pillSearchBorder(scheme),
                         enabledBorder: pillSearchBorder(scheme),
-                        focusedBorder: pillSearchBorder(scheme, focused: true),
+                        focusedBorder: pillSearchBorder(scheme, focused: true),
+
                         // One compact height for every search pill (38 px, like Circle's).
                         isDense: true,
                         constraints: const BoxConstraints(minHeight: 38, maxHeight: 38),
@@ -751,7 +760,8 @@ extension _ChatPollsAdmin on _ChatPageState {
                         prefixIcon: const Icon(Icons.search_rounded, size: 20),
                         filled: true,
                         fillColor: scheme.surfaceContainerHighest
-                            .withValues(alpha: 0.6),
+                            .withValues(alpha: 0.6),
+
                       ),
                     ),
                   ),

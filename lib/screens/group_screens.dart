@@ -7,6 +7,7 @@ import '../utils/net_image.dart';
 import '../utils/message_preview.dart';
 
 import 'api_service.dart';
+import '../e2ee/seal_space.dart';
 import 'token_helper.dart' show mediaAuthHeaders;
 import '../utils/toast_helper.dart';
 import '../utils/popup_shell.dart';
@@ -351,9 +352,11 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
                 prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 38, maxHeight: 38),
                 suffixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 38, maxHeight: 38),
                 hintText: 'Search contacts…',
-                prefixIcon: const Icon(Icons.search, size: 20),
+                prefixIcon: const Icon(Icons.search, size: 20),
+
                 filled: true,
-                fillColor: scheme.surfaceContainerHighest,
+                fillColor: scheme.surfaceContainerHighest,
+
               ),
             ),
           ),
@@ -611,6 +614,32 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     }
   }
 
+  Future<void> _setShareHistory(bool v) async {
+    if (!_isAdmin) return;
+    setState(() {
+      _busy = true;
+      _conv?['share_history'] = v; // optimistic
+    });
+    final ok = await ApiService()
+        .updateGroup(widget.conversationId, shareHistory: v);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      if (v) SealSpace.instance.serveHistory(widget.conversationId);
+      showToast(
+          context,
+          v
+              ? 'New members can read earlier messages'
+              : 'New members see only what’s sent after they join',
+          type: ToastType.success);
+      await _load();
+    } else {
+      setState(() => _conv?['share_history'] = !v);
+      showToast(context, 'Could not change that — try again.',
+          type: ToastType.error);
+    }
+  }
+
   Future<void> _setRole(int uid, String name, bool makeAdmin) async {
     setState(() => _busy = true);
     final ok = await ApiService().setGroupMemberRole(
@@ -658,6 +687,11 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (ok) {
+      // 🔒 A group that shares its history: hand the newcomers the earlier
+      // messages' keys this phone holds.
+      if (_conv?['share_history'] == true) {
+        SealSpace.instance.serveHistory(widget.conversationId);
+      }
       await _load();
     } else {
       showToast(context, 'Could not add members.', type: ToastType.error);
@@ -914,6 +948,34 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                       fontSize: 12.5, color: scheme.onSurfaceVariant)),
             ),
           ]),
+        // 🔒 History for newcomers: members' phones hand over the earlier
+        // messages' keys (the server can't read them either way).
+        if (_isAdmin)
+          SwitchListTile.adaptive(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            secondary: Icon(Icons.history_rounded, color: accentInk(scheme)),
+            title: const Text('New members can read earlier messages'),
+            subtitle: const Text(
+                'Members’ phones pass them the keys — still end-to-end '
+                'encrypted'),
+            value: _conv?['share_history'] == true,
+            onChanged: _busy ? null : _setShareHistory,
+          )
+        else if (_conv?['share_history'] == true)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(children: [
+              Icon(Icons.history_rounded,
+                  size: 16, color: accentInk(scheme)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('New members can read earlier messages',
+                    style: TextStyle(
+                        fontSize: 12.5, color: scheme.onSurfaceVariant)),
+              ),
+            ]),
+          ),
       ],
     );
   }
@@ -1146,9 +1208,11 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                     prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 38, maxHeight: 38),
                     suffixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 38, maxHeight: 38),
                     hintText: 'Search members…',
-                    prefixIcon: const Icon(Icons.search, size: 20),
+                    prefixIcon: const Icon(Icons.search, size: 20),
+
                     filled: true,
-                    fillColor: scheme.surfaceContainerHighest,
+                    fillColor: scheme.surfaceContainerHighest,
+
                   ),
                 ),
               ),

@@ -299,6 +299,39 @@ void main() {
       expect(await d.space.open(later), 'C ameondoka');
     });
 
+    test('a group that shares its history hands a newcomer the older keys',
+        () async {
+      final a = await device(1);
+      await device(2);
+      final before = await a.space.seal([1, 2], 'kabla hujaja');
+      final d = await device(4);
+      expect(await d.space.open(before), SealSpace.waitingForKey);
+      // A's phone wraps the older key for D's devices (the grant).
+      final devs = [
+        for (final x in (await dir.devicesOf(4))!)
+          {
+            'device_id': x.deviceId,
+            'ik_sig': x.ikSig,
+            'ik_dh': x.ikDh,
+            'ik_dh_sig': x.ikDhSig,
+            'epochs': [1],
+          }
+      ];
+      final keys = await a.space.historyWraps('1,2', 4, devs);
+      expect(keys, hasLength(1));
+      expect((keys.first['wraps'] as List).single['user_id'], 4);
+      for (final k in keys) {
+        await scopes.addWraps('1,2', k);
+      }
+      expect(await d.space.open(before), 'kabla hujaja');
+      // Nothing for epochs D already has.
+      expect(
+          await a.space.historyWraps('1,2', 4, [
+            {...devs.first, 'epochs': <int>[]}
+          ]),
+          isEmpty);
+    });
+
     test('a sealed group stays sealed when a new member has no keys',
         () async {
       final a = await device(1);

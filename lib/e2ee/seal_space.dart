@@ -56,6 +56,28 @@ class _HttpScopeApi implements SealScopeApi {
     return r.statusCode;
   }
 
+  /// Group history hand-over (not part of [SealScopeApi]: the app only).
+  Future<List<Map<String, dynamic>>> historyNeeds(int cid, String device) async {
+    final h = await _headers();
+    if (h == null) return const [];
+    final base = await AppConfig.baseUrl;
+    final r = await http
+        .get(
+            Uri.parse('$base/e2ee/scopes/history/needs').replace(
+                queryParameters: {
+                  'conversation_id': '$cid',
+                  'device_id': device
+                }),
+            headers: h)
+        .timeout(_wait);
+    if (r.statusCode != 200) return const [];
+    final j = jsonDecode(r.body) as Map<String, dynamic>;
+    return (j['needs'] as List? ?? const []).cast<Map<String, dynamic>>();
+  }
+
+  Future<int> grant(String scope, Map<String, dynamic> body) =>
+      _post('/e2ee/scopes/$scope/grant', body);
+
   @override
   Future<int> create(String scope, Map<String, dynamic> body) =>
       _post('/e2ee/scopes/$scope/create', body);
@@ -508,6 +530,63 @@ class SealSpace {
           if ((_current[e.key] ?? 0) < cur) _current[e.key] = cur;
         }
         await _saveHeld();
+      });
+
+  /// A group that lets new members read its earlier messages: hand the
+  /// older keys this device holds to members who joined after them (each
+  /// copy wrapped to one of their devices, checked against the directory).
+  /// Best-effort; returns how many members were given keys.
+  Future<int> serveHistory(int cid) async {
+    if (_apiOverride != null) return 0;
+    final api = _HttpScopeApi();
+    var given = 0;
+    try {
+      await _keys.load();
+      if (!_keys.isReady || !SealTab.inUse) return 0;
+      final needs = await api.historyNeeds(cid, _keys.deviceId);
+      for (final n in needs) {
+        final scope = n['scope'] as String;
+        final uid = n['user_id'] as int;
+        final keys = await historyWraps(scope, uid,
+            (n['devices'] as List).cast<Map<String, dynamic>>());
+        if (keys.isEmpty) continue;
+        final code = await api.grant(scope, {
+          'conversation_id': cid,
+          'user_id': uid,
+          'keys': keys,
+        });
+        if (code == 200) given++;
+      }
+    } catch (e) {
+      debugPrint('Seal history: $e');
+    }
+    return given;
+  }
+
+  /// Copies of [scope]'s keys this device holds, wrapped for [devices] of
+  /// member [uid] (each {device_id, ik_sig, ik_dh, ik_dh_sig, epochs}),
+  /// grouped by epoch: [{epoch, from_device, wraps}].
+  Future<List<Map<String, dynamic>>> historyWraps(String scope, int uid,
+          List<Map<String, dynamic>> devices) =>
+      _locked(() async {
+        final held = (await _heldKeys())[scope] ?? const <int, Uint8List>{};
+        final out = <Map<String, dynamic>>[];
+        for (final e in held.entries) {
+          final want = [
+            for (final d in devices)
+              if ((d['epochs'] as List? ?? const []).contains(e.key))
+                {...d, 'user_id': uid}
+          ];
+          if (want.isEmpty) continue;
+          final wraps = await _wrapFor(scope, e.key, e.value, want);
+          if (wraps.isEmpty) continue;
+          out.add({
+            'epoch': e.key,
+            'from_device': _keys.deviceId,
+            'wraps': wraps,
+          });
+        }
+        return out;
       });
 
   /// Every so often: give member devices that joined later their copy of

@@ -139,15 +139,19 @@ class SealMedia {
   }
 
   /// Open the locked file at [src] into [dst] piece by piece off the UI
-  /// thread. Throws [SealError] (and leaves no [dst]) when it was changed,
-  /// cut short or locked with another key.
+  /// thread. Throws [SealError] when it was changed, cut short or locked
+  /// with another key. Written beside [dst] first and moved into place
+  /// whole: nobody ever reads a half-opened file, and a failure leaves an
+  /// earlier good [dst] alone.
   static Future<void> openFile(String src, String dst, List<int> key) async {
     final k = Uint8List.fromList(key);
+    final part = '$dst.part';
     try {
-      await compute(_openFileIsolate, (src, dst, k));
+      await compute(_openFileIsolate, (src, part, k));
+      await File(part).rename(dst);
     } catch (e) {
       try {
-        final f = File(dst);
+        final f = File(part);
         if (await f.exists()) await f.delete();
       } catch (_) {}
       throw e is SealError ? e : SealError('media could not be unlocked');

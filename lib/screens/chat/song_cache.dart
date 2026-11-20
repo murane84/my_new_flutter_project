@@ -133,21 +133,16 @@ class SongCache {
       // with the key its address carries, keep only the opened song.
       final key = SealMedia.keyOf(url);
       if (key != null) {
-        final locked = File('${f.path}.locked');
-        final res = await DownloadManager.instance.fetch(
-            SealMedia.bare(url), locked,
-            headers: headers, name: filename ?? 'Song');
-        if (!res.ok || res.file == null) return null;
-        try {
-          await SealMedia.openFile(res.file!.path, f.path, key);
-          await MediaStore.instance.linkSealed(key, f.path);
-        } finally {
-          try {
-            if (await res.file!.exists()) await res.file!.delete();
-            if (await locked.exists()) await locked.delete();
-          } catch (_) {}
-        }
-        return (await f.exists() && await f.length() > 0) ? f.path : null;
+        // One fetch-and-open per song at a time (the bubble and a prefetch
+        // asking together share it).
+        final running = _opening[f.path];
+        if (running != null) return running;
+        final job = _openSealed(url, f, key, headers, filename);
+        _opening[f.path] = job;
+        job.whenComplete(() {
+          _opening.remove(f.path);
+        });
+        return job;
       }
       // Streamed to disk (not buffered in RAM) via the app-wide
       // DownloadManager, so leaving the chat / screen-off doesn't kill it.
@@ -158,6 +153,31 @@ class SongCache {
       if (await f.exists() && await f.length() > 0) return f.path;
     } catch (_) {}
     return null;
+  }
+
+  static final Map<String, Future<String?>> _opening = {};
+
+  static Future<String?> _openSealed(String url, File f, List<int> key,
+      Map<String, String> headers, String? filename) async {
+    try {
+      final locked = File('${f.path}.locked');
+      final res = await DownloadManager.instance.fetch(
+          SealMedia.bare(url), locked,
+          headers: headers, name: filename ?? 'Song');
+      if (!res.ok || res.file == null) return null;
+      try {
+        await SealMedia.openFile(res.file!.path, f.path, key);
+        await MediaStore.instance.linkSealed(key, f.path);
+      } finally {
+        try {
+          if (await res.file!.exists()) await res.file!.delete();
+          if (await locked.exists()) await locked.delete();
+        } catch (_) {}
+      }
+      return (await f.exists() && await f.length() > 0) ? f.path : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Whether we've already acked [id] to the server this session.

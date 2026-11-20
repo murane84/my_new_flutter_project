@@ -127,7 +127,24 @@ class MediaStore {
     return null;
   }
 
+  // One fetch-and-open per sealed file at a time (a thumbnail and its
+  // viewer asking together share it).
+  final Map<String, Future<File?>> _opening = {};
+
   Future<File?> _sealedFile(
+      String url, Uint8List key, Map<String, String> headers) {
+    final id = _idFor(url);
+    final running = _opening[id];
+    if (running != null) return running;
+    final job = _sealedFileNow(url, key, headers);
+    _opening[id] = job;
+    job.whenComplete(() {
+      _opening.remove(id);
+    });
+    return job;
+  }
+
+  Future<File?> _sealedFileNow(
       String url, Uint8List key, Map<String, String> headers) async {
     try {
       final f = await _fileFor(url);

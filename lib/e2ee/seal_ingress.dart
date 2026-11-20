@@ -517,6 +517,14 @@ class SealIngress {
 
   /// Sign-out: off the key directory, every key, session and text forgotten.
   static Future<void> signOut() async {
+    // The server-backup recovery key this phone kept for this person.
+    final me = await myUid();
+    if (me != null) {
+      try {
+        await SealKeyStore.platformStorage()
+            .delete('aluta_cloud_backup_key_$me');
+      } catch (_) {}
+    }
     // Sessions and Our Space keys first: they're filed under this device's
     // id, which the directory sign-out forgets with the keys.
     await SealMessenger.instance.wipe();

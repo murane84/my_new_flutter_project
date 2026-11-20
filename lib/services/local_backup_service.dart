@@ -139,6 +139,11 @@ class LocalBackupService {
     for (final e in data.entries) {
       if (e.key.startsWith('aluta_group_sealed_')) {
         await prefs.setBool(e.key, e.value == true || e.value == 'true');
+      } else if (e.key.startsWith('chat_cache_')) {
+        // A chat already on this phone keeps what's newer here: the backup
+        // only adds what's missing (restoring never loses messages).
+        await prefs.setString(
+            e.key, _mergeChat(prefs.getString(e.key), e.value.toString()));
       } else {
         await prefs.setString(e.key, e.value.toString());
       }
@@ -176,8 +181,11 @@ class LocalBackupService {
   static final List<int> _cloudInfo = utf8.encode('AlutaCloudBackup v1');
 
   SealStorage get _secure => SealKeyStore.platformStorage();
-  Future<String> _slot() async =>
-      'aluta_cloud_backup_key_${SealDirectory.ownerOf(await getToken()) ?? 'x'}';
+  /// Per signed-in person (another account on this phone never sees it).
+  Future<String> _slot() async => slotFor(
+      (await SharedPreferences.getInstance()).getString('my_user_id') ?? 'x');
+
+  static String slotFor(String uid) => 'aluta_cloud_backup_key_$uid';
 
   /// A new recovery key: 32 random bytes.
   List<int> newRecoveryKey() => _randomBytes(32);
@@ -303,6 +311,28 @@ class LocalBackupService {
     await http.delete(Uri.parse('${await AppConfig.baseUrl}/e2ee/backup'),
         headers: h);
     await forgetRecoveryKey();
+  }
+
+  /// One chat's cached messages: this phone's copy wins, the backup fills
+  /// in the rest (newest first, as the chat keeps them).
+  static String _mergeChat(String? here, String backup) {
+    if (here == null || here.isEmpty) return backup;
+    try {
+      final mine = (jsonDecode(here) as List).cast<Map<String, dynamic>>();
+      final theirs = (jsonDecode(backup) as List).cast<Map<String, dynamic>>();
+      final ids = {for (final m in mine) '${m['id']}'};
+      final all = [
+        ...mine,
+        for (final m in theirs)
+          if (!ids.contains('${m['id']}')) m
+      ];
+      int idOf(Map<String, dynamic> m) =>
+          m['id'] is int ? m['id'] as int : int.tryParse('${m['id']}') ?? 0;
+      all.sort((a, b) => idOf(b).compareTo(idOf(a)));
+      return jsonEncode(all.length > 3000 ? all.take(3000).toList() : all);
+    } catch (_) {
+      return here; // never trade a working chat for a broken merge
+    }
   }
 
   Future<SecretKey> _deriveKey(String pass, List<int> salt) async {

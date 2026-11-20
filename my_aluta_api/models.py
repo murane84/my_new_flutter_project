@@ -1598,6 +1598,18 @@ class SealScope(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class CloudBackup(Base):
+    """🔒 A person's encrypted backup (e2ee_backup.py): locked on their phone
+    with a key from their own recovery key — the server can't open it."""
+    __tablename__ = "cloud_backups"
+
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                     primary_key=True)
+    blob = Column(LargeBinary, nullable=False)
+    size = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class SealScopeGrant(Base):
     """🔒 A group's earlier messages handed to a member who joined later
     (the group lets new members read earlier messages): a member's device

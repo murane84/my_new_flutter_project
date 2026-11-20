@@ -85,8 +85,9 @@ POLICY_SUMMARY = {
         "notes and files are locked with a key only the members' phones hold. "
         "Someone who joins later can't read what came before, unless the "
         "group's admins let new members read earlier messages (members' phones "
-        "then pass them the keys). Songs, polls and Stories aren't encrypted "
-        "yet. Please review and accept to continue."
+        "then pass them the keys). You can also keep a backup on our server, "
+        "locked with a recovery key only you hold. Songs, polls and Stories "
+        "aren't encrypted yet. Please review and accept to continue."
     ),
 }
 

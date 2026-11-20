@@ -62,6 +62,7 @@ from routers import cover_art as cover_art_router
 from routers import e2ee_keys as e2ee_keys_router
 import e2ee_handover
 import e2ee_scope
+import e2ee_backup
 from websocket_routes import router as websocket_router
 import websocket_manager
 from sqlalchemy import text
@@ -197,6 +198,7 @@ app.include_router(cover_art_router.router)
 app.include_router(e2ee_keys_router.router)
 app.include_router(e2ee_handover.router)
 app.include_router(e2ee_scope.router)
+app.include_router(e2ee_backup.router)
 # Releases outside the Play Store: /download page, /app/latest (in-app update
 # check), /admin/release uploader. Files on the Railway volume, not Postgres.
 app.include_router(releases_router.router)

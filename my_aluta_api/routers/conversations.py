@@ -233,7 +233,9 @@ def get_messages(
     # Store-and-forward: drop content of messages every member has cached
     # (inert until the /cached acks arrive). Best-effort.
     cc.purge_cached_conversation(db, cid)
-    msgs = cc.get_messages(db, cid, skip, limit)
+    mine = cc.get_member(db, cid, current_user.id)
+    msgs = cc.get_messages(db, cid, skip, limit,
+                           joined_at=getattr(mine, "joined_at", None))
     # Per-reader visibility: a message hidden from its receiver (sent across
     # a block) or deleted-for-me never shows to me here either.
     me = current_user.id

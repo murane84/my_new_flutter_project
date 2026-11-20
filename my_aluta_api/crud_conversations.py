@@ -183,11 +183,23 @@ def add_message(db: Session, conversation_id: int, sender_id: int, payload) -> M
     return msg
 
 
-def get_messages(db: Session, conversation_id: int, skip: int = 0, limit: int = 20):
-    """Newest-first page of a conversation's (non-deleted-for-sender) messages."""
+def _not_sealed_before(joined_at):
+    """🔒 Leave out group messages sealed for the members BEFORE someone
+    joined: they were locked with a key the newcomer never gets, so they'd
+    only show as locked notes. (Plain older messages show as before.)"""
+    return ~(func.coalesce(Message.content, "").startswith("🔒s1.")
+             & (Message.timestamp < joined_at))
+
+
+def get_messages(db: Session, conversation_id: int, skip: int = 0,
+                 limit: int = 20, joined_at=None):
+    """Newest-first page of a conversation's (non-deleted-for-sender) messages.
+    [joined_at]: the reader joined then (see [_not_sealed_before])."""
+    q = db.query(Message).filter(Message.conversation_id == conversation_id)
+    if joined_at is not None:
+        q = q.filter(_not_sealed_before(joined_at))
     return (
-        db.query(Message)
-        .filter(Message.conversation_id == conversation_id)
+        q
         .order_by(Message.id.desc())
         .offset(skip)
         .limit(limit)
@@ -213,6 +225,9 @@ def last_message(db: Session, conversation_id: int,
     )
     if viewer is not None:
         q = q.filter(_visible_to(int(viewer)))
+        m = get_member(db, conversation_id, int(viewer))
+        if m is not None and getattr(m, "joined_at", None) is not None:
+            q = q.filter(_not_sealed_before(m.joined_at))
     return q.order_by(Message.id.desc()).first()
 
 

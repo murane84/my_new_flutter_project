@@ -183,21 +183,36 @@ def add_message(db: Session, conversation_id: int, sender_id: int, payload) -> M
     return msg
 
 
-def _not_sealed_before(joined_at):
+def _not_sealed_before(joined_at, granted=()):
     """🔒 Leave out group messages sealed for the members BEFORE someone
     joined: they were locked with a key the newcomer never gets, so they'd
-    only show as locked notes. (Plain older messages show as before.)"""
-    return ~(func.coalesce(Message.content, "").startswith("🔒s1.")
-             & (Message.timestamp < joined_at))
+    only show as locked notes. (Plain older messages show as before.)
+    [granted]: older scopes a member's phone did hand this reader (the
+    group shared its history) — those stay readable even if the group
+    later stops sharing."""
+    from sqlalchemy import or_
+    hidden = (func.coalesce(Message.content, "").startswith("🔒s1.")
+              & (Message.timestamp < joined_at))
+    if granted:
+        hidden = hidden & ~or_(*[
+            Message.content.startswith(f"🔒s1.{s}.") for s in granted])
+    return ~hidden
+
+
+def granted_scopes(db: Session, conversation_id: int, user_id: int) -> list:
+    from models import SealScopeGrant
+    return [r[0] for r in db.query(SealScopeGrant.scope).filter(
+        SealScopeGrant.user_id == user_id,
+        SealScopeGrant.conversation_id == conversation_id).all()]
 
 
 def get_messages(db: Session, conversation_id: int, skip: int = 0,
-                 limit: int = 20, joined_at=None):
+                 limit: int = 20, joined_at=None, granted=()):
     """Newest-first page of a conversation's (non-deleted-for-sender) messages.
     [joined_at]: the reader joined then (see [_not_sealed_before])."""
     q = db.query(Message).filter(Message.conversation_id == conversation_id)
     if joined_at is not None:
-        q = q.filter(_not_sealed_before(joined_at))
+        q = q.filter(_not_sealed_before(joined_at, granted))
     return (
         q
         .order_by(Message.id.desc())
@@ -229,7 +244,9 @@ def last_message(db: Session, conversation_id: int,
         conv = get_conversation(db, conversation_id)
         if (m is not None and getattr(m, "joined_at", None) is not None
                 and not getattr(conv, "share_history", False)):
-            q = q.filter(_not_sealed_before(m.joined_at))
+            q = q.filter(_not_sealed_before(
+                m.joined_at,
+                granted_scopes(db, conversation_id, int(viewer))))
     return q.order_by(Message.id.desc()).first()
 
 

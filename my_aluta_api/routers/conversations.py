@@ -240,7 +240,10 @@ def get_messages(
     # the older keys from a member's phone, so those messages stay.
     hide_from = (None if getattr(conv, "share_history", False)
                  else getattr(mine, "joined_at", None))
-    msgs = cc.get_messages(db, cid, skip, limit, joined_at=hide_from)
+    msgs = cc.get_messages(
+        db, cid, skip, limit, joined_at=hide_from,
+        granted=(cc.granted_scopes(db, cid, current_user.id)
+                 if hide_from is not None else ()))
     # Per-reader visibility: a message hidden from its receiver (sent across
     # a block) or deleted-for-me never shows to me here either.
     me = current_user.id

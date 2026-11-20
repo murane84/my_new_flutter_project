@@ -581,6 +581,7 @@ def update_group(
     avatar_url: str | None = None,
     admins_only: bool | None = None,
     share_history: bool | None = None,
+    avatar_asset: str | None = None,
 ) -> None:
     conv = get_conversation(db, conversation_id)
     if not conv:
@@ -595,6 +596,15 @@ def update_group(
             conv.title = new
     if avatar_url is not None:
         conv.avatar_url = avatar_url.strip() or None
+        # A plain photo is its own attachment; a sealed one names it apart
+        # (sealed again for new members: the same attachment stays named).
+        a = (avatar_asset or "").strip()
+        if a:
+            conv.avatar_asset = a.split("#", 1)[0]
+        elif not conv.avatar_url:
+            conv.avatar_asset = None
+        elif not conv.avatar_url.startswith("🔒s1."):
+            conv.avatar_asset = conv.avatar_url.split("#", 1)[0]
     conv.updated_at = _now()
     db.commit()
 

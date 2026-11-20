@@ -1069,9 +1069,16 @@ class _MomentVideoPlayerState extends State<_MomentVideoPlayer> {
                 httpHeaders: mediaAuthHeaders(widget.url),
               );
       } else {
+        // 🔒 A sealed clip plays from a local blob (never the locked bytes).
+        final src = await MediaStore.instance.webSource(
+            widget.url, mediaAuthHeaders(widget.url),
+            mime: 'video/mp4');
+        if (src == null) throw StateError('clip unavailable');
         c = VideoPlayerController.networkUrl(
-          Uri.parse(widget.url),
-          httpHeaders: mediaAuthHeaders(widget.url),
+          Uri.parse(src),
+          httpHeaders: SealMedia.isSealed(widget.url)
+              ? const {}
+              : mediaAuthHeaders(widget.url),
         );
       }
       await c.initialize();

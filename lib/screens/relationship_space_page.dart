@@ -33,6 +33,7 @@ import '../utils/net_image.dart';
 import '../widgets/glimpse_video.dart';
 import '../utils/app_config.dart';
 import '../services/media_store.dart';
+import '../e2ee/seal_media.dart';
 import '../utils/romantic_pattern.dart';
 import '../services/wallpapers_service.dart';
 import '../widgets/wallpaper_gallery.dart';
@@ -1207,17 +1208,20 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         final m = it as Map;
         final b = m['bytes'];
         if (b is! List<int>) continue;
-        final up = await ApiService().uploadMedia(
-          bytes: b,
-          filename: (m['filename'] ?? 'photo').toString(),
-          mime: (m['mime'] ?? 'image/jpeg').toString(),
-        );
+        // 🔒 Locked on this phone when both of you can open it.
+        String? url;
+        try {
+          url = await ApiService().uploadSpaceMedia(_id, b,
+              filename: (m['filename'] ?? 'photo').toString(),
+              mime: (m['mime'] ?? 'image/jpeg').toString(),
+              kind: 'image');
+        } catch (_) {}
         if (!mounted) return;
-        if (up == null || up['url'] == null) continue;
+        if (url == null) continue;
         final saved = await ApiService().addMoment(
           _id,
           kind: 'photo',
-          ref: up['url'] as String,
+          ref: url,
           caption: caption,
         );
         if (saved != null) ok++;
@@ -1239,17 +1243,27 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final bytes = result['_bytes'];
     if (bytes is List<int>) {
       showToast(context, 'Uploading…', type: ToastType.info);
-      final up = await ApiService().uploadMedia(
-        bytes: bytes,
-        filename: (result['_filename'] ?? 'moment').toString(),
-        mime: (result['_mime'] ?? '').toString(),
-      );
+      final mime = (result['_mime'] ?? '').toString();
+      // 🔒 Locked on this phone when both of you can open it.
+      String? url;
+      try {
+        url = await ApiService().uploadSpaceMedia(_id, bytes,
+            filename: (result['_filename'] ?? 'moment').toString(),
+            mime: mime,
+            kind: mime.startsWith('image/')
+                ? 'image'
+                : mime.startsWith('video/')
+                    ? 'video'
+                    : mime.startsWith('audio/')
+                        ? 'audio'
+                        : 'file');
+      } catch (_) {}
       if (!mounted) return;
-      if (up == null || up['url'] == null) {
+      if (url == null) {
         showToast(context, 'Upload failed — try again', type: ToastType.error);
         return;
       }
-      ref = up['url'] as String;
+      ref = url;
     }
     final saved = await ApiService().addMoment(
       _id,

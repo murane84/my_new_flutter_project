@@ -840,7 +840,10 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
                   accent: _accent,
                   aspectRatioFallback: 16 / 9,
                   caption: caption,
-                  posterUrl: '${_full(m['ref'])!}/thumb',
+                  // (a sealed clip has no server poster)
+                  posterUrl: SealMedia.isSealed(_full(m['ref']))
+                      ? null
+                      : '${_full(m['ref'])!}/thumb',
                   onFullscreen: () => _openMomentVideo(_full(m['ref'])!),
                 ),
               ),

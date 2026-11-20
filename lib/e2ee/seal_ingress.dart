@@ -273,6 +273,12 @@ class SealIngress {
   }
 
   static Future<Map<String, dynamic>> openPush(Map<String, dynamic> data) async {
+    // A sealed group name in the push ("group_title"): "Group" when this
+    // phone can't open it.
+    if (data.values.any(SealScope.isSealed)) {
+      data = Map<String, dynamic>.from(data);
+      await openGroupMeta(data);
+    }
     if (data.values.any(SealScope.isSealed)) {
       // 🔒 Our Space words in a push (the server avoids it, but never show
       // a sealed string as text).
@@ -461,6 +467,50 @@ class SealIngress {
     final me = await myUid();
     if (me == null || peer <= 0 || peer == me) return false;
     return SealMessenger.instance.canSealMedia(peer, me, cap: cap);
+  }
+
+  /// Whether something can go sealed for exactly [members] (a group being
+  /// made / renamed): every device of every member opens [cap]. Throws
+  /// [SealError] when it can't be told right now.
+  static Future<bool> canSealForMembers(List<int> members,
+      {String cap = 'm2', bool stay = false}) async {
+    final me = await myUid();
+    if (me == null || members.length > groupMaxMembers) return false;
+    return SealMessenger.instance
+        .canSealMediaFor(members, me, stay: stay, cap: cap);
+  }
+
+  /// 🔒 A group's name and photo address are sealed with the members' key.
+  /// Open them in place (a row of the chat list, a group's details, an
+  /// event): a name this device can't open reads "Group", a photo it can't
+  /// open is left out (initials show).
+  static const _groupMetaKeys = {
+    'title': true,
+    'group_title': true,
+    'avatar_url': false,
+    'group_avatar': false,
+  };
+
+  /// Returns the keys it couldn't open.
+  static Future<Set<String>> openGroupMeta(Map<String, dynamic> row,
+      {Set<String>? asked}) async {
+    final failed = <String>{};
+    for (final e in _groupMetaKeys.entries) {
+      final v = row[e.key];
+      if (!SealScope.isSealed(v)) continue;
+      String out;
+      try {
+        out = await SealSpace.instance.open(v as String, asked: asked);
+      } catch (_) {
+        out = SealSpace.unlockFailed;
+      }
+      final bad = SealScope.isSealed(out) ||
+          out == SealSpace.waitingForKey ||
+          out == SealSpace.unlockFailed;
+      if (bad) failed.add(e.key);
+      row[e.key] = bad ? (e.value ? 'Group' : '') : out;
+    }
+    return failed;
   }
 
   /// Whether a file for group [cid] can go sealed (every member device can

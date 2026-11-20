@@ -550,7 +550,8 @@ def update_group(
         raise HTTPException(status_code=403, detail="Only admins can edit the group")
     cc.update_group(db, cid, title=payload.title, avatar_url=payload.avatar_url,
                     admins_only=payload.admins_only,
-                    share_history=payload.share_history)
+                    share_history=payload.share_history,
+                    avatar_asset=payload.avatar_asset)
     conv = cc.get_conversation(db, cid)
     safe_broadcast_users(
         cc.member_ids(db, cid),
@@ -639,7 +640,9 @@ def start_poll_countdown(
     # the push; a member who muted the group stays quiet.)
     try:
         conv = db.query(Conversation).filter(Conversation.id == cid).first()
-        gtitle = ((conv.title if conv else None) or "Your group")[:80]
+        gtitle = ((conv.title if conv else None) or "Your group")
+        if not gtitle.startswith("🔒s1."):  # (a sealed name stays whole)
+            gtitle = gtitle[:80]
         # (The poll here is its JSON text; a sealed one has no readable
         # question — the app says just "Vote closes in …".)
         from polls import load as _load_poll

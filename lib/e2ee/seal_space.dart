@@ -8,6 +8,7 @@ import '../utils/app_config.dart';
 import '../utils/net.dart' as http;
 import 'seal_directory.dart';
 import 'seal_keystore.dart';
+import 'seal_media.dart';
 import 'seal_primitives.dart';
 import 'seal_scope.dart';
 import 'seal_tab.dart';
@@ -479,6 +480,7 @@ class SealSpace {
             await walk(x);
           }
         }
+        withMediaKeys(v);
       } else if (v is List) {
         for (var i = 0; i < v.length; i++) {
           final x = v[i];
@@ -496,6 +498,30 @@ class SealSpace {
   }
 
   /// Decode a JSON body and open it (for the Our Space API answers).
+  /// 🔒 A sealed Our Space photo / voice / song keeps its bare address in
+  /// a field (`ref`, `cover_ref`, `background_url`…) and its address WITH
+  /// the key sealed next to it (`ref_key`…). Once opened, the key goes back
+  /// onto the address in place, so every viewer / player opens the file.
+  static void withMediaKeys(Map v) {
+    for (final k in v.keys.toList()) {
+      if (k is! String || !k.endsWith('_key')) continue;
+      final keyed = v[k];
+      if (keyed is! String || !SealMedia.isSealed(keyed)) continue;
+      final base = k.substring(0, k.length - 4);
+      final cur = v[base];
+      if (cur is! String || cur.isEmpty || cur.contains(keyed)) continue;
+      final bare = SealMedia.bare(keyed);
+      if (bare.isEmpty) {
+        // Just the key ("#ask=…"): it belongs on the address as it is.
+        if (!SealMedia.isSealed(cur)) {
+          v[base] = SealMedia.withKey(cur, SealMedia.keyOf(keyed)!);
+        }
+      } else if (cur.contains(bare)) {
+        v[base] = cur.replaceFirst(bare, keyed);
+      }
+    }
+  }
+
   Future<dynamic> decode(String body) {
     final j = jsonDecode(body);
     return openJson(j);

@@ -704,7 +704,22 @@ class _DedVoicePlayerState extends State<_DedVoicePlayer> {
       final full = widget.url.startsWith('http')
           ? widget.url
           : '${await AppConfig.baseUrl}${widget.url}';
-      await _p.setUrl(full, headers: mediaAuthHeaders(full));
+      if (SealMedia.isSealed(full)) {
+        // 🔒 A sealed voice note: opened on this device, never streamed.
+        if (kIsWeb) {
+          final src = await MediaStore.instance
+              .webSource(full, mediaAuthHeaders(full), mime: 'audio/mp4');
+          if (src == null) return;
+          await _p.setUrl(src);
+        } else {
+          final f = await MediaStore.instance
+              .getFile(full, mediaAuthHeaders(full));
+          if (f == null) return;
+          await _p.setFilePath(f.path);
+        }
+      } else {
+        await _p.setUrl(full, headers: mediaAuthHeaders(full));
+      }
       if (mounted) setState(() => _ready = true);
     } catch (_) {}
   }

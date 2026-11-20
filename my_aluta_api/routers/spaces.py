@@ -14,7 +14,7 @@ pipeline before a live surface needs it.
 """
 from datetime import datetime, timezone, timedelta
 from fastapi import (APIRouter, Depends, HTTPException, Request, status,
-                     UploadFile, File)
+                     UploadFile, File, Form)
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from typing import Optional
@@ -213,6 +213,7 @@ def _space_brief(db: Session, space: RelationshipSpace,
         "name": space.name,
         "theme": space.theme,
         "background_url": space.background_url,
+        "background_url_key": getattr(space, "background_key", None),
         "is_primary": bool(space.is_primary),
         "plan_tier": space.plan_tier,
         "close_since": space.created_at.isoformat() if space.created_at else None,
@@ -576,6 +577,7 @@ def _moment_dict(db: Session, m: PinnedMoment, current_user_id: int) -> dict:
         "id": m.id,
         "kind": m.kind,
         "ref": m.ref,
+        "ref_key": getattr(m, "ref_key", None),
         "caption": m.caption,
         "author_id": m.author_id,
         "author": {
@@ -616,6 +618,7 @@ def _notify_partner_moment(db: Session, space: RelationshipSpace,
                 "kind": moment.kind,
                 "caption": moment.caption,
                 "ref": moment.ref,
+                "ref_key": getattr(moment, "ref_key", None),
                 "line": line,
             },
         })
@@ -634,7 +637,8 @@ def _notify_partner_moment(db: Session, space: RelationshipSpace,
                     song = str(d.get("title") or "") if isinstance(d, dict) else ""
                 except Exception:
                     song = ""
-            elif moment.kind == "photo":
+            elif moment.kind == "photo" and not getattr(moment, "ref_key", None):
+                # (a sealed photo can't be fetched for a picture banner)
                 photo = str(moment.ref or "")
             send_push_to_user(partner, {
                 "type": "space_moment",
@@ -1388,6 +1392,7 @@ def add_moment(
         author_id=current_user.id,
         kind=kind,
         ref=(payload.ref or None),
+        ref_key=_sealed_or_none(getattr(payload, "ref_key", None)),
         caption=(payload.caption or None),
     )
     db.add(moment)
@@ -2546,6 +2551,7 @@ def _recap_for(db: Session, space: RelationshipSpace, current_user: User,
     media_kinds = {"photo", "video", "gif"}
     photos = 0
     cover = None
+    cover_key = None
     highlights = []
     for m in moments:
         if m.kind in media_kinds:
@@ -2553,10 +2559,12 @@ def _recap_for(db: Session, space: RelationshipSpace, current_user: User,
             if m.ref:
                 if cover is None:
                     cover = m.ref
+                    cover_key = getattr(m, "ref_key", None)
                 if full:
                     highlights.append({
                         "kind": m.kind,
                         "ref": m.ref,
+                        "ref_key": getattr(m, "ref_key", None),
                         "caption": m.caption,
                         "created_at": (m.created_at.isoformat()
                                        if m.created_at else None),
@@ -2591,6 +2599,7 @@ def _recap_for(db: Session, space: RelationshipSpace, current_user: User,
         "dedications": ded_n,
     }
     out["cover_ref"] = cover
+    out["cover_ref_key"] = cover_key
     out["is_empty"] = not (tracks or moments or diary_n or listen_days or ded_n)
     if full:
         out["songs"] = [_track_dict(db, t, current_user.id) for t in tracks]
@@ -2636,6 +2645,7 @@ def list_recaps(
                 "month": rec["month"],
                 "label": rec["label"],
                 "cover_ref": rec["cover_ref"],
+                "cover_ref_key": rec.get("cover_ref_key"),
                 "numbers": rec["numbers"],
             })
     latest_ready = next((r for r in recaps if r["month"] != cur_key), None)
@@ -3415,6 +3425,7 @@ def edit_diary_comment(
 
 class _MomentRefBody(BaseModel):
     ref: str
+    ref_key: Optional[str] = None
 
 
 @router.patch("/{space_id}/moments/{moment_id}/ref")
@@ -3441,6 +3452,8 @@ def heal_moment_ref(
     if not ref or len(ref) > 20000:
         raise HTTPException(status_code=400, detail="Bad ref")
     moment.ref = ref
+    if payload.ref_key is not None:
+        moment.ref_key = _sealed_or_none(payload.ref_key)
     db.commit()
     db.refresh(moment)
     return _moment_dict(db, moment, current_user.id)
@@ -3510,6 +3523,7 @@ def add_moment_with(
         author_id=current_user.id,
         kind=kind,
         ref=(payload.ref or None),
+        ref_key=_sealed_or_none(getattr(payload, "ref_key", None)),
         caption=(payload.caption or None),
     )
     db.add(moment)
@@ -3530,10 +3544,19 @@ def current_user_plan(user: User) -> str:
 
 
 # ── Custom photo background (per-user) ────────────────────────────────────────
+def _sealed_or_none(v):
+    """A sealed address-with-key ("🔒s1.…"), or nothing."""
+    v = (v or "").strip()
+    if not v.startswith("🔒s1.") or len(v) > 4000:
+        return None
+    return v
+
+
 @router.post("/{space_id}/background")
 async def set_space_background(
     space_id: int,
     file: UploadFile = File(...),
+    key: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -3547,8 +3570,14 @@ async def set_space_background(
     if len(data) > 12 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Image too large (max 12 MB)")
     mime = file.content_type or "image/jpeg"
-    if not mime.startswith("image/"):
+    # 🔒 A photo locked on the phone comes with its sealed address-with-key.
+    sealed_key = _sealed_or_none(key)
+    if sealed_key and mime == "application/x-aluta-sealed":
+        pass
+    elif not mime.startswith("image/"):
         raise HTTPException(status_code=400, detail="Not an image")
+    else:
+        sealed_key = None
     old = space.background_url
     asset_id = _uuid.uuid4().hex
     db.add(MediaAsset(
@@ -3557,6 +3586,7 @@ async def set_space_background(
         uploader_id=current_user.id,
     ))
     space.background_url = f"/attachments/{asset_id}"
+    space.background_key = sealed_key
     db.commit()
     if old:
         frag = old.rsplit("/", 1)[-1]
@@ -3578,6 +3608,7 @@ def clear_space_background(
     space = _owned_space_or_404(db, space_id, current_user.id)
     old = space.background_url
     space.background_url = None
+    space.background_key = None
     db.commit()
     if old:
         frag = old.rsplit("/", 1)[-1]

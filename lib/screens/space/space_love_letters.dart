@@ -303,7 +303,7 @@ extension _SpaceLoveLetters on _RelationshipSpacePageState {
             accent: Colors.white,
             maxWidth: w,
             aspectRatioFallback: 16 / 9,
-            posterUrl: '$url/thumb',
+            posterUrl: SealMedia.isSealed(url) ? null : '$url/thumb',
           );
     }
     if (mime.startsWith('audio/')) {

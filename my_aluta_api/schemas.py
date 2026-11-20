@@ -242,6 +242,8 @@ class RenameGroup(BaseModel):
     # Group settings update — any subset. (Kept the name for compatibility.)
     title: Optional[str] = None
     avatar_url: Optional[str] = None
+    # 🔒 The attachment behind a sealed photo address (members may fetch it).
+    avatar_asset: Optional[str] = None
     admins_only: Optional[bool] = None
     share_history: Optional[bool] = None
 
@@ -501,4 +503,6 @@ class BondRequestCreate(BaseModel):
 class MomentCreate(BaseModel):
     kind: str                       # dedication | voice | photo | song | note
     ref: Optional[str] = None       # media URL / track JSON / text — kind decides
+    # 🔒 The sealed address-with-key of a sealed photo / voice / song.
+    ref_key: Optional[str] = None
     caption: Optional[str] = None

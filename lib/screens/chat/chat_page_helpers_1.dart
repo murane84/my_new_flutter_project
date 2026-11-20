@@ -264,7 +264,13 @@ extension _ChatPageHelpers1 on _ChatPageState {
   /// a server fetch while the bytes are still there, then re-uploads them as a
   /// NON-ephemeral asset. Returns the new ref, or [rel] unchanged on any failure
   /// so keeping never hard-fails.
-  Future<String> _durableMediaRef(String rel, String mime) async {
+  ///
+  /// 🔒 [spaceId]: the copy is for Our Space — locked on this phone when its
+  /// members' Aluta can open it (the address then carries its key, which
+  /// [ApiService.addMoment] seals beside the moment). Only for moments: a
+  /// playlist / dedication copy goes as before.
+  Future<String> _durableMediaRef(String rel, String mime,
+      {int? spaceId}) async {
     if (rel.isEmpty || rel.startsWith('http')) return rel;
     try {
       final url = fullMediaUrl(rel);
@@ -297,6 +303,21 @@ extension _ChatPageHelpers1 on _ChatPageState {
         return SealMedia.isSealed(rel) ? '' : rel;
       }
       final name = SealMedia.bare(rel).split('/').last;
+      if (spaceId != null) {
+        final kind = mime.startsWith('image/')
+            ? 'image'
+            : mime.startsWith('video/')
+                ? 'video'
+                : mime.startsWith('audio/')
+                    ? 'audio'
+                    : 'file';
+        final u = await ApiService().uploadSpaceMedia(spaceId, bytes,
+            filename: name.isEmpty ? 'keepsake' : name,
+            mime: mime.isNotEmpty ? mime : 'application/octet-stream',
+            kind: kind);
+        if (u != null && u.isNotEmpty) return u;
+        return SealMedia.isSealed(rel) ? '' : rel;
+      }
       final up = await ApiService().uploadMedia(
         bytes: bytes,
         filename: name.isEmpty ? 'keepsake' : name,
@@ -405,7 +426,7 @@ extension _ChatPageHelpers1 on _ChatPageState {
         final note = (msg['content'] as String?) ?? '';
         String? snapMedia;
         if (!sealed && rel.isNotEmpty) {
-          snapMedia = await _durableMediaRef(rel, hMime);
+          snapMedia = await _durableMediaRef(rel, hMime, spaceId: sid);
           if (!mounted) return;
         }
         ref = jsonEncode({
@@ -455,7 +476,8 @@ extension _ChatPageHelpers1 on _ChatPageState {
       // / song never breaks after the chat media is purged. (A GIF is an
       // external CDN url, so _durableMediaRef returns it unchanged.)
       final durable = await _durableMediaRef(
-          rel, mime.isNotEmpty ? mime : (type == 'image' ? 'image/jpeg' : ''));
+          rel, mime.isNotEmpty ? mime : (type == 'image' ? 'image/jpeg' : ''),
+          spaceId: sid);
       if (!mounted) return;
       if (durable.isEmpty && rel.isNotEmpty) {
         showToast(context, 'Could not keep that — check your connection',

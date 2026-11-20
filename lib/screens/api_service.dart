@@ -20,6 +20,8 @@ import '../e2ee/seal_keystore.dart' show SealKeyStore;
 import '../e2ee/seal_messenger.dart' show SealPayload, SealPeerAway;
 import '../e2ee/seal_space.dart';
 import '../e2ee/seal_polls.dart';
+import '../e2ee/seal_scope.dart';
+import '../e2ee/seal_primitives.dart' show SealError;
 import 'chat/song_cache.dart';
 
 final _logger = Logger();
@@ -2184,6 +2186,99 @@ class ApiService {
     }
   }
 
+  static final _keyedAddress =
+      RegExp(r'/attachments/[A-Za-z0-9_-]+#ask=[A-Za-z0-9_-]+');
+
+  /// [ref] with a sealed file's key taken out: (bare ref, the address WITH
+  /// its key sealed for Space [spaceId]). A key never goes plain: throws
+  /// when it can't be sealed.
+  Future<(String?, String?)> _splitMediaKey(int spaceId, String? ref) async {
+    if (ref == null) return (null, null);
+    final m = _keyedAddress.firstMatch(ref);
+    if (m == null) return (ref, null);
+    final keyed = m.group(0)!;
+    final sealed = await _sealSpaceText(spaceId, keyed);
+    if (sealed == null || !SealScope.isSealed(sealed)) {
+      throw StateError('media key not sealed');
+    }
+    return (ref.replaceFirst(keyed, SealMedia.bare(keyed)), sealed);
+  }
+
+  /// The members of Space [spaceId] as its sealing scope knows them.
+  Future<List<int>?> _spaceMembers(int spaceId) async {
+    if (SealSpace.instance.scopeOfSpace(spaceId) == null) {
+      await getSpace(spaceId); // learns its members
+    }
+    final s = SealSpace.instance.scopeOfSpace(spaceId);
+    if (s == null) return null;
+    final ids = [for (final x in s.split(',')) int.tryParse(x)];
+    return ids.contains(null) ? null : ids.cast<int>();
+  }
+
+  /// Whether a file kept in Space [spaceId] can go sealed: every device of
+  /// every member opens sealed Our Space media (m2).
+  Future<bool> spaceCanSealMedia(int spaceId) async {
+    final members = await _spaceMembers(spaceId);
+    if (members == null) return false;
+    try {
+      return await SealIngress.canSealForMembers(members);
+    } on SealError {
+      rethrow;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 🔒 Upload a photo / voice / video / song for Our Space [spaceId]:
+  /// locked on this phone when its members' Aluta can open it (the address
+  /// then carries the key — [addMoment] seals it beside the moment). Null
+  /// when the upload failed. Throws when it should be locked but can't be
+  /// right now.
+  Future<String?> uploadSpaceMedia(int spaceId, List<int> bytes,
+      {required String filename,
+      required String mime,
+      required String kind,
+      bool ephemeral = false}) async {
+    final seal = await spaceCanSealMedia(spaceId);
+    Uint8List? key;
+    List<int> up = bytes;
+    String? path;
+    if (seal) {
+      if (!kIsWeb && bytes.length > SealMedia.maxBytes) {
+        final dir = await getTemporaryDirectory();
+        final stamp = DateTime.now().microsecondsSinceEpoch;
+        final plain = '${dir.path}/aluta_seal_$stamp.plain';
+        path = '${dir.path}/aluta_seal_$stamp.locked';
+        try {
+          await File(plain).writeAsBytes(bytes, flush: true);
+          key = await SealMedia.sealFile(plain, path);
+          up = const <int>[];
+        } finally {
+          await _dropTemp(plain);
+        }
+      } else {
+        final (locked, k) = await SealMedia.sealInBackground(bytes);
+        up = locked;
+        key = k;
+      }
+    }
+    final u = await uploadMedia(
+        bytes: up,
+        filePath: path,
+        filename: key != null ? 'sealed' : filename,
+        mime: key != null ? SealMedia.uploadMime : mime,
+        sealedKind: key != null ? kind : null,
+        ephemeral: ephemeral);
+    final url = u?['url'] as String?;
+    if (url == null || url.isEmpty) return null;
+    if (key == null) return url;
+    final keyed = SealMedia.withKey(url, key);
+    // My own copy opens at once.
+    unawaited(MediaStore.instance
+        .putBytes('${await _baseUrl}$keyed', Uint8List.fromList(bytes)));
+    return keyed;
+  }
+
   /// Same, for the bond with [partnerId] (you and them).
   Future<String?> _sealPairText(int partnerId, String? text) async {
     if (text == null || text.trim().isEmpty) return text;
@@ -2257,18 +2352,28 @@ class ApiService {
     try {
       final token = await _getToken();
       if (token == null) return null;
+      // 🔒 The name is sealed for the Space's members once it exists (its
+      // key needs the Space): the server first sees no name at all.
+      final nm = (name ?? '').trim();
       final resp = await http.post(
         Uri.parse('${await _baseUrl}/spaces'),
         headers: _authHeaders(token),
         body: jsonEncode({
           'member_ids': memberIds,
-          'name': ?name,
           'theme': ?theme,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final data = await SealSpace.instance.decode(resp.body);
-        if (data is Map<String, dynamic>) return data;
+        if (data is Map<String, dynamic>) {
+          final sid = (data['id'] as num?)?.toInt();
+          if (nm.isNotEmpty && sid != null) {
+            final named = await updateSpace(sid, name: nm);
+            if (named != null) return named;
+            data['name'] = nm;
+          }
+          return data;
+        }
         return null;
       }
       if (resp.statusCode == 402 || resp.statusCode == 409) {
@@ -2446,6 +2551,10 @@ class ApiService {
     String? backgroundUrl,
   }) async {
     try {
+      // 🔒 A Space's name is sealed for its members (like its words).
+      if (name != null && name.trim().isNotEmpty) {
+        name = await _sealSpaceText(id, name.trim());
+      }
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.patch(
@@ -2553,7 +2662,13 @@ class ApiService {
       // 🔒 Our Space words are sealed for its members.
       caption = await _sealSpaceText(spaceId, caption);
       // A kept heart carries its words inside its ref (the snapshot).
-      if (kind == 'heart') ref = await _sealSpaceText(spaceId, ref);
+      String? refKey;
+      if (kind == 'heart') {
+        ref = await _sealSpaceText(spaceId, ref);
+      } else {
+        // A sealed photo / voice / song: the key travels sealed beside it.
+        (ref, refKey) = await _splitMediaKey(spaceId, ref);
+      }
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(
@@ -2562,6 +2677,7 @@ class ApiService {
         body: jsonEncode({
           'kind': kind,
           'ref': ?ref,
+          'ref_key': ?refKey,
           'caption': ?caption,
         }),
       );
@@ -2585,13 +2701,18 @@ class ApiService {
       final token = await _getToken();
       if (token == null) return false;
       // 🔒 A kept heart's snapshot carries its words: sealed like the rest.
+      String? refKey;
       if (ref.contains('"snap"')) {
         ref = (await _sealSpaceText(spaceId, ref))!;
+      } else {
+        final split = await _splitMediaKey(spaceId, ref);
+        ref = split.$1 ?? ref;
+        refKey = split.$2;
       }
       final resp = await http.patch(
         Uri.parse('${await _baseUrl}/spaces/$spaceId/moments/$momentId/ref'),
         headers: _authHeaders(token),
-        body: jsonEncode({'ref': ref}),
+        body: jsonEncode({'ref': ref, 'ref_key': ?refKey}),
       );
       return resp.statusCode >= 200 && resp.statusCode < 300;
     } catch (e) {
@@ -3637,7 +3758,12 @@ class ApiService {
         final body = jsonDecode(resp.body);
         if (body is List) {
           final rows = body.whereType<Map<String, dynamic>>().toList();
-          // 🔒 Sealed group last messages read with the group's key.
+          // 🔒 Sealed group names / photos, and last messages, read with
+          // each group's key.
+          final asked = <String>{};
+          for (final r in rows) {
+            await SealIngress.openGroupMeta(r, asked: asked);
+          }
           await SealIngress.groupPreviews(rows);
           return rows;
         }
@@ -3658,18 +3784,41 @@ class ApiService {
     try {
       final token = await _getToken();
       if (token == null) return null;
+      // 🔒 When every member's Aluta can open a sealed group name, the
+      // server only ever sees "Group": the real name is sealed for the
+      // members as soon as the group exists (its key needs the group).
+      final me = await SealIngress.myUid();
+      var sealName = false;
+      if (me != null) {
+        try {
+          sealName = await SealIngress.canSealForMembers(
+              {me, ...memberIds}.toList());
+        } catch (_) {
+          sealName = false; // can't tell now: named as before
+        }
+      }
       final resp = await http.post(
         Uri.parse('${await _baseUrl}/conversations/group'),
         headers: _authHeaders(token),
         body: jsonEncode({
-          'title': title,
+          'title': sealName ? 'Group' : title,
           'member_ids': memberIds,
           'avatar_url': ?avatarUrl,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final data = jsonDecode(resp.body);
-        if (data is Map<String, dynamic>) return data;
+        if (data is Map<String, dynamic>) {
+          final cid = (data['id'] as num?)?.toInt();
+          if (sealName && cid != null) {
+            forgetGroupMembers(cid);
+            if (!await updateGroup(cid, title: title)) {
+              _logger.w('createGroup: sealed name not set yet');
+            }
+          }
+          data['title'] = title;
+          return data;
+        }
       }
       _logger.w('createGroup failed: ${resp.statusCode} ${resp.body}');
       return null;
@@ -3710,7 +3859,8 @@ class ApiService {
   }
 
   /// One conversation's details (members, title, my role, …).
-  Future<Map<String, dynamic>?> getConversation(int cid) async {
+  Future<Map<String, dynamic>?> getConversation(int cid,
+      {bool raw = false}) async {
     try {
       final token = await _getToken();
       if (token == null) return null;
@@ -3720,7 +3870,11 @@ class ApiService {
       );
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
-        if (data is Map<String, dynamic>) return data;
+        if (data is Map<String, dynamic>) {
+          // 🔒 Its sealed name / photo opened (raw: as the server has them).
+          if (!raw) await SealIngress.openGroupMeta(data);
+          return data;
+        }
       }
       return null;
     } catch (e) {
@@ -3809,9 +3963,13 @@ class ApiService {
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final body = jsonDecode(resp.body);
         if (body is List) {
-          return body
-              .map((e) => Map<String, dynamic>.from(e as Map))
-              .toList();
+          final rows =
+              body.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          final asked = <String>{};
+          for (final r in rows) {
+            await SealIngress.openGroupMeta(r, asked: asked);
+          }
+          return rows;
         }
       }
     } catch (e) {
@@ -4004,14 +4162,113 @@ class ApiService {
   Future<bool> updateGroup(int cid,
       {String? title,
       String? avatarUrl,
+      String? avatarAsset,
       bool? adminsOnly,
       bool? shareHistory}) async {
+    // 🔒 A new name / photo address sealed with the members' key when every
+    // member's Aluta can open it. A sealed photo's address carries its key:
+    // it never goes plain (the change fails instead).
+    if (title != null || avatarUrl != null) {
+      try {
+        title = title == null ? null : await _groupMeta(cid, title);
+        final a = avatarUrl == null ? null : await _groupMeta(cid, avatarUrl);
+        if (a != null && SealMedia.isSealed(a)) return false;
+        avatarUrl = a;
+      } catch (e) {
+        _logger.w('updateGroup: can\'t seal right now: $e');
+        return false;
+      }
+    }
     return _convAction('PATCH', '/conversations/$cid', body: {
       'title': ?title,
       'avatar_url': ?avatarUrl,
+      'avatar_asset': ?avatarAsset,
       'admins_only': ?adminsOnly,
       'share_history': ?shareHistory,
     });
+  }
+
+  /// [value] (a group's name / photo address) sealed for group [cid]'s
+  /// members — or as it is while one of their Aluta can't open it.
+  Future<String> _groupMeta(int cid, String value) async {
+    if (value.isEmpty || SealScope.isSealed(value)) return value;
+    final me = await SealIngress.myUid();
+    final members = await groupMembers(cid);
+    if (me == null || members == null) {
+      throw SealError('group members unknown right now');
+    }
+    final stay = await SealIngress.groupSealedBefore(me, cid);
+    if (!await SealIngress.canSealForMembers(members, stay: stay)) {
+      return value;
+    }
+    try {
+      return await SealSpace.instance.seal(members, value, stay: stay);
+    } on SealSpaceNotReady {
+      return value;
+    }
+  }
+
+  /// 🔒 A new group photo: locked on this phone when the members' Aluta can
+  /// open a sealed photo, its address (with the key) sealed for them.
+  Future<bool> setGroupPhoto(int cid, Uint8List bytes, String name) async {
+    try {
+      final me = await SealIngress.myUid();
+      final members = await groupMembers(cid);
+      if (me == null || members == null) return false;
+      final seal = await SealIngress.canSealForMembers(members,
+          stay: await SealIngress.groupSealedBefore(me, cid));
+      Uint8List? key;
+      List<int> up = bytes;
+      if (seal) {
+        final (locked, k) = await SealMedia.sealInBackground(bytes);
+        up = locked;
+        key = k;
+      }
+      final u = await uploadMedia(
+          bytes: up,
+          filename: key != null ? 'sealed' : name,
+          mime: key != null ? SealMedia.uploadMime : 'image/jpeg',
+          sealedKind: key != null ? 'image' : null);
+      final url = u?['url'] as String?;
+      if (url == null || url.isEmpty) return false;
+      final shown = key == null ? url : SealMedia.withKey(url, key);
+      if (key != null) {
+        unawaited(MediaStore.instance.putBytes(
+            '${await _baseUrl}$shown', Uint8List.fromList(bytes)));
+      }
+      return updateGroup(cid, avatarUrl: shown, avatarAsset: url);
+    } catch (e) {
+      _logger.w('setGroupPhoto failed: $e');
+      return false;
+    }
+  }
+
+  /// 🔒 After members join, a group's sealed name and photo are sealed again
+  /// for exactly the new members (an admin's phone does it), so newcomers
+  /// can read them.
+  Future<void> resealGroupMeta(int cid) async {
+    try {
+      forgetGroupMembers(cid);
+      final rawConv = await getConversation(cid, raw: true);
+      if (rawConv == null) return;
+      final t = rawConv['title'];
+      final a = rawConv['avatar_url'];
+      if (!SealScope.isSealed(t) && !SealScope.isSealed(a)) return;
+      final opened = Map<String, dynamic>.from(rawConv);
+      // Only what this phone could open is sealed again (never "Group" over
+      // the real name).
+      final failed = await SealIngress.openGroupMeta(opened);
+      final title = SealScope.isSealed(t) && !failed.contains('title')
+          ? opened['title'] as String?
+          : null;
+      final photo = SealScope.isSealed(a) && !failed.contains('avatar_url')
+          ? opened['avatar_url'] as String?
+          : null;
+      if (title == null && photo == null) return;
+      await updateGroup(cid, title: title, avatarUrl: photo);
+    } catch (e) {
+      _logger.w('resealGroupMeta failed: $e');
+    }
   }
 
   /// Make a group member an admin ('admin') or step them down ('member').
@@ -4317,20 +4574,45 @@ class ApiService {
     try {
       final token = await _getToken();
       if (token == null) return null;
+      // 🔒 Locked on this phone when the Space's members' Aluta can open
+      // it; its key goes sealed beside it.
+      List<int> up = bytes;
+      String? sealedKey;
+      Uint8List? key;
+      if (await spaceCanSealMedia(spaceId)) {
+        final (locked, k) = await SealMedia.sealInBackground(bytes);
+        final s = await _sealSpaceText(spaceId,
+            '${SealMedia.fragment}${base64Url.encode(k).replaceAll('=', '')}');
+        if (s == null || !SealScope.isSealed(s)) return null;
+        up = locked;
+        key = k;
+        sealedKey = s;
+      }
       final req = http.MultipartRequest(
           'POST', Uri.parse('${await _baseUrl}/spaces/$spaceId/background'))
         ..headers['Authorization'] = 'Bearer $token'
+        ..fields.addAll({'key': ?sealedKey})
         ..files.add(http.MultipartFile.fromBytes(
           'file',
-          bytes,
-          filename: filename,
-          contentType: MediaType.parse(mime.isNotEmpty ? mime : 'image/jpeg'),
+          up,
+          filename: key != null ? 'sealed' : filename,
+          contentType: MediaType.parse(key != null
+              ? SealMedia.uploadMime
+              : (mime.isNotEmpty ? mime : 'image/jpeg')),
         ));
       final streamed = await req.send();
       final resp = await http.responseFrom(streamed);
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final data = await SealSpace.instance.decode(resp.body);
-        if (data is Map<String, dynamic>) return data;
+        if (data is Map<String, dynamic>) {
+          // My own copy opens at once.
+          final bg = data['background_url'];
+          if (key != null && bg is String && SealMedia.isSealed(bg)) {
+            unawaited(
+                MediaStore.instance.putBytes('${await _baseUrl}$bg', bytes));
+          }
+          return data;
+        }
       }
       _logger.w('Space background upload failed: ${resp.statusCode}');
     } catch (e) {

@@ -192,6 +192,10 @@ class Conversation(Base):
     is_group = Column(Boolean, default=False, nullable=False)
     title = Column(String, nullable=True)       # group name (NULL for DMs)
     avatar_url = Column(String, nullable=True)  # group photo (NULL for DMs)
+    # 🔒 A sealed group's name and photo address are sealed with the
+    # members' key ("🔒s1.…"); the photo's attachment (its locked bytes)
+    # is named here so members may fetch it.
+    avatar_asset = Column(String, nullable=True)
     created_by = Column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -633,6 +637,8 @@ class RelationshipSpace(Base):
     # /attachments/<id> URL). Per-row (each partner customises their own view);
     # None = the default motif theme. The device caches the image for offline.
     background_url = Column(String, nullable=True)
+    # 🔒 A sealed background photo: its address with the key, sealed.
+    background_key = Column(Text, nullable=True)
     # The single hero card at the top of the friend list. Exactly one primary
     # per owner (enforced in the router on create / set-primary).
     is_primary = Column(Boolean, default=False, nullable=False)
@@ -699,6 +705,10 @@ class PinnedMoment(Base):
     kind = Column(String, nullable=False)
     # The payload: a media URL, a track JSON blob, or free text — kind decides.
     ref = Column(Text, nullable=True)
+    # 🔒 A photo / video / voice / song kept sealed: its bytes are locked on
+    # the phone; the address WITH its key is sealed here for the Space's
+    # members ("🔒s1.…") — `ref` keeps the bare address.
+    ref_key = Column(Text, nullable=True)
     caption = Column(String, nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

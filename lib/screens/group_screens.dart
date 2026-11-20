@@ -524,13 +524,9 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
       if (x == null) return;
       setState(() => _busy = true);
       final bytes = await x.readAsBytes();
-      final up = await ApiService()
-          .uploadMedia(bytes: bytes, filename: x.name, mime: 'image/jpeg');
-      if (up == null || up['url'] == null) {
-        throw Exception('upload failed');
-      }
-      final ok = await ApiService().updateGroup(widget.conversationId,
-          avatarUrl: up['url'].toString());
+      // 🔒 Locked for the members when their Aluta can open it.
+      final ok = await ApiService()
+          .setGroupPhoto(widget.conversationId, bytes, x.name);
       if (!mounted) return;
       setState(() => _busy = false);
       if (ok) {
@@ -692,6 +688,9 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
       if (_conv?['share_history'] == true) {
         SealSpace.instance.serveHistory(widget.conversationId);
       }
+      // 🔒 Its sealed name / photo sealed again so the newcomers can read
+      // them.
+      await ApiService().resealGroupMeta(widget.conversationId);
       await _load();
     } else {
       showToast(context, 'Could not add members.', type: ToastType.error);

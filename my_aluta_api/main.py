@@ -224,6 +224,8 @@ def ensure_media_schema():
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS purged BOOLEAN DEFAULT FALSE",
         "ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS last_cached_message_id INTEGER",
         "ALTER TABLE relationship_spaces ADD COLUMN IF NOT EXISTS background_url VARCHAR",
+        "ALTER TABLE relationship_spaces ADD COLUMN IF NOT EXISTS background_key TEXT",
+        "ALTER TABLE pinned_moments ADD COLUMN IF NOT EXISTS ref_key TEXT",
         # Conversation features: reactions / edit marker / delete tombstone.
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS reactions TEXT",
         # End-to-end encryption (e2ee_msgs.py).
@@ -314,6 +316,7 @@ def ensure_media_schema():
         # Group admins-only posting + polls (polls.py).
         "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS admins_only BOOLEAN DEFAULT FALSE",
         "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS share_history BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS avatar_asset VARCHAR",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS poll TEXT",
         # Hearts with a photo/clip + group hearts for one member (hearts.py).
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS heart_for INTEGER",

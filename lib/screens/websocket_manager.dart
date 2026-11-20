@@ -102,8 +102,14 @@ class WebSocketManager {
                 if (event['type'] == 'conversation_updated') {
                   ApiService.forgetGroupMembers(event['conversation_id']);
                 }
-                // 🔒 Our Space words inside the event (moments, diary…).
+                // 🔒 Our Space words inside the event (moments, diary…), a
+                // group's sealed name / photo (a call ring, a mention).
                 if (rawMessage.contains(SealScope.prefix)) {
+                  await SealIngress.openGroupMeta(event);
+                  final d = event['data'];
+                  if (d is Map<String, dynamic>) {
+                    await SealIngress.openGroupMeta(d);
+                  }
                   await SealSpace.instance.openJson(event);
                 }
                 if (!_isClosed) onEventReceived(event);

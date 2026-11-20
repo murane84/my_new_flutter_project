@@ -294,9 +294,12 @@ def _can_access(
     # GROUP AVATAR: the photo lives on the Conversation (not on any User), so the
     # profile-picture branch below never matches it. Members of that group may
     # view its photo.
+    # (🔒 A sealed group photo's address is sealed; its attachment is
+    # named in avatar_asset.)
     grp_avatar = (
         db.query(Conversation.id)
-        .filter(Conversation.avatar_url.contains(fragment, autoescape=True))
+        .filter(Conversation.avatar_url.contains(fragment, autoescape=True)
+                | Conversation.avatar_asset.contains(fragment, autoescape=True))
         .first()
     )
     if grp_avatar and grp_avatar[0]:

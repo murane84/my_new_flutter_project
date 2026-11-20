@@ -332,7 +332,9 @@ extension _ChatHeartComposer on _ChatPageState {
                       prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 38, maxHeight: 38),
                       suffixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 38, maxHeight: 38),
                       hintText: 'Find a song to dedicate…',
-                      prefixIcon: Icon(Icons.search_rounded, color: tint),
+                      prefixIcon: Icon(Icons.search_rounded, color: tint),
+
+
                     ),
                   ),
                 ),
@@ -574,8 +576,9 @@ extension _ChatHeartComposer on _ChatPageState {
                 );
               },
               // The clip's own first frame, whole, in its own shape.
+              // (A sealed clip has no server poster: a quiet dark frame.)
               child: _HeartFitMedia(
-                url: '$url/thumb',
+                url: SealMedia.isSealed(url) ? '' : '$url/thumb',
                 width: w,
                 placeholderAspect: 16 / 9,
                 overlay: Column(
@@ -1558,6 +1561,7 @@ class _HeartFitMediaState extends State<_HeartFitMedia> {
 
   void _resolve() {
     _unlisten();
+    if (widget.url.isEmpty) return; // no picture (a sealed clip's poster)
     final stream = _provider.resolve(createLocalImageConfiguration(context));
     _listener = ImageStreamListener((info, _) {
       final w = info.image.width.toDouble(), h = info.image.height.toDouble();
@@ -1598,8 +1602,10 @@ class _HeartFitMediaState extends State<_HeartFitMedia> {
         child: Stack(
           fit: StackFit.expand,
           children: [
+            if (widget.url.isEmpty)
+              const ColoredBox(color: Color(0xFF15131B)),
             // Soft backdrop: the same picture, blurred and dimmed.
-            if (!fits)
+            if (!fits && widget.url.isNotEmpty)
               ClipRect(
                 child: ImageFiltered(
                   imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
@@ -1610,8 +1616,10 @@ class _HeartFitMediaState extends State<_HeartFitMedia> {
                   ),
                 ),
               ),
-            if (!fits) ColoredBox(color: Colors.black.withValues(alpha: 0.28)),
-            Image(
+            if (!fits && widget.url.isNotEmpty)
+              ColoredBox(color: Colors.black.withValues(alpha: 0.28)),
+            if (widget.url.isNotEmpty)
+              Image(
               image: _provider,
               fit: BoxFit.contain,
               errorBuilder: (_, _, _) => ColoredBox(

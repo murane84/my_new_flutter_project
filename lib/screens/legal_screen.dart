@@ -791,7 +791,7 @@ for that computer only; once a chat has been encrypted on your device it never
 falls back to plain text (a friend still on an older Aluta, with no keys, gets
 plain text until they update). 1:1 photos, videos, voice notes and files (up to
 100 MB) are locked on your phone before they're sent, with their captions and
-names (a secret heart's own photo or voice clip isn't yet). A backup you keep on our server (optional) is locked on your phone with a
+names — a 1:1 secret heart's photo, clip or voice too. A backup you keep on our server (optional) is locked on your phone with a
 recovery key only you hold — we can't open it. Group chats of up to 32 people
 are sealed with a key only the members' devices
 hold (someone who joins later can't read what came before, unless the admins let

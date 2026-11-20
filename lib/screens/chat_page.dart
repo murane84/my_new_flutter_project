@@ -2368,11 +2368,37 @@ class _ChatPageState extends State<ChatPage>
 
     // The sealed photo / clip uploads once; a retry reuses it.
     Map<String, dynamic>? up;
+    // 🔒 A 1:1 heart's photo / clip / voice is locked on this phone too (its
+    // key rides in the sealed note), when their Aluta can open it. Songs and
+    // group hearts go as before.
+    Uint8List? heartKey;
     Future<void> attempt() async {
       try {
         if (attach != null && up == null) {
+          final sealKind = switch (attach.kind) {
+            'photo' => 'image',
+            'video' => 'video',
+            'voice' => 'audio',
+            _ => null,
+          };
+          List<int> upBytes = attach.bytes;
+          if (heart &&
+              !_isGroup &&
+              heartFor == null &&
+              sealKind != null &&
+              attach.bytes.length <= SealMedia.maxBytes &&
+              await SealIngress.canSealMedia(widget.friendId)) {
+            final (locked, key) =
+                await SealMedia.sealInBackground(attach.bytes);
+            upBytes = locked;
+            heartKey = key;
+          }
+          final kind = sealKind;
           up = await appBusy.run(() => ApiService().uploadMedia(
-              bytes: attach.bytes, filename: attach.name, mime: attach.mime));
+              bytes: upBytes,
+              filename: heartKey != null ? 'sealed' : attach.name,
+              mime: heartKey != null ? SealMedia.uploadMime : attach.mime,
+              sealedKind: heartKey != null ? kind : null));
           if (up == null || up!['url'] == null) {
             up = null;
             _replaceOptimistic(tempId, null);
@@ -2402,11 +2428,29 @@ class _ChatPageState extends State<ChatPage>
             heartFor: heartFor,
             heartSave: heartSave,
             mediaUrl: up?['url'] as String?,
-            mediaName: up == null ? null : (up!['name'] ?? attach?.name) as String?,
-            mediaMime: up == null ? null : (up!['mime'] ?? attach?.mime) as String?,
-            mediaSize: (up?['size'] as num?)?.toInt(),
+            // A locked file: its real name and type go inside the sealed note.
+            mediaName: up == null
+                ? null
+                : heartKey != null
+                    ? attach?.name
+                    : (up!['name'] ?? attach?.name) as String?,
+            mediaMime: up == null
+                ? null
+                : heartKey != null
+                    ? attach?.mime
+                    : (up!['mime'] ?? attach?.mime) as String?,
+            mediaSize: heartKey != null
+                ? attach?.bytes.length
+                : (up?['size'] as num?)?.toInt(),
             mediaDuration: attach?.durationMs,
+            mediaKey: heartKey,
             meta: bedMeta));
+        // My own copy opens from this phone at once.
+        final su = sent?['media_url'];
+        if (heartKey != null && attach != null && su is String) {
+          unawaited(MediaStore.instance.putBytes(
+              fullMediaUrl(su), Uint8List.fromList(attach.bytes)));
+        }
         if (heart && sent != null) {
           // A server that doesn't (yet) store heart fields echoes the message
           // without them — keep what I chose so my bubble doesn't snap back to

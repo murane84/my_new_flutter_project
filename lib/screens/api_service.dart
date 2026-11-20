@@ -1581,7 +1581,9 @@ class ApiService {
             data['e2ee_group'] = 1;
             if (groupPoll) data['poll'] = SealPolls.mergeRaw(data['poll'], poll);
             if (sealedMedia != null) SealIngress.attachMedia(data, sealedMedia);
-            if (me != null) {
+            // (A heart sealed for just one member says nothing about the
+            // whole group.)
+            if (me != null && !(groupHeart && heartFor != null)) {
               await SealIngress.markGroupSealed(me, conversationId!);
             }
           }

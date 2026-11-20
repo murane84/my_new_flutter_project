@@ -15,6 +15,9 @@ class SealPolls {
   /// Opened words by their sealed string (stable while votes change).
   static final Map<String, Map<String, dynamic>> _words = {};
   static final Map<String, Future<bool>> _opening = {};
+  // Couldn't open (no key yet): asked again only after a minute, not on
+  // every repaint.
+  static final Map<String, DateTime> _failedAt = {};
 
   static const _wordKeys = ['q', 'options', 'rest'];
 
@@ -59,12 +62,17 @@ class SealPolls {
   /// Open [sealed] (once at a time): true when its words are now here.
   static Future<bool> open(String sealed) {
     if (_words.containsKey(sealed)) return Future.value(true);
+    final f = _failedAt[sealed];
+    if (f != null && DateTime.now().difference(f).inSeconds < 60) {
+      return Future.value(false);
+    }
     return _opening.putIfAbsent(sealed, () async {
       try {
         final t = await SealSpace.instance.open(sealed);
         if (SealScope.isSealed(t) ||
             t == SealSpace.waitingForKey ||
             t == SealSpace.unlockFailed) {
+          _failedAt[sealed] = DateTime.now();
           return false;
         }
         final d = jsonDecode(t);
@@ -72,6 +80,7 @@ class SealPolls {
         _words[sealed] = Map<String, dynamic>.from(d);
         return true;
       } catch (_) {
+        _failedAt[sealed] = DateTime.now();
         return false;
       } finally {
         // Block body: whenComplete would wait on the returned future.

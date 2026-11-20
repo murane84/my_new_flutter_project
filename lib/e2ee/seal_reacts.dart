@@ -63,6 +63,14 @@ class SealReacts {
     return out;
   }
 
+  /// Open every sealed reaction in [reactions] (before reading them, e.g.
+  /// to play a friend's new one as it lands).
+  static Future<void> openAll(Object? reactions) async {
+    for (final v in raw(reactions).values) {
+      if (SealScope.isSealed(v)) await _open(v);
+    }
+  }
+
   /// The JSON string of [opened] (for code that reads `reactions` as text).
   static String? openedJson(Object? reactions, {void Function()? onOpened}) {
     final m = opened(reactions, onOpened: onOpened);
@@ -78,12 +86,13 @@ class SealReacts {
     return _opening.putIfAbsent(sealed, () async {
       try {
         final t = await SealSpace.instance.open(sealed);
-        // An emoji is short; anything else is a lock note or still sealed.
+        // An emoji (or a "🎵 <title>" song reaction) is short; anything
+        // else is a lock note or still sealed.
         if (SealScope.isSealed(t) ||
             t == SealSpace.waitingForKey ||
             t == SealSpace.unlockFailed ||
             t.isEmpty ||
-            t.length > 32) {
+            t.length > 80) {
           _failedAt[sealed] = DateTime.now();
           return false;
         }

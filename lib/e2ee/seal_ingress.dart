@@ -154,9 +154,10 @@ class SealIngress {
     // A sealed poll: its question and options too.
     if (m['poll'] != null) await SealPolls.openIn(m);
     // This group is sealed: this device (a linked computer too) never
-    // writes to it in the clear from now on.
+    // writes to it in the clear from now on. (A heart sealed for just one
+    // member, with the two people's key, says nothing about the group.)
     final cid = _int(m['conversation_id']);
-    if (cid > 0) {
+    if (cid > 0 && m['heart_for'] == null) {
       final me = await myUid();
       if (me != null && _knownSealedGroups.add('$me:$cid')) {
         await markGroupSealed(me, cid);

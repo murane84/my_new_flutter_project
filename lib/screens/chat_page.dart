@@ -1625,7 +1625,10 @@ class _ChatPageState extends State<ChatPage>
       return;
     }
     if (type == 'message_reaction') {
-      _onLiveReaction(event);
+      // In order (a sealed one may wait a moment to open).
+      _reactionChain = _reactionChain
+          .then((_) => _onLiveReaction(event))
+          .catchError((_) {});
       return;
     }
     if (type == 'held_released') {
@@ -4606,9 +4609,14 @@ class _ChatPageState extends State<ChatPage>
   /// Someone reacted to a message in this chat (live over the socket).
   /// Update the bubble, and when it's THEIR new reaction on a message here,
   /// play its fountain on my screen too — their ❤️ / 😂 lands while I watch.
-  void _onLiveReaction(Map<String, dynamic> event) {
+  Future<void> _reactionChain = Future.value();
+
+  Future<void> _onLiveReaction(Map<String, dynamic> event) async {
     final data = (event['data'] as Map?)?.cast<String, dynamic>();
     if (data == null) return;
+    // 🔒 Their sealed reaction opened first, so it lands with its fountain.
+    await SealReacts.openAll(data['reactions']);
+    if (!mounted) return;
     final id = data['message_id']?.toString();
     if (id == null) return;
     final i = _messages.indexWhere((m) => m['id']?.toString() == id);

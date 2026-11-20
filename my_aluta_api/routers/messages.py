@@ -640,7 +640,8 @@ def react_to_message(
         raise HTTPException(status_code=400, detail="Cannot react to a deleted message")
     # 🔒 A sealed reaction ("🔒s1.…", seal_reacts.dart): the emoji is locked
     # for the chat's people — the server keeps who reacted, never with what.
-    if not emoji or len(emoji) > (600 if emoji.startswith("🔒s1.") else 32):
+    # (A song reaction is "🎵 <title>", up to ~45 characters.)
+    if not emoji or len(emoji) > (800 if emoji.startswith("🔒s1.") else 80):
         raise HTTPException(status_code=400, detail="Bad reaction")
 
     try:

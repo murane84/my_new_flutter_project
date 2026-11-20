@@ -4,6 +4,12 @@ The poll lives in `Message.poll` as JSON:
     {"q": "Where tonight?", "options": ["Pizza", "Sushi"], "multi": false,
      "votes": {"<user id>": [0]}}
 `content` carries the question too, so previews / search read naturally.
+
+🔒 A sealed group's poll keeps its words end-to-end encrypted: the app sends
+    {"sealed": "🔒s1.…", "n": 3, "multi": false, …}
+— the question and options live only inside `sealed` (the group's key), the
+server counts votes by option NUMBER (0 … n-1) and runs a jam's clock, and
+`content` is the sealed question.
 """
 import json
 import time
@@ -11,6 +17,33 @@ import time
 MAX_OPTIONS = 12
 MAX_OPTION_LEN = 100
 MAX_QUESTION_LEN = 300
+MAX_SEALED_LEN = 16000
+SCOPE_PREFIX = "🔒s1."
+
+
+def option_count(poll: dict) -> int:
+    """How many options a poll has (a sealed one says so: )."""
+    if poll.get("sealed"):
+        try:
+            return int(poll.get("n") or 0)
+        except (TypeError, ValueError):
+            return 0
+    return len(poll.get("options") or [])
+
+
+def _clean_sealed(data: dict) -> dict:
+    s = str(data.get("sealed") or "")
+    if not s.startswith(SCOPE_PREFIX) or len(s) > MAX_SEALED_LEN:
+        raise ValueError("Poll is not valid")
+    try:
+        n = int(data.get("n") or 0)
+    except (TypeError, ValueError):
+        n = 0
+    if n < 2:
+        raise ValueError("Poll needs at least two different options")
+    if n > MAX_OPTIONS:
+        raise ValueError(f"A poll can have at most {MAX_OPTIONS} options")
+    return {"sealed": s, "n": n}
 
 
 def clean_poll(raw) -> dict:
@@ -20,26 +53,31 @@ def clean_poll(raw) -> dict:
         data = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
     except Exception:
         raise ValueError("Poll is not valid JSON")
-    q = str(data.get("q") or "").strip()
-    if not q:
-        raise ValueError("Poll needs a question")
-    opts = []
     seen = set()
-    for o in data.get("options") or []:
-        t = str(o or "").strip()[:MAX_OPTION_LEN]
-        if t and t.lower() not in seen:
-            seen.add(t.lower())
-            opts.append(t)
-    if len(opts) < 2:
-        raise ValueError("Poll needs at least two different options")
-    if len(opts) > MAX_OPTIONS:
-        raise ValueError(f"A poll can have at most {MAX_OPTIONS} options")
-    out = {
-        "q": q[:MAX_QUESTION_LEN],
-        "options": opts,
-        "multi": bool(data.get("multi")),
-        "votes": {},
-    }
+    if data.get("sealed"):
+        out = _clean_sealed(data)
+        out["multi"] = bool(data.get("multi"))
+        out["votes"] = {}
+    else:
+        q = str(data.get("q") or "").strip()
+        if not q:
+            raise ValueError("Poll needs a question")
+        opts = []
+        for o in data.get("options") or []:
+            t = str(o or "").strip()[:MAX_OPTION_LEN]
+            if t and t.lower() not in seen:
+                seen.add(t.lower())
+                opts.append(t)
+        if len(opts) < 2:
+            raise ValueError("Poll needs at least two different options")
+        if len(opts) > MAX_OPTIONS:
+            raise ValueError(f"A poll can have at most {MAX_OPTIONS} options")
+        out = {
+            "q": q[:MAX_QUESTION_LEN],
+            "options": opts,
+            "multi": bool(data.get("multi")),
+            "votes": {},
+        }
     # A "jam": the options are songs — the group votes what plays next.
     # Always ONE vote each (a jam must name a single winner).
     if data.get("kind") == "jam":
@@ -58,6 +96,7 @@ def clean_poll(raw) -> dict:
         if data.get("decider"):
             out["decider"] = True
             rest = []
+            # (a sealed decider's other songs are inside )
             for o in data.get("rest") or []:
                 t = str(o or "").strip()[:MAX_OPTION_LEN]
                 if t and t.lower() not in seen and t not in rest:
@@ -95,7 +134,7 @@ def load(msg) -> dict:
 def apply_vote(msg, user_id: int, options) -> str:
     """Record (or retract, with []) user_id's choice; returns the new JSON."""
     poll = load(msg)
-    n = len(poll.get("options") or [])
+    n = option_count(poll)
     if n == 0:
         raise ValueError("Not a poll")
     ca = poll.get("closes_at")

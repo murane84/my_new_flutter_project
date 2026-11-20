@@ -140,7 +140,12 @@ def add_message(db: Session, conversation_id: int, sender_id: int, payload) -> M
         from polls import clean_poll
         spec = clean_poll(getattr(payload, "poll", None))
         poll_json = json.dumps(spec, separators=(",", ":"))
-        payload.content = spec["q"]
+        # (A sealed poll's question stays the sealed content it came with.)
+        if not spec.get("sealed"):
+            payload.content = spec["q"]
+        elif not str(getattr(payload, "content", "") or "").startswith(
+                "🔒s1."):
+            raise ValueError("A sealed poll needs its sealed question")
     msg = Message(
         poll=poll_json,
         sender_id=int(sender_id),

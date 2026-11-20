@@ -183,14 +183,26 @@ extension _ChatPollsAdmin on _ChatPageState {
   // ── Polls ────────────────────────────────────────────────────────────────
   Map<String, dynamic>? _pollOf(Map<String, dynamic> msg) {
     final raw = msg['poll'];
-    if (raw is Map) return Map<String, dynamic>.from(raw);
-    if (raw is! String || raw.isEmpty) return null;
-    try {
-      final d = jsonDecode(raw);
-      return d is Map ? Map<String, dynamic>.from(d) : null;
-    } catch (_) {
+    Map<String, dynamic>? p;
+    if (raw is Map) {
+      p = Map<String, dynamic>.from(raw);
+    } else if (raw is String && raw.isNotEmpty) {
+      try {
+        final d = jsonDecode(raw);
+        if (d is Map) p = Map<String, dynamic>.from(d);
+      } catch (_) {}
+    }
+    if (p == null) return null;
+    // 🔒 A sealed poll: its words come from this device (a vote update
+    // carries only the numbers). Not open yet → open it, then repaint.
+    final waiting = SealPolls.pending(p);
+    if (waiting != null) {
+      unawaited(SealPolls.open(waiting).then((ok) {
+        if (ok && mounted) rebuildWith(() {});
+      }));
       return null;
     }
+    return SealPolls.merged(p);
   }
 
   Future<void> _votePoll(Map<String, dynamic> msg, int option) async {

@@ -95,7 +95,9 @@ import '../e2ee/seal_ingress.dart' show SealIngress;
 import '../e2ee/seal_messenger.dart' show SealPeerAway;
 import '../e2ee/seal_media.dart';
 import '../e2ee/seal_verify.dart';
-import '../e2ee/seal_space.dart' show SealSpace;
+import '../e2ee/seal_space.dart' show SealSpace, SealSpaceNotReady;
+import '../e2ee/seal_polls.dart';
+import '../e2ee/seal_reacts.dart';
 import 'verify_encryption_screen.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart' as ja;
@@ -2405,8 +2407,10 @@ class _ChatPageState extends State<ChatPage>
 
     // The sealed photo / clip uploads once; a retry reuses it.
     Map<String, dynamic>? up;
-    // 🔒 A 1:1 heart's photo / clip / voice / song is locked on this phone
-    // too (its key rides in the sealed note), when their Aluta can open it.
+    // 🔒 A heart's photo / clip / voice / song is locked on this phone too
+    // (its key rides in the sealed note), when every device that gets it
+    // can open it: theirs in a 1:1, the one member's for a group heart
+    // meant for one, the members' for a group heart.
     Uint8List? heartKey;
     String? heartPath;
     Future<void> attempt() async {
@@ -2420,9 +2424,12 @@ class _ChatPageState extends State<ChatPage>
             _ => null,
           };
           List<int> upBytes = attach.bytes;
-          if (heart && !_isGroup && heartFor == null && sealKind != null) {
+          if (heart && sealKind != null) {
             final s = await ApiService().sealForChat(
-                receiverId: widget.friendId,
+                receiverId: heartFor ?? widget.friendId,
+                conversationId: _isGroup && heartFor == null
+                    ? widget.conversationId
+                    : null,
                 type: sealKind,
                 bytes: attach.bytes);
             upBytes = s.bytes;
@@ -4604,13 +4611,10 @@ class _ChatPageState extends State<ChatPage>
     final i = _messages.indexWhere((m) => m['id']?.toString() == id);
     if (i < 0) return;
     final msg = _messages[i];
-    Map<String, dynamic> before = {}, after = {};
-    try {
-      final b = msg['reactions'];
-      if (b is String && b.isNotEmpty) before = Map.from(jsonDecode(b));
-      final a = data['reactions'];
-      if (a is String && a.isNotEmpty) after = Map.from(jsonDecode(a));
-    } catch (_) {}
+    // (🔒 sealed reactions opened on this device)
+    final before = _reactionMap(msg);
+    final after = SealReacts.opened(data['reactions'],
+        onOpened: _repaintReactions);
     String? landed;
     after.forEach((who, e) {
       if (who.toString() != _myId && before[who] != e) landed = e.toString();
@@ -4628,12 +4632,33 @@ class _ChatPageState extends State<ChatPage>
   }
 
   /// The emoji I've already reacted with on [msg] (highlighted in the menu).
-  String? _myReactionOn(Map<String, dynamic> msg) {
-    final raw = msg['reactions'];
-    if (raw is! String || raw.isEmpty || _myId == null) return null;
+  String? _myReactionOn(Map<String, dynamic> msg) =>
+      _myId == null ? null : _reactionMap(msg)[_myId];
+
+  /// 🔒 What to send for [emoji]: sealed for the chat when it's a sealed
+  /// one and every device can open a sealed reaction; the emoji itself
+  /// otherwise. Null when it should be sealed but can't be right now (the
+  /// reaction isn't sent, never in the clear).
+  Future<String?> _reactionValue(String emoji) async {
+    final me = int.tryParse(_myId ?? '');
+    if (me == null) return emoji;
     try {
-      final v = (jsonDecode(raw) as Map)[_myId];
-      return v?.toString();
+      if (_isGroup) {
+        final cid = widget.conversationId!;
+        final members = await ApiService().groupMembers(cid);
+        if (members == null) return null;
+        if (!await SealIngress.canSealGroupMedia(cid, members, cap: 'm2')) {
+          return emoji;
+        }
+        return await SealReacts.seal(members, emoji,
+            stay: await SealIngress.groupSealedBefore(me, cid));
+      }
+      if (!await SealIngress.canSealMedia(widget.friendId, cap: 'm2')) {
+        return emoji;
+      }
+      return await SealReacts.seal([me, widget.friendId], emoji);
+    } on SealSpaceNotReady {
+      return emoji; // their Aluta can't read sealed reactions yet
     } catch (_) {
       return null;
     }
@@ -4647,13 +4672,11 @@ class _ChatPageState extends State<ChatPage>
     final myId = _myId;
     // Adding a reaction → its fountain (hearts: the full heart show; other
     // emojis: a lighter burst of that emoji). Removing → nothing.
-    var had = false;
-    try {
-      final raw = msg['reactions'];
-      if (raw is String && raw.isNotEmpty) {
-        had = (jsonDecode(raw) as Map)[myId] == emoji;
-      }
-    } catch (_) {}
+    final had = myId != null && _reactionMap(msg)[myId] == emoji;
+    // Taking mine back: the server matches the value it holds (a sealed
+    // reaction is a fresh lock each time).
+    final mineRaw = myId == null ? null : SealReacts.raw(msg['reactions'])[myId];
+    final reactionsBefore = msg['reactions'];
     if (!had) {
       HeartBurst.react(context, emoji);
       _countReaction(emoji);
@@ -4667,7 +4690,7 @@ class _ChatPageState extends State<ChatPage>
         }
       } catch (_) {}
       if (myId != null) {
-        if (map[myId] == emoji) {
+        if (had) {
           map.remove(myId);
         } else {
           map[myId] = emoji;
@@ -4676,8 +4699,17 @@ class _ChatPageState extends State<ChatPage>
       msg['reactions'] = map.isEmpty ? null : jsonEncode(map);
     });
     try {
+      final value = had ? (mineRaw ?? emoji) : await _reactionValue(emoji);
+      if (value == null) {
+        if (mounted) {
+          setState(() => msg['reactions'] = reactionsBefore);
+          showToast(context, 'Couldn’t react right now — try again',
+              type: ToastType.error);
+        }
+        return;
+      }
       final updated = await ApiService()
-          .reactToMessage(id is int ? id : int.parse(id.toString()), emoji);
+          .reactToMessage(id is int ? id : int.parse(id.toString()), value);
       if (mounted && updated != null) {
         setState(() => msg['reactions'] = updated);
       }
@@ -6925,16 +6957,12 @@ class _ChatPageState extends State<ChatPage>
   }
 
   /// Who reacted with what: {userId: emoji}.
-  Map<String, String> _reactionMap(Map<String, dynamic> msg) {
-    final raw = msg['reactions'];
-    if (raw == null || (raw is String && raw.isEmpty)) return const {};
-    try {
-      final d = raw is String ? jsonDecode(raw) : raw;
-      if (d is Map) {
-        return d.map((k, v) => MapEntry(k.toString(), v.toString()));
-      }
-    } catch (_) {}
-    return const {};
+  /// (🔒 Sealed reactions opened on this device.)
+  Map<String, String> _reactionMap(Map<String, dynamic> msg) =>
+      SealReacts.opened(msg['reactions'], onOpened: _repaintReactions);
+
+  void _repaintReactions() {
+    if (mounted) setState(() {});
   }
 
   String _reactorName(String uid) {

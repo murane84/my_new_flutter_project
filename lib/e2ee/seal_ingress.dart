@@ -8,6 +8,7 @@ import 'seal_directory.dart';
 import 'seal_keystore.dart';
 import 'seal_media.dart';
 import 'seal_messenger.dart';
+import 'seal_polls.dart';
 import 'seal_primitives.dart';
 import 'seal_scope.dart';
 import 'seal_space.dart';
@@ -150,6 +151,8 @@ class SealIngress {
     m.remove('seal_state');
     m['content'] = SealPayload.textOf(opened);
     _attachMedia(m, SealPayload.mediaOf(opened));
+    // A sealed poll: its question and options too.
+    if (m['poll'] != null) await SealPolls.openIn(m);
     // This group is sealed: this device (a linked computer too) never
     // writes to it in the clear from now on.
     final cid = _int(m['conversation_id']);
@@ -396,9 +399,13 @@ class SealIngress {
   /// sealed media the same shape plain media has ("📷 Photo · caption",
   /// "📎 report.pdf · caption").
   static String previewOf(String label, String? stored) {
+    // A secret heart never previews its note (a group's either).
+    if (label.startsWith('❤️')) return label;
     final words = _withoutQuote(SealPayload.textOf(stored));
     final media = SealPayload.mediaOf(stored);
     if (media == null) {
+      // A sealed poll: "📊 <its question>".
+      if (label.startsWith('📊') && words.isNotEmpty) return '📊 $words';
       // A shared location / contact keeps its label, never its JSON.
       if (label != serverPreview && words.startsWith('{')) return label;
       return words.isNotEmpty || label == serverPreview ? words : label;

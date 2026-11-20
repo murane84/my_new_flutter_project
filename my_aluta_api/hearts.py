@@ -24,8 +24,10 @@ A 1:1 heart's note is end-to-end encrypted (e2ee_msgs.py): `content` is
 empty and its per-device copies are `envelopes`. A timed one is opened by the
 phones on arrival (a ratchet key can't wait months) and kept covered by the
 app until `unlock_at` — a modified app could peek early, an accepted trade-off
-for love notes; the server still never has the words. Group hearts are still plain (protected
-by the server withholding them, an open heart by the client's cover gate).
+for love notes; the server still never has the words. In a sealed group a
+heart's note (and file key) is sealed too: with the group's key, or — meant
+for one member — with a key only the sender and that member hold; the server
+still withholds it from everyone else.
 """
 import json
 import logging

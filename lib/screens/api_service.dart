@@ -19,6 +19,7 @@ import '../e2ee/seal_ingress.dart';
 import '../e2ee/seal_keystore.dart' show SealKeyStore;
 import '../e2ee/seal_messenger.dart' show SealPayload, SealPeerAway;
 import '../e2ee/seal_space.dart';
+import '../e2ee/seal_polls.dart';
 
 final _logger = Logger();
 
@@ -1490,23 +1491,39 @@ class ApiService {
       // more than 32; never plain once sealed on this device.
       var groupSealed = false;
       int? me;
+      // A group heart's note is sealed like the group's words — one meant
+      // for a single member with just the two of them ([heartFor]); a poll's
+      // question and options with the group's key (votes stay numbers).
+      final groupHeart = messageType == 'heart';
+      final groupPoll = poll != null && messageType == 'poll';
       if (conversationId != null &&
           (content.isNotEmpty || sealedMedia != null) &&
-          poll == null &&
-          (plainText || sealedMedia != null)) {
+          (poll == null || groupPoll) &&
+          (plainText || sealedMedia != null || groupHeart || groupPoll)) {
         me = await SealIngress.myUid();
         final stay =
             me != null && await SealIngress.groupSealedBefore(me, conversationId);
-        final members = await groupMembers(conversationId);
+        final groupList = await groupMembers(conversationId);
+        final members = groupHeart && heartFor != null && me != null
+            ? (groupList == null ? null : <int>[me, heartFor])
+            : groupList;
         if (members == null) {
           if (stay || sealedMedia != null) return null; // can't tell now
-        } else if (members.length > SealIngress.groupMaxMembers) {
+        } else if ((groupList?.length ?? 0) > SealIngress.groupMaxMembers) {
           if (sealedMedia != null) return null;
+        } else if (groupPoll &&
+            !await SealIngress.canSealGroupMedia(conversationId, groupList,
+                cap: 'm2')) {
+          // A member's Aluta can't read a sealed poll yet: as before.
         } else {
           try {
             payload['content'] = await SealSpace.instance.seal(
                 members, SealPayload.store(content, sealedMedia),
                 stay: stay);
+            if (groupPoll) {
+              payload['poll'] = await SealPolls.sealSpec(
+                  members, poll, stay: stay);
+            }
             if (sealedMedia != null) {
               payload['media_name'] = 'sealed';
               payload['media_mime'] = SealMedia.uploadMime;
@@ -1561,6 +1578,7 @@ class ApiService {
           if (groupSealed) {
             data['content'] = content;
             data['e2ee_group'] = 1;
+            if (groupPoll) data['poll'] = SealPolls.mergeRaw(data['poll'], poll);
             if (sealedMedia != null) SealIngress.attachMedia(data, sealedMedia);
             if (me != null) {
               await SealIngress.markGroupSealed(me, conversationId!);

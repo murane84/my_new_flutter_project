@@ -331,6 +331,8 @@ def list_preview(msg) -> str:
         # "🎤 0:12"); the name and caption are inside the sealed copy (the
         # app adds them from its own opened copy).
         msg_kind = (msg.message_type or "").lower()
+        if msg_kind == "poll":
+            return "📊 Poll"
         if msg_kind == "location":
             return "📍 Location"
         if msg_kind == "contact":

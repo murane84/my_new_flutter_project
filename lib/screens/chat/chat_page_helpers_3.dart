@@ -1651,17 +1651,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
 
   // Parse the server reactions JSON ({"<uid>":"<emoji>"}) into a unique,
   // display-ready list of emojis.
-  List<String> _reactionsOf(Map<String, dynamic> msg) {
-    final raw = msg['reactions'];
-    if (raw == null || (raw is String && raw.isEmpty)) return const [];
-    try {
-      final decoded = raw is String ? jsonDecode(raw) : raw;
-      if (decoded is Map) {
-        return decoded.values.map((e) => e.toString()).toSet().toList();
-      }
-    } catch (_) {}
-    return const [];
-  }
+  List<String> _reactionsOf(Map<String, dynamic> msg) =>
+      _reactionMap(msg).values.toSet().toList();
 
   // ── Jump to a quoted original ───────────────────────────────────────────────
 

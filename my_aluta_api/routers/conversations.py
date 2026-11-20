@@ -108,6 +108,8 @@ def _group_sealed_preview(msg):
     from e2ee_msgs import scope_sealed
     if msg is None or getattr(msg, "is_deleted", False) or not scope_sealed(msg):
         return None
+    if (msg.message_type or "") == "heart":
+        return None  # a secret heart never previews its note
     if len(msg.content) > 8000:
         return None
     return _json.dumps({"id": msg.id, "content": msg.content,
@@ -393,7 +395,8 @@ def send_message(
                 # group's key for the banner (only when it fits a push).
                 **({"sealed_body": msg.content}
                    if (msg.content or "").startswith("🔒s1.")
-                   and len(msg.content) <= 2400 else {}),
+                   and len(msg.content) <= 2400
+                   and (msg.message_type or "") != "heart" else {}),
                 "mentioned": "1" if is_mention else "0",
                 "mention_all": "1" if (is_mention and mention_all) else "0",
             },
@@ -637,7 +640,10 @@ def start_poll_countdown(
     try:
         conv = db.query(Conversation).filter(Conversation.id == cid).first()
         gtitle = ((conv.title if conv else None) or "Your group")[:80]
-        q = str((poll or {}).get("question") or "")[:120]
+        # (The poll here is its JSON text; a sealed one has no readable
+        # question — the app says just "Vote closes in …".)
+        from polls import load as _load_poll
+        q = str(_load_poll(msg).get("q") or "")[:120]
         mins = int(payload.minutes or 2)
         for uid in cc.member_ids(db, cid):
             if int(uid) == int(current_user.id):

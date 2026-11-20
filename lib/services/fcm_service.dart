@@ -496,7 +496,10 @@ Future<void> handleFcmData(Map<String, dynamic> data,
           ActiveChat.instance.suppresses(senderId: senderId, convId: convId)) {
         return;
       }
-      final emoji = (data['emoji'] ?? '❤️').toString();
+      // 🔒 A sealed reaction this phone couldn't open: no emoji, never the
+      // lock itself.
+      final rawEmoji = (data['emoji'] ?? '❤️').toString();
+      final emoji = rawEmoji.startsWith('🔒') ? '' : rawEmoji;
       final preview = (data['body'] ?? '').toString().trim();
       final quoted = preview.isEmpty
           ? 'your message'
@@ -504,7 +507,9 @@ Future<void> handleFcmData(Map<String, dynamic> data,
       final isGroup = convId.isNotEmpty;
       // One collapsing alert per chat: "Ozilane reacted ❤️ to … (+2 more)".
       final chatKey = isGroup ? 'c$convId' : 's$senderId';
-      final line = '$who reacted $emoji to $quoted';
+      final line = emoji.isEmpty
+          ? '$who reacted to $quoted'
+          : '$who reacted $emoji to $quoted';
       final lines = await _reactionLines(chatKey, line);
       await showAlutaNotification(
         channel: alutaReactionChannel,

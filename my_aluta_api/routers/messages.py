@@ -638,6 +638,10 @@ def react_to_message(
         raise HTTPException(status_code=403, detail="Not authorized")
     if message.is_deleted:
         raise HTTPException(status_code=400, detail="Cannot react to a deleted message")
+    # 🔒 A sealed reaction ("🔒s1.…", seal_reacts.dart): the emoji is locked
+    # for the chat's people — the server keeps who reacted, never with what.
+    if not emoji or len(emoji) > (600 if emoji.startswith("🔒s1.") else 32):
+        raise HTTPException(status_code=400, detail="Bad reaction")
 
     try:
         reactions = json.loads(message.reactions) if message.reactions else {}

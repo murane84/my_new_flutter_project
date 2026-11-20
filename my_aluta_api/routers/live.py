@@ -309,7 +309,9 @@ def create_room(
                     "session_id": session_id,
                     "track_title": str((track or {}).get("title") or "")[:120],
                     "conversation_id": str(cid),
-                    "group_title": gtitle[:80],
+                    # (a sealed group name stays whole)
+                    "group_title": (gtitle if gtitle.startswith("🔒s1.")
+                                    else gtitle[:80]),
                 })
             except Exception:
                 pass

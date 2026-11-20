@@ -146,8 +146,11 @@ class SealVerifyStore {
     // One look at a time per chat (the chat and the check screen may both
     // ask): a change is noted once.
     final k = '$me:$peer';
-    return _inFlight[k] ??=
-        _refresh(me, peer).whenComplete(() => _inFlight.remove(k));
+    // (A block body: returning remove()'s value — this very future — from
+    // whenComplete would make the future wait on itself forever.)
+    return _inFlight[k] ??= _refresh(me, peer).whenComplete(() {
+      _inFlight.remove(k);
+    });
   }
 
   final Map<String, Future<SealVerifyState>> _inFlight = {};

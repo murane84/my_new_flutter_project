@@ -75,9 +75,18 @@ void main() {
     expect(st.changes.last.mine, isTrue);
     expect(st.changes, hasLength(2));
 
+    // The chat and the check screen looking at once: one look, one note.
+    dir.keys[42] = ['kB-new'];
+    final both = await Future.wait(
+        [store.refresh(7, 42), store.refresh(7, 42)]);
+    expect(both[0].changes, hasLength(3));
+    expect(both[1].changes, hasLength(3));
+    expect((await store.refresh(7, 42)).changes, hasLength(3),
+        reason: 'a later look finishes too (no look waits on itself)');
+
     dir.keys.remove(42); // they have no keys (or offline): no code
     st = await store.refresh(7, 42);
     expect(st.code, isNull);
-    expect(st.changes, hasLength(2));
+    expect(st.changes, hasLength(3));
   });
 }

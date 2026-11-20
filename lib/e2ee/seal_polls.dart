@@ -40,6 +40,12 @@ class SealPolls {
     return jsonEncode(out);
   }
 
+  /// Sign-out: nothing opened stays in memory.
+  static void forget() {
+    _words.clear();
+    _failedAt.clear();
+  }
+
   /// The words of a sealed poll this device has opened (null: not yet).
   static Map<String, dynamic>? wordsOf(String sealed) => _words[sealed];
 

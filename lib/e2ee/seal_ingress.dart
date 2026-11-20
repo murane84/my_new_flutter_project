@@ -9,6 +9,7 @@ import 'seal_keystore.dart';
 import 'seal_media.dart';
 import 'seal_messenger.dart';
 import 'seal_polls.dart';
+import 'seal_reacts.dart';
 import 'seal_primitives.dart';
 import 'seal_scope.dart';
 import 'seal_space.dart';
@@ -552,6 +553,8 @@ class SealIngress {
     await SealSpace.instance.wipe();
     await SealDirectory.instance.signOut();
     await MediaStore.instance.wipeSealed(); // opened photos / files too
+    SealPolls.forget(); // opened poll words and reactions held in memory
+    SealReacts.forget();
     await cancelAllAlutaNotifications(); // banners hold unlocked words
   }
 }

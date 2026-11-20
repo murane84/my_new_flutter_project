@@ -19,6 +19,12 @@ class SealReacts {
   // after a minute, not on every repaint.
   static final Map<String, DateTime> _failedAt = {};
 
+  /// Sign-out: nothing opened stays in memory.
+  static void forget() {
+    _emoji.clear();
+    _failedAt.clear();
+  }
+
   /// Lock [emoji] for [members].
   static Future<String> seal(Iterable<int> members, String emoji,
       {bool stay = false}) async {

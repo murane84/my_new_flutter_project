@@ -17,8 +17,8 @@ To publish an update:
 """
 
 # Bump this (and the date) whenever the policy or terms materially change.
-CURRENT_POLICY_VERSION = 6
-POLICY_EFFECTIVE_DATE = "19 November 2026"
+CURRENT_POLICY_VERSION = 7
+POLICY_EFFECTIVE_DATE = "20 November 2026"
 
 # The docs are served by the API itself (see main.py), so the client only needs
 # the paths; it prefixes them with the API origin. Kept relative so the same
@@ -78,6 +78,13 @@ POLICY_SUMMARY = {
         "on your phone before they're sent, so our server keeps only copies it "
         "can't open. Songs, group chats and Stories aren't encrypted yet. Please "
         "review and accept to continue."
+    ),
+    7: (
+        "We've updated Aluta's Privacy Policy and Terms: group chats of up to "
+        "32 people are now end-to-end encrypted too — messages, photos, voice "
+        "notes and files are locked with a key only the members' phones hold. "
+        "Someone who joins later can't read what came before. Songs, polls and "
+        "Stories aren't encrypted yet. Please review and accept to continue."
     ),
 }
 

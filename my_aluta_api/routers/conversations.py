@@ -88,13 +88,30 @@ def _conversation_out(db: Session, conv: Conversation, me: int) -> schemas.Conve
         last_message=(crud.list_preview(last) if last else None),
         last_message_id=(last.id if last else None),
         last_sealed=(crud._sealed_preview(last, me)
-                     if last is not None and not conv.is_group else None),
+                     if last is not None and not conv.is_group
+                     # 🔒 A sealed group message: its sealed content (the
+                     # app opens it with the group's key for the preview).
+                     else _group_sealed_preview(last)),
         last_timestamp=(last.timestamp if last else None),
         last_sender_id=(last.sender_id if last else None),
         unread_count=cc.unread_count(db, conv.id, me),
         my_role=my_role,
         admins_only=bool(getattr(conv, "admins_only", False)),
     )
+
+
+def _group_sealed_preview(msg):
+    """A group chat's last message, sealed, as the app needs it to preview it
+    itself (None when it isn't sealed)."""
+    import json as _json
+    from e2ee_msgs import scope_sealed
+    if msg is None or getattr(msg, "is_deleted", False) or not scope_sealed(msg):
+        return None
+    if len(msg.content) > 8000:
+        return None
+    return _json.dumps({"id": msg.id, "content": msg.content,
+                        "message_type": msg.message_type or "text"},
+                       separators=(",", ":"))
 
 
 def _addable(db: Session, me: int, ids) -> list:
@@ -362,6 +379,11 @@ def send_message(
                 "group_title": gt,
                 "message_id": str(msg.id),
                 "body": body,
+                # 🔒 A sealed group message: the phone opens it with the
+                # group's key for the banner (only when it fits a push).
+                **({"sealed_body": msg.content}
+                   if (msg.content or "").startswith("🔒s1.")
+                   and len(msg.content) <= 2400 else {}),
                 "mentioned": "1" if is_mention else "0",
                 "mention_all": "1" if (is_mention and mention_all) else "0",
             },

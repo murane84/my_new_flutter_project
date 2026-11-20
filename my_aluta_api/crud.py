@@ -320,11 +320,13 @@ def list_preview(msg) -> str:
         return "❤️ Secret message"
     # End-to-end encrypted: the server can't read it (the app previews it
     # from its own unlocked copy).
-    if getattr(msg, "e2ee", None) and \
+    from e2ee_msgs import scope_sealed
+    group_sealed = scope_sealed(msg)  # a sealed group chat message
+    if (getattr(msg, "e2ee", None) or group_sealed) and \
             (getattr(msg, "message_type", None) or "text") == "text":
         from e2ee_msgs import LOCKED_PREVIEW
         return LOCKED_PREVIEW
-    if getattr(msg, "e2ee", None):
+    if getattr(msg, "e2ee", None) or group_sealed:
         # Sealed media: its kind shows, as for plain media ("📷 Photo",
         # "🎤 0:12"); the name and caption are inside the sealed copy (the
         # app adds them from its own opened copy).

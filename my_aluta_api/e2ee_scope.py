@@ -1,4 +1,4 @@
-"""🔒 Our Space keys (end-to-end encryption, Phase 6).
+"""🔒 Our Space and group chat keys (end-to-end encryption, Phase 6 / 8).
 
 Everything a group shares in Our Space is sealed on the devices with one key
 per group. The **scope** names the group: its member ids, sorted ("3,7").
@@ -33,7 +33,7 @@ from routers.e2ee_keys import _live_devices
 
 router = APIRouter(prefix="/e2ee/scopes", tags=["E2EE"])
 
-MAX_MEMBERS = 20
+MAX_MEMBERS = 32          # a group bigger than this stays unsealed
 MAX_WRAPPED = 400          # base64 of the 158-byte wrapped key
 
 
@@ -57,11 +57,27 @@ def space_groups(db: Session, uid: int) -> List[set]:
     return out
 
 
+def chat_groups(db: Session, uid: int) -> List[set]:
+    """The member sets of every group chat [uid] is in (today's members)."""
+    from models import Conversation, ConversationMember
+    cids = [r[0] for r in db.query(ConversationMember.conversation_id)
+            .join(Conversation, Conversation.id ==
+                  ConversationMember.conversation_id)
+            .filter(ConversationMember.user_id == uid,
+                    Conversation.is_group == True).all()]  # noqa: E712
+    out = []
+    for cid in cids:
+        out.append({r[0] for r in db.query(ConversationMember.user_id).filter(
+            ConversationMember.conversation_id == cid).all()})
+    return out
+
+
 def share_a_space(db: Session, a: int, b: int) -> bool:
     return any(b in g for g in space_groups(db, a))
 
 
-def _members(scope: str, me: User, db: Session) -> List[int]:
+def _members(scope: str, me: User, db: Session,
+             making: bool = False) -> List[int]:
     try:
         ids = [int(x) for x in scope.split(",")]
     except ValueError:
@@ -75,8 +91,18 @@ def _members(scope: str, me: User, db: Session) -> List[int]:
     # not be each other's contacts) — or, for two people, anyone I can reach.
     if set(ids) in space_groups(db, me.id):
         return ids
+    # …or of one of my group chats (its members today).
+    if set(ids) in chat_groups(db, me.id):
+        return ids
     if len(ids) == 2 and crud.may_reach(db, me.id, [x for x in ids
                                                      if x != me.id][0]):
+        return ids
+    # A group I was in before its members changed: I may still read my own
+    # copies of its keys (and give them to my other devices / members who
+    # lack them), never start a new key for it.
+    if not making and db.query(SealScopeKey.id).filter(
+            SealScopeKey.scope == scope,
+            SealScopeKey.user_id == me.id).first() is not None:
         return ids
     raise HTTPException(status_code=403, detail="Not your space")
 
@@ -163,7 +189,7 @@ def get_scope(scope: str, device_id: str, db: Session = Depends(get_db),
 @router.post("/{scope}/create")
 def create_scope(scope: str, body: WrapsIn, db: Session = Depends(get_db),
                  me: User = Depends(get_current_user)):
-    members = _members(scope, me, db)
+    members = _members(scope, me, db, making=True)
     _check_wraps(db, me, members, body)
     if not any(w.user_id == me.id and w.device_id == body.from_device
                for w in body.wraps):

@@ -26,6 +26,16 @@ MEDIA_KINDS = ("image", "video", "audio", "file")
 # Shared cards whose JSON lives in `content` (sealed like text).
 CARD_KINDS = ("location", "contact")
 SEALED_MEDIA_MIME = "application/x-aluta-sealed"
+# A group chat message sealed with its members' shared key (seal_scope.dart):
+# the content itself is the sealed string.
+SCOPE_PREFIX = "🔒s1."
+
+
+def scope_sealed(msg) -> bool:
+    c = getattr(msg, "content", None) or ""
+    return c.startswith(SCOPE_PREFIX)
+
+
 LOCKED_PREVIEW = "🔒 Message"   # what lists / pushes show for an encrypted text
 
 

@@ -364,9 +364,14 @@ def search_messages(
         # Text matches the words; a media message also by its file name.
         # (A sealed file's name is only "sealed" here — never match that;
         # the app searches its own opened copy.)
+        # (A sealed group message's content is its sealed string: never
+        # matched either.)
         query = query.filter(or_(
-            Message.content.icontains(term, autoescape=True),
+            ~func.coalesce(Message.content, "").startswith("🔒s1.")
+            & Message.content.icontains(term, autoescape=True),
             (func.coalesce(Message.e2ee, 0) == 0)
+            & (func.coalesce(Message.media_mime, "")
+               != "application/x-aluta-sealed")
             & Message.media_name.icontains(term, autoescape=True),
         ))
     mime = func.coalesce(Message.media_mime, "")

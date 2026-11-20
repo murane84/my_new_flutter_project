@@ -2201,7 +2201,8 @@ class _ChatPageState extends State<ChatPage>
           if (aid != null) {
             unawaited(SongCache.putBytes(aid, outPlain,
                 filename: msg['media_name'] as String?,
-                mime: msg['media_mime'] as String?));
+                mime: msg['media_mime'] as String?,
+                sealedKey: outKey));
           }
         }
       }
@@ -2457,7 +2458,9 @@ class _ChatPageState extends State<ChatPage>
             final aid = SongCache.assetId(up!['url'].toString());
             if (aid != null) {
               unawaited(SongCache.putBytes(aid, attach.bytes,
-                  filename: attach.name, mime: attach.mime));
+                  filename: attach.name,
+                  mime: attach.mime,
+                  sealedKey: heartKey));
             }
           }
         }

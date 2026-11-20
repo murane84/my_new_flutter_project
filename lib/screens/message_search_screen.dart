@@ -241,7 +241,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
   Future<List<Map<String, dynamic>>> _sealedHits(String q) async {
     // Words, or a kind to browse (sealed photos, videos, voice notes and
     // files too — their names and captions are only on this device).
-    if ((q.length < 2 && _kind == null) || _kind == 'song') return const [];
+    if (q.length < 2 && _kind == null) return const [];
     final me = await SealIngress.myUid();
     if (me == null) return const [];
     final prefs = await warmPrefsNow();
@@ -295,7 +295,8 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
         final type = (m['message_type'] ?? 'text').toString();
         // A shared location / contact keeps JSON in its words: not a hit.
         if (type == 'location' || type == 'contact') continue;
-        final media = const ['image', 'video', 'audio', 'file'].contains(type);
+        final media =
+            const ['image', 'video', 'audio', 'file', 'song'].contains(type);
         final name = media ? (m['media_name'] ?? '').toString() : '';
         if (k.length >= 2 &&
             !c.toLowerCase().contains(k) &&
@@ -311,6 +312,7 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
           'media' => type == 'image' || type == 'video',
           'voice' => type == 'audio',
           'file' => type == 'file',
+          'song' => type == 'song',
           _ => false,
         };
         if (!ok) continue;

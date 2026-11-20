@@ -20,6 +20,7 @@ import '../e2ee/seal_keystore.dart' show SealKeyStore;
 import '../e2ee/seal_messenger.dart' show SealPayload, SealPeerAway;
 import '../e2ee/seal_space.dart';
 import '../e2ee/seal_polls.dart';
+import 'chat/song_cache.dart';
 
 final _logger = Logger();
 
@@ -4130,7 +4131,8 @@ class ApiService {
     if (type == 'song') {
       final aid = SongCache.assetId(url);
       if (aid != null) {
-        unawaited(SongCache.putBytes(aid, bytes, filename: filename, mime: mime));
+        unawaited(SongCache.putBytes(aid, bytes,
+            filename: filename, mime: mime, sealedKey: key));
       }
     }
     final sent = await sendMessage(

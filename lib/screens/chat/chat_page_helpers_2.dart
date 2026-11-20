@@ -784,7 +784,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
           final aid = SongCache.assetId(up['url'].toString());
           if (aid != null) {
             unawaited(SongCache.putBytes(aid, sendBytes,
-                filename: sendName, mime: sendMime));
+                filename: sendName, mime: sendMime, sealedKey: sealKey));
           }
         }
         // File is on the server; keep the ring moving while the message row is

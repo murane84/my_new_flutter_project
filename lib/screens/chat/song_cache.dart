@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../e2ee/seal_media.dart';
 import '../../services/download_manager.dart';
+import '../../services/media_store.dart';
 
 /// Local cache for EPHEMERAL shared songs.
 ///
@@ -95,13 +96,18 @@ class SongCache {
   }
 
   /// Store bytes we already hold (sender side, at send time). Returns the path.
+  /// [sealedKey]: the song went locked — this opened copy then leaves with
+  /// the message and at sign-out (MediaStore.linkSealed).
   static Future<String?> putBytes(String id, List<int> bytes,
-      {String? filename, String? mime}) async {
+      {String? filename, String? mime, List<int>? sealedKey}) async {
     try {
       if (bytes.isEmpty) return null;
       final f = await _fileFor(id, filename: filename, mime: mime);
       if (f == null) return null;
       await f.writeAsBytes(bytes, flush: true);
+      if (sealedKey != null) {
+        await MediaStore.instance.linkSealed(sealedKey, f.path);
+      }
       return f.path;
     } catch (_) {
       return null;
@@ -134,6 +140,7 @@ class SongCache {
         if (!res.ok || res.file == null) return null;
         try {
           await SealMedia.openFile(res.file!.path, f.path, key);
+          await MediaStore.instance.linkSealed(key, f.path);
         } finally {
           try {
             if (await res.file!.exists()) await res.file!.delete();

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -247,6 +248,79 @@ class MediaStore {
     }
   }
 
+  // ── Opened sealed files kept elsewhere (e.g. a song in the song cache) ──
+
+  Future<File?> _linksFile() async {
+    final d = await _base();
+    return d == null ? null : File('${d.path}/sealed_links.json');
+  }
+
+  Future<Map<String, List<String>>> _links() async {
+    try {
+      final f = await _linksFile();
+      if (f == null || !await f.exists()) return {};
+      final d = jsonDecode(await f.readAsString());
+      if (d is! Map) return {};
+      return {
+        for (final e in d.entries)
+          '${e.key}': [for (final p in (e.value as List? ?? const [])) '$p']
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> _saveLinks(Map<String, List<String>> links) async {
+    try {
+      final f = await _linksFile();
+      if (f == null) return;
+      if (links.isEmpty) {
+        if (await f.exists()) await f.delete();
+      } else {
+        await f.writeAsString(jsonEncode(links), flush: true);
+      }
+    } catch (_) {}
+  }
+
+  /// An opened copy of sealed media locked with [key] kept at [path]
+  /// outside this store (a song in the song cache): it leaves with the
+  /// message and at sign-out, like this store's own opened files.
+  Future<void> linkSealed(List<int> key, String path) async {
+    if (kIsWeb) return;
+    await _linksDo((links) {
+      final id = _sealedId(key);
+      final list = links[id] ?? <String>[];
+      if (!list.contains(path)) links[id] = [...list, path];
+      return const [];
+    });
+  }
+
+  // The links index is read-modified-written one change at a time.
+  Future<void> _linksQueue = Future.value();
+
+  /// Run [change] on the index (one at a time); deletes the paths it gives
+  /// back.
+  Future<void> _linksDo(
+      List<String> Function(Map<String, List<String>> links) change) {
+    final run = _linksQueue.then((_) async {
+      final links = await _links();
+      final drop = change(links);
+      await _saveLinks(links);
+      await _deletePaths(drop);
+    });
+    _linksQueue = run.catchError((_) {});
+    return run.catchError((_) {});
+  }
+
+  Future<void> _deletePaths(Iterable<String> paths) async {
+    for (final p in paths) {
+      try {
+        final f = File(p);
+        if (await f.exists()) await f.delete();
+      } catch (_) {}
+    }
+  }
+
   /// Sign-out: every opened sealed file leaves this device (disk, the
   /// viewer copies, memory, decoded pictures).
   Future<void> wipeSealed() async {
@@ -261,6 +335,11 @@ class MediaStore {
         ..clearLiveImages();
     } catch (_) {}
     if (kIsWeb) return;
+    await _linksDo((links) {
+      final all = links.values.expand((l) => l).toList();
+      links.clear();
+      return all;
+    });
     try {
       final d = await _base();
       if (d != null) {
@@ -300,6 +379,7 @@ class MediaStore {
       final f = File('${d.path}/${_sealedId(key)}');
       if (await f.exists()) await f.delete();
     } catch (_) {}
+    await _linksDo((links) => links.remove(_sealedId(key)) ?? const []);
     try {
       final t = await getTemporaryDirectory();
       final o = Directory('${t.path}/aluta_open/sealed/${_sealedId(key)}');

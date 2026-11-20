@@ -272,6 +272,17 @@ extension _ChatPageHelpers1 on _ChatPageState {
       // locked without its key) — device copy first, then the server.
       List<int>? bytes;
       if (!kIsWeb) {
+        // A song lives in the song cache (the server lets it go once it's
+        // delivered — a sealed one too, opened here).
+        try {
+          final id = SongCache.assetId(rel);
+          final p = id == null
+              ? null
+              : await SongCache.cachedPath(id, mime: mime);
+          if (p != null) bytes = await File(p).readAsBytes();
+        } catch (_) {}
+      }
+      if (!kIsWeb && (bytes == null || bytes.isEmpty)) {
         try {
           final f =
               await MediaStore.instance.getFile(url, mediaAuthHeaders(url));

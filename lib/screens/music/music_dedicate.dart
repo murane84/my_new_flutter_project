@@ -224,7 +224,8 @@ class _DedicateSheetState extends State<_DedicateSheet> {
       // My own bubble plays it from this device.
       final aid = SongCache.assetId(up['url'].toString());
       if (aid != null) {
-        unawaited(SongCache.putBytes(aid, bytes, filename: name, mime: mime));
+        unawaited(SongCache.putBytes(aid, bytes,
+            filename: name, mime: mime, sealedKey: key));
       }
       final note = _note.text.trim();
       final sent = await api.sendMessage(

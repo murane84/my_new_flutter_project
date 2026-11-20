@@ -3186,6 +3186,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
       if (id != null) {
         _myUserId = int.tryParse(id.toString());
         _startNotifyWs();
+        // 🔒 A new / reinstalled phone with a server backup: offer (once) to
+        // bring the chats back with the recovery key.
+        Future.delayed(const Duration(seconds: 4), () {
+          if (mounted) BackupScreen.offerRestore(context);
+        });
         final me = _myUserId;
         if (me != null) BlockList.instance.load(me);
       }

@@ -9,6 +9,8 @@ import '../e2ee/seal_keystore.dart';
 import '../e2ee/seal_messenger.dart';
 import '../e2ee/seal_space.dart';
 import '../screens/token_helper.dart';
+import '../utils/app_config.dart';
+import '../utils/net.dart' as http;
 
 /// Encrypted, device-held backup of the app's LOCAL data.
 ///
@@ -40,10 +42,9 @@ class LocalBackupService {
   /// your encrypted chats, so it must hold up to guessing.
   static const int minPassphrase = 8;
 
-  Future<String> createBackup(String passphrase) async {
-    if (passphrase.trim().length < minPassphrase) {
-      throw Exception('Passphrase too short');
-    }
+  /// The backup's contents (before locking): the cached chats / Our Space
+  /// and, 🔒, the encrypted chats' own memory and keys.
+  Future<List<int>> _payload() async {
     final prefs = await SharedPreferences.getInstance();
     final data = <String, Object>{};
     for (final k in prefs.getKeys()) {
@@ -66,13 +67,20 @@ class LocalBackupService {
         'scopes': await SealSpace.instance.exportKeys(),
       };
     } catch (_) {/* keys not set up here: the chats still go */}
-    final plain = utf8.encode(jsonEncode({
+    return utf8.encode(jsonEncode({
       'magic': _magic,
       'created_at': DateTime.now().toIso8601String(),
       'count': data.length,
       'data': data,
       'seal': ?seal,
     }));
+  }
+
+  Future<String> createBackup(String passphrase) async {
+    if (passphrase.trim().length < minPassphrase) {
+      throw Exception('Passphrase too short');
+    }
+    final plain = await _payload();
     final salt = _randomBytes(16);
     final nonce = _randomBytes(12);
     final key = await _deriveKey(passphrase, salt);
@@ -116,6 +124,11 @@ class LocalBackupService {
     } catch (_) {
       throw Exception('Wrong passphrase or corrupted file');
     }
+    return _apply(clear);
+  }
+
+  /// Put a backup's contents back on this device. Returns how many items.
+  Future<int> _apply(List<int> clear) async {
     final obj = jsonDecode(utf8.decode(clear)) as Map<String, dynamic>;
     if (obj['magic'] != _magic) {
       throw Exception('Not an Aluta backup');
@@ -149,6 +162,147 @@ class LocalBackupService {
       } catch (_) {/* the chats' cached copy is back either way */}
     }
     return n;
+  }
+
+  // ── 🔒 Backup on the server, locked with a recovery key ───────────────
+  //
+  // The same contents as the file, locked on this device with a key derived
+  // from a random 256-bit RECOVERY KEY (shown once; the person keeps it).
+  // The server stores only the locked bytes and can't open them — there is
+  // no short PIN to guess. This device keeps the recovery key (secure
+  // storage) so later backups go up without asking again.
+
+  static final List<int> _cloudMagic = ascii.encode('ACB1');
+  static final List<int> _cloudInfo = utf8.encode('AlutaCloudBackup v1');
+
+  SealStorage get _secure => SealKeyStore.platformStorage();
+  Future<String> _slot() async =>
+      'aluta_cloud_backup_key_${SealDirectory.ownerOf(await getToken()) ?? 'x'}';
+
+  /// A new recovery key: 32 random bytes.
+  List<int> newRecoveryKey() => _randomBytes(32);
+
+  /// "a1b2-c3d4-…" — 64 hex characters in groups of four.
+  static String formatRecoveryKey(List<int> key) {
+    final hex = key.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return [
+      for (var i = 0; i < hex.length; i += 4) hex.substring(i, i + 4)
+    ].join('-');
+  }
+
+  /// Read a typed / pasted recovery key (spaces, dashes, case ignored).
+  static List<int>? parseRecoveryKey(String text) {
+    final hex = text.toLowerCase().replaceAll(RegExp(r'[^0-9a-f]'), '');
+    if (hex.length != 64) return null;
+    return [
+      for (var i = 0; i < 64; i += 2) int.parse(hex.substring(i, i + 2), radix: 16)
+    ];
+  }
+
+  Future<SecretKey> _cloudKey(List<int> recovery) => Hkdf(
+          hmac: Hmac.sha256(), outputLength: 32)
+      .deriveKey(secretKey: SecretKey(recovery), info: _cloudInfo, nonce: const []);
+
+  /// Lock [plain] for the server: "ACB1" ‖ nonce(12) ‖ ciphertext ‖ tag(16).
+  Future<List<int>> lockForCloud(List<int> plain, List<int> recovery) async {
+    final nonce = _randomBytes(12);
+    final box = await AesGcm.with256bits().encrypt(plain,
+        secretKey: await _cloudKey(recovery), nonce: nonce, aad: _cloudMagic);
+    return [..._cloudMagic, ...nonce, ...box.cipherText, ...box.mac.bytes];
+  }
+
+  /// Open a locked server backup; throws on a wrong key / damaged backup.
+  Future<List<int>> openFromCloud(List<int> blob, List<int> recovery) async {
+    if (blob.length < 4 + 12 + 16 ||
+        String.fromCharCodes(blob.sublist(0, 4)) != 'ACB1') {
+      throw Exception('Not an Aluta backup');
+    }
+    final nonce = blob.sublist(4, 16);
+    final ct = blob.sublist(16, blob.length - 16);
+    final mac = Mac(blob.sublist(blob.length - 16));
+    try {
+      return await AesGcm.with256bits().decrypt(
+          SecretBox(ct, nonce: nonce, mac: mac),
+          secretKey: await _cloudKey(recovery),
+          aad: _cloudMagic);
+    } catch (_) {
+      throw Exception('That recovery key doesn’t open this backup');
+    }
+  }
+
+  /// The recovery key this device keeps (null: server backup not set up
+  /// here).
+  Future<List<int>?> savedRecoveryKey() async {
+    final v = await _secure.read(await _slot());
+    return v == null ? null : parseRecoveryKey(v);
+  }
+
+  Future<void> _saveRecoveryKey(List<int> key) async =>
+      _secure.write(await _slot(), formatRecoveryKey(key));
+
+  Future<void> forgetRecoveryKey() async => _secure.delete(await _slot());
+
+  Future<Map<String, String>?> _auth() async {
+    final t = await getToken();
+    return t == null
+        ? null
+        : {'Authorization': 'Bearer $t', 'Content-Type': 'application/json'};
+  }
+
+  /// {exists, size, updated_at} of the server copy, or null when unknown.
+  Future<Map<String, dynamic>?> cloudInfo() async {
+    final h = await _auth();
+    if (h == null) return null;
+    try {
+      final r = await http.get(
+          Uri.parse('${await AppConfig.baseUrl}/e2ee/backup/info'),
+          headers: h);
+      if (r.statusCode != 200) return null;
+      return jsonDecode(r.body) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Back up to the server now with [recovery] (or the key this device
+  /// keeps), and keep that key here for next time. Throws on failure.
+  Future<void> cloudBackupNow({List<int>? recovery}) async {
+    final key = recovery ?? await savedRecoveryKey();
+    if (key == null) throw Exception('Set up server backup first');
+    final h = await _auth();
+    if (h == null) throw Exception('Not signed in');
+    final blob = await lockForCloud(await _payload(), key);
+    final r = await http.put(
+        Uri.parse('${await AppConfig.baseUrl}/e2ee/backup'),
+        headers: h,
+        body: jsonEncode({'blob': base64Encode(blob)}));
+    if (r.statusCode == 413) throw Exception('Backup too large');
+    if (r.statusCode != 200) throw Exception('Couldn’t reach the server');
+    await _saveRecoveryKey(key);
+  }
+
+  /// Restore from the server copy with [recovery]. Returns items restored.
+  Future<int> cloudRestore(List<int> recovery) async {
+    final h = await _auth();
+    if (h == null) throw Exception('Not signed in');
+    final r = await http.get(
+        Uri.parse('${await AppConfig.baseUrl}/e2ee/backup'), headers: h);
+    if (r.statusCode == 404) throw Exception('No backup on the server');
+    if (r.statusCode != 200) throw Exception('Couldn’t reach the server');
+    final blob = base64Decode(
+        (jsonDecode(r.body) as Map<String, dynamic>)['blob'] as String);
+    final n = await _apply(await openFromCloud(blob, recovery));
+    await _saveRecoveryKey(recovery); // later backups from this device
+    return n;
+  }
+
+  /// Remove the server copy and this device's recovery key.
+  Future<void> cloudDelete() async {
+    final h = await _auth();
+    if (h == null) return;
+    await http.delete(Uri.parse('${await AppConfig.baseUrl}/e2ee/backup'),
+        headers: h);
+    await forgetRecoveryKey();
   }
 
   Future<SecretKey> _deriveKey(String pass, List<int> salt) async {

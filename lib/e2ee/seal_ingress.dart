@@ -150,7 +150,18 @@ class SealIngress {
     m.remove('seal_state');
     m['content'] = SealPayload.textOf(opened);
     _attachMedia(m, SealPayload.mediaOf(opened));
+    // This group is sealed: this device (a linked computer too) never
+    // writes to it in the clear from now on.
+    final cid = _int(m['conversation_id']);
+    if (cid > 0) {
+      final me = await myUid();
+      if (me != null && _knownSealedGroups.add('$me:$cid')) {
+        await markGroupSealed(me, cid);
+      }
+    }
   }
+
+  static final Set<String> _knownSealedGroups = {};
 
   /// Group rows of the conversation list: the server knows only "🔒 Message"
   /// / "📷 Photo" for a sealed last message; open its sealed copy with the
@@ -178,6 +189,32 @@ class SealIngress {
   }
 
   static String _groupKey(int me, int cid) => 'aluta_group_sealed_${me}_$cid';
+
+  /// A sealed group message as this device's copy of the chat reads it
+  /// (same shape as [previewOf]); the server [label] when it isn't there.
+  static Future<String> _groupCachedPreview(
+      String label, String cid, String mid) async {
+    final me = await myUid();
+    final fallback = label == serverPreview ? '' : label;
+    if (me == null) return fallback;
+    try {
+      final p = await SharedPreferences.getInstance();
+      final raw = p.getString('chat_cache_${me}_g$cid');
+      if (raw == null) return fallback;
+      for (final m in jsonDecode(raw) as List) {
+        if (m is! Map || '${m['id']}' != mid || m['seal_state'] != null) {
+          continue;
+        }
+        final words = _withoutQuote('${m['content'] ?? ''}'.trim());
+        var head = fallback;
+        final name = '${m['media_name'] ?? ''}'.trim();
+        if (head.startsWith('📎') && name.isNotEmpty) head = '📎 $name';
+        if (head.isEmpty) return words;
+        return words.isEmpty ? head : '$head · $words';
+      }
+    } catch (_) {}
+    return fallback;
+  }
 
   /// Once a group has been sealed on this device it stays sealed.
   static Future<bool> groupSealedBefore(int me, int cid) async {
@@ -246,7 +283,11 @@ class SealIngress {
       try {
         final s = await SealMessenger.instance
             .storedOfAny(_int(data['message_id']));
-        out['body'] = previewOf(label, s);
+        final cid = '${data['conversation_id'] ?? ''}';
+        out['body'] = s == null && cid.isNotEmpty
+            // A sealed group message: this device's own copy of the chat.
+            ? await _groupCachedPreview(label, cid, '${data['message_id']}')
+            : previewOf(label, s);
       } catch (_) {
         out['body'] = label == serverPreview ? '' : label;
       }

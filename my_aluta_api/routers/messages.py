@@ -657,7 +657,9 @@ def react_to_message(
                     # Hearts stay secret; media shows its label.
                     "body": crud.list_preview(message)[:120],
                     # 🔒 Sealed: the author's phone fills in its own words.
-                    **({"sealed": "1"} if getattr(message, "e2ee", None)
+                    **({"sealed": "1"}
+                       if (getattr(message, "e2ee", None)
+                           or (message.content or "").startswith("🔒s1."))
                        and (message.message_type or "text") != "heart"
                        else {}),
                 })

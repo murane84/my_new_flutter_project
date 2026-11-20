@@ -1163,9 +1163,11 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                 width: 54,
                 height: 54,
                 child: coverUrl != null
-                    ? Image.network(coverUrl,
+                    // (🔒 a sealed photo opens on this device)
+                    ? Image(
+                        image: authNetworkImageProvider(
+                            coverUrl, mediaAuthHeaders(coverUrl)),
                         fit: BoxFit.cover,
-                        headers: mediaAuthHeaders(coverUrl),
                         errorBuilder: (_, _, _) => _recapVinyl(scheme))
                     : _recapVinyl(scheme),
               ),

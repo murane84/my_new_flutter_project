@@ -3467,12 +3467,18 @@ def delete_moment(
     current_user: User = Depends(get_current_user),
 ):
     space = _owned_space_or_404(db, space_id, current_user.id)
-    db.query(PinnedMoment).filter(
+    q = db.query(PinnedMoment).filter(
         PinnedMoment.id == moment_id,
         PinnedMoment.space_id == space.id,
-    ).delete(synchronize_session=False)
+    )
+    m = q.first()
+    # 🔒 Its sealed address-with-key back to the app, so the opened copy
+    # leaves the device too.
+    out = {"ok": True, "ref": m.ref if m else None,
+           "ref_key": getattr(m, "ref_key", None) if m else None}
+    q.delete(synchronize_session=False)
     db.commit()
-    return {"ok": True}
+    return out
 
 
 # ── Keep a chat moment into Our Space (resolve the bond by partner) ───────────

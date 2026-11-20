@@ -277,7 +277,8 @@ class SealIngress {
     // phone can't open it.
     if (data.values.any(SealScope.isSealed)) {
       data = Map<String, dynamic>.from(data);
-      await openGroupMeta(data);
+      await openGroupMeta(data,
+          named: '${data['type'] ?? ''}'.startsWith('group_call'));
     }
     if (data.values.any(SealScope.isSealed)) {
       // 🔒 Our Space words in a push (the server avoids it, but never show
@@ -492,10 +493,15 @@ class SealIngress {
   };
 
   /// Returns the keys it couldn't open.
+  ///
+  /// [named]: open plain `title` / `avatar_url` too (a group row, a group
+  /// call ring) — off for any other event, where a sealed `title` is Our
+  /// Space words (a diary entry's) with their own lock note.
   static Future<Set<String>> openGroupMeta(Map<String, dynamic> row,
-      {Set<String>? asked}) async {
+      {Set<String>? asked, bool named = true}) async {
     final failed = <String>{};
     for (final e in _groupMetaKeys.entries) {
+      if (!named && (e.key == 'title' || e.key == 'avatar_url')) continue;
       final v = row[e.key];
       if (!SealScope.isSealed(v)) continue;
       String out;

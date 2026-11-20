@@ -2664,7 +2664,10 @@ class ApiService {
       // A kept heart carries its words inside its ref (the snapshot).
       String? refKey;
       if (kind == 'heart') {
+        final keyed = ref != null && _keyedAddress.hasMatch(ref);
         ref = await _sealSpaceText(spaceId, ref);
+        // A sealed file's key inside the snapshot never goes plain.
+        if (keyed && !SealScope.isSealed(ref)) return null;
       } else {
         // A sealed photo / voice / song: the key travels sealed beside it.
         (ref, refKey) = await _splitMediaKey(spaceId, ref);
@@ -3733,7 +3736,20 @@ class ApiService {
         Uri.parse('${await _baseUrl}/spaces/$spaceId/moments/$momentId'),
         headers: _authHeaders(token),
       );
-      return resp.statusCode >= 200 && resp.statusCode < 300;
+      final ok = resp.statusCode >= 200 && resp.statusCode < 300;
+      if (ok) {
+        // 🔒 A sealed photo / voice / song: its opened copy leaves this
+        // device too (as a deleted chat message's does).
+        try {
+          final d = await SealSpace.instance.decode(resp.body);
+          final hit = d is Map
+              ? _keyedAddress.firstMatch('${d['ref'] ?? ''}')
+              : null;
+          final key = hit == null ? null : SealMedia.keyOf(hit.group(0));
+          if (key != null) unawaited(MediaStore.instance.removeSealed(key));
+        } catch (_) {}
+      }
+      return ok;
     } catch (e) {
       _logger.w('deleteMoment failed: $e');
       return false;

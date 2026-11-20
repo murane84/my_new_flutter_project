@@ -186,11 +186,12 @@ class _MixtapeScreenState extends State<_MixtapeScreen> {
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 900),
           child: bgUrl != null
-              ? Image.network(
-                  bgUrl,
+              // (🔒 a sealed photo opens on this device)
+              ? Image(
+                  image: authNetworkImageProvider(
+                      bgUrl, mediaAuthHeaders(bgUrl)),
                   key: ValueKey(bgUrl),
                   fit: BoxFit.cover,
-                  headers: mediaAuthHeaders(bgUrl),
                   errorBuilder: (_, _, _) => _gradientBg(scheme, accent),
                 )
               : _gradientBg(scheme, accent),
@@ -397,9 +398,9 @@ class _MixtapeScreenState extends State<_MixtapeScreen> {
           fit: StackFit.expand,
           children: [
             if (url != null)
-              Image.network(url,
+              Image(
+                  image: authNetworkImageProvider(url, mediaAuthHeaders(url)),
                   fit: BoxFit.cover,
-                  headers: mediaAuthHeaders(url),
                   errorBuilder: (_, _, _) =>
                       Container(color: scheme.surfaceContainerHighest))
             else

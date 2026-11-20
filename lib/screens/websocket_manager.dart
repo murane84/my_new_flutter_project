@@ -105,10 +105,12 @@ class WebSocketManager {
                 // 🔒 Our Space words inside the event (moments, diary…), a
                 // group's sealed name / photo (a call ring, a mention).
                 if (rawMessage.contains(SealScope.prefix)) {
-                  await SealIngress.openGroupMeta(event);
+                  final named = '${event['type'] ?? ''}'
+                      .startsWith('group_call');
+                  await SealIngress.openGroupMeta(event, named: named);
                   final d = event['data'];
                   if (d is Map<String, dynamic>) {
-                    await SealIngress.openGroupMeta(d);
+                    await SealIngress.openGroupMeta(d, named: false);
                   }
                   await SealSpace.instance.openJson(event);
                 }

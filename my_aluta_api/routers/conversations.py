@@ -395,7 +395,9 @@ def send_message(
                 # group's key for the banner (only when it fits a push).
                 **({"sealed_body": msg.content}
                    if (msg.content or "").startswith("🔒s1.")
-                   and len(msg.content) <= 2400
+                   # (a sealed group name rides along: keep under 4 KB)
+                   and len(msg.content) <= (1900 if gt.startswith("🔒s1.")
+                                            else 2400)
                    and (msg.message_type or "") != "heart" else {}),
                 "mentioned": "1" if is_mention else "0",
                 "mention_all": "1" if (is_mention and mention_all) else "0",

@@ -222,8 +222,13 @@ class SealMessenger {
   /// [uid]'s devices as sealing sees them, fetched fresh (and kept for the
   /// next seals) — so a safety-code check covers the very keys messages
   /// are locked for.
-  Future<List<SealPeerDevice>?> devicesFor(int uid) =>
-      _locked(() => _devicesOf(uid, fresh: true));
+  /// (Not under the messenger's lock: a slow network here must never hold
+  /// up opening or sending messages.)
+  Future<List<SealPeerDevice>?> devicesFor(int uid) async {
+    final d = await _dir.devicesOf(uid);
+    if (d != null) _devices[uid] = (_clock(), d);
+    return d ?? _devices[uid]?.$2;
+  }
 
   Future<List<SealPeerDevice>?> _devicesOf(int uid, {bool fresh = false}) async {
     final c = _devices[uid];

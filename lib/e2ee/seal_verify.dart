@@ -142,7 +142,17 @@ class SealVerifyStore {
 
   /// The chat's state, noting a change of code since last time (a friend
   /// reinstalled or linked a device). A change clears "verified".
-  Future<SealVerifyState> refresh(int me, int peer) async {
+  Future<SealVerifyState> refresh(int me, int peer) {
+    // One look at a time per chat (the chat and the check screen may both
+    // ask): a change is noted once.
+    final k = '$me:$peer';
+    return _inFlight[k] ??=
+        _refresh(me, peer).whenComplete(() => _inFlight.remove(k));
+  }
+
+  final Map<String, Future<SealVerifyState>> _inFlight = {};
+
+  Future<SealVerifyState> _refresh(int me, int peer) async {
     final p = await SharedPreferences.getInstance();
     final code = await codeFor(me, peer);
     final changes = _changes(p, me, peer);

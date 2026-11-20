@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 import crud
 from auth import get_current_user
 from database import get_db
-from models import E2eeDevice, SealScope, SealScopeKey, User
+from models import E2eeDevice, SealScope, SealScopeGrant, SealScopeKey, User
 from routers.e2ee_keys import _live_devices
 
 router = APIRouter(prefix="/e2ee/scopes", tags=["E2EE"])
@@ -86,6 +86,12 @@ def _members(scope: str, me: User, db: Session,
             or ",".join(str(x) for x in sorted(set(ids))) != scope):
         raise HTTPException(status_code=400, detail="Bad scope")
     if me.id not in ids:
+        # A newcomer the group shared its earlier messages with may read
+        # their own copies of that older key — nothing more.
+        if not making and db.query(SealScopeGrant.id).filter(
+                SealScopeGrant.scope == scope,
+                SealScopeGrant.user_id == me.id).first() is not None:
+            return ids
         raise HTTPException(status_code=403, detail="Not your space")
     # Exactly the people of one of my Spaces (a group Space's members need
     # not be each other's contacts) — or, for two people, anyone I can reach.
@@ -226,6 +232,10 @@ def create_scope(scope: str, body: WrapsIn, db: Session = Depends(get_db),
 def add_wraps(scope: str, body: WrapsIn, db: Session = Depends(get_db),
               me: User = Depends(get_current_user)):
     members = _members(scope, me, db)
+    if me.id not in members:
+        # (A newcomer given the history only reads; its copies must never
+        # take a member device's place — the first copy wins.)
+        raise HTTPException(status_code=403, detail="Not your space")
     s = db.query(SealScope).filter(SealScope.scope == scope).first()
     if s is None or not (1 <= body.epoch <= s.epoch):
         raise HTTPException(status_code=409, detail="No such key")
@@ -239,4 +249,127 @@ def add_wraps(scope: str, body: WrapsIn, db: Session = Depends(get_db),
         raise HTTPException(status_code=403, detail="This device has no key")
     n = _insert(db, scope, me, body)
     db.commit()
+    return {"ok": True, "added": n}
+
+
+# ── A group's earlier messages for members who joined later ───────────────
+
+def _group_scopes(db: Session, cid: int) -> List[str]:
+    """The scopes this group chat's sealed messages were written with."""
+    from models import Message
+    from e2ee_msgs import SCOPE_PREFIX
+    out = set()
+    for (c,) in db.query(Message.content).filter(
+            Message.conversation_id == cid,
+            Message.is_deleted == False,  # noqa: E712
+            Message.content.startswith(SCOPE_PREFIX)).all():
+        part = (c or "")[len(SCOPE_PREFIX):].split(".", 1)[0]
+        if part:
+            out.add(part)
+    return sorted(out)
+
+
+def _sharing_group(db: Session, cid: int, me: User):
+    from models import Conversation, ConversationMember
+    conv = db.query(Conversation).filter(Conversation.id == cid).first()
+    if conv is None or not conv.is_group:
+        raise HTTPException(status_code=404, detail="No such group")
+    members = {r[0] for r in db.query(ConversationMember.user_id).filter(
+        ConversationMember.conversation_id == cid).all()}
+    if me.id not in members:
+        raise HTTPException(status_code=404, detail="No such group")
+    if not getattr(conv, "share_history", False):
+        raise HTTPException(status_code=403, detail="This group keeps its history")
+    return members
+
+
+@router.get("/history/needs")
+def history_needs(conversation_id: int, device_id: str,
+                  db: Session = Depends(get_db),
+                  me: User = Depends(get_current_user)):
+    """For a group that shares its history: the members who joined after some
+    of its messages were sealed, per older scope this device holds a key of —
+    with their devices, so this device can hand them those keys."""
+    members = _sharing_group(db, conversation_id, me)
+    out = []
+    for scope in _group_scopes(db, conversation_id):
+        try:
+            ids = {int(x) for x in scope.split(",")}
+        except ValueError:
+            continue
+        if me.id not in ids:
+            continue  # only a member of that older group holds its key
+        epochs = sorted({r[0] for r in db.query(SealScopeKey.epoch).filter(
+            SealScopeKey.scope == scope, SealScopeKey.user_id == me.id,
+            SealScopeKey.device_id == device_id).all()})
+        if not epochs:
+            continue
+        for uid in sorted(members - ids):
+            devices = []
+            for d in _live_devices(db, uid):
+                have = {r[0] for r in db.query(SealScopeKey.epoch).filter(
+                    SealScopeKey.scope == scope, SealScopeKey.user_id == uid,
+                    SealScopeKey.device_id == d.device_id).all()}
+                need = [e for e in epochs if e not in have]
+                if need and d.ik_dh and d.ik_dh_sig:
+                    devices.append({"device_id": d.device_id,
+                                    "ik_sig": d.ik_sig, "ik_dh": d.ik_dh,
+                                    "ik_dh_sig": d.ik_dh_sig,
+                                    "epochs": need})
+            if devices:
+                out.append({"scope": scope, "user_id": uid,
+                            "devices": devices})
+    return {"needs": out}
+
+
+class GrantIn(BaseModel):
+    conversation_id: int
+    user_id: int
+    keys: List[WrapsIn] = Field(max_length=64)
+
+
+@router.post("/{scope}/grant")
+def grant_history(scope: str, body: GrantIn, db: Session = Depends(get_db),
+                  me: User = Depends(get_current_user)):
+    """Hand an older scope's keys (wrapped on my device) to a member who
+    joined the group later — only for a group that shares its history, only
+    a scope this group wrote with, only from a device holding those keys."""
+    members = _sharing_group(db, body.conversation_id, me)
+    if body.user_id not in members or body.user_id == me.id:
+        raise HTTPException(status_code=400, detail="Not a member")
+    if scope not in _group_scopes(db, body.conversation_id):
+        raise HTTPException(status_code=400, detail="Not this group's")
+    try:
+        ids = [int(x) for x in scope.split(",")]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Bad scope")
+    if me.id not in ids or body.user_id in ids:
+        raise HTTPException(status_code=400, detail="Not for this scope")
+    live = {d.device_id for d in _live_devices(db, body.user_id)}
+    n = 0
+    for k in body.keys:
+        held = db.query(SealScopeKey.id).filter(
+            SealScopeKey.scope == scope, SealScopeKey.epoch == k.epoch,
+            SealScopeKey.user_id == me.id,
+            SealScopeKey.device_id == k.from_device).first()
+        if held is None:
+            raise HTTPException(status_code=403, detail="This device has no key")
+        for w in k.wraps:
+            if w.user_id != body.user_id or w.device_id not in live:
+                raise HTTPException(status_code=400, detail="Unknown device")
+        n += _insert(db, scope, me, k)
+    if db.query(SealScopeGrant.id).filter(
+            SealScopeGrant.scope == scope,
+            SealScopeGrant.user_id == body.user_id).first() is None:
+        db.add(SealScopeGrant(scope=scope, user_id=body.user_id,
+                              conversation_id=body.conversation_id,
+                              granted_by=me.id))
+    db.commit()
+    # Their open chat reloads and reads the earlier messages now.
+    try:
+        from websocket_manager import safe_notify_user
+        safe_notify_user(body.user_id, {"type": "history_shared",
+                                        "conversation_id": body.conversation_id})
+    except Exception:  # noqa: BLE001
+        pass
     return {"ok": True, "added": n}

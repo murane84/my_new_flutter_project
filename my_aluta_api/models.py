@@ -197,6 +197,10 @@ class Conversation(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
     # Group setting: only admins may post (members can still react / vote).
+    # 🔒 New members can read the messages from before they joined (a
+    # member's phone hands them the older keys — e2ee_scope.py grants).
+    share_history = Column(Boolean, default=False, nullable=False,
+                           server_default="false")
     admins_only = Column(Boolean, default=False, nullable=False,
                          server_default="false")
 
@@ -1569,7 +1573,7 @@ class SealScopeKey(Base):
     __tablename__ = "seal_scope_keys"
 
     id = Column(Integer, primary_key=True)
-    scope = Column(String(200), nullable=False, index=True)
+    scope = Column(String(400), nullable=False, index=True)
     epoch = Column(Integer, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
                      nullable=False, index=True)
@@ -1588,10 +1592,29 @@ class SealScope(Base):
     wins; everyone else uses that one)."""
     __tablename__ = "seal_scopes"
 
-    scope = Column(String(200), primary_key=True)
+    scope = Column(String(400), primary_key=True)
     epoch = Column(Integer, nullable=False, default=1)
     created_by = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class SealScopeGrant(Base):
+    """🔒 A group's earlier messages handed to a member who joined later
+    (the group lets new members read earlier messages): a member's device
+    wrapped that older scope's keys for the newcomer's devices. Lets the
+    newcomer read their own copies of that scope's keys — nothing more."""
+    __tablename__ = "seal_scope_grants"
+
+    id = Column(Integer, primary_key=True)
+    scope = Column(String(400), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                     nullable=False, index=True)
+    conversation_id = Column(Integer, nullable=False)
+    granted_by = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("scope", "user_id",
+                                       name="_scope_grant_uc"),)
 
 
 class E2eePreKey(Base):

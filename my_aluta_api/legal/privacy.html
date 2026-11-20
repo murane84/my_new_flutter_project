@@ -310,7 +310,10 @@
     on your device it never falls back to plain text; a friend still on an older Aluta
     (with no keys) gets plain text until they update. Group chats of up to 32 people are sealed with a key only the
     members' devices hold; someone who joins later can't read what was written before
-    they joined, and someone who leaves can't read what comes after. Not yet end-to-end
+    they joined — unless the group's admins let new members read earlier messages,
+    in which case members' phones pass the newcomer those older keys (still end-to-end
+    encrypted; our server can't read them) — and someone who leaves can't read what
+    comes after. Not yet end-to-end
     encrypted: songs (and song titles), files over 100 MB, polls and secret hearts in
     groups, groups of more than 32, group names and photos, Stories, reactions, and
     Space names and pictures —

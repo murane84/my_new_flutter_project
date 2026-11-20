@@ -226,7 +226,9 @@ def last_message(db: Session, conversation_id: int,
     if viewer is not None:
         q = q.filter(_visible_to(int(viewer)))
         m = get_member(db, conversation_id, int(viewer))
-        if m is not None and getattr(m, "joined_at", None) is not None:
+        conv = get_conversation(db, conversation_id)
+        if (m is not None and getattr(m, "joined_at", None) is not None
+                and not getattr(conv, "share_history", False)):
             q = q.filter(_not_sealed_before(m.joined_at))
     return q.order_by(Message.id.desc()).first()
 
@@ -556,12 +558,15 @@ def update_group(
     title: str | None = None,
     avatar_url: str | None = None,
     admins_only: bool | None = None,
+    share_history: bool | None = None,
 ) -> None:
     conv = get_conversation(db, conversation_id)
     if not conv:
         return
     if admins_only is not None:
         conv.admins_only = bool(admins_only)
+    if share_history is not None:
+        conv.share_history = bool(share_history)
     if title is not None:
         new = title.strip()
         if new:

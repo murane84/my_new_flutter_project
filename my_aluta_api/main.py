@@ -311,6 +311,10 @@ def ensure_media_schema():
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS heart_opens TEXT",
         # Group admins-only posting + polls (polls.py).
         "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS admins_only BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS share_history BOOLEAN DEFAULT FALSE",
+        # Group scopes name up to 32 members.
+        "ALTER TABLE seal_scope_keys ALTER COLUMN scope TYPE VARCHAR(400)",
+        "ALTER TABLE seal_scopes ALTER COLUMN scope TYPE VARCHAR(400)",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS poll TEXT",
         # Hearts with a photo/clip + group hearts for one member (hearts.py).
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS heart_for INTEGER",

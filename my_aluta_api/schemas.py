@@ -243,6 +243,7 @@ class RenameGroup(BaseModel):
     title: Optional[str] = None
     avatar_url: Optional[str] = None
     admins_only: Optional[bool] = None
+    share_history: Optional[bool] = None
 
 
 class RoleUpdate(BaseModel):
@@ -299,6 +300,7 @@ class ConversationOut(BaseModel):
     unread_count: int = 0
     my_role: Optional[str] = None
     admins_only: bool = False
+    share_history: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

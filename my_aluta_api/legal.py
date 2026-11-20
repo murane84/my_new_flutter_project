@@ -83,8 +83,10 @@ POLICY_SUMMARY = {
         "We've updated Aluta's Privacy Policy and Terms: group chats of up to "
         "32 people are now end-to-end encrypted too — messages, photos, voice "
         "notes and files are locked with a key only the members' phones hold. "
-        "Someone who joins later can't read what came before. Songs, polls and "
-        "Stories aren't encrypted yet. Please review and accept to continue."
+        "Someone who joins later can't read what came before, unless the "
+        "group's admins let new members read earlier messages (members' phones "
+        "then pass them the keys). Songs, polls and Stories aren't encrypted "
+        "yet. Please review and accept to continue."
     ),
 }
 

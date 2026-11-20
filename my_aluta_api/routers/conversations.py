@@ -97,6 +97,7 @@ def _conversation_out(db: Session, conv: Conversation, me: int) -> schemas.Conve
         unread_count=cc.unread_count(db, conv.id, me),
         my_role=my_role,
         admins_only=bool(getattr(conv, "admins_only", False)),
+        share_history=bool(getattr(conv, "share_history", False)),
     )
 
 
@@ -234,8 +235,12 @@ def get_messages(
     # (inert until the /cached acks arrive). Best-effort.
     cc.purge_cached_conversation(db, cid)
     mine = cc.get_member(db, cid, current_user.id)
-    msgs = cc.get_messages(db, cid, skip, limit,
-                           joined_at=getattr(mine, "joined_at", None))
+    conv = cc.get_conversation(db, cid)
+    # A group that shares its history with new members: their phones get
+    # the older keys from a member's phone, so those messages stay.
+    hide_from = (None if getattr(conv, "share_history", False)
+                 else getattr(mine, "joined_at", None))
+    msgs = cc.get_messages(db, cid, skip, limit, joined_at=hide_from)
     # Per-reader visibility: a message hidden from its receiver (sent across
     # a block) or deleted-for-me never shows to me here either.
     me = current_user.id
@@ -538,12 +543,14 @@ def update_group(
     if not cc.is_admin(db, cid, current_user.id):
         raise HTTPException(status_code=403, detail="Only admins can edit the group")
     cc.update_group(db, cid, title=payload.title, avatar_url=payload.avatar_url,
-                    admins_only=payload.admins_only)
+                    admins_only=payload.admins_only,
+                    share_history=payload.share_history)
     conv = cc.get_conversation(db, cid)
     safe_broadcast_users(
         cc.member_ids(db, cid),
         {"type": "conversation_updated", "conversation_id": cid,
-         "admins_only": bool(conv.admins_only)},
+         "admins_only": bool(conv.admins_only),
+         "share_history": bool(getattr(conv, "share_history", False))},
     )
     return _conversation_out(db, conv, current_user.id)
 

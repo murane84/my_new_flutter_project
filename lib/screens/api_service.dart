@@ -15,7 +15,7 @@ import '../services/media_store.dart';
 import '../e2ee/seal_media.dart';
 import '../e2ee/seal_ingress.dart';
 import '../e2ee/seal_keystore.dart' show SealKeyStore;
-import '../e2ee/seal_messenger.dart' show SealPeerAway;
+import '../e2ee/seal_messenger.dart' show SealPayload, SealPeerAway;
 import '../e2ee/seal_space.dart';
 
 final _logger = Logger();
@@ -1477,8 +1477,42 @@ class ApiService {
               'mm': ?mediaMime,
             }
           : null;
-      if (sealedMedia != null && conversationId != null) {
-        return null; // a locked file never goes to a group
+      // 🔒 A group chat: the words (and a locked file's key) sealed with the
+      // members' shared key. Plain only while a member's Aluta can't read
+      // sealed groups yet and the group was never sealed, or in a group of
+      // more than 32; never plain once sealed on this device.
+      var groupSealed = false;
+      int? me;
+      if (conversationId != null &&
+          (content.isNotEmpty || sealedMedia != null) &&
+          poll == null &&
+          (plainText || sealedMedia != null)) {
+        me = await SealIngress.myUid();
+        final stay =
+            me != null && await SealIngress.groupSealedBefore(me, conversationId);
+        final members = await groupMembers(conversationId);
+        if (members == null) {
+          if (stay || sealedMedia != null) return null; // can't tell now
+        } else if (members.length > SealIngress.groupMaxMembers) {
+          if (sealedMedia != null) return null;
+        } else {
+          try {
+            payload['content'] = await SealSpace.instance.seal(
+                members, SealPayload.store(content, sealedMedia),
+                stay: stay);
+            if (sealedMedia != null) {
+              payload['media_name'] = 'sealed';
+              payload['media_mime'] = SealMedia.uploadMime;
+            }
+            groupSealed = true;
+          } on SealSpaceNotReady {
+            // A member's Aluta can't read sealed groups yet (never sealed).
+            if (sealedMedia != null) return null;
+          } catch (e) {
+            _logger.w('Group seal failed: $e');
+            return null; // should be sealed but can't be right now
+          }
+        }
       }
       if (conversationId == null &&
           (content.isNotEmpty || sealedMedia != null) &&
@@ -1517,6 +1551,14 @@ class ApiService {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body);
         if (data is Map<String, dynamic>) {
+          if (groupSealed) {
+            data['content'] = content;
+            data['e2ee_group'] = 1;
+            if (sealedMedia != null) SealIngress.attachMedia(data, sealedMedia);
+            if (me != null) {
+              await SealIngress.markGroupSealed(me, conversationId!);
+            }
+          }
           if (sealed != null) {
             // A timed heart stays covered for its sender too (as before):
             // the text waits on this phone until the moment.
@@ -3560,7 +3602,12 @@ class ApiService {
       ).timeout(const Duration(seconds: 15));
       if (resp.statusCode == 200) {
         final body = jsonDecode(resp.body);
-        if (body is List) return body.whereType<Map<String, dynamic>>().toList();
+        if (body is List) {
+          final rows = body.whereType<Map<String, dynamic>>().toList();
+          // 🔒 Sealed group last messages read with the group's key.
+          await SealIngress.groupPreviews(rows);
+          return rows;
+        }
       }
       return [];
     } catch (e) {
@@ -3597,6 +3644,30 @@ class ApiService {
       _logger.e('createGroup exception: $e');
       return null;
     }
+  }
+
+  // 🔒 A group's members as last fetched (a sealed group message is locked
+  // for exactly them). Kept briefly: a member just added must not miss
+  // what's sent next.
+  static final Map<int, (DateTime, List<int>)> _groupMembersCache = {};
+
+  /// The members of group [cid] (me included), or null when unknown right
+  /// now (or it isn't a group).
+  Future<List<int>?> groupMembers(int cid) async {
+    final c = _groupMembersCache[cid];
+    if (c != null && DateTime.now().difference(c.$1).inSeconds < 10) {
+      return c.$2;
+    }
+    final conv = await getConversation(cid);
+    if (conv == null || conv['is_group'] != true) return null;
+    final ids = <int>[
+      for (final m in (conv['members'] as List? ?? const []))
+        if (m is Map && (m['user_id'] as num?) != null)
+          (m['user_id'] as num).toInt()
+    ];
+    if (ids.length < 2) return null;
+    _groupMembersCache[cid] = (DateTime.now(), ids);
+    return ids;
   }
 
   /// One conversation's details (members, title, my role, …).
@@ -3999,10 +4070,12 @@ class ApiService {
   }) async {
     Uint8List? key;
     List<int> up = bytes;
-    if (conversationId == null &&
-        const ['image', 'video', 'audio', 'file'].contains(type) &&
+    if (const ['image', 'video', 'audio', 'file'].contains(type) &&
         bytes.length <= SealMedia.maxBytes &&
-        await SealIngress.canSealMedia(receiverId)) {
+        (conversationId == null
+            ? await SealIngress.canSealMedia(receiverId)
+            : await SealIngress.canSealGroupMedia(
+                conversationId, await groupMembers(conversationId)))) {
       final (locked, k) = await SealMedia.sealInBackground(bytes);
       up = locked;
       key = k;
@@ -4407,9 +4480,20 @@ class ApiService {
   /// Edit my message. [sealedFor]: the friend's id when the message is
   /// end-to-end encrypted — the new text is sealed again.
   Future<Map<String, dynamic>?> editMessage(int messageId, String content,
-      {int? sealedFor}) async {
+      {int? sealedFor, int? sealedGroup}) async {
     final token = await getToken();
     Map<String, dynamic> body = {'content': content};
+    if (sealedGroup != null) {
+      // 🔒 A sealed group message is edited sealed (for today's members).
+      final members = await groupMembers(sealedGroup);
+      if (members == null || members.length > SealIngress.groupMaxMembers) {
+        throw Exception('Failed to edit message');
+      }
+      body = {
+        'content':
+            await SealSpace.instance.seal(members, content, stay: true),
+      };
+    }
     if (sealedFor != null) {
       final sealed = await SealIngress.sealFor(sealedFor, content);
       if (sealed == null) throw Exception('Failed to edit message');
@@ -4428,6 +4512,10 @@ class ApiService {
     }
     try {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (sealedGroup != null) {
+        data['content'] = content;
+        data['e2ee_group'] = 1;
+      }
       if (sealedFor != null) {
         data['content'] = content;
         await SealIngress.sent(sealedFor, data, content);

@@ -2508,7 +2508,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
   /// yet and never restart it; only a plain TEXT message does (a friend on
   /// an older Aluta). Computed once per message list.
   bool? _sealNoteFor(Map<String, dynamic> msg) {
-    if (_isGroup) return null;
+    // (A group's sealed messages carry e2ee_group; a 1:1's e2ee.)
+    final mark = _isGroup ? 'e2ee_group' : 'e2ee';
     if (!identical(_sealNotesOf, _messages)) {
       final notes = <String, bool>{};
       var sealedBefore = false; // an earlier sealed text in this run
@@ -2521,12 +2522,12 @@ extension _ChatPageHelpers3 on _ChatPageState {
         final text = (m['message_type'] ?? 'text').toString() == 'text';
         // A sealed photo / voice note / file counts like sealed text; plain
         // media, songs, call logs never restart the run.
-        if (!text && m['e2ee'] == null) continue;
+        if (!text && m[mark] == null) continue;
         if (const ['image', 'video', 'audio', 'file']
             .contains(m['message_type'])) {
           media = true;
         }
-        if (m['e2ee'] != null) {
+        if (m[mark] != null) {
           if (!sealedBefore) notes['${m['id']}'] = everSealed;
           sealedBefore = true;
           everSealed = true;
@@ -2660,11 +2661,14 @@ extension _ChatPageHelpers3 on _ChatPageState {
               TextSpan(
                   text: '${_sealedMediaSeen ? 'Messages and media are' : 'Text messages are'}'
                       ' end-to-end encrypted${again ? ' again' : ''}. '
-                      'Only the two of you can read them. '),
-              TextSpan(
-                  text: 'Check',
-                  style: TextStyle(
-                      color: accentInk(scheme), fontWeight: FontWeight.w700)),
+                      '${_isGroup ? 'Only the group’s members can read them.' : 'Only the two of you can read them. '}'),
+              // (The safety-code check is for 1:1 chats.)
+              if (!_isGroup)
+                TextSpan(
+                    text: 'Check',
+                    style: TextStyle(
+                        color: accentInk(scheme),
+                        fontWeight: FontWeight.w700)),
             ]),
             textAlign: TextAlign.center,
             style: TextStyle(

@@ -751,10 +751,12 @@ extension _ChatPageHelpers2 on _ChatPageState {
         // message; the server only ever stores locked bytes.
         Uint8List? sealKey;
         var upBytes = sendBytes;
-        if (widget.conversationId == null &&
-            const ['image', 'video', 'audio', 'file'].contains(type) &&
+        if (const ['image', 'video', 'audio', 'file'].contains(type) &&
             sendBytes.length <= SealMedia.maxBytes &&
-            await SealIngress.canSealMedia(widget.friendId)) {
+            (widget.conversationId == null
+                ? await SealIngress.canSealMedia(widget.friendId)
+                : await SealIngress.canSealGroupMedia(widget.conversationId!,
+                    await ApiService().groupMembers(widget.conversationId!)))) {
           final (locked, key) = await SealMedia.sealInBackground(sendBytes);
           upBytes = locked;
           sealKey = key;

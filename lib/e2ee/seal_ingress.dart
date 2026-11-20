@@ -107,7 +107,94 @@ class SealIngress {
     for (final m in sealed) {
       await open(m);
     }
+    final asked = <String>{};
+    for (final m in list) {
+      if (isGroupSealed(m)) await openGroup(m, asked: asked);
+    }
     return list;
+  }
+
+  // ── Group chats: sealed with the members' shared key (SealSpace) ───────
+
+  /// Groups bigger than this stay unsealed (the server's limit).
+  static const int groupMaxMembers = 32;
+  static const String lockedGroup =
+      '🔒 Sent before this device could read the group';
+
+  static bool isGroupSealed(Map<String, dynamic> m) =>
+      SealScope.isSealed(m['content']) && m['is_deleted'] != true;
+
+  /// Unlock a sealed group message in place: `content` becomes the words, a
+  /// sealed photo / file gets its key and real name back.
+  static Future<void> openGroup(Map<String, dynamic> m,
+      {Set<String>? asked}) async {
+    if (!isGroupSealed(m)) return;
+    m['e2ee_group'] = 1;
+    String opened;
+    try {
+      opened =
+          await SealSpace.instance.open(m['content'] as String, asked: asked);
+    } catch (_) {
+      opened = SealSpace.unlockFailed;
+    }
+    if (opened == SealSpace.waitingForKey || SealScope.isSealed(opened)) {
+      m['content'] = lockedGroup;
+      m['seal_state'] = 'nokey';
+      return;
+    }
+    if (opened == SealSpace.unlockFailed) {
+      m['content'] = lockedFailed;
+      m['seal_state'] = 'failed';
+      return;
+    }
+    m.remove('seal_state');
+    m['content'] = SealPayload.textOf(opened);
+    _attachMedia(m, SealPayload.mediaOf(opened));
+  }
+
+  /// Group rows of the conversation list: the server knows only "🔒 Message"
+  /// / "📷 Photo" for a sealed last message; open its sealed copy with the
+  /// group's key for the real words.
+  static Future<void> groupPreviews(List<Map<String, dynamic>> rows) async {
+    final asked = <String>{};
+    for (final r in rows) {
+      final raw = r['last_sealed'];
+      if (r['is_group'] != true || raw is! String || raw.isEmpty) continue;
+      try {
+        final j = jsonDecode(raw) as Map<String, dynamic>;
+        final c = j['content'];
+        if (!SealScope.isSealed(c)) continue;
+        final opened =
+            await SealSpace.instance.open(c as String, asked: asked);
+        if (SealScope.isSealed(opened) ||
+            opened == SealSpace.waitingForKey ||
+            opened == SealSpace.unlockFailed) {
+          continue;
+        }
+        r['last_message'] =
+            previewOf((r['last_message'] ?? '').toString(), opened);
+      } catch (_) {}
+    }
+  }
+
+  static String _groupKey(int me, int cid) => 'aluta_group_sealed_${me}_$cid';
+
+  /// Once a group has been sealed on this device it stays sealed.
+  static Future<bool> groupSealedBefore(int me, int cid) async {
+    try {
+      return (await SharedPreferences.getInstance())
+              .getBool(_groupKey(me, cid)) ==
+          true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<void> markGroupSealed(int me, int cid) async {
+    try {
+      await (await SharedPreferences.getInstance())
+          .setBool(_groupKey(me, cid), true);
+    } catch (_) {}
   }
 
   /// A socket event: its message travels under `data` (or `message`).
@@ -121,6 +208,10 @@ class SealIngress {
     }
     for (final k in const ['data', 'message']) {
       final d = event[k];
+      if (d is Map<String, dynamic> && isGroupSealed(d)) {
+        await openGroup(d);
+        continue;
+      }
       if (d is Map<String, dynamic> && d['e2ee'] != null) {
         // The server says a timed heart's moment has come: trust that over
         // this phone's clock.
@@ -158,6 +249,19 @@ class SealIngress {
         out['body'] = previewOf(label, s);
       } catch (_) {
         out['body'] = label == serverPreview ? '' : label;
+      }
+      return out;
+    }
+    // A sealed group message (opened above with the group's key, when this
+    // phone holds it): the banner reads like the list.
+    final sb = data['sealed_body'];
+    if (sb is String) {
+      final out = Map<String, dynamic>.from(data)..remove('sealed_body');
+      if (sb.isNotEmpty &&
+          !SealScope.isSealed(sb) &&
+          sb != SealSpace.waitingForKey &&
+          sb != SealSpace.unlockFailed) {
+        out['body'] = previewOf((data['body'] ?? '').toString(), sb);
       }
       return out;
     }
@@ -297,6 +401,23 @@ class SealIngress {
     return SealMessenger.instance.canSealMedia(peer, me);
   }
 
+  /// Whether a file for group [cid] can go sealed (every member device can
+  /// open it). Throws [SealError] when it can't be told right now.
+  /// [members]: the group's members as just fetched (null: unknown).
+  static Future<bool> canSealGroupMedia(int cid, List<int>? members) async {
+    final me = await myUid();
+    if (me == null) return false;
+    if (members == null) {
+      if (await groupSealedBefore(me, cid)) {
+        throw SealError('group members unknown right now');
+      }
+      return false;
+    }
+    if (members.length > groupMaxMembers) return false;
+    return SealMessenger.instance.canSealMediaFor(members, me,
+        stay: await groupSealedBefore(me, cid));
+  }
+
   /// Give a sent / opened message its sealed media's key and real name.
   static void attachMedia(Map<String, dynamic> m, Map<String, dynamic> media) =>
       _attachMedia(m, media);
@@ -334,6 +455,13 @@ class SealIngress {
     try {
       _dropOpened(await SealMessenger.instance.forgetChat(peer));
     } catch (_) {}
+  }
+
+  /// A deleted message's opened sealed file leaves this device (groups keep
+  /// no plain store, so the chat hands over the message's address).
+  static void dropOpenedMedia(Object? url) {
+    final key = url is String ? SealMedia.keyOf(url) : null;
+    if (key != null) MediaStore.instance.removeSealed(key);
   }
 
   /// Opened copies of deleted sealed media leave this device too.

@@ -412,6 +412,32 @@ class SealMessenger {
         ].every((d) => d.caps.contains('m1'));
       });
 
+  /// Whether a photo / file for a group can go sealed: every device of every
+  /// member (mine besides this one too) can open sealed media. A member
+  /// with no keys at all can't read the group anyway: skipped once the
+  /// group is sealed ([stay]), otherwise the file goes as before. "Not
+  /// right now" throws [SealError].
+  Future<bool> canSealMediaFor(List<int> members, int myUid,
+          {bool stay = false}) =>
+      _locked(() async {
+        if (!SealTab.inUse) throw SealError('Aluta is in use in another tab');
+        await _keys.load();
+        if (!_keys.isReady) throw SealError('my keys are not ready yet');
+        for (final uid in {...members, myUid}) {
+          final list = await _devicesOf(uid);
+          if (list == null) throw SealError('key directory unreachable');
+          if (list.isEmpty) {
+            if (uid != myUid && stay) continue;
+            return false;
+          }
+          for (final d in list) {
+            if (d.deviceId == _keys.deviceId) continue;
+            if (!d.caps.contains('m1')) return false;
+          }
+        }
+        return true;
+      });
+
   static String _textOf(List<int> clear) {
     final j = jsonDecode(utf8.decode(clear)) as Map<String, dynamic>;
     final m = j['m'];

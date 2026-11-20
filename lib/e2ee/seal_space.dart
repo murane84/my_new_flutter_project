@@ -374,7 +374,12 @@ class SealSpace {
   /// [SealSpaceNotReady] when a member's Aluta can't read sealed Our Space
   /// yet (send it plain), or a [SealError] when it should be sealed but
   /// can't be right now (don't send it plain then).
-  Future<String> seal(Iterable<int> members, String text) => _locked(() async {
+  ///
+  /// [stay]: the caller knows this chat was sealed before (a group whose
+  /// members changed has a new scope): never back to plain.
+  Future<String> seal(Iterable<int> members, String text,
+          {bool stay = false}) =>
+      _locked(() async {
         if (text.isEmpty || SealScope.isSealed(text)) return text;
         if (!SealTab.inUse) throw SealError('Aluta is in use in another tab');
         await _keys.load();
@@ -384,8 +389,9 @@ class SealSpace {
         // Once this Space has been sealed it stays sealed: a member with no
         // keys right now (signed out — or a server saying so) doesn't turn
         // it back to plain.
-        final sealedBefore = _keys.isReady &&
-            ((await _heldKeys())[scope]?.isNotEmpty ?? false);
+        final sealedBefore = stay ||
+            (_keys.isReady &&
+                ((await _heldKeys())[scope]?.isNotEmpty ?? false));
         for (final uid in ids) {
           final d = await _dir.devicesOf(uid);
           if (d == null) throw SealError('offline');
@@ -407,7 +413,10 @@ class SealSpace {
   }
 
   /// Open one sealed field (a note when it can't be opened yet).
-  Future<String> open(String sealed) => _open(sealed, null);
+  /// [asked]: share one set across a batch so a missing key is asked for
+  /// once, not per field.
+  Future<String> open(String sealed, {Set<String>? asked}) =>
+      _open(sealed, asked);
 
   /// [asked]: groups already looked up during this answer — a page full of
   /// fields waiting for the same key asks the server once, not per field.

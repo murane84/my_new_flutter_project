@@ -277,6 +277,42 @@ void main() {
       expect(await b.first.space.open(next), 'pili');
     });
 
+    test('a group chat: joiners read from then on, leavers stop', () async {
+      final a = await device(1);
+      final b = await device(2);
+      final c = await device(3);
+      final before = await a.space.seal([1, 2, 3], 'habari kikundi');
+      expect(await b.space.open(before), 'habari kikundi');
+      expect(await c.space.open(before), 'habari kikundi');
+
+      // D joins: the group's members — and so its key — change.
+      final d = await device(4);
+      final after = await b.space.seal([1, 2, 3, 4], 'karibu D');
+      expect(await d.space.open(after), 'karibu D');
+      expect(await d.space.open(before), SealSpace.waitingForKey,
+          reason: 'written before D joined');
+      expect(await a.space.open(after), 'karibu D');
+
+      // C leaves.
+      final later = await a.space.seal([1, 2, 4], 'C ameondoka');
+      expect(await c.space.open(later), SealSpace.waitingForKey);
+      expect(await d.space.open(later), 'C ameondoka');
+    });
+
+    test('a sealed group stays sealed when a new member has no keys',
+        () async {
+      final a = await device(1);
+      await device(2);
+      await a.space.seal([1, 2], 'kwanza');
+      // Member 9 (an older Aluta, no keys) joins: a new group of people.
+      await expectLater(a.space.seal([1, 2, 9], 'x'),
+          throwsA(isA<SealSpaceNotReady>()),
+          reason: 'never sealed for these people: the caller decides');
+      final s = await a.space.seal([1, 2, 9], 'bado siri', stay: true);
+      expect(SealScope.isSealed(s), isTrue);
+      expect(await dir.people[2]!.first.space.open(s), 'bado siri');
+    });
+
     test('offline: it refuses to seal rather than send plain', () async {
       final a = await device(1);
       await device(2);

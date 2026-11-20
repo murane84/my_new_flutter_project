@@ -235,16 +235,13 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
   /// This device's chats, read once per search screen (chat id → messages).
   Map<String, List<Map<String, dynamic>>>? _myChats;
 
-  /// 🔒 Sealed 1:1 texts that match [q], shaped like the server's results.
-  /// Groups aren't sealed (the server finds them); hearts stay out, as their
-  /// words are private even here.
+  /// 🔒 Sealed 1:1 and group messages that match [q], shaped like the
+  /// server's results (the server can't read them). Hearts stay out, as
+  /// their words are private even here.
   Future<List<Map<String, dynamic>>> _sealedHits(String q) async {
     // Words, or a kind to browse (sealed photos, videos, voice notes and
     // files too — their names and captions are only on this device).
     if ((q.length < 2 && _kind == null) || _kind == 'song') return const [];
-    if (_inChat?['group'] == true || (_inChat == null && _chatKind == 'group')) {
-      return const [];
-    }
     final me = await SealIngress.myUid();
     if (me == null) return const [];
     final prefs = await warmPrefsNow();
@@ -255,13 +252,15 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
       for (final key in prefs.getKeys()) {
         if (!key.startsWith(prefix)) continue;
         final fid = key.substring(prefix.length);
-        if (int.tryParse(fid) == null) continue; // a group ("g…")
+        // A 1:1 ("<friend id>") or a group ("g<conversation id>").
+        final group = fid.startsWith('g');
+        if (int.tryParse(group ? fid.substring(1) : fid) == null) continue;
         try {
           final list = jsonDecode(prefs.getString(key) ?? '[]') as List;
           out[fid] = [
             for (final m in list)
               if (m is Map &&
-                  m['e2ee'] != null &&
+                  m[group ? 'e2ee_group' : 'e2ee'] != null &&
                   m['is_deleted'] != true &&
                   m['seal_state'] == null &&
                   m['message_type'] != 'heart')
@@ -278,9 +277,19 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
     final k = q.toLowerCase();
     final hits = <Map<String, dynamic>>[];
     for (final e in chats.entries) {
-      if (only != null && e.key != only) continue;
-      final f = widget.people.firstWhere((p) => p['id']?.toString() == e.key,
-          orElse: () => const <String, dynamic>{});
+      final group = e.key.startsWith('g');
+      if (only != null &&
+          e.key != (_inChat?['group'] == true ? 'g$only' : only)) {
+        continue;
+      }
+      if (only == null && _chatKind == 'group' && !group) continue;
+      if (only == null && _chatKind == 'dm' && group) continue;
+      final gid = group ? int.parse(e.key.substring(1)) : 0;
+      final f = group
+          ? widget.groups.firstWhere((g) => '${g['id']}' == '$gid',
+              orElse: () => const <String, dynamic>{})
+          : widget.people.firstWhere((p) => p['id']?.toString() == e.key,
+              orElse: () => const <String, dynamic>{});
       for (final m in e.value) {
         final c = (m['content'] ?? '').toString();
         final type = (m['message_type'] ?? 'text').toString();
@@ -323,12 +332,23 @@ class _MessageSearchScreenState extends State<MessageSearchScreen> {
           'message_type': media ? type : 'text',
           'media_name': name,
           'media_mime': media ? (m['media_mime'] ?? '').toString() : '',
-          'sender_name': fromMe ? '' : (f['username'] ?? '').toString(),
-          'is_group': false,
-          'conversation_id': m['conversation_id'],
-          'friend_id': int.parse(e.key),
-          'friend_name': (f['username'] ?? 'Chat').toString(),
-          'friend_avatar': (f['avatar_url'] ?? '').toString(),
+          'sender_name': fromMe
+              ? ''
+              : group
+                  ? ((m['sender'] as Map?)?['username'] ?? '').toString()
+                  : (f['username'] ?? '').toString(),
+          if (group) ...{
+            'is_group': true,
+            'conversation_id': gid,
+            'group_title': (f['title'] ?? 'Group').toString(),
+            'group_avatar': (f['avatar_url'] ?? '').toString(),
+          } else ...{
+            'is_group': false,
+            'conversation_id': m['conversation_id'],
+            'friend_id': int.parse(e.key),
+            'friend_name': (f['username'] ?? 'Chat').toString(),
+            'friend_avatar': (f['avatar_url'] ?? '').toString(),
+          },
         });
       }
     }

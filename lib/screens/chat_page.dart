@@ -1736,6 +1736,7 @@ class _ChatPageState extends State<ChatPage>
         final mid = event['message_id'] ?? data?['message_id'];
         final idx = _messages.indexWhere((m) => m['id'] == mid);
         if (idx != -1) {
+          SealIngress.dropOpenedMedia(_messages[idx]['media_url']);
           _messages[idx]['is_deleted'] = true;
           _messages[idx]['content'] = '';
           _messages[idx]['message_type'] = 'text';
@@ -4663,7 +4664,9 @@ class _ChatPageState extends State<ChatPage>
           id is int ? id : int.parse(id.toString()), newContent,
           // 🔒 A sealed message is edited sealed.
           sealedFor:
-              editing['e2ee'] != null && !_isGroup ? widget.friendId : null);
+              editing['e2ee'] != null && !_isGroup ? widget.friendId : null,
+          sealedGroup:
+              editing['e2ee_group'] != null && _isGroup ? _cid : null);
     } catch (_) {
       if (mounted) {
         showToast(context, "Couldn't edit message", type: ToastType.error);
@@ -5109,6 +5112,7 @@ class _ChatPageState extends State<ChatPage>
       });
       try {
         await ApiService().deleteSingleMessage(id, deleteForAll: true);
+        SealIngress.dropOpenedMedia(backup['media_url']);
         if (mounted) {
           showToast(context, 'Deleted for everyone', type: ToastType.info);
         }
@@ -5128,6 +5132,7 @@ class _ChatPageState extends State<ChatPage>
     setState(() => _messages.removeWhere((m) => m['id'] == id));
     try {
       await ApiService().deleteSingleMessage(id, deleteForAll: false);
+      SealIngress.dropOpenedMedia(backup['media_url']);
       if (mounted) {
         showToast(context, 'Deleted for you', type: ToastType.info);
       }

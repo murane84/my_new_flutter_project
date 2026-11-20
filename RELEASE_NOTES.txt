@@ -1,11 +1,8 @@
-Profile pictures and story rings keep the photo's real shape: no more squeezed or stretched faces.
-🔒 Photos, videos, voice notes and files in 1:1 chats are now end-to-end encrypted — locked on your phone before they're sent, so only you and your friend can open them. (This turns on once both of you are on this version on every device.)
-📎 Encrypted files show their real name and caption in your Circle list and notifications.
-👁 Your status shows its real view count straight away.
-🔒 The "end-to-end encrypted" note appears once per chat instead of after every photo or song.
-📄 Privacy Policy and Terms updated for encrypted media.
-🔍 Search finds encrypted photos, voice notes and files by their name and caption.
-🔔 Notifications for photos, videos, voice notes and files say what was sent ("📷 Photo · caption", "📎 report.pdf") — on phone, computer and web.
-📍 Shared locations and contacts in 1:1 chats are end-to-end encrypted too.
-🔒 Voice replies from the message banner and duo photos are encrypted like everything else in the chat.
-🧹 Signing out removes every unlocked photo, file and notification from this device.
+🔒 Check your encryption together: open a chat → ⋮ → Encryption (or tap the 🔒 note). Scan each other's code or compare the numbers — and Aluta tells you in the chat when a friend reinstalls or changes devices.
+🔒 Check your encryption together: open a chat → ⋮ → Encryption (or tap the 🔒 note). Scan each other's code or compare the numbers — Aluta tells you in the chat when a friend reinstalls or changes devices.
+👥 Group chats (up to 32 people) are now end-to-end encrypted: messages, photos, videos, voice notes and files — only the members can read them.
+🕰️ Group admins can let new members read earlier messages — members' phones pass them the keys, still end-to-end encrypted.
+☁️ Back up to Aluta's server, locked with a recovery key only you hold. After a reinstall, the key brings your chats, Our Space and encrypted messages back.
+💾 Backup files now carry the keys to your encrypted chats too, and restoring never loses newer messages.
+❤️ A secret heart's photo, video clip or voice is now end-to-end encrypted too.
+📄 Privacy Policy and Terms updated for encrypted groups and backups.

@@ -4,6 +4,12 @@ import 'dart:math';
 import 'package:cryptography/cryptography.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../e2ee/seal_directory.dart';
+import '../e2ee/seal_keystore.dart';
+import '../e2ee/seal_messenger.dart';
+import '../e2ee/seal_space.dart';
+import '../screens/token_helper.dart';
+
 /// Encrypted, device-held backup of the app's LOCAL data.
 ///
 /// The server stores almost nothing long-term (delivered chats are purged), so
@@ -22,29 +28,50 @@ class LocalBackupService {
   bool _isBackupKey(String k) =>
       k.startsWith('chat_cache_') ||
       k.startsWith('space_full_') ||
+      // 🔒 Which groups were sealed (never written to in the clear again).
+      k.startsWith('aluta_group_sealed_') ||
       k == 'cached_friends_v1' ||
       k == 'cached_groups_v1' ||
       k == 'cached_spaces_v1';
 
   /// Produce the encrypted backup as a UTF-8 string (write it to a .alutabak
   /// file and let the user save/share it). Throws if [passphrase] is empty.
+  /// The shortest passphrase accepted: the file now carries the keys to
+  /// your encrypted chats, so it must hold up to guessing.
+  static const int minPassphrase = 8;
+
   Future<String> createBackup(String passphrase) async {
-    if (passphrase.trim().length < 4) {
+    if (passphrase.trim().length < minPassphrase) {
       throw Exception('Passphrase too short');
     }
     final prefs = await SharedPreferences.getInstance();
-    final data = <String, String>{};
+    final data = <String, Object>{};
     for (final k in prefs.getKeys()) {
       if (_isBackupKey(k)) {
-        final v = prefs.getString(k);
-        if (v != null) data[k] = v;
+        final v = prefs.get(k); // text, or a flag (sealed groups)
+        if (v is String) {
+          data[k] = v;
+        } else if (v is bool) {
+          data[k] = v;
+        }
       }
     }
+    // 🔒 The encrypted chats' own memory: the opened 1:1 texts (with their
+    // photos' / files' keys) and the Our Space / group keys — so a reinstall
+    // reads everything again, not just the cached copy.
+    Map<String, dynamic>? seal;
+    try {
+      seal = {
+        'plain': await SealMessenger.instance.exportPlain(),
+        'scopes': await SealSpace.instance.exportKeys(),
+      };
+    } catch (_) {/* keys not set up here: the chats still go */}
     final plain = utf8.encode(jsonEncode({
       'magic': _magic,
       'created_at': DateTime.now().toIso8601String(),
       'count': data.length,
       'data': data,
+      'seal': ?seal,
     }));
     final salt = _randomBytes(16);
     final nonce = _randomBytes(12);
@@ -97,8 +124,29 @@ class LocalBackupService {
     final prefs = await SharedPreferences.getInstance();
     var n = 0;
     for (final e in data.entries) {
-      await prefs.setString(e.key, e.value.toString());
+      if (e.key.startsWith('aluta_group_sealed_')) {
+        await prefs.setBool(e.key, e.value == true || e.value == 'true');
+      } else {
+        await prefs.setString(e.key, e.value.toString());
+      }
       n++;
+    }
+    // 🔒 Filed under THIS install's keys (a reinstall made new ones).
+    final seal = obj['seal'];
+    if (seal is Map) {
+      try {
+        final owner = SealDirectory.ownerOf(await getToken());
+        if (owner != null) await SealKeyStore.instance.ensure(owner);
+        final p = seal['plain'];
+        if (p is Map) {
+          n += await SealMessenger.instance
+              .importPlain(p.cast<String, dynamic>());
+        }
+        final s = seal['scopes'];
+        if (s is Map) {
+          await SealSpace.instance.importKeys(s.cast<String, dynamic>());
+        }
+      } catch (_) {/* the chats' cached copy is back either way */}
     }
     return n;
   }

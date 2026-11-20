@@ -42,8 +42,12 @@ class _BackupScreenState extends State<BackupScreen> {
 
   Future<void> _create() async {
     final pass = _pass.text.trim();
-    if (pass.length < 4) {
-      _toast('Choose a passphrase of at least 4 characters', ToastType.info);
+    if (pass.length < LocalBackupService.minPassphrase) {
+      _toast(
+          'Choose a passphrase of at least '
+          '${LocalBackupService.minPassphrase} characters — it protects the '
+          'keys to your encrypted chats',
+          ToastType.info);
       return;
     }
     setState(() => _busy = true);
@@ -140,7 +144,9 @@ class _BackupScreenState extends State<BackupScreen> {
               Text(
                 'Your chats and Our Space live on THIS device. Make an '
                 'encrypted backup to carry them to a new phone or recover after '
-                'a reinstall — the server never keeps them for you.',
+                'a reinstall — the server never keeps them for you. It also '
+                'carries the keys to your 🔒 encrypted chats, so restoring '
+                'opens them again.',
                 style: TextStyle(fontSize: 13.5, color: scheme.onSurfaceVariant),
               ),
               const SizedBox(height: 16),

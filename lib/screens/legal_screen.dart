@@ -794,7 +794,8 @@ plain text until they update). 1:1 photos, videos, voice notes and files (up to
 names (a secret heart's own photo or voice clip isn't yet). Group chats of up to 32 people are sealed with a key only the members' devices
 hold (someone who joins later can't read what came before; someone who leaves
 can't read what comes after). Not yet end-to-end encrypted: songs (and titles),
-bigger files, polls and secret hearts in groups, bigger groups, Stories, reactions, and Space names and pictures (a chat photo you keep in
+bigger files, polls and secret hearts in groups, bigger groups, group names and
+photos, Stories, reactions, and Space names and pictures (a chat photo you keep in
 Our Space or share as your status is saved there as a normal copy). The server still
 sees who you talk to and when, so it can deliver messages.
 

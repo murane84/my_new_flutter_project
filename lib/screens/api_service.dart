@@ -3651,6 +3651,12 @@ class ApiService {
   // what's sent next.
   static final Map<int, (DateTime, List<int>)> _groupMembersCache = {};
 
+  /// A group's members changed (socket event): look them up afresh.
+  static void forgetGroupMembers(Object? cid) {
+    final id = cid is int ? cid : int.tryParse('$cid');
+    if (id != null) _groupMembersCache.remove(id);
+  }
+
   /// The members of group [cid] (me included), or null when unknown right
   /// now (or it isn't a group).
   Future<List<int>?> groupMembers(int cid) async {

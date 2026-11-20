@@ -97,6 +97,11 @@ class WebSocketManager {
               final event = jsonDecode(rawMessage as String);
               if (event is Map<String, dynamic>) {
                 await SealIngress.openEvent(event);
+                // 🔒 A group's members changed: the next sealed message is
+                // for exactly the new members (no cached list).
+                if (event['type'] == 'conversation_updated') {
+                  ApiService.forgetGroupMembers(event['conversation_id']);
+                }
                 // 🔒 Our Space words inside the event (moments, diary…).
                 if (rawMessage.contains(SealScope.prefix)) {
                   await SealSpace.instance.openJson(event);

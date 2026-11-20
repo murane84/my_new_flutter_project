@@ -4,6 +4,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'seal_directory.dart';
+import 'seal_messenger.dart';
 
 /// 🔒 Checking a chat's encryption together: a safety code both phones work
 /// out on their own from the two people's keys.
@@ -121,8 +122,9 @@ class SealVerifyStore {
   SealVerifyStore._();
   static final SealVerifyStore instance = SealVerifyStore._();
 
-  /// Directory reads used to work the code out (a fake in tests).
-  SealKeyDirectory directory = SealDirectory.instance;
+  /// Device lists used to work the code out: the messenger's own, so the
+  /// code covers exactly the keys messages are sealed for (a fake in tests).
+  SealKeyDirectory directory = _SealingDevices();
 
   String _k(String what, int me, int peer) => 'aluta_verify_${what}_${me}_$peer';
 
@@ -220,4 +222,16 @@ class SealVerifyStore {
       return [];
     }
   }
+}
+
+/// The messenger's view of a person's devices (fresh), as a directory.
+class _SealingDevices implements SealKeyDirectory {
+  @override
+  Future<List<SealPeerDevice>?> devicesOf(int userId) =>
+      SealMessenger.instance.devicesFor(userId);
+
+  @override
+  Future<List<SealDeviceBundle>?> bundlesFor(int userId,
+          {String? deviceId}) async =>
+      const [];
 }

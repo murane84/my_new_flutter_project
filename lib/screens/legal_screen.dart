@@ -925,7 +925,8 @@ the web.
 - Chat and media: one-to-one and group chats with photos, files, voice notes and
   GIFs, reactions, replies, edit and delete, pinned messages, typing indicators
   and read receipts. 1:1 text messages, photos, videos, voice notes and files are
-  end-to-end encrypted (songs and group chats come next).
+  end-to-end encrypted (songs and group chats come next); check a chat's
+  encryption together by comparing or scanning your safety code.
 - Voice and group calls: peer-to-peer calls that are never recorded, answerable
   from Bluetooth and car head units.
 - Stories: post a photo, short video, text card or "now playing" moment that

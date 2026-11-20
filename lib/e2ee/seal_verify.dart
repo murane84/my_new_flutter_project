@@ -47,6 +47,17 @@ class SealVerify {
     return a < b ? '$ca$cb' : '$cb$ca';
   }
 
+  /// The changes that happened after a message sent at [after] and no
+  /// later than the next newer one ([before]; null = it's the newest) —
+  /// where a "code changed" note goes in the thread.
+  static List<SealCodeChange> changesBetween(
+          List<SealCodeChange> changes, DateTime after, DateTime? before) =>
+      [
+        for (final c in changes)
+          if (c.at.isAfter(after) && (before == null || !c.at.isAfter(before)))
+            c
+      ];
+
   /// "12345 67890 …" in groups of five.
   static List<String> groups(String code) => [
         for (var i = 0; i + 5 <= code.length; i += 5) code.substring(i, i + 5)

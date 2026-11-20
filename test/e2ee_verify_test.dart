@@ -50,6 +50,22 @@ void main() {
     expect(SealVerify.checkQr('aluta-link:ABCD', 7, 42, code), isNull);
   });
 
+  test('a change note sits after the last message before it', () {
+    final t = DateTime.utc(2026, 11, 20, 9);
+    final c = SealCodeChange(t, mine: false);
+    final m8 = t.subtract(const Duration(hours: 1));
+    final m10 = t.add(const Duration(hours: 1));
+    expect(SealVerify.changesBetween([c], m8, m10), [c]);
+    expect(SealVerify.changesBetween([c], m8, null), [c],
+        reason: 'after the newest message');
+    expect(SealVerify.changesBetween([c], m10, null), isEmpty,
+        reason: 'it happened before this message');
+    expect(SealVerify.changesBetween([c], m8, t), [c],
+        reason: 'the same moment as the newer message still counts here');
+    expect(SealVerify.changesBetween([c], t, m10), isEmpty,
+        reason: 'never shown twice');
+  });
+
   test('verified until the code changes; changes are noted with whose',
       () async {
     SharedPreferences.setMockInitialValues({});

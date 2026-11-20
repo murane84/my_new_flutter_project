@@ -2574,11 +2574,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
 
     final here = at(msgIdx);
     if (here == null) return const [];
-    final newer = msgIdx > 0 ? at(msgIdx - 1) : null;
-    return [
-      for (final c in _codeChanges)
-        if (c.at.isAfter(here) && (newer == null || !c.at.isAfter(newer))) c
-    ];
+    return SealVerify.changesBetween(
+        _codeChanges, here, msgIdx > 0 ? at(msgIdx - 1) : null);
   }
 
   Widget _buildCodeChangeNote(SealCodeChange c) {

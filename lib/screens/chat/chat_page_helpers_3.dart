@@ -2541,12 +2541,105 @@ extension _ChatPageHelpers3 on _ChatPageState {
     return _sealNotes['${msg['id']}'];
   }
 
+  /// 🔒 Look the chat's safety code up again (a change since last time is
+  /// noted, and shows in the thread).
+  Future<void> _refreshSealCheck() async {
+    if (_isGroup) return;
+    final me = await SealIngress.myUid();
+    if (me == null || !mounted) return;
+    try {
+      final st = await SealVerifyStore.instance.refresh(me, widget.friendId);
+      if (!mounted) return;
+      setState(() => _codeChanges = st.changes);
+    } catch (_) {}
+  }
+
+  /// Open the check (from the 🔒 notes).
+  Future<void> _openSealCheck() async {
+    if (_isGroup) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => VerifyEncryptionScreen(
+            friendId: widget.friendId, friendName: widget.friendName)));
+    if (mounted) unawaited(_refreshSealCheck());
+  }
+
+  /// Code changes between the message at [msgIdx] and the next newer one
+  /// (after the newest, for index 0) — shown just below that message.
+  List<SealCodeChange> _codeChangesAfter(int msgIdx) {
+    if (_codeChanges.isEmpty || _isGroup) return const [];
+    DateTime? at(int i) {
+      final ts = (_messages[i]['timestamp'] ?? '').toString();
+      return ts.isEmpty ? null : parseServerTime(ts);
+    }
+
+    final here = at(msgIdx);
+    if (here == null) return const [];
+    final newer = msgIdx > 0 ? at(msgIdx - 1) : null;
+    return [
+      for (final c in _codeChanges)
+        if (c.at.isAfter(here) && (newer == null || !c.at.isAfter(newer))) c
+    ];
+  }
+
+  Widget _buildCodeChangeNote(SealCodeChange c) {
+    final scheme = Theme.of(context).colorScheme;
+    final first = widget.friendName.trim().split(RegExp(r'\s+')).first;
+    final who = c.mine
+        ? 'You changed devices — the security code changed'
+        : '$first changed devices — the security code changed';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 6, 28, 8),
+      child: Center(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(Radii.lg),
+          onTap: _openSealCheck,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(Radii.lg),
+              border: Border.all(color: scheme.onSurface.withAlpha(30)),
+            ),
+            child: Text.rich(
+              TextSpan(children: [
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Icon(Icons.sync_lock_rounded,
+                        size: 13, color: accentInk(scheme)),
+                  ),
+                ),
+                TextSpan(text: '$who. '),
+                TextSpan(
+                    text: 'Check',
+                    style: TextStyle(
+                        color: accentInk(scheme),
+                        fontWeight: FontWeight.w700)),
+              ]),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: scheme.onSurfaceVariant,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSealNote({bool again = false}) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(28, 4, 28, 10),
       child: Center(
-        child: Container(
+        child: InkWell(
+          // Tap: check the chat's safety code together.
+          borderRadius: BorderRadius.circular(Radii.lg),
+          onTap: _openSealCheck,
+          child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
             color: scheme.surface,
@@ -2569,7 +2662,11 @@ extension _ChatPageHelpers3 on _ChatPageState {
               TextSpan(
                   text: '${_sealedMediaSeen ? 'Messages and media are' : 'Text messages are'}'
                       ' end-to-end encrypted${again ? ' again' : ''}. '
-                      'Only the two of you can read them.'),
+                      'Only the two of you can read them. '),
+              TextSpan(
+                  text: 'Check',
+                  style: TextStyle(
+                      color: accentInk(scheme), fontWeight: FontWeight.w700)),
             ]),
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -2579,6 +2676,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
               height: 1.35,
             ),
           ),
+        ),
         ),
       ),
     );

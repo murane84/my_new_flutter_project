@@ -94,6 +94,8 @@ import '../utils/voice_rec.dart';
 import '../e2ee/seal_ingress.dart' show SealIngress;
 import '../e2ee/seal_messenger.dart' show SealPeerAway;
 import '../e2ee/seal_media.dart';
+import '../e2ee/seal_verify.dart';
+import 'verify_encryption_screen.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 import 'package:url_launcher/url_launcher.dart';
@@ -668,6 +670,9 @@ class _ChatPageState extends State<ChatPage>
   // Whether this thread holds sealed photos / voice notes / files (so the
   // note can honestly say media too).
   bool _sealedMediaSeen = false;
+  // 🔒 Moments this chat's safety code changed (a friend — or I —
+  // reinstalled Aluta or changed devices), shown in the thread.
+  List<SealCodeChange> _codeChanges = const [];
   // The message field has focus → the composer pill shows its brand ring.
   bool _composerFocused = false;
   // ── Unread divider (chat/chat_unread.dart) ─────────────────────────────────
@@ -798,6 +803,9 @@ class _ChatPageState extends State<ChatPage>
     _isUserOffline = !ConnectionStatus.instance.isOnline;
     ConnectionStatus.instance.online.addListener(_onConnStatusChanged);
     _initChat();
+    if (!_isGroup) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _refreshSealCheck());
+    }
     _loadMySpaces();
     _loadRitualFlags();
     _loadSavedMediaKeys();
@@ -8063,6 +8071,9 @@ class _ChatPageState extends State<ChatPage>
                                 _buildSeenAvatar(scheme),
                               // Sent with our song · sent while you slept.
                               ?_bondNotes(msg, isMe),
+                              // 🔒 The safety code changed after this one.
+                              for (final c in _codeChangesAfter(msgIdx))
+                                _buildCodeChangeNote(c),
                             ],
                           );
                         },
@@ -8380,10 +8391,12 @@ class _ChatPageState extends State<ChatPage>
                 _openChatWallpaperSheet();
               } else if (v == 'media') {
                 _openMediaBrowser();
+              } else if (v == 'seal') {
+                _openSealCheck();
               }
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem<String>(
+            itemBuilder: (_) => [
+              const PopupMenuItem<String>(
                 value: 'media',
                 child: Row(
                   children: [
@@ -8393,7 +8406,7 @@ class _ChatPageState extends State<ChatPage>
                   ],
                 ),
               ),
-              PopupMenuItem<String>(
+              const PopupMenuItem<String>(
                 value: 'wallpaper',
                 child: Row(
                   children: [
@@ -8403,6 +8416,18 @@ class _ChatPageState extends State<ChatPage>
                   ],
                 ),
               ),
+              // 🔒 Check this chat's encryption together (1:1).
+              if (!_isGroup)
+                const PopupMenuItem<String>(
+                  value: 'seal',
+                  child: Row(
+                    children: [
+                      Icon(Icons.lock_outline_rounded, size: 20),
+                      SizedBox(width: 12),
+                      Text('Encryption'),
+                    ],
+                  ),
+                ),
             ],
           ),
         ],

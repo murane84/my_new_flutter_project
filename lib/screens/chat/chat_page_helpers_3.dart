@@ -2583,7 +2583,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
 
   Widget _buildCodeChangeNote(SealCodeChange c) {
     final scheme = Theme.of(context).colorScheme;
-    final first = widget.friendName.trim().split(RegExp(r'\s+')).first;
+    var first = widget.friendName.trim().split(RegExp(r'\s+')).first;
+    if (first.isEmpty) first = 'Your friend';
     final who = c.mine
         ? 'You changed devices — the security code changed'
         : '$first changed devices — the security code changed';

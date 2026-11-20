@@ -34,7 +34,10 @@ class _VerifyEncryptionScreenState extends State<VerifyEncryptionScreen> {
   SealVerifyState? _state;
   bool _loading = true;
 
-  String get _first => widget.friendName.trim().split(RegExp(r'\s+')).first;
+  String get _first {
+    final f = widget.friendName.trim().split(RegExp(r'\s+')).first;
+    return f.isEmpty ? 'your friend' : f;
+  }
 
   bool get _canScan =>
       !kIsWeb && (Platform.isAndroid || Platform.isIOS);
@@ -359,8 +362,9 @@ class _VerifyEncryptionScreenState extends State<VerifyEncryptionScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '${c.mine ? 'You' : _first} reinstalled Aluta or changed '
-                    'devices · ${fmt.format(c.at.toLocal())}',
+                    // Same words as the note in the chat.
+                    '${c.mine ? 'You' : _first} changed devices · '
+                    '${fmt.format(c.at.toLocal())}',
                     style: const TextStyle(fontSize: 13),
                   ),
                 ),

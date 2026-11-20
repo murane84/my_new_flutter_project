@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 
+import '../../e2ee/seal_media.dart';
 import '../../services/download_manager.dart';
 
 /// Local cache for EPHEMERAL shared songs.
@@ -35,7 +36,7 @@ class SongCache {
     const marker = '/attachments/';
     final i = mediaUrl.indexOf(marker);
     if (i < 0) return null;
-    var id = mediaUrl.substring(i + marker.length);
+    var id = SealMedia.bare(mediaUrl).substring(i + marker.length);
     final q = id.indexOf('?');
     if (q >= 0) id = id.substring(0, q);
     final slash = id.indexOf('/');
@@ -122,6 +123,25 @@ class SongCache {
     try {
       final f = await _fileFor(id, filename: filename, mime: mime);
       if (f == null) return null;
+      // 🔒 A sealed song: fetch the locked bytes, open them on this device
+      // with the key its address carries, keep only the opened song.
+      final key = SealMedia.keyOf(url);
+      if (key != null) {
+        final locked = File('${f.path}.locked');
+        final res = await DownloadManager.instance.fetch(
+            SealMedia.bare(url), locked,
+            headers: headers, name: filename ?? 'Song');
+        if (!res.ok || res.file == null) return null;
+        try {
+          await SealMedia.openFile(res.file!.path, f.path, key);
+        } finally {
+          try {
+            if (await res.file!.exists()) await res.file!.delete();
+            if (await locked.exists()) await locked.delete();
+          } catch (_) {}
+        }
+        return (await f.exists() && await f.length() > 0) ? f.path : null;
+      }
       // Streamed to disk (not buffered in RAM) via the app-wide
       // DownloadManager, so leaving the chat / screen-off doesn't kill it.
       final res = await DownloadManager.instance.fetch(url, f,

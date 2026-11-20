@@ -745,24 +745,19 @@ extension _ChatPageHelpers2 on _ChatPageState {
             }
           } catch (_) {/* keep the original bytes on any failure */}
         }
-        // 🔒 1:1 photos, videos, voice notes and files are locked on this
-        // phone before they leave it, when every device of theirs (and my
-        // other devices) can open them. The key travels sealed in the
-        // message; the server only ever stores locked bytes.
-        Uint8List? sealKey;
-        var upBytes = sendBytes;
-        if (const ['image', 'video', 'audio', 'file'].contains(type) &&
-            sendBytes.length <= SealMedia.maxBytes &&
-            (widget.conversationId == null
-                ? await SealIngress.canSealMedia(widget.friendId)
-                : await SealIngress.canSealGroupMedia(widget.conversationId!,
-                    await ApiService().groupMembers(widget.conversationId!)))) {
-          final (locked, key) = await SealMedia.sealInBackground(sendBytes);
-          upBytes = locked;
-          sealKey = key;
-        }
+        // 🔒 Photos, videos, voice notes, files and songs are locked on
+        // this phone before they leave it, when every device that gets
+        // them can open them. The key travels sealed in the message; the
+        // server only ever stores locked bytes.
+        final sealedUp = await ApiService().sealForChat(
+            receiverId: widget.friendId,
+            conversationId: widget.conversationId,
+            type: type,
+            bytes: sendBytes);
+        final sealKey = sealedUp.key;
         final up = await appBusy.run(() => ApiService().uploadMedia(
-            bytes: upBytes,
+            bytes: sealedUp.bytes,
+            filePath: sealedUp.path,
             filename: sealKey != null ? 'sealed' : sendName,
             mime: sealKey != null ? SealMedia.uploadMime : sendMime,
             sealedKind: sealKey != null ? type : null,
@@ -1006,6 +1001,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
       'image' => 'photo',
       'video' => 'video',
       'audio' => 'voice note',
+      'song' => 'song',
       _ => 'file',
     };
     return Padding(

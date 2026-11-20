@@ -109,8 +109,10 @@ class SealDirectory implements SealKeyDirectory {
   }
 
   /// What this app can open beyond sealed text, told to the directory so
-  /// friends know (m1 = sealed media v1, seal_media.dart).
-  static const String caps = 'm1';
+  /// friends know: m1 = sealed media v1 (seal_media.dart); m2 = sealed
+  /// songs, files over 100 MB (opened in pieces), polls, reactions, group
+  /// hearts and Stories.
+  static const String caps = 'm1,m2';
 
   /// Register / refresh this device and keep one-time prekeys topped up.
   /// Call when the signed-in home mounts.

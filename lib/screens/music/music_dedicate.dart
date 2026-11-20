@@ -209,8 +209,23 @@ class _DedicateSheetState extends State<_DedicateSheet> {
       final name = '$safe.$ext';
       final mime = _mime(ext);
       final api = ApiService();
-      final up = await api.uploadMedia(bytes: bytes, filename: name, mime: mime);
+      // 🔒 The song is locked on this phone too when their Aluta can open
+      // it (its key rides in the sealed note).
+      final s = await api.sealForChat(
+          receiverId: id, type: 'song', bytes: bytes);
+      final key = s.key;
+      final up = await api.uploadMedia(
+          bytes: s.bytes,
+          filePath: s.path,
+          filename: key != null ? 'sealed' : name,
+          mime: key != null ? SealMedia.uploadMime : mime,
+          sealedKind: key != null ? 'song' : null);
       if (up == null || up['url'] == null) throw Exception('upload failed');
+      // My own bubble plays it from this device.
+      final aid = SongCache.assetId(up['url'].toString());
+      if (aid != null) {
+        unawaited(SongCache.putBytes(aid, bytes, filename: name, mime: mime));
+      }
       final note = _note.text.trim();
       final sent = await api.sendMessage(
         id,
@@ -218,10 +233,13 @@ class _DedicateSheetState extends State<_DedicateSheet> {
         messageType: 'heart',
         heartMood: 'love',
         mediaUrl: up['url'].toString(),
-        mediaName: (up['name'] ?? name).toString(),
-        mediaMime: (up['mime'] ?? mime).toString(),
-        mediaSize: (up['size'] as num?)?.toInt() ?? bytes.length,
+        mediaName: key != null ? name : (up['name'] ?? name).toString(),
+        mediaMime: key != null ? mime : (up['mime'] ?? mime).toString(),
+        mediaSize: key != null
+            ? bytes.length
+            : (up['size'] as num?)?.toInt() ?? bytes.length,
         mediaDuration: widget.durationMs,
+        mediaKey: key,
       );
       if (sent == null) throw Exception('send failed');
       if (mounted) {

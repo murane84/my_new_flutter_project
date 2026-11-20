@@ -413,7 +413,8 @@ async def upload_media(
     # so the size check follows the kind the app says it is.
     _sealed = _mime == "application/x-aluta-sealed"
     if _sealed:
-        _mime = {"image": "image/", "audio": "audio/", "video": "video/"}.get(
+        _mime = {"image": "image/", "audio": "audio/", "song": "audio/",
+                 "video": "video/"}.get(
             (kind or "").lower(), "application/")
     # Files and videos: the sender's plan sets the size (a light free amount,
     # more with Together). Photos / voice / songs keep the fixed cap.

@@ -623,7 +623,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
       //    🔒 A sealed file only ever comes this way (fetched locked, opened
       //    on this phone) — never as raw bytes from step 3.
       final sealed = SealMedia.isSealed(url);
-      if (!kIsWeb && id == null && (onProgress == null || sealed)) {
+      if (!kIsWeb && (sealed || (id == null && onProgress == null))) {
         try {
           final f =
               await MediaStore.instance.getFile(url, mediaAuthHeaders(url));

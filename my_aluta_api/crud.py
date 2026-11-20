@@ -335,6 +335,8 @@ def list_preview(msg) -> str:
             return "📍 Location"
         if msg_kind == "contact":
             return "👤 Contact"
+        if msg_kind == "song":
+            return "🎵 Song"
         if msg_kind == "audio":
             ms = getattr(msg, "media_duration", None) or 0
             if ms and ms > 0:

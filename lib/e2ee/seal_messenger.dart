@@ -388,7 +388,8 @@ class SealMessenger {
   /// goes as before); "not right now" (my keys still being set up, the
   /// directory unreachable, another tab in use) throws [SealError] — the
   /// send fails rather than go unlocked, as text does.
-  Future<bool> canSealMedia(int peerUid, int myUid) => _locked(() async {
+  Future<bool> canSealMedia(int peerUid, int myUid, {String cap = 'm1'}) =>
+      _locked(() async {
         if (!SealTab.inUse) throw SealError('Aluta is in use in another tab');
         await _keys.load();
         final theirs = await _devicesOf(peerUid);
@@ -409,7 +410,7 @@ class SealMessenger {
         return [
           ...theirs,
           ...mine.where((d) => d.deviceId != _keys.deviceId),
-        ].every((d) => d.caps.contains('m1'));
+        ].every((d) => d.caps.contains(cap));
       });
 
   /// Whether a photo / file for a group can go sealed: every device of every
@@ -418,7 +419,7 @@ class SealMessenger {
   /// group is sealed ([stay]), otherwise the file goes as before. "Not
   /// right now" throws [SealError].
   Future<bool> canSealMediaFor(List<int> members, int myUid,
-          {bool stay = false}) =>
+          {bool stay = false, String cap = 'm1'}) =>
       _locked(() async {
         if (!SealTab.inUse) throw SealError('Aluta is in use in another tab');
         await _keys.load();
@@ -432,7 +433,7 @@ class SealMessenger {
           }
           for (final d in list) {
             if (d.deviceId == _keys.deviceId) continue;
-            if (!d.caps.contains('m1')) return false;
+            if (!d.caps.contains(cap)) return false;
           }
         }
         return true;

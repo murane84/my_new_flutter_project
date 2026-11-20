@@ -61,6 +61,7 @@ import '../utils/marquee_text.dart';
 import '../utils/typing_guard.dart';
 import 'api_service.dart';
 import 'chat/song_cache.dart';
+import '../e2ee/seal_media.dart';
 import 'music/song_identifier.dart' show showSongIdentifier;
 import '../widgets/genie_menu.dart';
 import '../widgets/tap_chip.dart';

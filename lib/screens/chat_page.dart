@@ -2070,27 +2070,54 @@ class _ChatPageState extends State<ChatPage>
   /// for [peer] and uploaded: (address, key, opened bytes). Null when their
   /// Aluta can't open sealed media yet, or it isn't a lockable kind.
   Future<(String, Uint8List, Uint8List)?> _sealedCopyFor(
-      String rel, String type, int peer) async {
-    if (!const ['image', 'video', 'audio', 'file'].contains(type)) return null;
+      String rel, String type, int peer,
+      {int? size, String? name, String? mime}) async {
+    if (!SealMedia.kinds.contains(type)) return null;
     if (rel.startsWith('http')) return null; // external (e.g. a GIF)
     // "Not right now" throws (the forward fails, never goes unlocked).
-    if (!await SealIngress.canSealMedia(peer)) return null;
+    if (!await SealIngress.canSealMedia(peer,
+        cap: SealMedia.capFor(type, size ?? 0))) {
+      return null;
+    }
     // From here it goes locked or not at all (a failure never falls back
-    // to an unlocked copy); only a file too big to lock goes as before.
-    final url = fullMediaUrl(rel);
-    final data = await MediaStore.instance.bytes(url, mediaAuthHeaders(url));
+    // to an unlocked copy).
+    final data = await _openedBytesOf(rel, type, name: name, mime: mime);
     if (data == null || data.isEmpty) throw StateError('file unavailable');
-    if (data.length > SealMedia.maxBytes) return null;
-    final (locked, key) = await SealMedia.sealInBackground(data);
+    final s = await ApiService().sealForChat(
+        receiverId: peer, type: type, bytes: data);
+    final key = s.key;
+    if (key == null) return null; // a bigger file their Aluta can't open
     final up = await ApiService().uploadMedia(
-      bytes: locked,
+      bytes: s.bytes,
+      filePath: s.path,
       filename: 'sealed',
       mime: SealMedia.uploadMime,
       sealedKind: type,
+      ephemeral: type == 'song',
     );
     final u = (up?['url'] as String?) ?? '';
     if (u.isEmpty) throw StateError('upload failed');
     return (u, key, data);
+  }
+
+  /// The opened bytes of a chat file: a song from this device's song
+  /// cache first (the server lets songs go once they're delivered), then
+  /// the media store / server (opened here when sealed).
+  Future<Uint8List?> _openedBytesOf(String rel, String type,
+      {String? name, String? mime}) async {
+    if (type == 'song' && !kIsWeb) {
+      final id = SongCache.assetId(rel);
+      final p = id == null
+          ? null
+          : await SongCache.cachedPath(id, filename: name, mime: mime);
+      if (p != null) {
+        try {
+          return await File(p).readAsBytes();
+        } catch (_) {}
+      }
+    }
+    final url = fullMediaUrl(rel);
+    return MediaStore.instance.bytes(url, mediaAuthHeaders(url));
   }
 
   /// Returns true when it was sent. [doneToast] replaces the usual
@@ -2115,7 +2142,10 @@ class _ChatPageState extends State<ChatPage>
       // it (whether or not the original was sealed).
       final (String, Uint8List, Uint8List)? fresh;
       try {
-        fresh = await _sealedCopyFor(rel, type, fidInt);
+        fresh = await _sealedCopyFor(rel, type, fidInt,
+            size: (msg['media_size'] as num?)?.toInt(),
+            name: msg['media_name'] as String?,
+            mime: msg['media_mime'] as String?);
       } catch (e) {
         if (mounted && !quiet) {
           showToast(
@@ -2164,6 +2194,13 @@ class _ChatPageState extends State<ChatPage>
         final u = sent['media_url'];
         if (u is String) {
           unawaited(MediaStore.instance.putBytes(fullMediaUrl(u), outPlain));
+          // A song plays from my own bubble after the server lets it go.
+          final aid = type == 'song' ? SongCache.assetId(u) : null;
+          if (aid != null) {
+            unawaited(SongCache.putBytes(aid, outPlain,
+                filename: msg['media_name'] as String?,
+                mime: msg['media_mime'] as String?));
+          }
         }
       }
       if (sent != null) {
@@ -2368,10 +2405,10 @@ class _ChatPageState extends State<ChatPage>
 
     // The sealed photo / clip uploads once; a retry reuses it.
     Map<String, dynamic>? up;
-    // 🔒 A 1:1 heart's photo / clip / voice is locked on this phone too (its
-    // key rides in the sealed note), when their Aluta can open it. Songs and
-    // group hearts go as before.
+    // 🔒 A 1:1 heart's photo / clip / voice / song is locked on this phone
+    // too (its key rides in the sealed note), when their Aluta can open it.
     Uint8List? heartKey;
+    String? heartPath;
     Future<void> attempt() async {
       try {
         if (attach != null && up == null) {
@@ -2379,23 +2416,23 @@ class _ChatPageState extends State<ChatPage>
             'photo' => 'image',
             'video' => 'video',
             'voice' => 'audio',
+            'song' => 'song',
             _ => null,
           };
           List<int> upBytes = attach.bytes;
-          if (heart &&
-              !_isGroup &&
-              heartFor == null &&
-              sealKind != null &&
-              attach.bytes.length <= SealMedia.maxBytes &&
-              await SealIngress.canSealMedia(widget.friendId)) {
-            final (locked, key) =
-                await SealMedia.sealInBackground(attach.bytes);
-            upBytes = locked;
-            heartKey = key;
+          if (heart && !_isGroup && heartFor == null && sealKind != null) {
+            final s = await ApiService().sealForChat(
+                receiverId: widget.friendId,
+                type: sealKind,
+                bytes: attach.bytes);
+            upBytes = s.bytes;
+            heartPath = s.path;
+            heartKey = s.key;
           }
           final kind = sealKind;
           up = await appBusy.run(() => ApiService().uploadMedia(
               bytes: upBytes,
+              filePath: heartPath,
               filename: heartKey != null ? 'sealed' : attach.name,
               mime: heartKey != null ? SealMedia.uploadMime : attach.mime,
               sealedKind: heartKey != null ? kind : null));

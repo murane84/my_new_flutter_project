@@ -136,14 +136,17 @@ class MediaStore {
           SealMedia.bare(url), locked,
           headers: headers, notify: false);
       if (!res.ok || res.file == null) return null;
-      final bytes = await res.file!.readAsBytes();
+      // Opened piece by piece, file to file: a 200 MB video never sits in
+      // memory twice.
       try {
-        await res.file!.delete();
-        if (await locked.exists()) await locked.delete();
-      } catch (_) {}
-      final open = await SealMedia.openInBackground(bytes, key);
-      await f.writeAsBytes(open, flush: true);
-      return f;
+        await SealMedia.openFile(res.file!.path, f.path, key);
+      } finally {
+        try {
+          if (await res.file!.exists()) await res.file!.delete();
+          if (await locked.exists()) await locked.delete();
+        } catch (_) {}
+      }
+      return (await f.exists() && await f.length() > 0) ? f : null;
     } catch (_) {
       return null; // never hand out the locked bytes
     }

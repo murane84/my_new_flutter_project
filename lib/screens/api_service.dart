@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show File;
+import 'package:path_provider/path_provider.dart' show getTemporaryDirectory;
 import '../utils/net.dart' as http;
 import 'package:http_parser/http_parser.dart' show MediaType;
 import 'package:logger/logger.dart';
@@ -1402,6 +1404,11 @@ class ApiService {
   /// send a message"), or null when it simply failed (network…).
   static String? lastSendRefusal;
 
+  /// An accepted bond with this friend? (Set by Home.) A sealed song sent
+  /// to a bonded partner still joins Our Playlist: only then does the app
+  /// tell the server its title.
+  static bool Function(int peer)? bondedWith;
+
   Future<Map<String, dynamic>?> sendMessage(
     int receiverId,
     String content, {
@@ -1566,6 +1573,11 @@ class ApiService {
             if (sealedMedia != null) SealIngress.attachMedia(data, sealedMedia);
             await SealIngress.sent(receiverId, data, content,
                 media: sealedMedia);
+            if (messageType == 'song' &&
+                content.trim().isNotEmpty &&
+                (bondedWith?.call(receiverId) ?? false)) {
+              unawaited(_soundtrackShare(data['id'], content.trim()));
+            }
           }
           return data;
         }
@@ -4078,26 +4090,31 @@ class ApiService {
     String? meta,
     int? conversationId,
   }) async {
-    Uint8List? key;
-    List<int> up = bytes;
-    if (const ['image', 'video', 'audio', 'file'].contains(type) &&
-        bytes.length <= SealMedia.maxBytes &&
-        (conversationId == null
-            ? await SealIngress.canSealMedia(receiverId)
-            : await SealIngress.canSealGroupMedia(
-                conversationId, await groupMembers(conversationId)))) {
-      final (locked, k) = await SealMedia.sealInBackground(bytes);
-      up = locked;
-      key = k;
-    }
+    final sealedUp = await sealForChat(
+        receiverId: receiverId,
+        conversationId: conversationId,
+        type: type,
+        bytes: bytes);
+    final key = sealedUp.key;
     final u = await uploadMedia(
-      bytes: up,
+      bytes: sealedUp.bytes,
+      filePath: sealedUp.path,
       filename: key != null ? 'sealed' : filename,
       mime: key != null ? SealMedia.uploadMime : mime,
       sealedKind: key != null ? type : null,
+      // A song is purged from the server once the receiver has it.
+      ephemeral: type == 'song',
     );
     final url = u?['url'] as String?;
     if (url == null || url.isEmpty) return null;
+    // A song I send plays from my own bubble even after the server lets it
+    // go: my cache gets the bytes I already hold.
+    if (type == 'song') {
+      final aid = SongCache.assetId(url);
+      if (aid != null) {
+        unawaited(SongCache.putBytes(aid, bytes, filename: filename, mime: mime));
+      }
+    }
     final sent = await sendMessage(
       receiverId,
       content,
@@ -4131,6 +4148,9 @@ class ApiService {
     void Function(int sent, int total)? onProgress,
     // 🔒 Locked bytes (SealMedia): the real kind, for the server's size cap.
     String? sealedKind,
+    // A big locked file waiting on disk ([sealForChat]): streamed up from
+    // there (then removed) instead of [bytes].
+    String? filePath,
   }) async {
     try {
       final token = await _getToken();
@@ -4145,13 +4165,18 @@ class ApiService {
       }
       final req = http.MultipartRequest('POST', uri)
         ..headers['Authorization'] = 'Bearer $token'
-        ..files.add(http.MultipartFile.fromBytes(
-          'file',
-          bytes,
-          filename: filename,
-          contentType: MediaType.parse(
-              mime.isNotEmpty ? mime : 'application/octet-stream'),
-        ));
+        ..files.add(filePath != null
+            ? await http.MultipartFile.fromPath('file', filePath,
+                filename: filename,
+                contentType: MediaType.parse(
+                    mime.isNotEmpty ? mime : 'application/octet-stream'))
+            : http.MultipartFile.fromBytes(
+                'file',
+                bytes,
+                filename: filename,
+                contentType: MediaType.parse(
+                    mime.isNotEmpty ? mime : 'application/octet-stream'),
+              ));
 
       http.StreamedResponse streamed;
       if (onProgress == null) {
@@ -4192,7 +4217,74 @@ class ApiService {
       _logger.e('Upload media exception: $e');
       http.noteNetError(e);
       return null;
+    } finally {
+      if (filePath != null) unawaited(_dropTemp(filePath));
     }
+  }
+
+  /// A sealed song to my bonded partner: its title for Our Playlist.
+  Future<void> _soundtrackShare(Object? messageId, String title) async {
+    try {
+      final id = int.tryParse('${messageId ?? ''}');
+      final token = await _getToken();
+      if (id == null || token == null) return;
+      await http.post(
+          Uri.parse('${await _baseUrl}/messages/$id/soundtrack'),
+          headers: _authHeaders(token),
+          body: jsonEncode({'title': title}));
+    } catch (_) {}
+  }
+
+  static Future<void> _dropTemp(String path) async {
+    try {
+      final f = File(path);
+      if (await f.exists()) await f.delete();
+    } catch (_) {}
+  }
+
+  /// 🔒 Lock a chat file on this phone before it leaves, when every device
+  /// that will get it (theirs, the members', my other ones) can open it —
+  /// the one rule for every place that sends a photo, video, voice note,
+  /// file or song. Not sealable (an older Aluta somewhere, a kind that
+  /// isn't locked): `key` is null and the bytes go as before. Throws
+  /// ([SealError] / [SealPeerAway]) when it should be locked but can't be
+  /// right now — the send then fails rather than go unlocked.
+  ///
+  /// A file over [SealMedia.maxBytes] on a phone / computer is locked piece
+  /// by piece into a temporary file (`path`, for [uploadMedia]'s
+  /// `filePath`), so it never sits in memory twice.
+  Future<({List<int> bytes, String? path, Uint8List? key})> sealForChat({
+    required int receiverId,
+    int? conversationId,
+    required String type,
+    required List<int> bytes,
+  }) async {
+    final cap = SealMedia.capFor(type, bytes.length);
+    final can = SealMedia.kinds.contains(type) &&
+        (conversationId == null
+            ? await SealIngress.canSealMedia(receiverId, cap: cap)
+            : await SealIngress.canSealGroupMedia(
+                conversationId, await groupMembers(conversationId),
+                cap: cap));
+    if (!can) return (bytes: bytes, path: null, key: null);
+    if (!kIsWeb && bytes.length > SealMedia.maxBytes) {
+      final dir = await getTemporaryDirectory();
+      final stamp = DateTime.now().microsecondsSinceEpoch;
+      final plain = '${dir.path}/aluta_seal_$stamp.plain';
+      final locked = '${dir.path}/aluta_seal_$stamp.locked';
+      try {
+        await File(plain).writeAsBytes(bytes, flush: true);
+        final key = await SealMedia.sealFile(plain, locked);
+        return (bytes: const <int>[], path: locked, key: key);
+      } catch (e) {
+        await _dropTemp(locked);
+        rethrow;
+      } finally {
+        await _dropTemp(plain);
+      }
+    }
+    final (locked, key) = await SealMedia.sealInBackground(bytes);
+    return (bytes: locked, path: null, key: key);
   }
 
   /// Upload a custom photo background for the caller's Our Space view. Returns

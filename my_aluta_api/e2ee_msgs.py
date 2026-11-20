@@ -22,7 +22,7 @@ MAX_ENVELOPE = 96 * 1024        # base64 characters per envelope
 PUSH_BUDGET = 2800              # envelope JSON that rides in a push (FCM ≤ 4 KB)
 # Sealed media (seal_media.dart): the bytes are locked on the phone; the
 # message keeps its kind, the rest is inside the sealed copy.
-MEDIA_KINDS = ("image", "video", "audio", "file")
+MEDIA_KINDS = ("image", "video", "audio", "file", "song")
 # Shared cards whose JSON lives in `content` (sealed like text).
 CARD_KINDS = ("location", "contact")
 SEALED_MEDIA_MIME = "application/x-aluta-sealed"

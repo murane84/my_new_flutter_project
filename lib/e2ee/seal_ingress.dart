@@ -406,6 +406,15 @@ class SealIngress {
     var head = label == serverPreview ? '' : label;
     final name = '${media['n'] ?? ''}'.trim();
     if (head.startsWith('📎') && name.isNotEmpty) head = '📎 $name';
+    // A song previews by its title, as a plain one does ("🎵 Title").
+    if (head.startsWith('🎵')) {
+      if (words.isNotEmpty) return '🎵 $words';
+      if (name.isNotEmpty) {
+        final dot = name.lastIndexOf('.');
+        return '🎵 ${dot > 0 ? name.substring(0, dot) : name}';
+      }
+      return head;
+    }
     if (head.isEmpty) return words;
     return words.isEmpty ? head : '$head · $words';
   }
@@ -436,16 +445,20 @@ class SealIngress {
   /// Whether a file for [peer] can go sealed (every device can open it).
   /// Throws [SealError] when it can't be told right now — the send then
   /// fails (and can be retried) instead of going unlocked.
-  static Future<bool> canSealMedia(int peer) async {
+  /// [cap]: what their Aluta must be able to open ("m1" photos, videos,
+  /// voice notes and files; "m2" songs, big files, polls, reactions —
+  /// [SealMedia.capFor]).
+  static Future<bool> canSealMedia(int peer, {String cap = 'm1'}) async {
     final me = await myUid();
     if (me == null || peer <= 0 || peer == me) return false;
-    return SealMessenger.instance.canSealMedia(peer, me);
+    return SealMessenger.instance.canSealMedia(peer, me, cap: cap);
   }
 
   /// Whether a file for group [cid] can go sealed (every member device can
   /// open it). Throws [SealError] when it can't be told right now.
   /// [members]: the group's members as just fetched (null: unknown).
-  static Future<bool> canSealGroupMedia(int cid, List<int>? members) async {
+  static Future<bool> canSealGroupMedia(int cid, List<int>? members,
+      {String cap = 'm1'}) async {
     final me = await myUid();
     if (me == null) return false;
     if (members == null) {
@@ -456,7 +469,7 @@ class SealIngress {
     }
     if (members.length > groupMaxMembers) return false;
     return SealMessenger.instance.canSealMediaFor(members, me,
-        stay: await groupSealedBefore(me, cid));
+        stay: await groupSealedBefore(me, cid), cap: cap);
   }
 
   /// Give a sent / opened message its sealed media's key and real name.

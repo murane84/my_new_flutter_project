@@ -211,28 +211,15 @@ class _ShareSheetState extends State<_ShareSheet> {
           if (id == null) continue;
           try {
             if (_asFile) {
-              final data = bytes!;
-              final up = await api.uploadMedia(
-                  bytes: data,
-                  filename: _fileName(path),
-                  mime: _mimeOf(path),
-                  ephemeral: true);
-              if (up == null || up['url'] == null) throw Exception('upload');
-              // Seed OUR OWN cache so the sender can still play it from the
-              // bubble after the server purges it.
-              final aid = SongCache.assetId(up['url'].toString());
-              if (aid != null) {
-                await SongCache.putBytes(aid, data,
-                    filename: _fileName(path), mime: _mimeOf(path));
-              }
-              final sent = await api.sendMessage(
+              // 🔒 Locked for them when their Aluta can open it; my own
+              // cache keeps the song for my bubble (sendMediaTo).
+              final sent = await api.sendMediaTo(
                 id,
-                _label(path),
-                messageType: 'song',
-                mediaUrl: up['url'].toString(),
-                mediaName: (up['name'] ?? _fileName(path)).toString(),
-                mediaMime: (up['mime'] ?? _mimeOf(path)).toString(),
-                mediaSize: (up['size'] as num?)?.toInt() ?? data.length,
+                bytes!,
+                type: 'song',
+                filename: _fileName(path),
+                mime: _mimeOf(path),
+                content: _label(path),
               );
               if (sent == null) throw Exception('send');
             } else {
@@ -596,7 +583,9 @@ class _SongPickSheetState extends State<_SongPickSheet> {
                   prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 38, maxHeight: 38),
                   suffixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 38, maxHeight: 38),
                   hintText: 'Search your songs',
-                  prefixIcon: const Icon(Icons.search_rounded),
+                  prefixIcon: const Icon(Icons.search_rounded),
+
+
                 ),
               ),
             ),

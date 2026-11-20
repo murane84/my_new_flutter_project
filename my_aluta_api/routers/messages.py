@@ -203,29 +203,58 @@ def send_message(message: schemas.MessageCreate, background: BackgroundTasks, db
 
     # Harmony: a song shared with a BONDED partner flows into their soundtrack
     # (Our Playlist), de-duped, source=share — the "reminds me of you" feed.
+    # (A sealed song's title is unreadable here: the sender's app adds it
+    # itself — /messages/{id}/soundtrack — only for a bonded partner.)
     try:
-        if (db_message.message_type or "") == "song" and message.receiver_id:
-            from models import BondRequest
-            from bonding import pair_key, record_soundtrack_track
-            a = current_user.id
-            b = int(message.receiver_id)
-            bonded = db.query(BondRequest).filter(
-                BondRequest.status == "accepted",
-            ).filter(
-                ((BondRequest.from_user_id == a) & (BondRequest.to_user_id == b))
-                | ((BondRequest.from_user_id == b) & (BondRequest.to_user_id == a))
-            ).first() is not None
-            if bonded:
-                title = ((db_message.content or "").strip()
-                         or (db_message.media_name or "").strip())
-                if title:
-                    record_soundtrack_track(
-                        db, pair_key(a, b), current_user.id, title, None,
-                        source="share")
+        if ((db_message.message_type or "") == "song" and message.receiver_id
+                and not db_message.e2ee):
+            title = ((db_message.content or "").strip()
+                     or (db_message.media_name or "").strip())
+            _soundtrack_share(db, current_user.id, int(message.receiver_id),
+                              title)
     except Exception:
         pass
 
     return validated_message
+
+
+def _bonded(db: Session, a: int, b: int) -> bool:
+    from models import BondRequest
+    return db.query(BondRequest).filter(
+        BondRequest.status == "accepted",
+    ).filter(
+        ((BondRequest.from_user_id == a) & (BondRequest.to_user_id == b))
+        | ((BondRequest.from_user_id == b) & (BondRequest.to_user_id == a))
+    ).first() is not None
+
+
+def _soundtrack_share(db: Session, me: int, peer: int, title: str) -> bool:
+    from bonding import pair_key, record_soundtrack_track
+    title = (title or "").strip()[:200]
+    if not title or not _bonded(db, me, peer):
+        return False
+    record_soundtrack_track(db, pair_key(me, peer), me, title, None,
+                            source="share")
+    return True
+
+
+@router.post("/{message_id}/soundtrack")
+def add_sealed_song_to_soundtrack(
+    message_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """🔒 A sealed song I sent to my bonded partner: my app tells the
+    title (the server can't read it) so it joins Our Playlist, as an
+    unsealed song does by itself. Only my own 1:1 song, only for a bond."""
+    msg = db.query(Message).filter(Message.id == message_id).first()
+    if (msg is None or msg.sender_id != current_user.id
+            or (msg.message_type or "") != "song" or not msg.receiver_id):
+        raise HTTPException(status_code=404, detail="Song not found")
+    added = _soundtrack_share(db, current_user.id, int(msg.receiver_id),
+                              str((body or {}).get("title") or ""))
+    return {"ok": True, "added": added}
 
 
 # 🌅 DELIVER AT THEIR MORNING — hold a DM until the friend's local 05:00 and

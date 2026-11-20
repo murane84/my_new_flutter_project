@@ -749,6 +749,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     // Home about bonds, live music and my songs through these.
     StoryMute.instance.load();
     StoryHooks.isBonded = (id) => _bondWith(id) != null;
+    ApiService.bondedWith = (id) => _bondWith(id) != null;
     StoryHooks.closeness = (id) =>
         _isHarmonyPartner(id) ? 2 : (_bondWith(id) != null ? 1 : 0);
     StoryHooks.isPlayingNow =
@@ -4190,17 +4191,11 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final mime = pick.fileName.toLowerCase().endsWith('.m4a')
           ? 'audio/mp4'
           : 'audio/mpeg';
-      final up = await api.uploadMedia(
-          bytes: bytes, filename: pick.fileName, mime: mime, ephemeral: true);
-      if (up == null || up['url'] == null) throw Exception('upload');
       await api.sendMessage(id, '🎵 This one’s for $about',
           messageType: 'text');
-      final sent = await api.sendMessage(id, pick.title,
-          messageType: 'song',
-          mediaUrl: up['url'].toString(),
-          mediaName: (up['name'] ?? pick.fileName).toString(),
-          mediaMime: (up['mime'] ?? mime).toString(),
-          mediaSize: (up['size'] as num?)?.toInt() ?? bytes.length);
+      // 🔒 Locked for them when their Aluta can open it (sendMediaTo).
+      final sent = await api.sendMediaTo(id, bytes,
+          type: 'song', filename: pick.fileName, mime: mime, content: pick.title);
       if (sent == null) throw Exception('send');
       if (ctx.mounted) {
         showToast(ctx, '🎵 “${pick.title}” sent to $first',

@@ -943,7 +943,12 @@ class _SongBubbleState extends State<_SongBubble> {
         path = await SongCache.cachedPath(id,
             filename: widget.fileName, mime: widget.mime);
       }
-      if (path == null && !widget.isMe && id != null) {
+      // My own sealed song on another of my devices (no seeded copy):
+      // fetched and opened here too, but never acked (that's the
+      // receiver's to do).
+      if (path == null &&
+          id != null &&
+          (!widget.isMe || SealMedia.isSealed(widget.url))) {
         path = await SongCache.ensureCached(
           id,
           widget.url,
@@ -951,7 +956,7 @@ class _SongBubbleState extends State<_SongBubble> {
           filename: widget.fileName,
           mime: widget.mime,
         );
-        if (path != null && !SongCache.hasAcked(id)) {
+        if (path != null && !widget.isMe && !SongCache.hasAcked(id)) {
           SongCache.markAcked(id);
           unawaited(ApiService().ackAttachmentCached(id));
         }
@@ -960,6 +965,16 @@ class _SongBubbleState extends State<_SongBubble> {
       if (path != null) {
         _localPath = path;
         d = await _player.setFilePath(path);
+      } else if (SealMedia.isSealed(widget.url)) {
+        // 🔒 A sealed song: only ever played opened — on the web from a
+        // local blob, never by streaming the locked bytes.
+        final src = kIsWeb
+            ? await MediaStore.instance.webSource(
+                widget.url, mediaAuthHeaders(widget.url),
+                mime: widget.mime ?? 'audio/mpeg')
+            : null;
+        if (src == null) throw StateError('sealed song not opened');
+        d = await _player.setUrl(src);
       } else {
         d = await _player.setUrl(widget.url,
             headers: mediaAuthHeaders(widget.url));

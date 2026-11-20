@@ -314,9 +314,6 @@ def ensure_media_schema():
         # Group admins-only posting + polls (polls.py).
         "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS admins_only BOOLEAN DEFAULT FALSE",
         "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS share_history BOOLEAN DEFAULT FALSE",
-        # Group scopes name up to 32 members.
-        "ALTER TABLE seal_scope_keys ALTER COLUMN scope TYPE VARCHAR(400)",
-        "ALTER TABLE seal_scopes ALTER COLUMN scope TYPE VARCHAR(400)",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS poll TEXT",
         # Hearts with a photo/clip + group hearts for one member (hearts.py).
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS heart_for INTEGER",
@@ -344,6 +341,10 @@ def ensure_media_schema():
         "UPDATE users SET created_at = COALESCE("
         "(SELECT MIN(m.timestamp) FROM messages m WHERE m.sender_id = users.id),"
         " last_login, last_seen, now()) WHERE created_at IS NULL",
+        # Group scopes name up to 32 members. (Last: one transaction, so a
+        # refusal here can't hold back the steps above.)
+        "ALTER TABLE seal_scope_keys ALTER COLUMN scope TYPE VARCHAR(400)",
+        "ALTER TABLE seal_scopes ALTER COLUMN scope TYPE VARCHAR(400)",
     ]
     try:
         with engine.begin() as conn:

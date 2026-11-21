@@ -62,7 +62,16 @@ class SealPolls {
   /// A sealed poll that still needs opening (no words here yet).
   static String? pending(Map<String, dynamic> poll) {
     final s = poll['sealed'];
-    return s is String && !_words.containsKey(s) ? s : null;
+    if (s is! String || _words.containsKey(s)) return null;
+    // Already opened into this copy (this device's chat cache): keep them.
+    if (poll['options'] is List && poll['q'] != null) {
+      _words[s] = {
+        for (final k in _wordKeys)
+          if (poll[k] != null) k: poll[k],
+      };
+      return null;
+    }
+    return s;
   }
 
   /// Open [sealed] (once at a time): true when its words are now here.

@@ -305,7 +305,9 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     }
     final ok = await ApiService().updateSpace(
       widget.spaceId,
-      name: _c.text.trim(),
+      // Only a changed name is sent (sealed): a name this device couldn't
+      // open must not block saving the rest, nor go back over the real one.
+      name: _c.text.trim() != widget.initialName.trim() ? _c.text.trim() : null,
       theme: _theme,
       // Only ever promote to hero here (never demote to headless).
       isPrimary: (_primary && !widget.initialPrimary) ? true : null,

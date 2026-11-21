@@ -1,8 +1,12 @@
-🔒 Check your encryption together: open a chat → ⋮ → Encryption (or tap the 🔒 note). Scan each other's code or compare the numbers — and Aluta tells you in the chat when a friend reinstalls or changes devices.
-🔒 Check your encryption together: open a chat → ⋮ → Encryption (or tap the 🔒 note). Scan each other's code or compare the numbers — Aluta tells you in the chat when a friend reinstalls or changes devices.
-👥 Group chats (up to 32 people) are now end-to-end encrypted: messages, photos, videos, voice notes and files — only the members can read them.
-🕰️ Group admins can let new members read earlier messages — members' phones pass them the keys, still end-to-end encrypted.
-☁️ Back up to Aluta's server, locked with a recovery key only you hold. After a reinstall, the key brings your chats, Our Space and encrypted messages back.
-💾 Backup files now carry the keys to your encrypted chats too, and restoring never loses newer messages.
-❤️ A secret heart's photo, video clip or voice is now end-to-end encrypted too.
-📄 Privacy Policy and Terms updated for encrypted groups and backups.
+🎵 Songs you send are now end-to-end encrypted — title included — from the chat, the player's Share, "Answer with a song", Dedicate and a heart. A song you send your bonded partner still joins Our Playlist.
+📦 Files and videos over 100 MB are end-to-end encrypted too, locked piece by piece so even big videos stay light on your phone.
+📊 Polls in encrypted groups: the question and options are end-to-end encrypted (Aluta only counts the votes).
+❤️ Secret hearts in groups are end-to-end encrypted — a heart for one member can only be opened by the two of you.
+😍 Reactions in encrypted chats are end-to-end encrypted — Aluta sees that someone reacted, not with what.
+👥 Group names and photos are end-to-end encrypted.
+💞 Our Space names, photos, videos, voice notes, songs and your background are end-to-end encrypted — and so is anything you keep from a chat.
+💾 Fixed: saving an encrypted photo or file to your phone.
+🗳️ Fixed: the "vote closes in…" alert for a group jam now arrives.
+✨ Circle: the time and unread badge no longer touch the card's edge.
+📄 Privacy Policy and Terms updated (version 8) — everyone is asked to accept once.
+🎧 The little record on a friend's photo while they're listening now stands out in dark mode.

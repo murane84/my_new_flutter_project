@@ -3848,7 +3848,11 @@ class ApiService {
           if (sealName && cid != null) {
             forgetGroupMembers(cid);
             if (!await updateGroup(cid, title: title)) {
-              _logger.w('createGroup: sealed name not set yet');
+              // Couldn't seal it after all (keys not reachable just now):
+              // named as before rather than left as "Group" for everyone.
+              _logger.w('createGroup: sealed name not set — named plainly');
+              await _convAction('PATCH', '/conversations/$cid',
+                  body: {'title': title});
             }
           }
           data['title'] = title;

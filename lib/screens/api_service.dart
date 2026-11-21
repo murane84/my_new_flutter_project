@@ -3541,6 +3541,12 @@ class ApiService {
       // 🔒 Our Space words are sealed for its members.
       body = (await _sealSpaceText(spaceId, body))!;
       title = await _sealSpaceText(spaceId, title);
+      // A sealed moment's photo address carries its key: sealed too (never
+      // plain — left out when it can't be).
+      if (sourceThumb != null && SealMedia.isSealed(sourceThumb)) {
+        final s = await _sealSpaceText(spaceId, sourceThumb);
+        sourceThumb = s != null && SealScope.isSealed(s) ? s : null;
+      }
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(

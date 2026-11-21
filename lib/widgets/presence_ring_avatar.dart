@@ -257,19 +257,46 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
                     // A STILL badge: only the comet moves on the photo.
                     child: Transform.rotate(
                     angle: 0,
-                    child: Container(
+                    child: Builder(builder: (context) {
+                    // On a dark theme the black vinyl on a dark rim vanished
+                    // into the card: there it gets a light rim, lighter
+                    // grooves, a brighter label and a soft glow of the song.
+                    final dark =
+                        Theme.of(context).brightness == Brightness.dark;
+                    final label = dark
+                        ? Color.lerp(widget.color, Colors.white, 0.25)!
+                        : widget.color;
+                    return Container(
                       width: 20,
                       height: 20,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: gap, width: 2),
+                        border: Border.all(
+                            color: dark
+                                ? Colors.white.withValues(alpha: 0.85)
+                                : gap,
+                            width: dark ? 1.6 : 2),
+                        boxShadow: dark
+                            ? [
+                                BoxShadow(
+                                    color:
+                                        widget.color.withValues(alpha: 0.55),
+                                    blurRadius: 6),
+                              ]
+                            : null,
                         gradient: RadialGradient(
                           colors: [
-                            widget.color,
-                            widget.color,
-                            const Color(0xFF1B1B1B),
-                            const Color(0xFF2E2E2E),
-                            const Color(0xFF1B1B1B),
+                            label,
+                            label,
+                            dark
+                                ? const Color(0xFF3A3A3A)
+                                : const Color(0xFF1B1B1B),
+                            dark
+                                ? const Color(0xFF5C5C5C)
+                                : const Color(0xFF2E2E2E),
+                            dark
+                                ? const Color(0xFF3A3A3A)
+                                : const Color(0xFF1B1B1B),
                           ],
                           stops: const [0.0, 0.3, 0.31, 0.7, 1.0],
                         ),
@@ -279,9 +306,11 @@ class _PresenceRingAvatarState extends State<PresenceRingAvatar>
                         width: 4,
                         height: 4,
                         decoration: BoxDecoration(
-                            shape: BoxShape.circle, color: gap),
+                            shape: BoxShape.circle,
+                            color: dark ? const Color(0xFF1B1B1B) : gap),
                       ),
-                    ),
+                    );
+                    }),
                   ),
                   ),
                 ),

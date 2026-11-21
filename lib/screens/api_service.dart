@@ -2352,14 +2352,27 @@ class ApiService {
     try {
       final token = await _getToken();
       if (token == null) return null;
-      // 🔒 The name is sealed for the Space's members once it exists (its
-      // key needs the Space): the server first sees no name at all.
-      final nm = (name ?? '').trim();
+      // 🔒 The name is sealed for the Space's members. A couple's key (the
+      // two of you) can be made before the Space exists, so the name goes
+      // sealed at once (the partner's invite carries it). A group Space's
+      // key needs the Space: it's named, sealed, as soon as it exists.
+      var nm = (name ?? '').trim();
+      String? sentName;
+      final me = await SealIngress.myUid();
+      if (nm.isNotEmpty && memberIds.length == 1 && me != null) {
+        try {
+          sentName = await SealSpace.instance.seal([me, memberIds.first], nm);
+        } on SealSpaceNotReady {
+          sentName = nm; // their Aluta can't read sealed Spaces yet
+        }
+        nm = ''; // nothing left to name afterwards
+      }
       final resp = await http.post(
         Uri.parse('${await _baseUrl}/spaces'),
         headers: _authHeaders(token),
         body: jsonEncode({
           'member_ids': memberIds,
+          'name': ?sentName,
           'theme': ?theme,
         }),
       );

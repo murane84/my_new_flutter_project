@@ -1875,7 +1875,9 @@ extension _HomeFriendListView on HomePageState {
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 64),
         child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 9, 0, 9),
+        // Right 14: the time and the unread badge breathe inside the card
+        // (they sat on its edge and looked cut off).
+        padding: const EdgeInsets.fromLTRB(10, 9, 14, 9),
         child: Row(
           children: [
             Expanded(
@@ -2508,7 +2510,9 @@ extension _HomeFriendListView on HomePageState {
             ),
           ),
         Padding(
-        padding: const EdgeInsets.fromLTRB(10, 9, 0, 9),
+        // Right 14: the time and the unread badge breathe inside the card
+        // (they sat on its edge and looked cut off).
+        padding: const EdgeInsets.fromLTRB(10, 9, 14, 9),
         child: Row(
           children: [
             Expanded(

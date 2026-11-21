@@ -136,13 +136,13 @@ class SongCache {
         // One fetch-and-open per song at a time (the bubble and a prefetch
         // asking together share it).
         final running = _opening[f.path];
-        if (running != null) return running;
+        if (running != null) return await running;
         final job = _openSealed(url, f, key, headers, filename);
         _opening[f.path] = job;
         job.whenComplete(() {
           _opening.remove(f.path);
         });
-        return job;
+        return await job;
       }
       // Streamed to disk (not buffered in RAM) via the app-wide
       // DownloadManager, so leaving the chat / screen-off doesn't kill it.

@@ -4278,7 +4278,7 @@ class ApiService {
         unawaited(MediaStore.instance.putBytes(
             '${await _baseUrl}$shown', Uint8List.fromList(bytes)));
       }
-      return updateGroup(cid, avatarUrl: shown, avatarAsset: url);
+      return await updateGroup(cid, avatarUrl: shown, avatarAsset: url);
     } catch (e) {
       _logger.w('setGroupPhoto failed: $e');
       return false;

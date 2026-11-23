@@ -30,7 +30,7 @@ from auth import get_current_user
 from database import get_db
 from models import (E2eeDevice, SealScope, SealScopeEpoch, SealScopeGrant,
                     SealScopeKey, User)
-from routers.e2ee_keys import _live_devices
+from routers.e2ee_keys import STALE_AFTER, _live_devices
 
 router = APIRouter(prefix="/e2ee/scopes", tags=["E2EE"])
 
@@ -44,10 +44,32 @@ MAX_WRAPPED = 400          # base64 of the 158-byte wrapped key
 # that changes: a group on any join or leave (a newcomer reads only what
 # comes after, unless the group shares its history; a leaver nothing more),
 # Stories when someone loses access (a new viewer just gets today's key).
-MAX_NAMED_MEMBERS = 1024  # = crud_conversations.GROUP_MAX_MEMBERS
-# One copy per device: every member with all their devices (routers/
-# e2ee_keys.MAX_DEVICES = 6 each).
+MAX_NAMED_MEMBERS = 1024  # a group (= crud_conversations.GROUP_MAX_MEMBERS)
+MAX_STORY_AUDIENCE = 4096  # who may see someone's Stories
+# One copy per device: a full group with all its members' devices (routers/
+# e2ee_keys.MAX_DEVICES = 6 each). A Stories audience is held to this many
+# devices too (most people have one or two).
 MAX_WRAPS = MAX_NAMED_MEMBERS * 6
+
+
+def _named_cap(nk) -> int:
+    return MAX_STORY_AUDIENCE if nk[0] == "s" else MAX_NAMED_MEMBERS
+
+
+def _devices_of(db: Session, uids) -> dict:
+    """{user id: their live devices} for many people in a few queries (a
+    big group or audience isn't looked up person by person)."""
+    from datetime import datetime, timezone
+    since = datetime.now(timezone.utc) - STALE_AFTER
+    ids = sorted({int(u) for u in uids})
+    out = {u: [] for u in ids}
+    for i in range(0, len(ids), 500):
+        for d in (db.query(E2eeDevice)
+                  .filter(E2eeDevice.user_id.in_(ids[i:i + 500]),
+                          E2eeDevice.last_seen_at >= since)
+                  .order_by(E2eeDevice.id.asc()).all()):
+            out[int(d.user_id)].append(d)
+    return out
 
 
 def named_kind(scope: str):
@@ -145,7 +167,7 @@ def _members(scope: str, me: User, db: Session,
         members = named_members(db, *nk)
         # Too many to make a key for — but reading the keys one already
         # holds never stops working because the audience grew.
-        if making and len(members) > MAX_NAMED_MEMBERS:
+        if making and len(members) > _named_cap(nk):
             raise HTTPException(status_code=400, detail="Too many members")
         if me.id in members:
             # Only the author's devices make a key for their Stories.
@@ -212,9 +234,8 @@ def _check_wraps(db: Session, me: User, members, body: WrapsIn):
                                        ).first()
     if mine is None:
         raise HTTPException(status_code=400, detail="Unknown device")
-    live = {}
-    for uid in members:
-        live[uid] = {d.device_id for d in _live_devices(db, uid)}
+    live = {uid: {d.device_id for d in ds}
+            for uid, ds in _devices_of(db, members).items()}
     for w in body.wraps:
         if w.user_id not in live or w.device_id not in live[w.user_id]:
             raise HTTPException(status_code=400, detail="Unknown device")
@@ -261,7 +282,9 @@ def get_scope(scope: str, device_id: str, db: Session = Depends(get_db),
         # open), so a member's device can make the next key and tell
         # whether every device can read it — without asking per person.
         named["members"] = members
-        if len(members) > MAX_NAMED_MEMBERS:
+        devs = _devices_of(db, members)
+        if (len(members) > _named_cap(nk)
+                or sum(len(v) for v in devs.values()) > MAX_WRAPS):
             # (No new key can be made for this many: the phone keeps what
             # it writes as it would for an older Aluta.)
             named["too_big"] = True
@@ -269,7 +292,7 @@ def get_scope(scope: str, device_id: str, db: Session = Depends(get_db),
             {"user_id": uid, "device_id": d.device_id, "ik_sig": d.ik_sig,
              "ik_dh": d.ik_dh, "ik_dh_sig": d.ik_dh_sig,
              "caps": getattr(d, "caps", None) or ""}
-            for uid in members for d in _live_devices(db, uid)]
+            for uid in members for d in devs.get(uid, [])]
         if s is not None:
             made_for = _epoch_members(db, scope, s.epoch)
             now = set(members)
@@ -296,8 +319,10 @@ def get_scope(scope: str, device_id: str, db: Session = Depends(get_db),
     targets = {e: (_named_targets(db, scope, nk, e, s.epoch, now_members)
                    if nk is not None else now_members)
                for e in range(1, s.epoch + 1)}
+    # (only who hands out keys learns who lacks them)
+    live_by = _devices_of(db, members) if full else {}
     for uid in members:
-        for d in _live_devices(db, uid):
+        for d in live_by.get(uid, []):
             for e in range(1, s.epoch + 1):
                 if uid not in targets[e]:
                     continue

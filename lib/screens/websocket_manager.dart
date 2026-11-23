@@ -101,6 +101,11 @@ class WebSocketManager {
                 // for exactly the new members (no cached list).
                 if (event['type'] == 'conversation_updated') {
                   ApiService.forgetGroupMembers(event['conversation_id']);
+                  // (a big group's named key: today's members afresh)
+                  final cid = int.tryParse('${event['conversation_id']}');
+                  if (cid != null) {
+                    SealSpace.instance.forgetScope(SealScope.group(cid));
+                  }
                 }
                 // 🔒 Our Space words inside the event (moments, diary…), a
                 // group's sealed name / photo (a call ring, a mention).

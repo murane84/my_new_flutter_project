@@ -42,6 +42,26 @@ class SealScope {
     return ids.length < 2 || of(ids) != scope ? null : ids;
   }
 
+  /// A NAMED scope: a key that belongs to something rather than to a list
+  /// of ids — "g:<conversation id>" (a group chat of more than 32) or
+  /// "s:<user id>" (that person's Stories). The server says who belongs.
+  static String group(int conversationId) => 'g:$conversationId';
+
+  /// A member-list scope holds at most this many (bigger: a named one).
+  static const int maxListMembers = 32;
+  static String story(int userId) => 's:$userId';
+
+  static bool isNamed(String scope) {
+    if (scope.length < 3 || scope[1] != ':') return false;
+    if (scope[0] != 'g' && scope[0] != 's') return false;
+    final n = int.tryParse(scope.substring(2));
+    return n != null && n > 0 && '$n' == scope.substring(2);
+  }
+
+  /// A scope this format knows: a member list, or a named one.
+  static bool isScope(String scope) =>
+      membersOf(scope) != null || isNamed(scope);
+
   static bool isSealed(Object? v) => v is String && v.startsWith(prefix);
 
   /// (scope, epoch) a sealed field names, or null.
@@ -50,7 +70,7 @@ class SealScope {
     final parts = sealed.substring(prefix.length).split('.');
     if (parts.length != 3) return null;
     final epoch = int.tryParse(parts[1]);
-    if (epoch == null || epoch <= 0 || membersOf(parts[0]) == null) {
+    if (epoch == null || epoch <= 0 || !isScope(parts[0])) {
       return null;
     }
     return (parts[0], epoch);

@@ -4662,7 +4662,7 @@ class _ChatPageState extends State<ChatPage>
           return emoji;
         }
         return await SealReacts.seal(members, emoji,
-            stay: await SealIngress.groupSealedBefore(me, cid));
+            stay: await SealIngress.groupSealedBefore(me, cid), cid: cid);
       }
       if (!await SealIngress.canSealMedia(widget.friendId, cap: 'm2')) {
         return emoji;

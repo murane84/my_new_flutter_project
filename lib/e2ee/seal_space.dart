@@ -146,6 +146,24 @@ class SealSpace {
   final Map<String, int> _current = {};
   String? _heldNs;
   final Map<String, DateTime> _lastAsked = {};
+  // The latest server answer per scope (a named scope's members / devices).
+  final Map<String, Map<String, dynamic>> _lastAnswer = {};
+
+  /// Who a scope's keys may come from: its member list, or — named — the
+  /// members the server answered with.
+  List<int> _membersIn(String scope, Map<String, dynamic> j) =>
+      SealScope.membersOf(scope) ??
+      [
+        for (final m in (j['members'] as List? ?? const []))
+          if (m is int) m
+      ];
+
+  /// A named scope's members changed (a group's members, a status
+  /// audience): ask the server afresh before the next seal.
+  void forgetScope(String scope) {
+    _lastAsked.remove(scope);
+    _lastAnswer.remove(scope);
+  }
   final Map<int, String> _spaceScopes = {};
 
   String get _storeKey => 'aluta_seal_scopes_${_keys.deviceIdOrNull}';
@@ -292,7 +310,7 @@ class SealSpace {
       if (mine.containsKey(e)) continue;
       final from = await _deviceOf(
           k['from_user'] as int, k['from_device'] as String);
-      final members = SealScope.membersOf(scope) ?? const <int>[];
+      final members = _membersIn(scope, j);
       if (from == null || !members.contains(k['from_user'])) continue;
       try {
         mine[e] = await SealScope.unwrap(
@@ -352,11 +370,16 @@ class SealSpace {
         return known == null ? null : (cur!, known);
       }
       _lastAsked[scope] = DateTime.now();
+      _lastAnswer[scope] = j;
       final epoch = await _absorb(scope, j);
       if (epoch != null) {
         unawaited(_serveMissing(scope, j).catchError((_) {}));
         final k = held[scope]?[epoch];
-        if (k != null) return (epoch, k);
+        // A named scope whose members changed since its key was made (a
+        // join / leave; someone who lost sight of a Story): writing moves
+        // it on to a new key for exactly today's members.
+        final rotate = make && j['rotate'] == true;
+        if (k != null && !rotate) return (epoch, k);
         // No copy of the current key here (a new phone nobody has served
         // yet): reading waits, but writing moves the group on to a new key
         // rather than staying stuck.
@@ -367,9 +390,18 @@ class SealSpace {
       // Make the group's (next) key, wrapped for every member device (this
       // one included).
       final next = (epoch ?? 0) + 1;
-      final members = SealScope.membersOf(scope)!;
       final key = sealRandomBytes(32);
-      final devices = await _allDevices(members);
+      // A named scope's devices come with the server's answer (a big group
+      // or a Story audience isn't looked up person by person).
+      final devices = SealScope.isNamed(scope)
+          ? [
+              for (final d in (j['member_devices'] as List? ?? const []))
+                if (d is Map<String, dynamic> &&
+                    d['ik_dh'] != null &&
+                    d['ik_dh_sig'] != null)
+                  d
+            ]
+          : await _allDevices(SealScope.membersOf(scope)!);
       final wraps = await _wrapFor(scope, next, key, devices);
       // This device keeps a copy too (it must be on the key directory).
       if (!wraps.any((w) => w['device_id'] == _keys.deviceId)) return null;
@@ -434,6 +466,53 @@ class SealSpace {
     if (scope == null) throw SealSpaceNotReady();
     return seal(SealScope.membersOf(scope)!, text);
   }
+
+  /// Seal [text] with NAMED scope [scope] (a big group "g:<id>", Stories
+  /// "s:<id>"): its key is made for whoever belongs today, and moved on
+  /// when that changes. Throws [SealError] when it can't be sealed right
+  /// now (never plain then) — callers check [namedReady] first.
+  Future<String> sealNamed(String scope, String text) => _locked(() async {
+        if (text.isEmpty || SealScope.isSealed(text)) return text;
+        if (!SealTab.inUse) throw SealError('Aluta is in use in another tab');
+        await _keys.load();
+        if (!_keys.isReady) throw SealError('my keys are not ready yet');
+        final k = await _currentKey(scope);
+        if (k == null) throw SealError('no key for this scope yet');
+        return SealScope.seal(k.$2, scope, k.$1, text);
+      });
+
+  /// Whether every device of everyone in named [scope] can open what it
+  /// seals ([caps] all present). Throws [SealError] when it can't be told
+  /// right now.
+  Future<bool> namedReady(String scope, Set<String> caps) =>
+      _locked(() async {
+        await _keys.load();
+        if (!_keys.isReady) throw SealError('my keys are not ready yet');
+        final j = await _api.fetch(scope, _keys.deviceId);
+        if (j == null) throw SealError('key store unreachable');
+        _lastAnswer[scope] = j;
+        final devices = (j['member_devices'] as List? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+        final members = _membersIn(scope, j).toSet();
+        // Everyone needs at least one device with keys.
+        final withKeys = {for (final d in devices) d['user_id']};
+        if (!members.every(withKeys.contains)) return false;
+        for (final d in devices) {
+          if (d['device_id'] == _keys.deviceId) continue;
+          final have = '${d['caps'] ?? ''}'.split(',').toSet();
+          if (!caps.every(have.contains)) return false;
+        }
+        return true;
+      });
+
+  /// Seal [text] for group chat [cid] whose members are [members]: with
+  /// their member-list key up to 32, the group's named key above that.
+  Future<String> sealGroup(int cid, List<int> members, String text,
+          {bool stay = false}) =>
+      members.length > SealScope.maxListMembers
+          ? sealNamed(SealScope.group(cid), text)
+          : seal(members, text, stay: stay);
 
   /// Open one sealed field (a note when it can't be opened yet).
   /// [asked]: share one set across a batch so a missing key is asked for
@@ -545,7 +624,7 @@ class SealSpace {
   Future<void> importKeys(Map<String, dynamic> data) => _locked(() async {
         final held = await _heldKeys();
         for (final e in data.entries) {
-          if (SealScope.membersOf(e.key) == null) continue;
+          if (!SealScope.isScope(e.key)) continue;
           final v = e.value as Map<String, dynamic>;
           final mine = held.putIfAbsent(e.key, () => {});
           for (final k in (v['keys'] as Map<String, dynamic>).entries) {
@@ -637,5 +716,6 @@ class SealSpace {
         _held = null;
         _current.clear();
         _lastAsked.clear();
+        _lastAnswer.clear();
       });
 }

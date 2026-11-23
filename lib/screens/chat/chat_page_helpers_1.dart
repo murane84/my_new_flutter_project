@@ -228,9 +228,18 @@ extension _ChatPageHelpers1 on _ChatPageState {
     {
       final mime = (msg['media_mime'] as String?) ??
           (t == 'video' ? 'video/mp4' : 'image/jpeg');
-      final mine = await _durableMediaRef(rel, mime);
-      final assetId =
-          (mine.isNotEmpty && mine != rel) ? mine.split('/').last : null;
+      // 🔒 A fresh copy for the status, locked with my Stories key when
+      // everyone who may see it can open it (no longer a normal copy).
+      String? assetId;
+      try {
+        final bytes = await _openedBytesOf(rel, t);
+        if (bytes != null && bytes.isNotEmpty) {
+          assetId = await ApiService().uploadStoryMedia(
+              bytes: bytes,
+              filename: t == 'video' ? 'status.mp4' : 'status.jpg',
+              mime: mime);
+        }
+      } catch (_) {}
       if (assetId != null) {
         res = await ApiService().createStory(
             kind: t == 'video' ? 'video' : 'photo',

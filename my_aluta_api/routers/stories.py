@@ -125,6 +125,8 @@ def _story_out(story: Story, *, viewed: bool, view_count: int = 0) -> schemas.St
         song_title=getattr(story, "song_title", None),
         song_start_ms=getattr(story, "song_start_ms", None),
         co_author_id=getattr(story, "co_author_id", None),
+        media_url_key=getattr(story, "media_key", None),
+        song_url_key=getattr(story, "song_key", None),
         created_at=story.created_at,
         expires_at=story.expires_at,
         viewed=viewed,
@@ -133,9 +135,25 @@ def _story_out(story: Story, *, viewed: bool, view_count: int = 0) -> schemas.St
 
 
 
+SEALED = "🔒s1."
+
+
+def _sealed(v) -> bool:
+    return isinstance(v, str) and v.startswith(SEALED)
+
+
+def _sealed_key(v):
+    """A sealed media key for this status ("🔒s1.s:…"), or None."""
+    v = (v or "").strip()
+    return v if v.startswith(SEALED + "s:") and len(v) <= 2000 else None
+
+
 def _clean_thumb(raw):
-    """A small JPEG/PNG/WebP data URI, or None (anything else is dropped)."""
+    """A small JPEG/PNG/WebP data URI, or None (anything else is dropped).
+    🔒 A sealed status's preview is a sealed string (the app opens it)."""
     t = (raw or "").strip()
+    if _sealed(t):
+        return t if len(t) <= 60000 else None
     if not t or len(t) > 40000:
         return None
     if not t.startswith(("data:image/jpeg;base64,", "data:image/png;base64,",
@@ -197,10 +215,13 @@ def create_story(
                 int(co) not in set(_get_friend_ids(db, current_user.id)):
             co = None
 
-    # Sane sizes for what every viewer downloads and renders.
-    if len(payload.caption or "") > 2000 or \
-            len(payload.music_title or "") > 300 or \
-            len(payload.music_artist or "") > 300 or \
+    # Sane sizes for what every viewer downloads and renders (a sealed
+    # field is longer than its words: base64 + the lock).
+    def _cap(v, n):
+        return n * 2 + 200 if _sealed(v) else n
+    if len(payload.caption or "") > _cap(payload.caption, 2000) or \
+            len(payload.music_title or "") > _cap(payload.music_title, 300) or \
+            len(payload.music_artist or "") > _cap(payload.music_artist, 300) or \
             len(payload.background or "") > 64:
         raise HTTPException(status_code=400, detail="Too long")
 
@@ -244,9 +265,17 @@ def create_story(
         background=(payload.background or None),
         thumb=_clean_thumb(getattr(payload, "thumb", None)) if kind == "video" else None,
         song_asset_id=song_id,
-        song_title=((payload.song_title or "").strip()[:200] or None) if song_id else None,
+        # (a sealed title stays whole)
+        song_title=(((payload.song_title or "").strip()
+                     if _sealed(payload.song_title)
+                     else (payload.song_title or "").strip()[:200]) or None)
+        if song_id else None,
         song_start_ms=max(0, int(payload.song_start_ms or 0)) if song_id else None,
         co_author_id=co,
+        media_key=(_sealed_key(getattr(payload, "media_url_key", None))
+                   if kind in ("photo", "video") else None),
+        song_key=(_sealed_key(getattr(payload, "song_url_key", None))
+                  if song_id else None),
         created_at=now,
         expires_at=now + STORY_TTL,
     )
@@ -583,8 +612,21 @@ def keep_story_in_space(
     dup = dup_q.first() if (ref is not None or caption != sealed) else None
     if dup is not None:
         return {"ok": True, "moment_id": dup.id, "already": True}
+    # 🔒 A sealed photo / video: the app gives its address-with-key, sealed
+    # for the two of us (the moment then opens like any sealed one).
+    ref_key = None
+    rk = (body or {}).get("ref_key")
+    if kind in ("photo", "video") and getattr(story, "media_key", None) \
+            and isinstance(rk, str) and rk.startswith(
+                f"🔒s1.{min(me, author)},{max(me, author)}.") \
+            and len(rk) <= 4000:
+        ref_key = rk
+    elif kind in ("photo", "video") and getattr(story, "media_key", None):
+        # Without its key the kept photo couldn't be opened in Our Space.
+        raise HTTPException(status_code=400,
+                            detail="Update Aluta to keep this status")
     moment = PinnedMoment(space_id=space.id, author_id=me, kind=kind,
-                          ref=ref, caption=caption)
+                          ref=ref, ref_key=ref_key, caption=caption)
     db.add(moment)
     db.commit()
     db.refresh(moment)

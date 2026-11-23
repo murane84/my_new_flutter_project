@@ -395,6 +395,9 @@ class StoryCreate(BaseModel):
     song_start_ms: Optional[int] = None
     # Duo status: my bonded partner, posting it with me.
     co_author_id: Optional[int] = None
+    # 🔒 A sealed status: its media's / song's key, sealed ("🔒s1.s:<me>.…").
+    media_url_key: Optional[str] = None
+    song_url_key: Optional[str] = None
 
 
 class StoryOut(BaseModel):
@@ -415,6 +418,10 @@ class StoryOut(BaseModel):
     song_title: Optional[str] = None
     song_start_ms: Optional[int] = None
     co_author_id: Optional[int] = None
+    # 🔒 Keys of a sealed status's media / song (the app puts them back on
+    # media_url / song_url once it opens them).
+    media_url_key: Optional[str] = None
+    song_url_key: Optional[str] = None
     created_at: datetime
     expires_at: datetime
     # Has the requesting user already viewed this story?

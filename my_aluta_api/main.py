@@ -329,6 +329,8 @@ def ensure_media_schema():
         # Song moments + duo statuses.
         "ALTER TABLE stories ADD COLUMN IF NOT EXISTS song_asset_id VARCHAR",
         "ALTER TABLE stories ADD COLUMN IF NOT EXISTS song_title VARCHAR",
+        "ALTER TABLE stories ADD COLUMN IF NOT EXISTS media_key TEXT",
+        "ALTER TABLE stories ADD COLUMN IF NOT EXISTS song_key TEXT",
         "ALTER TABLE stories ADD COLUMN IF NOT EXISTS song_start_ms INTEGER",
         "ALTER TABLE stories ADD COLUMN IF NOT EXISTS co_author_id INTEGER",
         # Ozilane Key: opaque per-user subject, linked-at cache, two-step flag.

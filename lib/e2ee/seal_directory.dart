@@ -111,8 +111,9 @@ class SealDirectory implements SealKeyDirectory {
   /// What this app can open beyond sealed text, told to the directory so
   /// friends know: m1 = sealed media v1 (seal_media.dart); m2 = sealed
   /// songs, files over 100 MB (opened in pieces), polls, reactions, group
-  /// hearts and Stories.
-  static const String caps = 'm1,m2';
+  /// hearts and Stories; m3 = named keys — group chats of more than 32
+  /// and Stories (seal_scope.dart).
+  static const String caps = 'm1,m2,m3';
 
   /// Register / refresh this device and keep one-time prekeys topped up.
   /// Call when the signed-in home mounts.

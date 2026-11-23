@@ -22,7 +22,7 @@ class SealPolls {
   static const _wordKeys = ['q', 'options', 'rest'];
 
   /// [specJson] (the composer's poll) with its words sealed for [members].
-  static Future<String> sealSpec(Iterable<int> members, String specJson,
+  static Future<String> sealSpec(int cid, List<int> members, String specJson,
       {bool stay = false}) async {
     final spec = Map<String, dynamic>.from(jsonDecode(specJson) as Map);
     final words = {
@@ -30,7 +30,7 @@ class SealPolls {
         if (spec[k] != null) k: spec[k],
     };
     final sealed = await SealSpace.instance
-        .seal(members, jsonEncode(words), stay: stay);
+        .sealGroup(cid, members, jsonEncode(words), stay: stay);
     if (!SealScope.isSealed(sealed)) throw StateError('poll not sealed');
     _words[sealed] = words;
     final out = Map<String, dynamic>.from(spec)

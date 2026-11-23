@@ -548,6 +548,11 @@ class Story(Base):
     song_asset_id = Column(String, nullable=True)
     song_title = Column(String, nullable=True)
     song_start_ms = Column(Integer, nullable=True)
+    # 🔒 A sealed status (e2ee_scope.py "s:<author>"): its words are sealed
+    # strings, its photo / video / song locked on the phone — these carry
+    # their keys, sealed for the author's audience.
+    media_key = Column(Text, nullable=True)
+    song_key = Column(Text, nullable=True)
     # A duo status: posted by one partner WITH the other — it shows in both
     # people's status lists as one post.
     co_author_id = Column(Integer, nullable=True)
@@ -1606,6 +1611,23 @@ class SealScope(Base):
     epoch = Column(Integer, nullable=False, default=1)
     created_by = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class SealScopeEpoch(Base):
+    """🔒 Who a NAMED scope's key was made for (e2ee_scope.py): a big group
+    chat ("g:<conversation id>") or a person's Stories ("s:<user id>") has
+    one key per membership — this row is that epoch's member list, so the
+    server knows when the members changed and the next key is due."""
+    __tablename__ = "seal_scope_epochs"
+
+    id = Column(Integer, primary_key=True)
+    scope = Column(String(400), nullable=False, index=True)
+    epoch = Column(Integer, nullable=False)
+    members = Column(Text, nullable=False)  # sorted ids, comma-separated
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("scope", "epoch",
+                                       name="_scope_epoch_uc"),)
 
 
 class CloudBackup(Base):

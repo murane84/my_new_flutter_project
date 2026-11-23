@@ -532,7 +532,12 @@ class SealIngress {
       }
       return false;
     }
-    if (members.length > groupMaxMembers) return false;
+    if (members.length > groupMaxMembers) {
+      // A group of more than 32: its own named key — every device of every
+      // member must open those (m3) and [cap].
+      return SealSpace.instance
+          .namedReady(SealScope.group(cid), {'m3', cap});
+    }
     return SealMessenger.instance.canSealMediaFor(members, me,
         stay: await groupSealedBefore(me, cid), cap: cap);
   }

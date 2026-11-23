@@ -26,9 +26,13 @@ class SealReacts {
   }
 
   /// Lock [emoji] for [members].
-  static Future<String> seal(Iterable<int> members, String emoji,
-      {bool stay = false}) async {
-    final s = await SealSpace.instance.seal(members, emoji, stay: stay);
+  /// [cid]: a group chat (a big one seals with its named key).
+  static Future<String> seal(List<int> members, String emoji,
+      {bool stay = false, int? cid}) async {
+    final s = cid == null
+        ? await SealSpace.instance.seal(members, emoji, stay: stay)
+        : await SealSpace.instance
+            .sealGroup(cid, members, emoji, stay: stay);
     if (SealScope.isSealed(s)) _emoji[s] = emoji;
     return s;
   }

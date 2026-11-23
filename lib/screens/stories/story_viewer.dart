@@ -15,6 +15,7 @@ import '../../state/presence_state.dart';
 import 'dart:io';
 import '../../utils/net_image.dart';
 import '../../services/media_store.dart';
+import '../../e2ee/seal_media.dart';
 import '../api_service.dart';
 import '../token_helper.dart' show mediaAuthHeaders;
 import 'story_models.dart';
@@ -588,11 +589,28 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       if (!kIsWeb) {
         try {
           cachedVid = await MediaStore.instance.cached(url);
+          // 🔒 A sealed clip is only ever played opened, from this device.
+          if (cachedVid == null && SealMedia.isSealed(url)) {
+            cachedVid = await MediaStore.instance.getFile(url, headers);
+          }
         } catch (_) {}
       }
-      final ctrl = cachedVid != null
-          ? VideoPlayerController.file(cachedVid)
-          : VideoPlayerController.networkUrl(uri, httpHeaders: hdrs);
+      VideoPlayerController ctrl;
+      if (cachedVid != null) {
+        ctrl = VideoPlayerController.file(cachedVid);
+      } else if (SealMedia.isSealed(url)) {
+        final src = kIsWeb
+            ? await MediaStore.instance
+                .webSource(url, headers, mime: item.mediaMime ?? 'video/mp4')
+            : null;
+        if (src == null) {
+          if (mounted) setState(() => _loading = false);
+          return;
+        }
+        ctrl = VideoPlayerController.networkUrl(Uri.parse(src));
+      } else {
+        ctrl = VideoPlayerController.networkUrl(uri, httpHeaders: hdrs);
+      }
       _video = ctrl;
       if (mounted) setState(() => _loading = true);
       try {
@@ -888,7 +906,21 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     try {
       final p = _song ??= ja.AudioPlayer();
       await p.setVolume(_songMuted ? 0 : 1);
-      await p.setAudioSource(ja.AudioSource.uri(uri, headers: hdrs));
+      if (SealMedia.isSealed(url)) {
+        // 🔒 A sealed song moment: opened on this device, never streamed.
+        if (kIsWeb) {
+          final src = await MediaStore.instance
+              .webSource(url, headers, mime: 'audio/mpeg');
+          if (src == null) return;
+          await p.setAudioSource(ja.AudioSource.uri(Uri.parse(src)));
+        } else {
+          final f = await MediaStore.instance.getFile(url, headers);
+          if (f == null) return;
+          await p.setAudioSource(ja.AudioSource.file(f.path));
+        }
+      } else {
+        await p.setAudioSource(ja.AudioSource.uri(uri, headers: hdrs));
+      }
       if (!mounted || gen != _gen) return;
       if (item.songStartMs > 0) {
         await p.seek(Duration(milliseconds: item.songStartMs));
@@ -2137,7 +2169,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         _actionChip('💞', partner ? 'Add to our moments' : 'Keep', () async {
           _pause();
           final err = await ApiService().keepStoryInSpace(item.id,
-              authorId: item.authorId, caption: item.caption);
+              authorId: item.authorId,
+              caption: item.caption,
+              mediaUrl: item.mediaUrl);
           if (!mounted) return;
           if (err == null) _floatUp('💞');
           showToast(

@@ -1512,20 +1512,25 @@ class ApiService {
             : groupList;
         if (members == null) {
           if (stay || sealedMedia != null) return null; // can't tell now
-        } else if ((groupList?.length ?? 0) > SealIngress.groupMaxMembers) {
-          if (sealedMedia != null) return null;
+        } else if (members.length > SealIngress.groupMaxMembers &&
+            !stay &&
+            sealedMedia == null &&
+            !await SealIngress.canSealGroupMedia(conversationId, members)) {
+          // A group of more than 32 whose members' Aluta can't all read its
+          // named key yet, never sealed before: as before.
         } else if (groupPoll &&
             !await SealIngress.canSealGroupMedia(conversationId, groupList,
                 cap: 'm2')) {
           // A member's Aluta can't read a sealed poll yet: as before.
         } else {
           try {
-            payload['content'] = await SealSpace.instance.seal(
-                members, SealPayload.store(content, sealedMedia),
+            payload['content'] = await SealSpace.instance.sealGroup(
+                conversationId, members,
+                SealPayload.store(content, sealedMedia),
                 stay: stay);
             if (groupPoll) {
               payload['poll'] = await SealPolls.sealSpec(
-                  members, poll, stay: stay);
+                  conversationId, members, poll, stay: stay);
             }
             if (sealedMedia != null) {
               payload['media_name'] = 'sealed';
@@ -3826,8 +3831,11 @@ class ApiService {
       var sealName = false;
       if (me != null) {
         try {
-          sealName = await SealIngress.canSealForMembers(
-              {me, ...memberIds}.toList());
+          final all = {me, ...memberIds}.toList();
+          // A group of more than 32 gets its own named key once it exists:
+          // try sealing its name then (it's named plainly if it can't be).
+          sealName = all.length > SealIngress.groupMaxMembers ||
+              await SealIngress.canSealForMembers(all);
         } catch (_) {
           sealName = false; // can't tell now: named as before
         }
@@ -4240,11 +4248,12 @@ class ApiService {
       throw SealError('group members unknown right now');
     }
     final stay = await SealIngress.groupSealedBefore(me, cid);
-    if (!await SealIngress.canSealForMembers(members, stay: stay)) {
+    if (!await SealIngress.canSealGroupMedia(cid, members, cap: 'm2')) {
       return value;
     }
     try {
-      return await SealSpace.instance.seal(members, value, stay: stay);
+      return await SealSpace.instance
+          .sealGroup(cid, members, value, stay: stay);
     } on SealSpaceNotReady {
       return value;
     }
@@ -4257,8 +4266,8 @@ class ApiService {
       final me = await SealIngress.myUid();
       final members = await groupMembers(cid);
       if (me == null || members == null) return false;
-      final seal = await SealIngress.canSealForMembers(members,
-          stay: await SealIngress.groupSealedBefore(me, cid));
+      final seal =
+          await SealIngress.canSealGroupMedia(cid, members, cap: 'm2');
       Uint8List? key;
       List<int> up = bytes;
       if (seal) {
@@ -4934,12 +4943,10 @@ class ApiService {
     if (sealedGroup != null) {
       // 🔒 A sealed group message is edited sealed (for today's members).
       final members = await groupMembers(sealedGroup);
-      if (members == null || members.length > SealIngress.groupMaxMembers) {
-        throw Exception('Failed to edit message');
-      }
+      if (members == null) throw Exception('Failed to edit message');
       body = {
-        'content':
-            await SealSpace.instance.seal(members, content, stay: true),
+        'content': await SealSpace.instance
+            .sealGroup(sealedGroup, members, content, stay: true),
       };
     }
     if (sealedFor != null) {
@@ -5067,10 +5074,21 @@ class ApiService {
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final data = jsonDecode(resp.body);
         if (data is Map && data['groups'] is List) {
-          return (data['groups'] as List)
+          final groups = (data['groups'] as List)
               .whereType<Map>()
               .map((e) => Map<String, dynamic>.from(e))
               .toList();
+          // 🔒 Sealed statuses opened with each author's Stories key (their
+          // photo / video / song keys go back on the addresses).
+          if (resp.body.contains(SealScope.prefix)) {
+            await SealSpace.instance.openJson(groups);
+            for (final g in groups) {
+              for (final s in (g['stories'] as List? ?? const [])) {
+                if (s is Map<String, dynamic>) _storyLockNotes(s);
+              }
+            }
+          }
+          return groups;
         }
       }
       return [];
@@ -5126,20 +5144,87 @@ class ApiService {
 
   /// Upload a story's photo/video bytes and return its asset id (or null).
   /// Reuses the ephemeral media store; the story then references this id.
+  ///
+  /// 🔒 Locked on this phone when everyone who may see my status can open a
+  /// sealed one ([_storiesSealable]); its key waits here for [createStory].
+  ///
+  /// [duo]: for a duo status (shown to my partner's audience too) — goes as
+  /// before.
   Future<String?> uploadStoryMedia({
     required List<int> bytes,
     required String filename,
     required String mime,
+    bool duo = false,
   }) async {
-    final up = await uploadMedia(
-        bytes: bytes, filename: filename, mime: mime, ephemeral: true);
-    final url = up?['url'];
+    Uint8List? key;
+    List<int> up = bytes;
+    if (!duo && await _storiesSealable()) {
+      final (locked, k) = await SealMedia.sealInBackground(bytes);
+      up = locked;
+      key = k;
+    }
+    final kind = mime.startsWith('video/')
+        ? 'video'
+        : mime.startsWith('audio/')
+            ? 'audio'
+            : 'image';
+    final res = await uploadMedia(
+        bytes: up,
+        filename: key != null ? 'sealed' : filename,
+        mime: key != null ? SealMedia.uploadMime : mime,
+        sealedKind: key != null ? kind : null,
+        ephemeral: true);
+    final url = res?['url'];
     if (url is String && url.isNotEmpty) {
       // url is "/attachments/<id>" — the story only wants the <id>.
       final idx = url.lastIndexOf('/');
-      return idx >= 0 ? url.substring(idx + 1) : url;
+      final id = idx >= 0 ? url.substring(idx + 1) : url;
+      if (key != null) {
+        _storyMediaKeys[id] = key;
+        // My own copy opens at once from what I hold.
+        unawaited(MediaStore.instance.putBytes(
+            SealMedia.withKey('${await _baseUrl}/stories/media/$id', key),
+            Uint8List.fromList(bytes)));
+      }
+      return id;
     }
     return null;
+  }
+
+  // Keys of story media locked on this phone, by asset id (until posted).
+  static final Map<String, Uint8List> _storyMediaKeys = {};
+  // Whether my statuses can go sealed right now (asked at most every 30 s).
+  static (DateTime, bool)? _storiesReady;
+
+  /// 🔒 Whether my statuses can go sealed: every device of everyone who may
+  /// see them opens sealed Stories (m3). Throws [SealError] when it can't
+  /// be told right now.
+  Future<bool> _storiesSealable() async {
+    final c = _storiesReady;
+    if (c != null && DateTime.now().difference(c.$1).inSeconds < 30) {
+      return c.$2;
+    }
+    final me = await SealIngress.myUid();
+    if (me == null) return false;
+    final ok =
+        await SealSpace.instance.namedReady(SealScope.story(me), {'m3'});
+    _storiesReady = (DateTime.now(), ok);
+    return ok;
+  }
+
+  /// A sealed status this phone couldn't open: quiet notes, never a lock
+  /// note dressed up as a caption or a song title.
+  static void _storyLockNotes(Map<String, dynamic> s) {
+    for (final k in const ['caption', 'music_title', 'music_artist',
+        'song_title', 'thumb']) {
+      final v = s[k];
+      if (v is String &&
+          (v == SealSpace.waitingForKey ||
+              v == SealSpace.unlockFailed ||
+              SealScope.isSealed(v))) {
+        s[k] = k == 'caption' ? '🔒' : null;
+      }
+    }
   }
 
   /// Post a story (photo/video/music). Returns the created story map, or null.
@@ -5165,6 +5250,35 @@ class ApiService {
     try {
       final token = await _getToken();
       if (token == null) return null;
+      // 🔒 Sealed with my Stories key when everyone who may see it can open
+      // it (a duo goes as before: its co-author's audience isn't mine).
+      // Locked media never goes without its key sealed beside it.
+      final mediaKey =
+          mediaAssetId == null ? null : _storyMediaKeys[mediaAssetId];
+      final songKey =
+          songAssetId == null ? null : _storyMediaKeys[songAssetId];
+      String? mediaUrlKey, songUrlKey;
+      final me = await SealIngress.myUid();
+      final seal = coAuthorId == null &&
+          me != null &&
+          (mediaKey != null || songKey != null || await _storiesSealable());
+      if (seal) {
+        final scope = SealScope.story(me);
+        Future<String?> s(String? v) async => v == null || v.isEmpty
+            ? v
+            : await SealSpace.instance.sealNamed(scope, v);
+        caption = await s(caption);
+        musicTitle = await s(musicTitle);
+        musicArtist = await s(musicArtist);
+        songTitle = await s(songTitle);
+        thumb = await s(thumb);
+        String frag(Uint8List k) =>
+            '${SealMedia.fragment}${base64Url.encode(k).replaceAll('=', '')}';
+        if (mediaKey != null) mediaUrlKey = await s(frag(mediaKey));
+        if (songKey != null) songUrlKey = await s(frag(songKey));
+      } else if (mediaKey != null || songKey != null) {
+        return null; // locked media can't go without its key
+      }
       final resp = await http.post(
         Uri.parse('${await _baseUrl}/stories'),
         headers: _authHeaders(token),
@@ -5182,10 +5296,16 @@ class ApiService {
           'song_title': ?songTitle,
           'song_start_ms': ?songStartMs,
           'co_author_id': ?coAuthorId,
+          'media_url_key': ?mediaUrlKey,
+          'song_url_key': ?songUrlKey,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final out = _tryDecode(resp.body);
+        final raw = _tryDecode(resp.body);
+        final out =
+            raw == null ? null : await SealSpace.instance.openJson(raw);
+        if (mediaAssetId != null) _storyMediaKeys.remove(mediaAssetId);
+        if (songAssetId != null) _storyMediaKeys.remove(songAssetId);
         ok = out != null;
         return out;
       }
@@ -5254,9 +5374,25 @@ class ApiService {
   /// 🔒 Its words become Our Space words: sealed for the two of you, like
   /// every other moment (the status itself expires).
   Future<String?> keepStoryInSpace(String storyId,
-      {int? authorId, String? caption}) async {
+      {int? authorId, String? caption, String? mediaUrl}) async {
     try {
       String? sealed;
+      // 🔒 A sealed photo / video: its address-with-key sealed for the two
+      // of you (the kept moment opens like any sealed one).
+      String? refKey;
+      final key = SealMedia.keyOf(mediaUrl);
+      if (key != null && authorId != null) {
+        final asset = SealMedia.bare(mediaUrl!).split('/').last;
+        try {
+          refKey = await _sealPairText(
+              authorId, SealMedia.withKey('/attachments/$asset', key));
+        } catch (_) {
+          return 'Couldn\'t keep it — check your connection';
+        }
+        if (refKey == null || !SealScope.isSealed(refKey)) {
+          return 'Couldn\'t keep it — try again';
+        }
+      }
       if (authorId != null && (caption ?? '').trim().isNotEmpty) {
         try {
           sealed = await _sealPairText(authorId, caption);
@@ -5270,7 +5406,7 @@ class ApiService {
       final resp = await http.post(
         Uri.parse('${await _baseUrl}/stories/$storyId/keep'),
         headers: _authHeaders(token),
-        body: jsonEncode({'caption': ?sealed}),
+        body: jsonEncode({'caption': ?sealed, 'ref_key': ?refKey}),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) return null;
       try {

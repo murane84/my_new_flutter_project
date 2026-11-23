@@ -28,13 +28,73 @@ from sqlalchemy.orm import Session
 import crud
 from auth import get_current_user
 from database import get_db
-from models import E2eeDevice, SealScope, SealScopeGrant, SealScopeKey, User
+from models import (E2eeDevice, SealScope, SealScopeEpoch, SealScopeGrant,
+                    SealScopeKey, User)
 from routers.e2ee_keys import _live_devices
 
 router = APIRouter(prefix="/e2ee/scopes", tags=["E2EE"])
 
-MAX_MEMBERS = 32          # a group bigger than this stays unsealed
+MAX_MEMBERS = 32          # a member-list scope ("3,7,9") holds at most this
 MAX_WRAPPED = 400          # base64 of the 158-byte wrapped key
+# NAMED scopes — a key that belongs to something rather than to a list of
+# ids: "g:<conversation id>" (a group chat of more than 32) and "s:<user id>"
+# (that person's Stories). Their members are whoever belongs today (the
+# group's members; the author + who may see their status); each epoch
+# records who it was made for (SealScopeEpoch) and a new one is due when
+# that changes: a group on any join or leave (a newcomer reads only what
+# comes after, unless the group shares its history; a leaver nothing more),
+# Stories when someone loses access (a new viewer just gets today's key).
+MAX_NAMED_MEMBERS = 1024
+MAX_WRAPS = 4000
+
+
+def named_kind(scope: str):
+    """("g", conversation id) / ("s", user id) for a named scope, else None."""
+    if len(scope) < 3 or scope[1] != ":" or scope[0] not in ("g", "s"):
+        return None
+    tail = scope[2:]
+    if not tail.isdigit() or str(int(tail)) != tail or int(tail) <= 0:
+        raise HTTPException(status_code=400, detail="Bad scope")
+    return scope[0], int(tail)
+
+
+def named_members(db: Session, kind: str, n: int) -> set:
+    """Who belongs to a named scope today."""
+    if kind == "g":
+        from models import Conversation, ConversationMember
+        conv = db.query(Conversation).filter(Conversation.id == n).first()
+        if conv is None or not conv.is_group:
+            return set()
+        return {int(r[0]) for r in db.query(ConversationMember.user_id).filter(
+            ConversationMember.conversation_id == n).all()}
+    import privacy
+    from routers.stories import _story_circle
+    return {n} | {int(x) for x in privacy.status_audience_of(
+        db, n, _story_circle(db, n))}
+
+
+def _epoch_members(db: Session, scope: str, epoch: int) -> set:
+    row = db.query(SealScopeEpoch).filter(SealScopeEpoch.scope == scope,
+                                         SealScopeEpoch.epoch == epoch).first()
+    if row is None:
+        return set()
+    return {int(x) for x in row.members.split(",") if x}
+
+
+def _named_targets(db: Session, scope: str, nk, epoch: int, current: int,
+                   now_members: set) -> set:
+    """Who may hold a named scope's key of [epoch]: those it was made for
+    (still here) — plus, for a group that shares its history, every member
+    now; for Stories, today's audience gets today's key."""
+    out = _epoch_members(db, scope, epoch) & now_members
+    if nk[0] == "g":
+        from models import Conversation
+        conv = db.query(Conversation).filter(Conversation.id == nk[1]).first()
+        if conv is not None and getattr(conv, "share_history", False):
+            out |= now_members
+    elif epoch == current:
+        out |= now_members
+    return out
 
 
 def space_groups(db: Session, uid: int) -> List[set]:
@@ -78,6 +138,23 @@ def share_a_space(db: Session, a: int, b: int) -> bool:
 
 def _members(scope: str, me: User, db: Session,
              making: bool = False) -> List[int]:
+    nk = named_kind(scope)
+    if nk is not None:
+        members = named_members(db, *nk)
+        if len(members) > MAX_NAMED_MEMBERS:
+            raise HTTPException(status_code=400, detail="Too many members")
+        if me.id in members:
+            # Only the author's devices make a key for their Stories.
+            if making and nk[0] == "s" and me.id != nk[1]:
+                raise HTTPException(status_code=403, detail="Not yours")
+            return sorted(members)
+        # Someone who left reads their own copies of older keys — nothing
+        # more.
+        if not making and db.query(SealScopeKey.id).filter(
+                SealScopeKey.scope == scope,
+                SealScopeKey.user_id == me.id).first() is not None:
+            return sorted(members)
+        raise HTTPException(status_code=403, detail="Not your space")
     try:
         ids = [int(x) for x in scope.split(",")]
     except ValueError:
@@ -122,7 +199,7 @@ class WrapIn(BaseModel):
 class WrapsIn(BaseModel):
     epoch: int = Field(ge=1)
     from_device: str = Field(min_length=8, max_length=64)
-    wraps: List[WrapIn] = Field(max_length=MAX_MEMBERS * 6)
+    wraps: List[WrapIn] = Field(max_length=MAX_WRAPS)
 
 
 def _check_wraps(db: Session, me: User, members, body: WrapsIn):
@@ -159,9 +236,26 @@ def _insert(db: Session, scope: str, me: User, body: WrapsIn) -> int:
 def get_scope(scope: str, device_id: str, db: Session = Depends(get_db),
               me: User = Depends(get_current_user)):
     members = _members(scope, me, db)
+    nk = named_kind(scope)
     s = db.query(SealScope).filter(SealScope.scope == scope).first()
+    named = {}
+    if nk is not None:
+        # The devices of everyone who belongs (with what their Aluta can
+        # open), so a member's device can make the next key and tell
+        # whether every device can read it — without asking per person.
+        named["members"] = members
+        named["member_devices"] = [
+            {"user_id": uid, "device_id": d.device_id, "ik_sig": d.ik_sig,
+             "ik_dh": d.ik_dh, "ik_dh_sig": d.ik_dh_sig,
+             "caps": getattr(d, "caps", None) or ""}
+            for uid in members for d in _live_devices(db, uid)]
+        if s is not None:
+            made_for = _epoch_members(db, scope, s.epoch)
+            now = set(members)
+            named["rotate"] = (made_for != now if nk[0] == "g"
+                               else bool(made_for - now))
     if s is None:
-        return {"epoch": None, "keys": [], "missing": []}
+        return {"epoch": None, "keys": [], "missing": [], **named}
     keys = (db.query(SealScopeKey)
             .filter(SealScopeKey.scope == scope,
                     SealScopeKey.user_id == me.id,
@@ -175,9 +269,15 @@ def get_scope(scope: str, device_id: str, db: Session = Depends(get_db),
             SealScopeKey.scope == scope).all():
         have_by.setdefault(e, set()).add((u, dv))
     missing = []
+    now_members = set(members)
+    targets = {e: (_named_targets(db, scope, nk, e, s.epoch, now_members)
+                   if nk is not None else now_members)
+               for e in range(1, s.epoch + 1)}
     for uid in members:
         for d in _live_devices(db, uid):
             for e in range(1, s.epoch + 1):
+                if uid not in targets[e]:
+                    continue
                 if (uid, d.device_id) not in have_by.get(e, set()):
                     missing.append({"epoch": e, "user_id": uid,
                                     "device_id": d.device_id,
@@ -189,6 +289,7 @@ def get_scope(scope: str, device_id: str, db: Session = Depends(get_db),
                   "from_user": k.from_user, "from_device": k.from_device}
                  for k in keys],
         "missing": missing,
+        **named,
     }
 
 
@@ -223,6 +324,10 @@ def create_scope(scope: str, body: WrapsIn, db: Session = Depends(get_db),
         if moved != 1:
             db.rollback()
             raise HTTPException(status_code=409, detail="Not the next key")
+    if named_kind(scope) is not None:
+        # Who this key is made for (the next one is due when that changes).
+        db.add(SealScopeEpoch(scope=scope, epoch=body.epoch,
+                              members=",".join(str(m) for m in members)))
     _insert(db, scope, me, body)
     db.commit()
     return {"ok": True, "epoch": body.epoch}
@@ -240,6 +345,12 @@ def add_wraps(scope: str, body: WrapsIn, db: Session = Depends(get_db),
     if s is None or not (1 <= body.epoch <= s.epoch):
         raise HTTPException(status_code=409, detail="No such key")
     _check_wraps(db, me, members, body)
+    nk = named_kind(scope)
+    if nk is not None:
+        allowed = _named_targets(db, scope, nk, body.epoch, s.epoch,
+                                 set(members))
+        if any(w.user_id not in allowed for w in body.wraps):
+            raise HTTPException(status_code=403, detail="Not for this key")
     # Only a device that holds the key can wrap it: it must have its own copy.
     held = db.query(SealScopeKey.id).filter(
         SealScopeKey.scope == scope, SealScopeKey.epoch == body.epoch,

@@ -617,6 +617,14 @@ def keep_story_in_space(
             f"🔒s1.{min(me, author)},{max(me, author)}.") \
             and len(sealed) <= 2000 * 6 + 200:  # (a status caption, sealed)
         caption = sealed
+    elif _sealed(caption):
+        # Still sealed with the author's Stories key (not the two of us'):
+        # kept without words rather than with ones Our Space can't rely on
+        # (a note is nothing but its words: the app must send them).
+        if kind == "note":
+            raise HTTPException(status_code=400,
+                                detail="Update Aluta to keep this status")
+        caption = None
     # Already kept → don't pin it twice. A photo / song / GIF is known by its
     # ref; a note by its words — unless they're sealed (they differ each
     # time), then there's nothing to match.

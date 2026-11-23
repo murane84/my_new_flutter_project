@@ -5452,6 +5452,8 @@ class ApiService {
         final raw = _tryDecode(resp.body);
         final out =
             raw == null ? null : await SealSpace.instance.openJson(raw);
+        // (as the feed marks it: its words quoted only into sealed chats)
+        if (seal && out is Map<String, dynamic>) out['sealed'] = true;
         if (mediaAssetId != null) _storyMediaKeys.remove(mediaAssetId);
         if (songAssetId != null) _storyMediaKeys.remove(songAssetId);
         ok = out != null;

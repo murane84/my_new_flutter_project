@@ -48,19 +48,27 @@ class LiveAudioCache {
     }
   }
 
-  /// The cached bytes for [key], or null on a miss / any error.
+  /// The cached bytes for [key], or null on a miss / any error — or when
+  /// what's stored isn't that song (a copy filed under the wrong key by an
+  /// older Aluta: treated as a miss, so the right song is streamed and
+  /// stored over it).
   Future<Uint8List?> get(String key) async {
     if (key.isEmpty) return null;
     try {
-      return await _store.get(key);
+      final b = await _store.get(key);
+      if (b == null || liveTrackFingerprint(b) != key) return null;
+      return b;
     } catch (_) {
       return null;
     }
   }
 
-  /// Store [bytes] under [key] (best-effort). Evicts oldest entries past the cap.
+  /// Store [bytes] under [key] (best-effort) — only when they ARE that song
+  /// (a song that finished streaming just as another was offered must never
+  /// be filed under the new one's key). Evicts oldest entries past the cap.
   Future<void> put(String key, Uint8List bytes) async {
     if (key.isEmpty || bytes.isEmpty) return;
+    if (liveTrackFingerprint(bytes) != key) return;
     try {
       await _store.put(key, bytes);
     } catch (_) {}

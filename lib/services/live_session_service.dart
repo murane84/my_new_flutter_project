@@ -1507,6 +1507,10 @@ class LiveSessionController {
     final ch = p.channel;
     final bytes = _hostBytes;
     if (ch == null || bytes == null) return;
+    // A song still streaming to this guest is over: stop it before offering
+    // the next, so its end can't land after this offer.
+    p.streamEpoch++;
+    p.liveStreaming = false;
     final hash = _hostHash ??= liveTrackFingerprint(bytes);
     p.pendingOfferHash = hash;
     final epoch = ++p.offerEpoch;
@@ -1864,6 +1868,20 @@ class LiveSessionController {
           case 'eos':
             final full = _incoming.toBytes();
             _log('listener: eos — buffered ${full.length} bytes');
+            // A song that finished streaming after the host had already
+            // offered the next one (the guest tapped next mid-transfer): not
+            // what's playing now — never played under the new title; the
+            // offered song follows.
+            final offered = currentHash;
+            if (offered != null &&
+                _listenerBaseMs == 0 &&
+                full.isNotEmpty &&
+                liveTrackFingerprint(full) != offered) {
+              _log('listener: eos of a superseded song — waiting for $offered');
+              _incoming.clear();
+              _pendingCacheHash = null;
+              break;
+            }
             // The host stamped its position + play state on the terminator.
             final pos = j['pos'];
             if (pos is int) _hostPositionMs = pos;
@@ -1988,6 +2006,8 @@ class LiveSessionController {
   Future<void> _closeListenerPc() async {
     _listenerRecoverTimer?.cancel();
     _listenerRecoverTimer = null;
+    // (a new link starts with the host's next offer)
+    currentHash = null;
     await _bounded(_lchan?.close());
     _lchan = null;
     await _bounded(_lpc?.close());

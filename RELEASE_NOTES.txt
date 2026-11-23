@@ -1,12 +1,8 @@
-🎵 Songs you send are now end-to-end encrypted — title included — from the chat, the player's Share, "Answer with a song", Dedicate and a heart. A song you send your bonded partner still joins Our Playlist.
-📦 Files and videos over 100 MB are end-to-end encrypted too, locked piece by piece so even big videos stay light on your phone.
-📊 Polls in encrypted groups: the question and options are end-to-end encrypted (Aluta only counts the votes).
-❤️ Secret hearts in groups are end-to-end encrypted — a heart for one member can only be opened by the two of you.
-😍 Reactions in encrypted chats are end-to-end encrypted — Aluta sees that someone reacted, not with what.
-👥 Group names and photos are end-to-end encrypted.
-💞 Our Space names, photos, videos, voice notes, songs and your background are end-to-end encrypted — and so is anything you keep from a chat.
-💾 Fixed: saving an encrypted photo or file to your phone.
-🗳️ Fixed: the "vote closes in…" alert for a group jam now arrives.
-✨ Circle: the time and unread badge no longer touch the card's edge.
-📄 Privacy Policy and Terms updated (version 8) — everyone is asked to accept once.
-🎧 The little record on a friend's photo while they're listening now stands out in dark mode.
+🔒 Stories are now end-to-end encrypted — captions, photos, videos, songs and their titles. Only the people your "Who can see my status" choice includes can open them, however many they are.
+🔒 Group chats of any size are now end-to-end encrypted (before: up to 32 people).
+👥 Groups now hold up to 1024 people.
+🛡️ Someone removed from a group can no longer read messages sent right after they leave.
+🛡️ A group photo can only be a picture its setter uploaded.
+✨ Replies and nudges on a status keep its words private.
+🐞 Fixes: status posting no longer gets stuck, long group names no longer stop notifications, faster start-up.
+📜 Privacy policy updated (version 9).

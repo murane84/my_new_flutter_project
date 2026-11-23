@@ -1626,7 +1626,7 @@ class ApiService {
           response.body.contains('key_moved_on')) {
         SealSpace.instance.forgetScope(SealScope.group(conversationId));
         forgetGroupMembers(conversationId);
-        return sendMessage(receiverId, content,
+        return await sendMessage(receiverId, content,
             messageType: messageType,
             mediaUrl: mediaUrl,
             mediaName: mediaName,

@@ -24,6 +24,9 @@ class StoryItem {
   final DateTime? expiresAt;
   bool viewed; // mutable so the viewer can flip it locally
   final int viewCount; // only meaningful for my own stories
+  // 🔒 It came sealed with its author's Stories key: its words are quoted
+  // only into a chat that is sealed too.
+  final bool sealed;
 
   StoryItem({
     required this.id,
@@ -45,6 +48,7 @@ class StoryItem {
     this.expiresAt,
     this.viewed = false,
     this.viewCount = 0,
+    this.sealed = false,
   });
 
   bool get isVideo => kind == 'video';
@@ -76,6 +80,7 @@ class StoryItem {
         expiresAt: _dt(j['expires_at']),
         viewed: j['viewed'] == true,
         viewCount: (j['view_count'] as num?)?.toInt() ?? 0,
+        sealed: j['sealed'] == true,
       );
 }
 

@@ -282,7 +282,8 @@ def hard_delete_user(db: Session, user: User) -> None:
     # no link to the user row), and the Our Space key groups it belonged to
     # with every member's copy: nothing sealed outlives the account.
     from sqlalchemy import or_
-    from models import HeldMessage, SealScope, SealScopeGrant, SealScopeKey
+    from models import (HeldMessage, SealScope, SealScopeEpoch, SealScopeGrant,
+                        SealScopeKey)
     db.query(HeldMessage).filter(
         (HeldMessage.sender_id == user.id)
         | (HeldMessage.receiver_id == user.id)
@@ -293,7 +294,11 @@ def hard_delete_user(db: Session, user: User) -> None:
         SealScope.scope.like(f"%,{uid}"),
         SealScope.scope.like(f"%,{uid},%"),
     )).all() if uid in s.split(",")]
+    # …and the key of this account's Stories (every viewer's copy).
+    gone.append(f"s:{uid}")
     if gone:
+        db.query(SealScopeEpoch).filter(SealScopeEpoch.scope.in_(gone)).delete(
+            synchronize_session=False)
         db.query(SealScopeKey).filter(SealScopeKey.scope.in_(gone)).delete(
             synchronize_session=False)
         db.query(SealScope).filter(SealScope.scope.in_(gone)).delete(
@@ -305,6 +310,13 @@ def hard_delete_user(db: Session, user: User) -> None:
     # (Copies of older group keys someone handed this account.)
     db.query(SealScopeKey).filter(SealScopeKey.user_id == user.id).delete(
         synchronize_session=False)
+    # Who a big group's / someone's Stories key was made for: not this
+    # account any more.
+    for row in db.query(SealScopeEpoch).filter(
+            SealScopeEpoch.members.like(f"%{uid}%")).all():
+        ids = [x for x in (row.members or "").split(",") if x]
+        if uid in ids:
+            row.members = ",".join(x for x in ids if x != uid)
 
     # Deleting the user cascades their messages (ORM relationship) and their
     # friend / mute / block rows (FK ON DELETE CASCADE).

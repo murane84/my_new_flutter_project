@@ -205,10 +205,18 @@ def _not_sealed_before(joined_at, granted=()):
 
 
 def granted_scopes(db: Session, conversation_id: int, user_id: int) -> list:
-    from models import SealScopeGrant
-    return [r[0] for r in db.query(SealScopeGrant.scope).filter(
+    from models import SealScopeGrant, SealScopeKey
+    out = [r[0] for r in db.query(SealScopeGrant.scope).filter(
         SealScopeGrant.user_id == user_id,
         SealScopeGrant.conversation_id == conversation_id).all()]
+    # A group of more than 32: each key of its own it gave me ("g:<id>.<n>"
+    # — matched as that field prefix), including older ones it shared while
+    # it shared its history.
+    g = f"g:{conversation_id}"
+    out += [f"{g}.{e}" for (e,) in db.query(SealScopeKey.epoch).filter(
+        SealScopeKey.scope == g, SealScopeKey.user_id == user_id)
+        .distinct().all()]
+    return out
 
 
 def get_messages(db: Session, conversation_id: int, skip: int = 0,

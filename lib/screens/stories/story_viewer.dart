@@ -15,6 +15,7 @@ import '../../state/presence_state.dart';
 import 'dart:io';
 import '../../utils/net_image.dart';
 import '../../services/media_store.dart';
+import '../../e2ee/seal_ingress.dart';
 import '../../e2ee/seal_media.dart';
 import '../api_service.dart';
 import '../token_helper.dart' show mediaAuthHeaders;
@@ -263,9 +264,26 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     if (mounted) setState(() {});
   }
 
+  /// [_statusQuote] for a DM to [peer]: a sealed status's words (caption,
+  /// song) only go into a chat with them that is sealed too — otherwise
+  /// just which kind of status it was.
+  Future<String> _quoteFor(int peer, StoryItem it) async {
+    var words = !it.sealed;
+    if (!words) {
+      try {
+        words = await SealIngress.canSealMedia(peer);
+      } catch (_) {
+        words = false; // can't tell now: no words
+      }
+    }
+    return _statusQuote(it, words: words);
+  }
+
   /// A one-line quote of the status, so the DM shows what was answered.
-  String _statusQuote(StoryItem it) {
+  /// [words]: its caption / song (off: only which kind of status).
+  String _statusQuote(StoryItem it, {bool words = true}) {
     String clip(String t) {
+      if (!words) return '';
       final one = t.trim().replaceAll(RegExp(r'\s+'), ' ');
       return one.length > 60 ? '${one.substring(0, 57)}…' : one;
     }
@@ -295,7 +313,6 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     final item = _story;
     final to = _group.authorId;
     setState(() => _replySending = true);
-    final content = '> ${_statusQuote(item)}\n\n$text';
     // See it go: the reaction floats up over their status (and an occasion
     // gets its confetti).
     if (quick != null) _floatUp(quick);
@@ -304,6 +321,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     }
     // A quick reaction also shows beside my name in their "Viewed by".
     if (quick != null) ApiService().reactToStory(item.id, quick);
+    final content = '> ${await _quoteFor(to, item)}\n\n$text';
     final sent = await _sendWithGif(to, content, gifUrl);
     if (!mounted) return;
     setState(() => _replySending = false);
@@ -1647,7 +1665,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   Future<bool> _nudgeViewer(StoryViewer v, StoryItem item,
       {String? emoji, String? gifUrl}) async {
     // The DM shows it as a quote: a warm "caught you" + which status.
-    final content = '> 👀 Caught you on my status\n> ${_statusQuote(item)}'
+    final content = '> 👀 Caught you on my status\n> '
+        '${await _quoteFor(v.userId, item)}'
         '\n\n${emoji ?? ''}';
     final sent = await _sendWithGif(v.userId, content, gifUrl);
     return sent != null;
@@ -2128,7 +2147,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           _pause();
           setState(() => _confetti = true);
           await StoryHooks.answerWithSong!(context, author, name,
-              occasion == 'birthday' ? 'your birthday 🎂' : _statusLabel(item));
+              occasion == 'birthday'
+                  ? 'your birthday 🎂'
+                  : await _statusLabelFor(item));
           if (mounted) _resume();
         }),
       if (live && StoryHooks.tuneIn != null)
@@ -2158,7 +2179,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         _actionChip('🎵', 'Answer with a song', () async {
           _pause();
           await StoryHooks.answerWithSong!(
-              context, author, name, _statusLabel(item));
+              context, author, name, await _statusLabelFor(item));
           if (mounted) _resume();
         }),
       // My person's photo → send my half back for a duo.
@@ -2200,12 +2221,31 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     );
   }
 
+  /// [_statusLabel] for the song sent to its author: a sealed status's
+  /// words only into a chat with them that is sealed too.
+  Future<String> _statusLabelFor(StoryItem item) async {
+    var words = !item.sealed;
+    if (!words) {
+      try {
+        words = await SealIngress.canSealMedia(item.authorId);
+      } catch (_) {
+        words = false;
+      }
+    }
+    return _statusLabel(item, words: words);
+  }
+
   /// "📷 your photo status" / "🎵 your “Song” status" — what a song answers.
-  String _statusLabel(StoryItem item) {
-    if (item.isMusic) return 'your “${item.musicTitle ?? 'song'}” status';
+  /// [words]: off — only which kind of status (see [_statusLabelFor]).
+  String _statusLabel(StoryItem item, {bool words = true}) {
+    if (item.isMusic) {
+      return words && (item.musicTitle ?? '').isNotEmpty
+          ? 'your “${item.musicTitle}” status'
+          : 'your song status';
+    }
     if (item.isVideo) return 'your video status';
     if (item.isText) {
-      final t = (item.caption ?? '').trim();
+      final t = words ? (item.caption ?? '').trim() : '';
       return t.isEmpty
           ? 'your status'
           : 'your status “${t.length > 40 ? '${t.substring(0, 39)}…' : t}”';
@@ -2498,7 +2538,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           type: 'image',
           filename: x.name,
           mime: mime,
-          content: '> ${_statusQuote(item)}\n\n📸 Duo — add your half 💞',
+          content: '> ${await _quoteFor(partner.id, item)}'
+              '\n\n📸 Duo — add your half 💞',
           meta: jsonEncode({'duo': 1}));
     } catch (_) {
       sent = null;

@@ -5089,6 +5089,14 @@ class ApiService {
           // 🔒 Sealed statuses opened with each author's Stories key (their
           // photo / video / song keys go back on the addresses).
           if (resp.body.contains(SealScope.prefix)) {
+            for (final g in groups) {
+              for (final s in (g['stories'] as List? ?? const [])) {
+                if (s is Map<String, dynamic> &&
+                    s.values.any(SealScope.isSealed)) {
+                  s['sealed'] = true;
+                }
+              }
+            }
             await SealSpace.instance.openJson(groups);
             for (final g in groups) {
               for (final s in (g['stories'] as List? ?? const [])) {

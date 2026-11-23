@@ -127,8 +127,10 @@ def named_members(db: Session, kind: str, n: int) -> set:
         conv = db.query(Conversation).filter(Conversation.id == n).first()
         if conv is None or not conv.is_group:
             return set()
-        return {int(r[0]) for r in db.query(ConversationMember.user_id).filter(
-            ConversationMember.conversation_id == n).all()}
+        # (members whose account exists — as the app lists them)
+        return {int(r[0]) for r in db.query(ConversationMember.user_id)
+                .join(User, User.id == ConversationMember.user_id)
+                .filter(ConversationMember.conversation_id == n).all()}
     import privacy
     from routers.stories import _story_circle
     return {n} | {int(x) for x in privacy.status_audience_of(

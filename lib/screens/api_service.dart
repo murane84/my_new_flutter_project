@@ -5341,8 +5341,10 @@ class ApiService {
   /// people may see it than one key is made for, say so (once, wherever the
   /// post started) instead.
   static void _tooManyForStatus() {
-    final ctx = navigatorKey.currentContext;
-    if (ctx == null || !ctx.mounted) return;
+    // (the app's root overlay: the navigator's own context sits above it)
+    final overlay = navigatorKey.currentState?.overlay;
+    final ctx = overlay?.context;
+    if (overlay == null || ctx == null || !ctx.mounted) return;
     showToast(
         ctx,
         'Too many people can see your status to keep it end-to-end '
@@ -5350,6 +5352,7 @@ class ApiService {
         'my status”, then post again.',
         type: ToastType.error,
         duration: const Duration(seconds: 7),
+        overlay: overlay,
         hold: true);
   }
 

@@ -2146,10 +2146,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
             }, () async {
           _pause();
           setState(() => _confetti = true);
-          await StoryHooks.answerWithSong!(context, author, name,
-              occasion == 'birthday'
-                  ? 'your birthday 🎂'
-                  : await _statusLabelFor(item));
+          final about = occasion == 'birthday'
+              ? 'your birthday 🎂'
+              : await _statusLabelFor(item);
+          if (!mounted) return;
+          await StoryHooks.answerWithSong!(context, author, name, about);
           if (mounted) _resume();
         }),
       if (live && StoryHooks.tuneIn != null)
@@ -2178,8 +2179,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       if (!_group.isMe && occasion == null && StoryHooks.answerWithSong != null)
         _actionChip('🎵', 'Answer with a song', () async {
           _pause();
-          await StoryHooks.answerWithSong!(
-              context, author, name, await _statusLabelFor(item));
+          final about = await _statusLabelFor(item);
+          if (!mounted) return;
+          await StoryHooks.answerWithSong!(context, author, name, about);
           if (mounted) _resume();
         }),
       // My person's photo → send my half back for a duo.

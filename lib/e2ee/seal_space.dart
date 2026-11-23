@@ -467,8 +467,8 @@ class SealSpace {
     return seal(SealScope.membersOf(scope)!, text);
   }
 
-  /// Seal [text] with NAMED scope [scope] (a big group "g:<id>", Stories
-  /// "s:<id>"): its key is made for whoever belongs today, and moved on
+  /// Seal [text] with NAMED scope [scope] (a big group `g:<id>`, Stories
+  /// `s:<id>`): its key is made for whoever belongs today, and moved on
   /// when that changes. Throws [SealError] when it can't be sealed right
   /// now (never plain then) — callers check [namedReady] first.
   Future<String> sealNamed(String scope, String text) => _locked(() async {

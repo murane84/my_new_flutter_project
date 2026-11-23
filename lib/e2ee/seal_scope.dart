@@ -43,8 +43,8 @@ class SealScope {
   }
 
   /// A NAMED scope: a key that belongs to something rather than to a list
-  /// of ids — "g:<conversation id>" (a group chat of more than 32) or
-  /// "s:<user id>" (that person's Stories). The server says who belongs.
+  /// of ids — `g:<conversation id>` (a group chat of more than 32) or
+  /// `s:<user id>` (that person's Stories). The server says who belongs.
   static String group(int conversationId) => 'g:$conversationId';
 
   /// A member-list scope holds at most this many (bigger: a named one).

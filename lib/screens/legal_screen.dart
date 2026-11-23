@@ -678,7 +678,7 @@ List<Widget> _legalBody(BuildContext context, String raw) {
 // the backend CURRENT_POLICY_VERSION is bumped), update this content too.
 const String _privacy = '''
 Aluta — Privacy Policy
-Development / Beta build · Last updated: 21 November 2026
+Development / Beta build · Last updated: 23 November 2026
 
 Aluta is an app in active development, provided for early testing. Features and
 data practices change frequently, and it is not yet intended for public
@@ -699,9 +699,9 @@ information. It is a good-faith draft by the developer, not legal advice.
   reactions and replies. Media is stored on our server so it can be delivered.
   The words of 1:1 text messages and secret-heart notes are end-to-end
   encrypted: the server keeps only locked copies it cannot read. So are 1:1
-  photos, videos, voice notes, files and songs, group chats of up to 32 people,
-  polls, reactions, group names and photos. Stories are not end-to-end encrypted
-  yet; they travel
+  photos, videos, voice notes, files and songs, group chats, polls, reactions,
+  group names and photos, and Stories (their words, photos, videos and songs).
+  Who posted and who viewed travel
   over encrypted connections (HTTPS/WSS) and are served only to participants.
 - Stories: the ephemeral photo, video, text or "now playing" Stories you post and
   a list of which friends viewed them. Stories expire about 24 hours after posting.
@@ -793,18 +793,19 @@ falls back to plain text (a friend still on an older Aluta, with no keys, gets
 plain text until they update). Photos, videos, voice notes, files of any size and
 songs (with their titles) are locked on your phone before they're sent, with their
 captions and names — and so is anything inside a secret heart. A backup you keep on our server (optional) is locked on your phone with a
-recovery key only you hold — we can't open it. Group chats of up to 32 people
-are sealed with a key only the members' devices
+recovery key only you hold — we can't open it. Group chats are sealed with a key
+only the members' devices
 hold (someone who joins later can't read what came before, unless the admins let
 new members read earlier messages — then members' phones pass them the older keys,
 still end-to-end encrypted; someone who leaves can't read what comes after). Polls
 (question and options), group hearts, reactions, group names and photos, and Our
 Space's name, photos, videos, voice notes, songs and background (including anything
-you keep from a chat) are end-to-end encrypted too. A song you send your bonded
-partner joins Our Playlist by its title, which our server can see. Not yet end-to-end
-encrypted: Stories (a chat photo you share as your status is saved there as a normal
-copy), group chats of more than 32 people, the song copies in Our Playlist,
-dedication voice notes, and reactions inside Our Space. The server still sees who
+you keep from a chat) are end-to-end encrypted too, and so are Stories, locked with a
+key only the people your status choice includes hold. Group chats of any size get a
+new key whenever someone joins or leaves. A song you send your bonded partner joins
+Our Playlist by its title, which our server can see. Not yet end-to-end encrypted:
+duo statuses, the picture a sticker or GIF status shows, reactions to Stories, the
+song copies in Our Playlist, dedication voice notes, and reactions inside Our Space. The server still sees who
 you talk to and when, so it can deliver messages.
 
 7. Children
@@ -830,7 +831,7 @@ For any privacy questions or requests, use Help & feedback in the app menu
 
 const String _terms = '''
 Aluta — Terms of Service
-Development / Beta build · Last updated: 21 November 2026
+Development / Beta build · Last updated: 23 November 2026
 
 Aluta is in active development, provided for early testing. Features change
 frequently, data may be reset, and the service may be unavailable or contain
@@ -845,9 +846,9 @@ and data (including messages, media and accounts) may be lost or reset during
 development — do not rely on the Service to store anything important. 1:1 text
 messages, secret-heart notes, Our Space words and Listen Together chat are
 end-to-end encrypted, and so are photos, videos, voice notes, files and songs in 1:1
-chats and group chats of up to 32 people, polls, reactions, group names and photos,
-and Our Space's names and pictures; Stories are not yet, so think twice before
-sharing highly sensitive information.
+and group chats, polls, reactions, group names and photos, Our Space's names and
+pictures, and Stories — still, think twice before sharing highly sensitive
+information.
 
 2. Eligibility and your account
 You must be at least the age of digital consent in your country (and at least 13)
@@ -926,7 +927,7 @@ Help & feedback in the app ("Get help"), or email support@ozilane.com.
 
 const String _about = '''
 About Aluta
-Development / Beta build · Last updated: 21 November 2026
+Development / Beta build · Last updated: 23 November 2026
 
 Aluta is a social app that brings your conversations and your music into one
 place — private and group chat, voice and group calls, ephemeral Stories, a
@@ -938,8 +939,8 @@ the web.
 - Chat and media: one-to-one and group chats with photos, files, voice notes and
   GIFs, reactions, replies, edit and delete, pinned messages, typing indicators
   and read receipts. 1:1 text messages, photos, videos, voice notes and files are
-  end-to-end encrypted, and so are songs, polls, reactions and group chats of up to
-  32 (Stories come next); check a chat's
+  end-to-end encrypted, and so are songs, polls, reactions, Stories and group chats
+  of any size; check a chat's
   encryption together by comparing or scanning your safety code.
 - Voice and group calls: peer-to-peer calls that are never recorded, answerable
   from Bluetooth and car head units.

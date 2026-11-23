@@ -53,7 +53,7 @@
   <header>
     <div class="brand"><span class="dot"></span><strong>Aluta</strong></div>
     <h1>Privacy Policy</h1>
-    <div class="meta">Effective date: 21 November 2026 · Version 0.8 (beta)</div>
+    <div class="meta">Effective date: 23 November 2026 · Version 0.9 (beta)</div>
     <span class="badge">Beta build</span>
   </header>
 
@@ -65,8 +65,8 @@
     delivered. Your <strong>1:1 text messages are end-to-end encrypted</strong>, and so
     are secret-heart notes, Our Space words and Listen Together chat: our server
     can't read them. So are photos, videos, voice notes, files and songs in 1:1 chats
-    and in group chats of up to 32 people, polls, reactions, group names and photos,
-    and Our Space's names and pictures. Stories aren't yet.
+    and in group chats, polls, reactions, group names and photos, Our Space's names
+    and pictures, and Stories.
     This policy is a good-faith description written by the developer, not legal
     advice.
   </div>
@@ -102,7 +102,7 @@
       <li>Messages you send and receive — text, photos, videos, voice notes, files,
       songs, GIFs, polls, locations and contact cards you choose to share — with
       details like time, delivery/read status, replies, reactions, edits and pins.
-      In 1:1 chats and in group chats of up to 32 people, the words, files (with their
+      In 1:1 chats and in group chats, the words, files (with their
       names), songs (with their titles), polls, secret hearts and reactions are
       end-to-end encrypted: our server stores and passes on only locked copies, which
       it cannot read (see Security). It still sees who took part and when — for a poll,
@@ -121,7 +121,9 @@
       the session (peer-to-peer). Our server only passes the small “play / pause /
       position” signals and does not keep the audio.</li>
       <li><strong>Stories</strong> you post and who viewed them; they expire after about
-      24 hours.</li>
+      24 hours. Their words, photos, videos and songs are end-to-end encrypted for the
+      people who may see them (see Security); our server still knows who posted, when,
+      and who viewed.</li>
     </ul>
 
     <h3>Our Space and Our Diary</h3>
@@ -301,7 +303,7 @@
       <li>1:1 text messages, including edits and replies typed into a notification, and
       the locations and contacts you share in them;</li>
       <li>photos, videos, voice notes, files of any size and songs (with their titles) in
-      1:1 chats and group chats of up to 32 people — with their captions and file names
+      1:1 chats and group chats of any size — with their captions and file names
       — once every device involved runs an Aluta that can open them;</li>
       <li>secret hearts — their note and any photo, clip, voice or song inside (including
       Dedicate from the music player); a group heart meant for one member can be opened
@@ -311,23 +313,30 @@
       <li>Our Space — its words (moments, diary, notes, memos, kept hearts and kept
       statuses), its name, the photos, videos, voice notes and songs you pin there
       (including anything you keep from a chat) and your background photo;</li>
+      <li>Stories — their words, photos, videos, video previews and song moments
+      (including a chat photo you share as your status), locked with a key only the
+      people who may see your status hold;</li>
       <li>chat lines and GIF reactions in a Listen Together room.</li>
     </ul>
     <p>Your private keys never leave your devices; our server holds only public keys
     and locked copies of keys. When you link a computer with the QR code, your phone
     sends it your history locked for that computer only. Once a chat has been encrypted
     on your device it never falls back to plain text; a friend still on an older Aluta
-    (with no keys) gets plain text until they update. Group chats of up to 32 people are sealed with a key only the
-    members' devices hold; someone who joins later can't read what was written before
+    (with no keys) gets plain text until they update. Group chats are sealed with a key only the
+    members' devices hold (a new one whenever someone joins or leaves); someone who joins later can't read what was written before
     they joined — unless the group's admins let new members read earlier messages,
     in which case members' phones pass the newcomer those older keys (still end-to-end
     encrypted; our server can't read them) — and someone who leaves can't read what
     comes after. When you send
     your bonded partner a song, your phone tells our server its title so it joins Our
-    Playlist (Our Playlist's titles aren't end-to-end encrypted). Not yet end-to-end
-    encrypted: Stories (including a chat photo you share as your status, which is saved
-    there as a normal copy), group chats of more than 32 people, the song copies in Our
-    Playlist, dedication voice notes, and reactions inside Our Space. Our server also
+    Playlist (Our Playlist's titles aren't end-to-end encrypted). Your Stories are locked
+    with a key your devices pass to the people your "Who can see my status" choice
+    includes; when someone loses that, a new key is made, and a new viewer gets today's
+    key. Stories, like group features, are encrypted once every device of the people
+    involved runs an Aluta that can open them. Not yet end-to-end encrypted: duo
+    statuses posted with your partner, the picture a sticker or GIF status shows,
+    reactions to Stories, the song copies in Our Playlist, dedication voice notes, and
+    reactions inside Our Space. Our server also
     still sees who you talk to and when (needed to deliver messages). Notifications show your messages on your own device, and a
     backup file you make contains your chats — and the keys to your encrypted chats, so
     restoring after a reinstall opens them again — protected by the passphrase you choose
@@ -381,7 +390,7 @@
   </section>
 
   <footer>
-    Aluta — Privacy Policy · Version 0.8 · 21 November 2026 · Written in good faith, not legal advice.
+    Aluta — Privacy Policy · Version 0.9 · 23 November 2026 · Written in good faith, not legal advice.
   </footer>
 </div>
 </body>

@@ -352,6 +352,8 @@ class LiveSessionController {
   // somewhere we don't hold yet — we wait silently instead of replaying the
   // first second of our buffer over and over.
   bool _receivingHead = false;
+  // Listener: the song the current stream says it is (its track_start).
+  String? _streamHash;
   final BytesBuilder _headBuf = BytesBuilder(copy: false);
   Uint8List? _fullSong;
   String? _headCacheHash;
@@ -1397,8 +1399,14 @@ class LiveSessionController {
 
       _log('host: streaming ${bytes.length - startByte}/${bytes.length} bytes '
           '($mime)${baseMs > 0 ? ' from ${baseMs}ms' : ''}');
-      ch.send(RTCDataChannelMessage(
-          jsonEncode({'t': 'track_start', 'mime': mime, 'base_ms': baseMs})));
+      ch.send(RTCDataChannelMessage(jsonEncode({
+        't': 'track_start',
+        'mime': mime,
+        'base_ms': baseMs,
+        // which song this is (a trimmed tail can't be fingerprinted by the
+        // listener): a stream overtaken by the next offer is never played
+        'hash': liveTrackFingerprint(bytes),
+      })));
       // 16 KB frames stay under every WebRTC implementation's reliable
       // single-message limit (browsers included), so the web PWA interops too.
       // Faster pacing (#2): send in short bursts and yield only BETWEEN bursts.
@@ -1858,6 +1866,8 @@ class LiveSessionController {
             // full-from-start transfer.
             final base = j['base_ms'];
             _listenerBaseMs = (base is int && base > 0) ? base : 0;
+            final sh = (j['hash'] ?? '').toString();
+            _streamHash = sh.isEmpty ? null : sh; // (an older host: none)
             _resetHead();
             _incoming.clear();
             _listenerStarted = false;
@@ -1873,10 +1883,13 @@ class LiveSessionController {
             // what's playing now — never played under the new title; the
             // offered song follows.
             final offered = currentHash;
+            final streamed = _streamHash;
             if (offered != null &&
-                _listenerBaseMs == 0 &&
                 full.isNotEmpty &&
-                liveTrackFingerprint(full) != offered) {
+                (streamed != null
+                    ? streamed != offered
+                    : _listenerBaseMs == 0 &&
+                        liveTrackFingerprint(full) != offered)) {
               _log('listener: eos of a superseded song — waiting for $offered');
               _incoming.clear();
               _pendingCacheHash = null;
@@ -1890,7 +1903,8 @@ class LiveSessionController {
             // Cache the freshly-streamed song for instant reuse next time — but
             // only a FULL-from-start transfer (a trimmed fast-join tail is only
             // part of the song and must never be cached as the whole thing).
-            final h = _pendingCacheHash;
+            // (the song this stream says it is; else the one asked for)
+            final h = _streamHash ?? _pendingCacheHash;
             if (h != null && _listenerBaseMs == 0 && full.isNotEmpty) {
               unawaited(LiveAudioCache.instance.put(h, full));
             }
@@ -1931,7 +1945,12 @@ class LiveSessionController {
               final bytes = _prefetchBuf.toBytes();
               _prefetchBuf.clear();
               _prefetchHash = null;
-              if (h != null && h.isNotEmpty && bytes.isNotEmpty) {
+              // Only the whole song it says it is (a transfer cut short by a
+              // song change is neither cached nor saved as that song).
+              if (h != null &&
+                  h.isNotEmpty &&
+                  bytes.isNotEmpty &&
+                  liveTrackFingerprint(bytes) == h) {
                 unawaited(LiveAudioCache.instance.put(h, bytes));
                 // A shared song I asked to keep arrived → hand it over.
                 _songWaiters.remove(h)?.complete(bytes);
@@ -2008,6 +2027,7 @@ class LiveSessionController {
     _listenerRecoverTimer = null;
     // (a new link starts with the host's next offer)
     currentHash = null;
+    _streamHash = null;
     await _bounded(_lchan?.close());
     _lchan = null;
     await _bounded(_lpc?.close());

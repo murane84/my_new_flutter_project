@@ -21,6 +21,7 @@ from .users import get_current_user
 from websocket_manager import safe_notify_user, safe_broadcast_users
 from push import send_push_to_user
 import hearts
+import e2ee_msgs
 
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
 
@@ -411,6 +412,12 @@ def send_message(
         if is_viewing(int(uid), f"grp:{cid}"):
             continue
         gt = (conv.title or "") if is_group else ""
+        # (A push is at most 4 KB: a plain name is cut for it; a sealed one
+        # too long to ride along is left out — the phone names the group.)
+        if gt.startswith("🔒s1."):
+            gt = gt if len(gt) <= 200 * 6 + 200 else ""
+        else:
+            gt = gt[:200]
         # The body stays the message preview; the client builds the
         # "X mentioned you: …" line from type/mentioned (fcm_service.dart).
         body = preview
@@ -431,9 +438,9 @@ def send_message(
                 # group's key for the banner (only when it fits a push).
                 **({"sealed_body": msg.content}
                    if (msg.content or "").startswith("🔒s1.")
-                   # (a sealed group name rides along: keep under 4 KB)
-                   and len(msg.content) <= (1900 if gt.startswith("🔒s1.")
-                                            else 2400)
+                   # (with the group's name: the budget a sealed 1:1 has)
+                   and len(msg.content) + len(gt.encode())
+                   <= e2ee_msgs.PUSH_BUDGET
                    and (msg.message_type or "") != "heart" else {}),
                 "mentioned": "1" if is_mention else "0",
                 "mention_all": "1" if (is_mention and mention_all) else "0",

@@ -277,7 +277,7 @@ def hold_for_morning(body: dict, db: Session = Depends(get_db),
         content = ""
         envelopes = e2ee_msgs.clean((body or {}).get("envelopes"),
                                     [current_user.id, rid], rid)
-    if len(content) > 8000:
+    if len(content) > schemas.MAX_MESSAGE_TEXT:  # (as any message)
         raise HTTPException(status_code=400, detail="Too long")
     # Same block rule as sending now (release also checks at delivery time).
     if crud.block_state(db, current_user.id, rid)[0]:

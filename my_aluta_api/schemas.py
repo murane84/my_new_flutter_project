@@ -2,6 +2,10 @@ from pydantic import BaseModel, EmailStr, ConfigDict, Field
 from datetime import datetime
 from typing import Optional, List
 
+# What a message's text may hold, plain or sealed — the size of one sealed
+# 1:1 copy (e2ee_msgs.MAX_ENVELOPE): far above anything typed or pasted.
+MAX_MESSAGE_TEXT = 96 * 1024
+
 # ---------------------- USER SCHEMAS ----------------------
 
 class UserCreate(BaseModel):
@@ -64,7 +68,7 @@ class FriendAdd(BaseModel):
 
 class MessageCreate(BaseModel):
     receiver_id: int
-    content: Optional[str] = ""
+    content: Optional[str] = Field("", max_length=MAX_MESSAGE_TEXT)
     # Attachment fields — omitted for plain text messages.
     message_type: Optional[str] = "text"   # text | image | file | audio
     media_url: Optional[str] = None
@@ -84,7 +88,7 @@ class MessageCreate(BaseModel):
 
 
 class MessageEdit(BaseModel):
-    content: Optional[str] = ""
+    content: Optional[str] = Field("", max_length=MAX_MESSAGE_TEXT)
     envelopes: Optional[str] = None     # an encrypted message's new copies
 
 
@@ -211,7 +215,7 @@ class GroupCreate(BaseModel):
 class GroupMessageCreate(BaseModel):
     # Like MessageCreate but WITHOUT receiver_id — the conversation determines
     # the recipients (its members).
-    content: Optional[str] = ""
+    content: Optional[str] = Field("", max_length=MAX_MESSAGE_TEXT)
     message_type: Optional[str] = "text"
     media_url: Optional[str] = None
     media_name: Optional[str] = None

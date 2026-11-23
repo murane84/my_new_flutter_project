@@ -106,6 +106,13 @@ GROUP_MAX_MEMBERS = 1024
 GROUP_FULL = f"A group holds up to {GROUP_MAX_MEMBERS} people"
 
 
+def _group_title(t) -> str:
+    """A group's name: a plain one cut to 200 letters; a sealed one whole
+    (its size is checked where it comes in)."""
+    t = (t or "").strip()
+    return t if t.startswith("🔒s1.") else t[:200]
+
+
 def create_group(
     db: Session,
     creator_id: int,
@@ -119,7 +126,7 @@ def create_group(
         raise HTTPException(status_code=400, detail=GROUP_FULL)
     conv = Conversation(
         is_group=True,
-        title=(title or "Group").strip() or "Group",
+        title=_group_title(title) or "Group",
         avatar_url=avatar_url,
         created_by=int(creator_id),
     )
@@ -619,7 +626,7 @@ def update_group(
     if share_history is not None:
         conv.share_history = bool(share_history)
     if title is not None:
-        new = title.strip()
+        new = _group_title(title)
         if new:
             conv.title = new
     if avatar_url is not None:

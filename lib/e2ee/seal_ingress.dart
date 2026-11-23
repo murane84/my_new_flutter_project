@@ -532,14 +532,18 @@ class SealIngress {
       }
       return false;
     }
+    final stay = await groupSealedBefore(me, cid);
     if (members.length > groupMaxMembers) {
       // A group of more than 32: its own named key — every device of every
-      // member must open those (m3) and [cap].
-      return SealSpace.instance
-          .namedReady(SealScope.group(cid), {'m3', cap});
+      // member must open those (m3) and [cap]. Once sealed, a member with
+      // no keys right now (signed out) doesn't turn it back to plain — as
+      // in a smaller group.
+      return SealSpace.instance.namedReady(
+          SealScope.group(cid), {'m3', cap},
+          skipKeyless: stay);
     }
-    return SealMessenger.instance.canSealMediaFor(members, me,
-        stay: await groupSealedBefore(me, cid), cap: cap);
+    return SealMessenger.instance
+        .canSealMediaFor(members, me, stay: stay, cap: cap);
   }
 
   /// Give a sent / opened message its sealed media's key and real name.

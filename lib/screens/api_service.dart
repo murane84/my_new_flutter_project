@@ -3838,6 +3838,11 @@ class ApiService {
     String? avatarUrl,
   }) async {
     lastGroupRefusal = null;
+    // (at most 200 letters — what a sealed name may be, plain alike)
+    title = title.trim();
+    if (title.runes.length > 200) {
+      title = String.fromCharCodes(title.runes.take(200));
+    }
     try {
       final token = await _getToken();
       if (token == null) return null;

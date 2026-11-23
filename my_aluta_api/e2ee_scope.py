@@ -269,7 +269,9 @@ def get_scope(scope: str, device_id: str, db: Session = Depends(get_db),
             SealScopeKey.scope == scope).all():
         have_by.setdefault(e, set()).add((u, dv))
     missing = []
-    now_members = set(members)
+    # (Only the author's devices hand out a Stories key — add_wraps.)
+    serves = not (nk is not None and nk[0] == "s" and me.id != nk[1])
+    now_members = set(members) if serves else set()
     targets = {e: (_named_targets(db, scope, nk, e, s.epoch, now_members)
                    if nk is not None else now_members)
                for e in range(1, s.epoch + 1)}
@@ -346,6 +348,11 @@ def add_wraps(scope: str, body: WrapsIn, db: Session = Depends(get_db),
         raise HTTPException(status_code=409, detail="No such key")
     _check_wraps(db, me, members, body)
     nk = named_kind(scope)
+    # Only the author's devices hand out their Stories key: a viewer's phone
+    # may not be able to check another viewer's devices (they needn't know
+    # each other), and the first copy a device gets is the one it keeps.
+    if nk is not None and nk[0] == "s" and me.id != nk[1]:
+        raise HTTPException(status_code=403, detail="Not yours")
     if nk is not None:
         allowed = _named_targets(db, scope, nk, body.epoch, s.epoch,
                                  set(members))

@@ -12,6 +12,7 @@ import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -781,7 +782,10 @@ class AppUpdater {
     final base = await AppConfig.baseUrl;
     final url = '$base${rel['url'] ?? '/download/aluta.apk'}';
     final f = _filesIn(await getTemporaryDirectory(), rel);
-    if (await f.apk.exists() && await f.ok.exists()) return (f.apk, null);
+    if (await f.apk.exists() && await f.ok.exists()) {
+      if (_loud) progress.value = 1; // already here: straight to installing
+      return (f.apk, null);
+    }
     final short = await spaceShort(rel);
     if (short > 0) {
       return (
@@ -837,12 +841,17 @@ class AppUpdater {
       final total =
           rest > 0 ? have + rest : (rel['size'] as num?)?.toInt() ?? 0;
       var got = have;
-      await for (final chunk in resp.stream) {
+      // (a connection that stops sending is dropped after a minute — the
+      // part is kept and the next tap continues it)
+      await for (final chunk
+          in resp.stream.timeout(const Duration(seconds: 60))) {
         sink.add(chunk);
         hasher.add(chunk);
         got += chunk.length;
         if (total > 0) {
-          _dlFrac = got / total;
+          // Full only once checked and in place ("Opening the installer…"
+          // is said then, not while the last bytes are still being checked).
+          _dlFrac = (got / total).clamp(0.0, 0.999);
           if (_loud) progress.value = _dlFrac;
         }
       }
@@ -898,11 +907,33 @@ class AppUpdater {
   }
 
   Future<String?> _openInstaller(File file) async {
-    final r = await OpenFilex.open(file.path,
-        type: 'application/vnd.android.package-archive');
-    return r.type == ResultType.done
-        ? null
-        : 'Allow Aluta to install apps, then tap Update again';
+    // Ask for "Install unknown apps" first, on our own terms: the opener's
+    // own ask waits on an answer some phones never send back, which left the
+    // card on "Opening the installer…" for good.
+    try {
+      var st = await Permission.requestInstallPackages.status;
+      if (!st.isGranted) {
+        st = await Permission.requestInstallPackages
+            .request()
+            .timeout(const Duration(minutes: 3));
+      }
+      if (!st.isGranted) {
+        return 'Allow Aluta to install apps, then tap Update again';
+      }
+    } catch (_) {/* can't tell: let the opener try */}
+    try {
+      final r = await OpenFilex.open(file.path,
+              type: 'application/vnd.android.package-archive')
+          .timeout(const Duration(seconds: 20));
+      return r.type == ResultType.done
+          ? null
+          : 'Allow Aluta to install apps, then tap Update again';
+    } on TimeoutException {
+      return 'The installer didn’t open — tap Update again '
+          '(the download is kept)';
+    } catch (_) {
+      return 'Couldn’t open the installer — tap Update again';
+    }
   }
 
   /// Android: download (or reuse the Wi-Fi copy), verify, open the
@@ -1411,6 +1442,8 @@ class _UpdateCardState extends State<_UpdateCard> {
                   final got = size > 0 ? (size * f / 1048576).round() : null;
                   final label = f >= 1
                       ? 'Opening the installer…'
+                      : f >= 0.999
+                          ? 'Checking the download…'
                       : v == null || v <= 0
                           ? 'Starting the download…'
                           : got != null && mb != null

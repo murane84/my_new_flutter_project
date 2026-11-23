@@ -3816,11 +3816,28 @@ class ApiService {
   }
 
   /// Create a group. Returns the created conversation map, or null.
+  /// Why the last group create / member add was refused, in the server's
+  /// words ("A group holds up to 1024 people — room for 3 more"); null when
+  /// it wasn't (or it just couldn't get through).
+  static String? lastGroupRefusal;
+
+  static String? _refusalOf(http.Response resp) {
+    if (resp.statusCode != 400) return null;
+    try {
+      final d = jsonDecode(resp.body);
+      final s = d is Map ? d['detail'] : null;
+      return s is String && s.isNotEmpty && s.length < 160 ? s : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>?> createGroup(
     String title,
     List<int> memberIds, {
     String? avatarUrl,
   }) async {
+    lastGroupRefusal = null;
     try {
       final token = await _getToken();
       if (token == null) return null;
@@ -3868,6 +3885,7 @@ class ApiService {
         }
       }
       _logger.w('createGroup failed: ${resp.statusCode} ${resp.body}');
+      lastGroupRefusal = _refusalOf(resp);
       return null;
     } catch (e) {
       _logger.e('createGroup exception: $e');
@@ -4192,7 +4210,8 @@ class ApiService {
   }
 
   Future<bool> addGroupMembers(int cid, List<int> userIds) async {
-    return _convAction('POST', '/conversations/$cid/members',
+    lastGroupRefusal = null;
+    return _convAction('POST', '/conversations/$cid/members', refusal: true,
         body: {'user_ids': userIds});
   }
 
@@ -4376,8 +4395,9 @@ class ApiService {
     }
   }
 
+  /// [refusal]: keep a 400's reason in [lastGroupRefusal].
   Future<bool> _convAction(String method, String path,
-      {Map<String, dynamic>? body}) async {
+      {Map<String, dynamic>? body, bool refusal = false}) async {
     try {
       final token = await _getToken();
       if (token == null) return false;
@@ -4398,6 +4418,7 @@ class ApiService {
         default:
           resp = await http.get(uri, headers: headers);
       }
+      if (refusal) lastGroupRefusal = _refusalOf(resp);
       return resp.statusCode >= 200 && resp.statusCode < 300;
     } catch (e) {
       _logger.e('_convAction $method $path exception: $e');

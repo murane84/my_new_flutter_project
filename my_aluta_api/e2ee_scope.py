@@ -44,8 +44,10 @@ MAX_WRAPPED = 400          # base64 of the 158-byte wrapped key
 # that changes: a group on any join or leave (a newcomer reads only what
 # comes after, unless the group shares its history; a leaver nothing more),
 # Stories when someone loses access (a new viewer just gets today's key).
-MAX_NAMED_MEMBERS = 1024
-MAX_WRAPS = 4000
+MAX_NAMED_MEMBERS = 1024  # = crud_conversations.GROUP_MAX_MEMBERS
+# One copy per device: every member with all their devices (routers/
+# e2ee_keys.MAX_DEVICES = 6 each).
+MAX_WRAPS = MAX_NAMED_MEMBERS * 6
 
 
 def named_kind(scope: str):

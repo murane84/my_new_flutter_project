@@ -12,6 +12,7 @@ import 'seal_media.dart';
 import 'seal_primitives.dart';
 import 'seal_scope.dart';
 import 'seal_tab.dart';
+import 'seal_x3dh.dart';
 
 /// What [SealSpace] needs from the server's scope-key store (a fake in tests).
 abstract class SealScopeApi {
@@ -254,6 +255,25 @@ class SealSpace {
   /// Ed25519 identity.
   Future<List<Map<String, dynamic>>> _wrapFor(String scope, int epoch,
       List<int> key, Iterable<Map<String, dynamic>> devices) async {
+    final list = devices.toList();
+    // A big group's key for hundreds of devices (each a key agreement and a
+    // signature): worked out off the UI thread.
+    if (list.length > 48) {
+      return compute(_wrapForIsolate, <String, dynamic>{
+        'me': _keys.identity.toJson(),
+        'scope': scope,
+        'epoch': epoch,
+        'key': Uint8List.fromList(key),
+        'devices': list,
+      });
+    }
+    return wrapList(_keys.identity, scope, epoch, key, list);
+  }
+
+  /// Wrap [key] for each device in [devices] whose identity checks out.
+  static Future<List<Map<String, dynamic>>> wrapList(SealIdentity me,
+      String scope, int epoch, List<int> key,
+      Iterable<Map<String, dynamic>> devices) async {
     final out = <Map<String, dynamic>>[];
     for (final d in devices) {
       try {
@@ -268,7 +288,7 @@ class SealSpace {
           'user_id': d['user_id'],
           'device_id': d['device_id'],
           'wrapped': await SealScope.wrap(
-              me: _keys.identity,
+              me: me,
               recipIkDh: ikDh,
               recipIkSig: ikSig,
               scope: scope,
@@ -744,3 +764,12 @@ class SealSpace {
         _lastAnswer.clear();
       });
 }
+
+/// [SealSpace.wrapList] in a background isolate (see [SealSpace._wrapFor]).
+Future<List<Map<String, dynamic>>> _wrapForIsolate(Map<String, dynamic> a) =>
+    SealSpace.wrapList(
+        SealIdentity.fromJson((a['me'] as Map).cast<String, dynamic>()),
+        a['scope'] as String,
+        a['epoch'] as int,
+        a['key'] as List<int>,
+        (a['devices'] as List).cast<Map<String, dynamic>>());

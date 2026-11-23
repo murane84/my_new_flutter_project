@@ -99,6 +99,13 @@ def find_dm_conversation(db: Session, u1: int, u2: int):
     return None
 
 
+# The most people a group chat holds: as many as its end-to-end key can be
+# made for (e2ee_scope.MAX_NAMED_MEMBERS) — so a sealed group never grows
+# past being able to write.
+GROUP_MAX_MEMBERS = 1024
+GROUP_FULL = f"A group holds up to {GROUP_MAX_MEMBERS} people"
+
+
 def create_group(
     db: Session,
     creator_id: int,
@@ -106,6 +113,10 @@ def create_group(
     members: list[int],
     avatar_url: str | None = None,
 ) -> Conversation:
+    ids = {int(x) for x in members} | {int(creator_id)}
+    if len(ids) > GROUP_MAX_MEMBERS:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=GROUP_FULL)
     conv = Conversation(
         is_group=True,
         title=(title or "Group").strip() or "Group",
@@ -114,7 +125,6 @@ def create_group(
     )
     db.add(conv)
     db.flush()
-    ids = {int(x) for x in members} | {int(creator_id)}
     for uid in ids:
         db.add(
             ConversationMember(
@@ -552,15 +562,25 @@ def seen_by(db: Session, conversation_id: int, message_id: int, exclude_user: in
 
 def add_members(db: Session, conversation_id: int, user_ids: list[int]) -> list[int]:
     added = []
+    have = db.query(ConversationMember.user_id).filter(
+        ConversationMember.conversation_id == conversation_id).count()
     for uid in user_ids:
         uid = int(uid)
-        if not is_member(db, conversation_id, uid):
+        if uid not in added and not is_member(db, conversation_id, uid):
             db.add(
                 ConversationMember(
                     conversation_id=conversation_id, user_id=uid, role="member"
                 )
             )
             added.append(uid)
+    if have + len(added) > GROUP_MAX_MEMBERS:
+        db.rollback()
+        from fastapi import HTTPException
+        room = max(0, GROUP_MAX_MEMBERS - have)
+        raise HTTPException(
+            status_code=400,
+            detail=(f"{GROUP_FULL} — room for {room} more" if room
+                    else f"{GROUP_FULL} — this one is full"))
     if added:
         db.commit()
     return added

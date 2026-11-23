@@ -123,6 +123,9 @@ def _addable(db: Session, me: int, ids) -> list:
     across a block (either way). Anyone else's id is quietly skipped — a
     stranger can't be pulled into a group by guessing their id."""
     import crud
+    # (More than a group could ever hold: refused before any lookups.)
+    if len(ids or []) > cc.GROUP_MAX_MEMBERS:
+        raise HTTPException(status_code=400, detail=cc.GROUP_FULL)
     friends = crud._get_friend_ids(db, me)
     out = []
     for raw in ids or []:

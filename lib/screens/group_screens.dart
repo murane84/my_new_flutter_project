@@ -276,7 +276,9 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
     if (conv != null) {
       Navigator.pop(context, conv); // caller opens the new group
     } else {
-      showToast(context, 'Could not create the group.', type: ToastType.error);
+      showToast(context,
+          ApiService.lastGroupRefusal ?? 'Could not create the group.',
+          type: ToastType.error);
     }
   }
 
@@ -693,7 +695,8 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
       await ApiService().resealGroupMeta(widget.conversationId);
       await _load();
     } else {
-      showToast(context, 'Could not add members.', type: ToastType.error);
+      showToast(context, ApiService.lastGroupRefusal ?? 'Could not add members.',
+          type: ToastType.error);
     }
   }
 

@@ -98,6 +98,7 @@ import '../e2ee/seal_verify.dart';
 import '../e2ee/seal_space.dart' show SealSpace, SealSpaceNotReady;
 import '../e2ee/seal_polls.dart';
 import '../e2ee/seal_reacts.dart';
+import '../e2ee/seal_scope.dart' show SealScope;
 import 'verify_encryption_screen.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart' as ja;
@@ -4710,17 +4711,31 @@ class _ChatPageState extends State<ChatPage>
       msg['reactions'] = map.isEmpty ? null : jsonEncode(map);
     });
     try {
-      final value = had ? (mineRaw ?? emoji) : await _reactionValue(emoji);
-      if (value == null) {
-        if (mounted) {
-          setState(() => msg['reactions'] = reactionsBefore);
-          showToast(context, 'Couldn’t react right now — try again',
-              type: ToastType.error);
+      final mid = id is int ? id : int.parse(id.toString());
+      var value = had ? (mineRaw ?? emoji) : await _reactionValue(emoji);
+      String? updated;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        if (value == null) {
+          if (mounted) {
+            setState(() => msg['reactions'] = reactionsBefore);
+            showToast(context, 'Couldn’t react right now — try again',
+                type: ToastType.error);
+          }
+          return;
         }
-        return;
+        try {
+          updated = await ApiService().reactToMessage(mid, value);
+          break;
+        } on KeyMovedOn {
+          // 🔒 The group's members changed since this phone looked: seal
+          // it for them as they are now, once.
+          final cid = widget.conversationId;
+          if (attempt > 0 || had || !_isGroup || cid == null) rethrow;
+          ApiService.forgetGroupMembers(cid);
+          SealSpace.instance.forgetScope(SealScope.group(cid));
+          value = await _reactionValue(emoji);
+        }
       }
-      final updated = await ApiService()
-          .reactToMessage(id is int ? id : int.parse(id.toString()), value);
       if (mounted && updated != null) {
         setState(() => msg['reactions'] = updated);
       }

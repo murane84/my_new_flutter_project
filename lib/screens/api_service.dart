@@ -26,6 +26,10 @@ import 'chat/song_cache.dart';
 
 final _logger = Logger();
 
+/// 🔒 The server refused a group write sealed for members who changed since
+/// this phone last looked (or with a big group's key that moved on).
+class KeyMovedOn implements Exception {}
+
 class ApiService {
   Future<String> get _baseUrl => AppConfig.baseUrl;
 
@@ -1434,6 +1438,7 @@ class ApiService {
     // 🔒 The file at [mediaUrl] was locked on this phone with this key
     // (SealMedia): the key, real name and type go inside the sealed copy.
     List<int>? mediaKey,
+    bool keyRetry = false, // (internal: once more after a big group's key moved on)
   }) async {
     lastSendRefusal = null;
     try {
@@ -1611,6 +1616,33 @@ class ApiService {
         }
       }
       _logger.w('Send message failed: ${response.statusCode}');
+      // 🔒 A big group's key moved on (its members changed and this phone
+      // hadn't heard yet): take the new key and send once more.
+      if (response.statusCode == 409 &&
+          conversationId != null &&
+          !keyRetry &&
+          response.body.contains('key_moved_on')) {
+        SealSpace.instance.forgetScope(SealScope.group(conversationId));
+        forgetGroupMembers(conversationId);
+        return sendMessage(receiverId, content,
+            messageType: messageType,
+            mediaUrl: mediaUrl,
+            mediaName: mediaName,
+            mediaMime: mediaMime,
+            mediaSize: mediaSize,
+            mediaDuration: mediaDuration,
+            conversationId: conversationId,
+            mentions: mentions,
+            mentionAll: mentionAll,
+            heartMood: heartMood,
+            unlockAt: unlockAt,
+            heartFor: heartFor,
+            heartSave: heartSave,
+            poll: poll,
+            meta: meta,
+            mediaKey: mediaKey,
+            keyRetry: true);
+      }
       // A refusal (blocked / not someone you know) won't succeed on retry —
       // keep the server's reason so the chat can say it.
       if (response.statusCode == 403) {
@@ -4238,7 +4270,9 @@ class ApiService {
       String? avatarUrl,
       String? avatarAsset,
       bool? adminsOnly,
-      bool? shareHistory}) async {
+      bool? shareHistory,
+      bool keyRetry = false}) async {
+    final asked = (title: title, avatarUrl: avatarUrl);
     // 🔒 A new name / photo address sealed with the members' key when every
     // member's Aluta can open it. A sealed photo's address carries its key:
     // it never goes plain (the change fails instead).
@@ -4261,13 +4295,28 @@ class ApiService {
         return false;
       }
     }
-    return _convAction('PATCH', '/conversations/$cid', body: {
+    _lastConvStatus = 0;
+    final ok = await _convAction('PATCH', '/conversations/$cid', body: {
       'title': ?title,
       'avatar_url': ?avatarUrl,
       'avatar_asset': ?avatarAsset,
       'admins_only': ?adminsOnly,
       'share_history': ?shareHistory,
     });
+    // 🔒 Sealed for members who changed since this phone last looked (or
+    // a big group's key moved on): look again and seal once more.
+    if (!ok && _lastConvStatus == 409 && !keyRetry) {
+      forgetGroupMembers(cid);
+      SealSpace.instance.forgetScope(SealScope.group(cid));
+      return updateGroup(cid,
+          title: asked.title,
+          avatarUrl: asked.avatarUrl,
+          avatarAsset: avatarAsset,
+          adminsOnly: adminsOnly,
+          shareHistory: shareHistory,
+          keyRetry: true);
+    }
+    return ok;
   }
 
   /// [value] (a group's name / photo address) sealed for group [cid]'s
@@ -4400,6 +4449,9 @@ class ApiService {
     }
   }
 
+  // The last [_convAction]'s status (0: it didn't get through).
+  static int _lastConvStatus = 0;
+
   /// [refusal]: keep a 400's reason in [lastGroupRefusal].
   Future<bool> _convAction(String method, String path,
       {Map<String, dynamic>? body, bool refusal = false}) async {
@@ -4424,6 +4476,7 @@ class ApiService {
           resp = await http.get(uri, headers: headers);
       }
       if (refusal) lastGroupRefusal = _refusalOf(resp);
+      _lastConvStatus = resp.statusCode;
       return resp.statusCode >= 200 && resp.statusCode < 300;
     } catch (e) {
       _logger.e('_convAction $method $path exception: $e');
@@ -4956,6 +5009,9 @@ class ApiService {
       ),
       headers: _authHeaders(token ?? ''),
     );
+    if (response.statusCode == 409 && response.body.contains('key_moved_on')) {
+      throw KeyMovedOn();
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('Failed to react');
     }
@@ -4971,7 +5027,7 @@ class ApiService {
   /// Edit my message. [sealedFor]: the friend's id when the message is
   /// end-to-end encrypted — the new text is sealed again.
   Future<Map<String, dynamic>?> editMessage(int messageId, String content,
-      {int? sealedFor, int? sealedGroup}) async {
+      {int? sealedFor, int? sealedGroup, bool keyRetry = false}) async {
     final token = await getToken();
     Map<String, dynamic> body = {'content': content};
     if (sealedGroup != null) {
@@ -4996,6 +5052,16 @@ class ApiService {
       },
       body: jsonEncode(body),
     );
+    // 🔒 The group's members changed since this phone looked: once more.
+    if (response.statusCode == 409 &&
+        sealedGroup != null &&
+        !keyRetry &&
+        response.body.contains('key_moved_on')) {
+      forgetGroupMembers(sealedGroup);
+      SealSpace.instance.forgetScope(SealScope.group(sealedGroup));
+      return editMessage(messageId, content,
+          sealedGroup: sealedGroup, keyRetry: true);
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('Failed to edit message');
     }

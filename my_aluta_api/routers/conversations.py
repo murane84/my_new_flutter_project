@@ -324,6 +324,23 @@ def send_message(
                             detail="Only admins can send messages in this group")
     if (payload.message_type or "") == "poll" and not conv.is_group:
         raise HTTPException(status_code=400, detail="Polls are for groups")
+    # 🔒 Sealed with a big group's key that has moved on (members changed):
+    # never stored — the phone takes the new key and sends again.
+    if conv.is_group:
+        import e2ee_scope
+        sealed_poll = None
+        try:
+            import json as _json
+            pj = getattr(payload, "poll", None)
+            pj = _json.loads(pj) if isinstance(pj, str) else pj
+            sealed_poll = pj.get("sealed") if isinstance(pj, dict) else None
+        except Exception:  # noqa: BLE001
+            pass
+        hf = getattr(payload, "heart_for", None)
+        if e2ee_scope.stale_group_key(
+                db, cid, payload.content, sealed_poll,
+                pair=((current_user.id, int(hf)) if hf else None)):
+            raise HTTPException(status_code=409, detail="key_moved_on")
     # 🔒 A 1:1 conversation follows the same block rule as /messages/: I
     # blocked them → unblock first; they blocked me → kept for me, never
     # delivered (no socket, no push, hidden from them).
@@ -595,6 +612,9 @@ def update_group(
         raise HTTPException(status_code=403, detail="Only admins can edit the group")
     _check_group_meta(db, current_user.id, payload.title, payload.avatar_url,
                       payload.avatar_asset, conv)
+    import e2ee_scope
+    if e2ee_scope.stale_group_key(db, cid, payload.title, payload.avatar_url):
+        raise HTTPException(status_code=409, detail="key_moved_on")
     cc.update_group(db, cid, title=payload.title, avatar_url=payload.avatar_url,
                     admins_only=payload.admins_only,
                     share_history=payload.share_history,

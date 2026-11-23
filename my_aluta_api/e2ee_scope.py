@@ -52,6 +52,42 @@ MAX_STORY_AUDIENCE = 4096  # who may see someone's Stories
 MAX_WRAPS = MAX_NAMED_MEMBERS * 6
 
 
+def stale_group_key(db: Session, cid: int, *values, pair=None) -> bool:
+    """Whether a value written to group [cid] is sealed for anyone but its
+    members today — so someone who just left (and still holds the old key)
+    can't read it. Sealed with the members' list key: exactly today's
+    members ([pair]: exactly those two — a heart for one member); with a big
+    group's own key: its current one, made for today's members. Anything
+    else sealed (another scope) doesn't belong here either. The writer's
+    phone then looks its members / key up afresh and writes again."""
+    lead = "🔒s1."
+    now = None
+    named = f"g:{int(cid)}"
+    for v in values:
+        if not (isinstance(v, str) and v.startswith(lead)):
+            continue
+        parts = v[len(lead):].split(".")
+        if len(parts) < 3:
+            return True
+        scope, ep = parts[0], parts[1]
+        if now is None:
+            now = named_members(db, "g", int(cid))
+        if scope == named:
+            s = db.query(SealScope).filter(SealScope.scope == named).first()
+            if s is None or ep != str(s.epoch):
+                return True
+            if _epoch_members(db, named, s.epoch) != now:
+                return True
+            continue
+        try:
+            ids = {int(x) for x in scope.split(",")}
+        except ValueError:
+            return True
+        if ids != ({int(x) for x in pair} if pair else now):
+            return True
+    return False
+
+
 def _named_cap(nk) -> int:
     return MAX_STORY_AUDIENCE if nk[0] == "s" else MAX_NAMED_MEMBERS
 

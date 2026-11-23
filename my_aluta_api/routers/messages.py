@@ -651,6 +651,16 @@ def react_to_message(
     key = str(current_user.id)
     # Same emoji again = remove (toggle); a different one replaces it.
     added = reactions.get(key) != emoji
+    # 🔒 A new sealed reaction in a group: sealed for its members as they
+    # are now (taking one back resends the value as it was).
+    if added and emoji.startswith("🔒s1.") and message.conversation_id:
+        import e2ee_scope
+        from models import Conversation
+        conv = db.query(Conversation).filter(
+            Conversation.id == message.conversation_id).first()
+        if (conv is not None and conv.is_group
+                and e2ee_scope.stale_group_key(db, conv.id, emoji)):
+            raise HTTPException(status_code=409, detail="key_moved_on")
     if not added:
         reactions.pop(key, None)
     else:
@@ -812,7 +822,17 @@ def edit_message(
         message.e2ee_rev = (message.e2ee_rev or 0) + 1
         message.content = ""
     else:
-        message.content = payload.content or ""
+        new = payload.content or ""
+        # 🔒 A sealed group message edited: sealed for its members now.
+        if new.startswith("🔒s1.") and message.conversation_id:
+            import e2ee_scope
+            from models import Conversation
+            conv = db.query(Conversation).filter(
+                Conversation.id == message.conversation_id).first()
+            if (conv is not None and conv.is_group
+                    and e2ee_scope.stale_group_key(db, conv.id, new)):
+                raise HTTPException(status_code=409, detail="key_moved_on")
+        message.content = new
     message.edited = True
     db.commit()
     db.refresh(message)

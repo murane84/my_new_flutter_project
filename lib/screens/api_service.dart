@@ -5193,22 +5193,25 @@ class ApiService {
 
   // Keys of story media locked on this phone, by asset id (until posted).
   static final Map<String, Uint8List> _storyMediaKeys = {};
-  // Whether my statuses can go sealed right now (asked at most every 30 s).
-  static (DateTime, bool)? _storiesReady;
+  // Whether my statuses can go sealed right now (asked at most every 30 s;
+  // per account).
+  static (int, DateTime, bool)? _storiesReady;
 
   /// 🔒 Whether my statuses can go sealed: every device of everyone who may
   /// see them opens sealed Stories (m3). Throws [SealError] when it can't
   /// be told right now.
   Future<bool> _storiesSealable() async {
-    final c = _storiesReady;
-    if (c != null && DateTime.now().difference(c.$1).inSeconds < 30) {
-      return c.$2;
-    }
     final me = await SealIngress.myUid();
     if (me == null) return false;
-    final ok =
-        await SealSpace.instance.namedReady(SealScope.story(me), {'m3'});
-    _storiesReady = (DateTime.now(), ok);
+    final c = _storiesReady;
+    if (c != null &&
+        c.$1 == me &&
+        DateTime.now().difference(c.$2).inSeconds < 30) {
+      return c.$3;
+    }
+    final ok = await SealSpace.instance
+        .namedReady(SealScope.story(me), {'m3'}, skipKeyless: true);
+    _storiesReady = (me, DateTime.now(), ok);
     return ok;
   }
 
@@ -5374,7 +5377,11 @@ class ApiService {
   /// 🔒 Its words become Our Space words: sealed for the two of you, like
   /// every other moment (the status itself expires).
   Future<String?> keepStoryInSpace(String storyId,
-      {int? authorId, String? caption, String? mediaUrl}) async {
+      {int? authorId,
+      String? caption,
+      String? mediaUrl,
+      String? musicTitle,
+      String? musicArtist}) async {
     try {
       String? sealed;
       // 🔒 A sealed photo / video: its address-with-key sealed for the two
@@ -5406,7 +5413,13 @@ class ApiService {
       final resp = await http.post(
         Uri.parse('${await _baseUrl}/stories/$storyId/keep'),
         headers: _authHeaders(token),
-        body: jsonEncode({'caption': ?sealed, 'ref_key': ?refKey}),
+        body: jsonEncode({
+          'caption': ?sealed,
+          'ref_key': ?refKey,
+          // A sealed status's song: its title for the kept moment.
+          'title': ?musicTitle,
+          'artist': ?musicArtist,
+        }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) return null;
       try {

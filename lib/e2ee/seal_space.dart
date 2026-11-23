@@ -476,15 +476,34 @@ class SealSpace {
         if (!SealTab.inUse) throw SealError('Aluta is in use in another tab');
         await _keys.load();
         if (!_keys.isReady) throw SealError('my keys are not ready yet');
-        final k = await _currentKey(scope);
+        // (A Story audience changes without any event reaching this phone:
+        // posting always checks whether a new key is due.)
+        final k = await _currentKey(scope,
+            force: scope.startsWith('s:') && !_postingFresh(scope));
         if (k == null) throw SealError('no key for this scope yet');
         return SealScope.seal(k.$2, scope, k.$1, text);
       });
 
+  // One status seals several fields: the key is checked once per post (the
+  // first field), not per field.
+  final Map<String, DateTime> _postedAt = {};
+  bool _postingFresh(String scope) {
+    final t = _postedAt[scope];
+    final now = DateTime.now();
+    _postedAt[scope] = now;
+    return t != null && now.difference(t).inSeconds < 5;
+  }
+
   /// Whether every device of everyone in named [scope] can open what it
   /// seals ([caps] all present). Throws [SealError] when it can't be told
   /// right now.
-  Future<bool> namedReady(String scope, Set<String> caps) =>
+  ///
+  /// [skipKeyless]: someone with no device on the key directory at all (an
+  /// account unused for two months) doesn't hold it back — for Stories,
+  /// where one long-gone friend in the audience would keep every status
+  /// plain.
+  Future<bool> namedReady(String scope, Set<String> caps,
+          {bool skipKeyless = false}) =>
       _locked(() async {
         await _keys.load();
         if (!_keys.isReady) throw SealError('my keys are not ready yet');
@@ -497,7 +516,7 @@ class SealSpace {
         final members = _membersIn(scope, j).toSet();
         // Everyone needs at least one device with keys.
         final withKeys = {for (final d in devices) d['user_id']};
-        if (!members.every(withKeys.contains)) return false;
+        if (!skipKeyless && !members.every(withKeys.contains)) return false;
         for (final d in devices) {
           if (d['device_id'] == _keys.deviceId) continue;
           final have = '${d['caps'] ?? ''}'.split(',').toSet();

@@ -805,7 +805,8 @@ key only the people your status choice includes hold. Group chats of any size ge
 new key whenever someone joins or leaves. A song you send your bonded partner joins
 Our Playlist by its title, which our server can see. Not yet end-to-end encrypted:
 duo statuses, the picture a sticker or GIF status shows, reactions to Stories, the
-song copies in Our Playlist, dedication voice notes, and reactions inside Our Space. The server still sees who
+song copies in Our Playlist and the titles of songs kept in Our Space, dedication
+voice notes, and reactions inside Our Space. The server still sees who
 you talk to and when, so it can deliver messages.
 
 7. Children

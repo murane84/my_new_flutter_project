@@ -2171,7 +2171,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           final err = await ApiService().keepStoryInSpace(item.id,
               authorId: item.authorId,
               caption: item.caption,
-              mediaUrl: item.mediaUrl);
+              mediaUrl: item.mediaUrl,
+              musicTitle: item.isMusic ? item.musicTitle : null,
+              musicArtist: item.isMusic ? item.musicArtist : null);
           if (!mounted) return;
           if (err == null) _floatUp('💞');
           showToast(

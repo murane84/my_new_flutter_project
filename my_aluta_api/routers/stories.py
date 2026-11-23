@@ -585,8 +585,16 @@ def keep_story_in_space(
         ref = f"/attachments/{story.media_asset_id}"
     elif story.kind == "music":
         kind = "song"
-        ref = _json.dumps({"title": story.music_title or "",
-                           "artist": story.music_artist or ""})
+        title, artist = story.music_title or "", story.music_artist or ""
+        # 🔒 A sealed status's song: the keeper's app tells its title (a
+        # kept song's title is plain in Our Space, as for a kept chat song).
+        if _sealed(title) or _sealed(artist):
+            title = str((body or {}).get("title") or "")[:300]
+            artist = str((body or {}).get("artist") or "")[:300]
+            if not title:
+                raise HTTPException(status_code=400,
+                                    detail="Update Aluta to keep this status")
+        ref = _json.dumps({"title": title, "artist": artist})
     elif story.kind == "sticker" and story.music_art_url:
         kind, ref = "gif", story.music_art_url
     elif story.kind == "text" and (story.caption or "").strip():

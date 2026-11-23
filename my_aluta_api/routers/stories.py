@@ -142,10 +142,12 @@ def _sealed(v) -> bool:
     return isinstance(v, str) and v.startswith(SEALED)
 
 
-def _sealed_key(v):
-    """A sealed media key for this status ("🔒s1.s:…"), or None."""
+def _sealed_key(v, author_id: int):
+    """A sealed media key for this status — sealed with its author's Stories
+    key ("🔒s1.s:<author>.…") — or None."""
     v = (v or "").strip()
-    return v if v.startswith(SEALED + "s:") and len(v) <= 2000 else None
+    return (v if v.startswith(f"{SEALED}s:{author_id}.") and len(v) <= 2000
+            else None)
 
 
 def _clean_thumb(raw):
@@ -216,12 +218,16 @@ def create_story(
             co = None
 
     # Sane sizes for what every viewer downloads and renders (a sealed
-    # field is longer than its words: base64 + the lock).
+    # field is longer than its words: letters of up to 4 bytes each — emoji —
+    # in base64, + the lock).
     def _cap(v, n):
-        return n * 2 + 200 if _sealed(v) else n
+        return n * 6 + 200 if _sealed(v) else n
+    # (A plain song title is cut to 200 below.)
     if len(payload.caption or "") > _cap(payload.caption, 2000) or \
             len(payload.music_title or "") > _cap(payload.music_title, 300) or \
             len(payload.music_artist or "") > _cap(payload.music_artist, 300) or \
+            (_sealed(payload.song_title) and
+             len(payload.song_title) > _cap(payload.song_title, 200)) or \
             len(payload.background or "") > 64:
         raise HTTPException(status_code=400, detail="Too long")
 
@@ -272,9 +278,11 @@ def create_story(
         if song_id else None,
         song_start_ms=max(0, int(payload.song_start_ms or 0)) if song_id else None,
         co_author_id=co,
-        media_key=(_sealed_key(getattr(payload, "media_url_key", None))
+        media_key=(_sealed_key(getattr(payload, "media_url_key", None),
+                               current_user.id)
                    if kind in ("photo", "video") else None),
-        song_key=(_sealed_key(getattr(payload, "song_url_key", None))
+        song_key=(_sealed_key(getattr(payload, "song_url_key", None),
+                              current_user.id)
                   if song_id else None),
         created_at=now,
         expires_at=now + STORY_TTL,
@@ -607,7 +615,7 @@ def keep_story_in_space(
     sealed = (body or {}).get("caption")
     if caption and isinstance(sealed, str) and sealed.startswith(
             f"🔒s1.{min(me, author)},{max(me, author)}.") \
-            and len(sealed) <= 6000:
+            and len(sealed) <= 2000 * 6 + 200:  # (a status caption, sealed)
         caption = sealed
     # Already kept → don't pin it twice. A photo / song / GIF is known by its
     # ref; a note by its words — unless they're sealed (they differ each

@@ -141,7 +141,9 @@ def _members(scope: str, me: User, db: Session,
     nk = named_kind(scope)
     if nk is not None:
         members = named_members(db, *nk)
-        if len(members) > MAX_NAMED_MEMBERS:
+        # Too many to make a key for — but reading the keys one already
+        # holds never stops working because the audience grew.
+        if making and len(members) > MAX_NAMED_MEMBERS:
             raise HTTPException(status_code=400, detail="Too many members")
         if me.id in members:
             # Only the author's devices make a key for their Stories.
@@ -239,12 +241,29 @@ def get_scope(scope: str, device_id: str, db: Session = Depends(get_db),
     nk = named_kind(scope)
     s = db.query(SealScope).filter(SealScope.scope == scope).first()
     named = {}
-    if nk is not None:
+    # Who belongs to a named scope (and their devices) is told only to
+    # someone who may make its key: a member of the group today, or the
+    # author of the Stories. A viewer of someone's Stories must not learn
+    # who else may see them, nor someone who left a group who is in it now;
+    # they get only themselves and whoever handed them their copies (enough
+    # to check those copies' signatures).
+    full = nk is None or (me.id == nk[1] if nk[0] == "s"
+                          else me.id in members)
+    if nk is not None and not full:
+        givers = {int(r[0]) for r in db.query(SealScopeKey.from_user).filter(
+            SealScopeKey.scope == scope, SealScopeKey.user_id == me.id).all()}
+        members = sorted({me.id} | givers)
+        named["members"] = members
+    if nk is not None and full:
         # The devices of everyone who belongs (with what their Aluta can
         # open), so a member's device can make the next key and tell
         # whether every device can read it — without asking per person.
         named["members"] = members
-        named["member_devices"] = [
+        if len(members) > MAX_NAMED_MEMBERS:
+            # (No new key can be made for this many: the phone keeps what
+            # it writes as it would for an older Aluta.)
+            named["too_big"] = True
+        named["member_devices"] = [] if named.get("too_big") else [
             {"user_id": uid, "device_id": d.device_id, "ik_sig": d.ik_sig,
              "ik_dh": d.ik_dh, "ik_dh_sig": d.ik_dh_sig,
              "caps": getattr(d, "caps", None) or ""}
@@ -269,9 +288,9 @@ def get_scope(scope: str, device_id: str, db: Session = Depends(get_db),
             SealScopeKey.scope == scope).all():
         have_by.setdefault(e, set()).add((u, dv))
     missing = []
-    # (Only the author's devices hand out a Stories key — add_wraps.)
-    serves = not (nk is not None and nk[0] == "s" and me.id != nk[1])
-    now_members = set(members) if serves else set()
+    # (Only the author's devices hand out a Stories key, and only members
+    # today hand out a group's — add_wraps.)
+    now_members = set(members) if full else set()
     targets = {e: (_named_targets(db, scope, nk, e, s.epoch, now_members)
                    if nk is not None else now_members)
                for e in range(1, s.epoch + 1)}

@@ -510,6 +510,8 @@ class SealSpace {
         final j = await _api.fetch(scope, _keys.deviceId);
         if (j == null) throw SealError('key store unreachable');
         _lastAnswer[scope] = j;
+        // More people than a key can be made for.
+        if (j['too_big'] == true) return false;
         final devices = (j['member_devices'] as List? ?? const [])
             .whereType<Map<String, dynamic>>()
             .toList();

@@ -4,6 +4,7 @@ DMs continue to use the legacy /messages/{friend_id} routes unchanged; these
 routes are additive and power groups (and a unified conversation list). Receipts
 are WhatsApp-style via per-member pointers (see crud_conversations).
 """
+import re
 from datetime import datetime
 from typing import List, Optional
 
@@ -154,12 +155,44 @@ def list_conversations(
     return [_conversation_out(db, c, current_user.id) for c in convs]
 
 
+_ATTACHMENT_ID = re.compile(r"attachments/([0-9A-Za-z_-]+)")
+
+
+def _check_group_meta(db: Session, me: int, title, avatar_url, avatar_asset,
+                      conv) -> None:
+    """A group's name in sane size (a sealed one is longer than its words),
+    and a NEW group photo only from an attachment its setter uploaded — the
+    photo's attachment becomes viewable by every member, so it must never
+    name someone else's file."""
+    t = (title or "").strip()
+    if t.startswith("🔒s1.") and len(t) > 200 * 6 + 200:
+        raise HTTPException(status_code=413, detail="Too long")
+    if len(avatar_url or "") > 4000 or len(avatar_asset or "") > 400:
+        raise HTTPException(status_code=413, detail="Too long")
+    from models import MediaAsset
+    now = " ".join(x or "" for x in (
+        getattr(conv, "avatar_url", None), getattr(conv, "avatar_asset", None)))
+    for v in (avatar_asset, avatar_url):
+        v = (v or "").strip()
+        if not v or v.startswith("🔒s1."):
+            continue  # (sealed: its attachment is named in avatar_asset)
+        for aid in _ATTACHMENT_ID.findall(v):
+            if aid in now:
+                continue  # unchanged (sealed again for new members)
+            a = db.query(MediaAsset).filter(MediaAsset.id == aid).first()
+            if a is not None and a.uploader_id not in (None, me):
+                raise HTTPException(status_code=403,
+                                    detail="Not your picture")
+
+
 @router.post("/group", response_model=schemas.ConversationOut)
 def create_group(
     payload: schemas.GroupCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _check_group_meta(db, current_user.id, payload.title, payload.avatar_url,
+                      None, None)
     if not (payload.title or "").strip():
         raise HTTPException(status_code=400, detail="Group needs a name")
     conv = cc.create_group(
@@ -550,6 +583,8 @@ def update_group(
         raise HTTPException(status_code=400, detail="Not a group")
     if not cc.is_admin(db, cid, current_user.id):
         raise HTTPException(status_code=403, detail="Only admins can edit the group")
+    _check_group_meta(db, current_user.id, payload.title, payload.avatar_url,
+                      payload.avatar_asset, conv)
     cc.update_group(db, cid, title=payload.title, avatar_url=payload.avatar_url,
                     admins_only=payload.admins_only,
                     share_history=payload.share_history,

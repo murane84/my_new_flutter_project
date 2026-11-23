@@ -4220,7 +4220,15 @@ class ApiService {
     // it never goes plain (the change fails instead).
     if (title != null || avatarUrl != null) {
       try {
-        title = title == null ? null : await _groupMeta(cid, title);
+        // (a name of at most 200 letters — what the server takes sealed)
+        final t0 = title?.trim();
+        title = t0 == null
+            ? null
+            : await _groupMeta(
+                cid,
+                t0.runes.length <= 200
+                    ? t0
+                    : String.fromCharCodes(t0.runes.take(200)));
         final a = avatarUrl == null ? null : await _groupMeta(cid, avatarUrl);
         if (a != null && SealMedia.isSealed(a)) return false;
         avatarUrl = a;
@@ -5273,7 +5281,11 @@ class ApiService {
         caption = await s(caption);
         musicTitle = await s(musicTitle);
         musicArtist = await s(musicArtist);
-        songTitle = await s(songTitle);
+        // (cut to what the server keeps of a plain one first)
+        final st = songTitle?.trim();
+        songTitle = await s(st == null || st.length <= 200
+            ? st
+            : String.fromCharCodes(st.runes.take(200)));
         thumb = await s(thumb);
         String frag(Uint8List k) =>
             '${SealMedia.fragment}${base64Url.encode(k).replaceAll('=', '')}';

@@ -336,6 +336,10 @@ class SealSpace {
           k['from_user'] as int, k['from_device'] as String);
       final members = _membersIn(scope, j);
       if (from == null || !members.contains(k['from_user'])) continue;
+      // Someone's Stories key comes only from their own devices.
+      if (scope.startsWith('s:') && '${k['from_user']}' != scope.substring(2)) {
+        continue;
+      }
       try {
         mine[e] = await SealScope.unwrap(
             me: _keys.identity,

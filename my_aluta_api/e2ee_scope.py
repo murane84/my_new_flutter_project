@@ -18,6 +18,7 @@ checks the signature against the key directory before trusting it).
                                            devices (only ones that have none
                                            yet — first wins)
 """
+from datetime import datetime, timedelta, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -52,6 +53,7 @@ MAX_STORY_AUDIENCE = 20000
 # e2ee_keys.MAX_DEVICES = 6 each) fits one; a bigger Stories audience gets
 # the rest in further requests (/wraps).
 MAX_WRAPS = MAX_NAMED_MEMBERS * 6
+NEW_KEY_EVERY = timedelta(minutes=10)  # a big group's key, members unchanged
 
 
 def stale_group_key(db: Session, cid: int, *values, pair=None) -> bool:
@@ -400,6 +402,21 @@ def create_scope(scope: str, body: WrapsIn, db: Session = Depends(get_db),
     else:
         if body.epoch != s.epoch + 1:
             raise HTTPException(status_code=409, detail="Not the next key")
+        nk = named_kind(scope)
+        if nk is not None and nk[0] == "g":
+            # A big group's key moves on when its members change; otherwise
+            # (a phone nobody has handed the key yet) at most every
+            # NEW_KEY_EVERY — one member can't churn the key for everyone.
+            row = db.query(SealScopeEpoch).filter(
+                SealScopeEpoch.scope == scope,
+                SealScopeEpoch.epoch == s.epoch).first()
+            made = getattr(row, "created_at", None)
+            if made is not None and made.tzinfo is None:
+                made = made.replace(tzinfo=timezone.utc)
+            if (row is not None and _epoch_members(db, scope, s.epoch)
+                    == set(members) and made is not None
+                    and datetime.now(timezone.utc) - made < NEW_KEY_EVERY):
+                raise HTTPException(status_code=429, detail="Too soon")
         # Only one device moves the group on (compare-and-set).
         moved = (db.query(SealScope)
                  .filter(SealScope.scope == scope,

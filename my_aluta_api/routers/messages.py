@@ -252,6 +252,14 @@ def add_sealed_song_to_soundtrack(
     if (msg is None or msg.sender_id != current_user.id
             or (msg.message_type or "") != "song" or not msg.receiver_id):
         raise HTTPException(status_code=404, detail="Song not found")
+    # Only a song that went sealed (a plain one joins by itself), told as it
+    # goes — not any old song renamed later.
+    ts = msg.timestamp
+    if ts is not None and ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    if not msg.e2ee or ts is None or \
+            datetime.now(timezone.utc) - ts > timedelta(hours=1):
+        raise HTTPException(status_code=400, detail="Not a sealed song just sent")
     added = _soundtrack_share(db, current_user.id, int(msg.receiver_id),
                               str((body or {}).get("title") or ""))
     return {"ok": True, "added": added}

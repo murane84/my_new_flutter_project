@@ -92,6 +92,10 @@ class _HttpScopeApi implements SealScopeApi {
 /// The friend can't read sealed Our Space yet (an older Aluta): keep plain.
 class SealSpaceNotReady implements Exception {}
 
+/// More people than one key is made for (a Stories audience past the
+/// server's ceiling): never written plain instead — the app says so.
+class SealTooMany implements Exception {}
+
 /// 🔒 Seals and opens Our Space words (see [SealScope] for the format).
 ///
 /// One key per group of members, made by the first of their devices that
@@ -347,6 +351,26 @@ class SealSpace {
   }
 
   /// Wrap the current key for member devices that don't have it yet.
+  /// At most this many key copies per request (the server's MAX_WRAPS).
+  static const int maxWrapsPerRequest = 6144;
+
+  /// The copies of a new key that didn't fit its first request, handed out
+  /// in further ones (anyone left out is also served later, from the
+  /// server's "missing" list).
+  Future<void> _wrapRest(String scope, int epoch, Uint8List key,
+      List<Map<String, dynamic>> devices) async {
+    for (var i = 0; i < devices.length; i += maxWrapsPerRequest) {
+      final part = devices.skip(i).take(maxWrapsPerRequest).toList();
+      final wraps = await _wrapFor(scope, epoch, key, part);
+      if (wraps.isEmpty) continue;
+      await _api.addWraps(scope, {
+        'epoch': epoch,
+        'from_device': _keys.deviceId,
+        'wraps': wraps,
+      });
+    }
+  }
+
   /// Wrap every key this device holds for member devices that lack it —
   /// older keys too, so a device that joined later can open what was
   /// written before it.
@@ -362,13 +386,7 @@ class SealSpace {
     for (final e in byEpoch.entries) {
       final key = held[e.key];
       if (key == null) continue;
-      final wraps = await _wrapFor(scope, e.key, key, e.value);
-      if (wraps.isEmpty) continue;
-      await _api.addWraps(scope, {
-        'epoch': e.key,
-        'from_device': _keys.deviceId,
-        'wraps': wraps,
-      });
+      await _wrapRest(scope, e.key, key, e.value);
     }
   }
 
@@ -422,7 +440,14 @@ class SealSpace {
                   d
             ]
           : await _allDevices(SealScope.membersOf(scope)!);
-      final wraps = await _wrapFor(scope, next, key, devices);
+      // This device's own copy first; at most [maxWrapsPerRequest] copies
+      // go with the new key, the rest (a very big Stories audience) right
+      // after, in the background.
+      devices.sort((x, y) => (x['device_id'] == _keys.deviceId ? 0 : 1)
+          .compareTo(y['device_id'] == _keys.deviceId ? 0 : 1));
+      final first = devices.take(maxWrapsPerRequest).toList();
+      final rest = devices.skip(maxWrapsPerRequest).toList();
+      final wraps = await _wrapFor(scope, next, key, first);
       // This device keeps a copy too (it must be on the key directory).
       if (!wraps.any((w) => w['device_id'] == _keys.deviceId)) return null;
       final code = await _api.create(scope, {
@@ -435,6 +460,9 @@ class SealSpace {
         _current[scope] = next;
         _lastAsked[scope] = DateTime.now();
         await _saveHeld();
+        if (rest.isNotEmpty) {
+          unawaited(_wrapRest(scope, next, key, rest).catchError((_) {}));
+        }
         return (next, key);
       }
       if (code != 409) return null;
@@ -530,8 +558,9 @@ class SealSpace {
         final j = await _api.fetch(scope, _keys.deviceId);
         if (j == null) throw SealError('key store unreachable');
         _lastAnswer[scope] = j;
-        // More people than a key can be made for.
-        if (j['too_big'] == true) return false;
+        // More people than a key can be made for: not plain — the caller
+        // says so.
+        if (j['too_big'] == true) throw SealTooMany();
         final devices = (j['member_devices'] as List? ?? const [])
             .whereType<Map<String, dynamic>>()
             .toList();

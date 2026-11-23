@@ -45,10 +45,12 @@ MAX_WRAPPED = 400          # base64 of the 158-byte wrapped key
 # comes after, unless the group shares its history; a leaver nothing more),
 # Stories when someone loses access (a new viewer just gets today's key).
 MAX_NAMED_MEMBERS = 1024  # a group (= crud_conversations.GROUP_MAX_MEMBERS)
-MAX_STORY_AUDIENCE = 4096  # who may see someone's Stories
-# One copy per device: a full group with all its members' devices (routers/
-# e2ee_keys.MAX_DEVICES = 6 each). A Stories audience is held to this many
-# devices too (most people have one or two).
+# Who may see someone's Stories: far past any real circle. A status is never
+# posted plain for being seen by many — past this the app says so instead.
+MAX_STORY_AUDIENCE = 20000
+# Key copies per request: a full group with all its members' devices (routers/
+# e2ee_keys.MAX_DEVICES = 6 each) fits one; a bigger Stories audience gets
+# the rest in further requests (/wraps).
 MAX_WRAPS = MAX_NAMED_MEMBERS * 6
 
 
@@ -319,10 +321,8 @@ def get_scope(scope: str, device_id: str, db: Session = Depends(get_db),
         # whether every device can read it — without asking per person.
         named["members"] = members
         devs = _devices_of(db, members)
-        if (len(members) > _named_cap(nk)
-                or sum(len(v) for v in devs.values()) > MAX_WRAPS):
-            # (No new key can be made for this many: the phone keeps what
-            # it writes as it would for an older Aluta.)
+        if len(members) > _named_cap(nk):
+            # (No new key can be made for this many.)
             named["too_big"] = True
         named["member_devices"] = [] if named.get("too_big") else [
             {"user_id": uid, "device_id": d.device_id, "ik_sig": d.ik_sig,

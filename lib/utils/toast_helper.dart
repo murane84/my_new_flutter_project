@@ -31,8 +31,14 @@ void showToast(
   // Show on this overlay instead of the nearest one (e.g. the app's root
   // overlay, kept from a screen that may be gone by the time this fires).
   OverlayState? overlay,
+  // An explanation that a screen's own generic "couldn't …" right after
+  // mustn't replace: ordinary toasts wait until it's gone.
+  bool hold = false,
 }) {
   if (!context.mounted) return;
+  final now = DateTime.now();
+  if (!hold && _holdUntil != null && now.isBefore(_holdUntil!)) return;
+  _holdUntil = hold ? now.add(duration) : null;
   // Something to tap → give people time to read and reach it.
   if ((actions.isNotEmpty || onTap != null) &&
       duration < const Duration(milliseconds: 5000)) {
@@ -87,6 +93,8 @@ void showToast(
 }
 
 OverlayEntry? _current;
+// Until when a held toast stays (see [showToast] hold).
+DateTime? _holdUntil;
 
 bool _alreadyExplains(String message, String reason) {
   final m = message.toLowerCase();

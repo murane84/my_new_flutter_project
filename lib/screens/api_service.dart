@@ -19,6 +19,8 @@ import '../e2ee/seal_ingress.dart';
 import '../e2ee/seal_keystore.dart' show SealKeyStore;
 import '../e2ee/seal_messenger.dart' show SealPayload, SealPeerAway;
 import '../e2ee/seal_space.dart';
+import '../main.dart' show navigatorKey;
+import '../utils/toast_helper.dart' show showToast, ToastType;
 import '../e2ee/seal_polls.dart';
 import '../e2ee/seal_scope.dart';
 import '../e2ee/seal_primitives.dart' show SealError;
@@ -5269,6 +5271,9 @@ class ApiService {
     bool seal;
     try {
       seal = !duo && await _storiesSealable();
+    } on SealTooMany {
+      _tooManyForStatus();
+      return null;
     } catch (e) {
       // Can't tell right now whether it should go sealed: not uploaded
       // (try again), never plain instead.
@@ -5330,6 +5335,22 @@ class ApiService {
         .namedReady(SealScope.story(me), {'m3'}, skipKeyless: true);
     _storiesReady = (me, DateTime.now(), ok);
     return ok;
+  }
+
+  /// 🔒 A status is never posted plain for being seen by many: when more
+  /// people may see it than one key is made for, say so (once, wherever the
+  /// post started) instead.
+  static void _tooManyForStatus() {
+    final ctx = navigatorKey.currentContext;
+    if (ctx == null || !ctx.mounted) return;
+    showToast(
+        ctx,
+        'Too many people can see your status to keep it end-to-end '
+        'encrypted. Choose “Bonds” or hide some friends in “Who can see '
+        'my status”, then post again.',
+        type: ToastType.error,
+        duration: const Duration(seconds: 7),
+        hold: true);
   }
 
   /// A sealed status this phone couldn't open: quiet notes, never a lock
@@ -5434,6 +5455,9 @@ class ApiService {
         return out;
       }
       _logger.w('createStory failed: ${resp.statusCode} ${resp.body}');
+      return null;
+    } on SealTooMany {
+      _tooManyForStatus();
       return null;
     } catch (e) {
       _logger.e('createStory exception: $e');

@@ -1,8 +1,4 @@
-🔒 Stories are now end-to-end encrypted — captions, photos, videos, songs and their titles. Only the people your "Who can see my status" choice includes can open them, however many they are.
-🔒 Group chats of any size are now end-to-end encrypted (before: up to 32 people).
-👥 Groups now hold up to 1024 people.
-🛡️ Someone removed from a group can no longer read messages sent right after they leave.
-🛡️ A group photo can only be a picture its setter uploaded.
-✨ Replies and nudges on a status keep its words private.
-🐞 Fixes: status posting no longer gets stuck, long group names no longer stop notifications, faster start-up.
-📜 Privacy policy updated (version 9).
+🎧 Listen Together: when a guest skips to the next song, they now hear that song — not the previous one under the new title.
+🎧 Listen Together: songs you keep from a room are always saved whole.
+⬆️ Updates no longer get stuck on "Opening the installer…" — Aluta asks for permission to install first and tells you if the installer didn't open.
+⬆️ Clearer update progress: "Checking the download…" before the installer opens; a dropped download continues where it stopped.

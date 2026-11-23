@@ -570,9 +570,18 @@ class AppUpdater {
       type: ToastType.success,
       duration: const Duration(seconds: 14),
       detail: 'Got it on Wi-Fi — tap to install',
-      onTap: () => _openInstaller(file),
-      actions: [ToastAction('Install', () => _openInstaller(file))],
+      onTap: () => _installFromToast(c, file),
+      actions: [ToastAction('Install', () => _installFromToast(c, file))],
     );
+  }
+
+  /// The ready toast's Install: say why when the installer didn't open
+  /// (as the update card does) instead of nothing happening.
+  Future<void> _installFromToast(BuildContext c, File file) async {
+    final err = await _openInstaller(file);
+    if (err != null && c.mounted) {
+      showToast(c, err, type: ToastType.error);
+    }
   }
 
   /// Old update files (builds I already have) leave the phone's storage.
@@ -913,9 +922,14 @@ class AppUpdater {
     try {
       var st = await Permission.requestInstallPackages.status;
       if (!st.isGranted) {
-        st = await Permission.requestInstallPackages
-            .request()
-            .timeout(const Duration(minutes: 3));
+        try {
+          st = await Permission.requestInstallPackages
+              .request()
+              .timeout(const Duration(seconds: 90));
+        } on TimeoutException {
+          // No answer came back (some phones): look at the setting itself.
+          st = await Permission.requestInstallPackages.status;
+        }
       }
       if (!st.isGranted) {
         return 'Allow Aluta to install apps, then tap Update again';

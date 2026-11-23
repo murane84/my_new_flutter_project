@@ -5174,7 +5174,16 @@ class ApiService {
   }) async {
     Uint8List? key;
     List<int> up = bytes;
-    if (!duo && await _storiesSealable()) {
+    bool seal;
+    try {
+      seal = !duo && await _storiesSealable();
+    } catch (e) {
+      // Can't tell right now whether it should go sealed: not uploaded
+      // (try again), never plain instead.
+      _logger.w('uploadStoryMedia: can\'t tell if sealed: $e');
+      return null;
+    }
+    if (seal) {
       final (locked, k) = await SealMedia.sealInBackground(bytes);
       up = locked;
       key = k;

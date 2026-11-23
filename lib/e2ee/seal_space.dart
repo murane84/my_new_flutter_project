@@ -717,9 +717,13 @@ class SealSpace {
 
   /// Every so often: give member devices that joined later their copy of
   /// the keys this device holds. Best-effort.
-  Future<void> serveAll() async {
+  /// [me]: my user id — someone else's Stories key is handed out only by
+  /// its author's devices, so it isn't asked about here.
+  Future<void> serveAll({int? me}) async {
     try {
       final scopes = (await _locked(() async => (await _heldKeys()).keys))
+          .where((s) =>
+              !s.startsWith('s:') || (me != null && s == SealScope.story(me)))
           .toList();
       for (final s in scopes) {
         final j = await _api.fetch(s, _keys.deviceId);

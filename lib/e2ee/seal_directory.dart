@@ -105,7 +105,13 @@ class SealDirectory implements SealKeyDirectory {
     if (!fresh) await Future<void>.delayed(const Duration(seconds: 8));
     await sync();
     // Give member devices that joined later their Our Space keys.
-    await SealSpace.instance.serveAll();
+    int? me;
+    try {
+      me = int.tryParse(
+          (await SharedPreferences.getInstance()).getString('my_user_id') ??
+              '');
+    } catch (_) {}
+    await SealSpace.instance.serveAll(me: me);
   }
 
   /// What this app can open beyond sealed text, told to the directory so

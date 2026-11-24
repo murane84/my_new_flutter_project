@@ -28,19 +28,27 @@ Future<void> maybeShowReleaseStory(BuildContext context,
     final mine = '${info.version}+${info.buildNumber}';
     final p = await SharedPreferences.getInstance();
     final seen = p.getString(key);
-    await p.setString(key, mine);
-    // Nothing new, or a brand-new member (the welcome is theirs) → nothing.
-    if (seen == mine || (seen == null && welcomedNow)) return;
+    if (seen == mine) return; // already told (or noted) on this device
+    // A brand-new member: the welcome is theirs — just note the version.
+    if (seen == null && welcomedNow) {
+      await p.setString(key, mine);
+      return;
+    }
     final base = await AppConfig.baseUrl;
     final r = await http
         .get(Uri.parse('$base/app/story?version='
             '${Uri.encodeQueryComponent(info.version)}'))
         .timeout(const Duration(seconds: 10));
+    // Only a real answer settles it: offline / a server hiccup → try again
+    // next open (200 = the story or none; 404 = an older server, none).
+    if (r.statusCode != 200 && r.statusCode != 404) return;
+    await p.setString(key, mine);
     if (r.statusCode != 200) return;
     final j = jsonDecode(r.body);
     if (j is! Map) return;
     final name = (j['name'] ?? '').toString().trim();
     if (name.isEmpty || !context.mounted) return;
+    Haptics.lightImpact();
     await showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -71,7 +79,6 @@ class _ReleaseStory extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    Haptics.lightImpact();
     return Center(
       child: Material(
         color: Colors.transparent,

@@ -116,8 +116,28 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
   /// history): on each anniversary of the bond, and on its 100th, 500th and
   /// 1000th day, a quiet card at the top of Our Space — one tap sends a
   /// "thinking of you" for the day. Never a push asking them to come back.
+  /// Today is the bond's day (a yearly anniversary, or its 100th / 500th /
+  /// 1000th day) — the anniversary card shows, and the milestone banner
+  /// stands back for it (one card per moment, never two).
+  bool get _bondDayToday {
+    if (_partnerId == null) return false;
+    final raw = (_space['close_since'] ?? _space['stats']?['close_since'] ?? '')
+        .toString();
+    final since = DateTime.tryParse(raw)?.toLocal();
+    if (since == null) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = DateTime(since.year, since.month, since.day);
+    final days = today.difference(start).inDays;
+    if (days <= 0) return false;
+    final yearly = today.year > start.year &&
+        today.month == start.month &&
+        today.day == start.day;
+    return yearly || days == 100 || days == 500 || days == 1000;
+  }
+
   Widget _anniversaryCard(ColorScheme scheme) {
-    if (_partnerId == null) return const SizedBox.shrink();
+    if (!_bondDayToday) return const SizedBox.shrink();
     final raw = (_space['close_since'] ?? _space['stats']?['close_since'] ?? '')
         .toString();
     final since = DateTime.tryParse(raw)?.toLocal();
@@ -133,12 +153,18 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
         today.day == start.day;
     final round = days == 100 || days == 500 || days == 1000;
     if (!yearly && !round) return const SizedBox.shrink();
+    // Counted from the bond on Aluta, so it says so — a couple together for
+    // ten years who bonded here last year must not read "one year together".
     final title = yearly
-        ? (years == 1 ? 'One year together' : '$years years together')
-        : '$days days together';
+        ? (years == 1
+            ? 'One year of your bond on Aluta'
+            : '$years years of your bond on Aluta')
+        : '$days days of your bond on Aluta';
     final sw = yearly
-        ? (years == 1 ? 'Mwaka mmoja pamoja' : 'Miaka $years pamoja')
-        : 'Siku $days pamoja';
+        ? (years == 1
+            ? 'Mwaka mmoja pamoja kwenye Aluta'
+            : 'Miaka $years pamoja kwenye Aluta')
+        : 'Siku $days pamoja kwenye Aluta';
     final ink = readableOn(_accent);
     // What Aluta kept for them — only what's really recorded: their song and
     // the days they listened together.
@@ -213,6 +239,8 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
     final reached = (_space['stats'] as Map?)?['milestone_reached'];
     if (reached is! Map) return const SizedBox.shrink();
     final kind = (reached['kind'] ?? '').toString();
+    // The anniversary card already holds today's bond day.
+    if (kind == 'anniversary' && _bondDayToday) return const SizedBox.shrink();
     final label = (reached['label'] ?? '').toString();
     final emoji = kind == 'streak' ? '🔥' : '💫';
     final line = kind == 'streak'

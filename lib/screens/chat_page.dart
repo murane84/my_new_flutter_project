@@ -317,6 +317,7 @@ class _ChatPageState extends State<ChatPage>
   // and the music player stay in reach) — and how it ends.
   Widget? _photoEditor;
   Completer<Map<String, dynamic>?>? _photoEditorDone;
+  FocusNode? _focusBeforeEditor; // given back when the pane editor closes
   // True when this screen is showing a GROUP conversation (vs a 1:1 DM).
   bool get _isGroup => widget.isGroup && widget.conversationId != null;
   int get _cid => widget.conversationId ?? 0;

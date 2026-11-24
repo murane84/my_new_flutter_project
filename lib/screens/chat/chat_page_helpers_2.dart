@@ -582,6 +582,10 @@ extension _ChatPageHelpers2 on _ChatPageState {
     }
     final done = Completer<Map<String, dynamic>?>();
     _photoEditorDone = done;
+    // Where the keyboard was (usually the message box): it goes back there
+    // when the editor closes. A pushed route does that by itself; this pane
+    // doesn't, and focus left on the page stopped Ctrl+V reaching the chat.
+    _focusBeforeEditor = FocusManager.instance.primaryFocus;
     setState(() {
       _photoEditor = CallbackShortcuts(
         key: ValueKey(done), // a fresh editor per photo
@@ -620,8 +624,20 @@ extension _ChatPageHelpers2 on _ChatPageState {
     _photoEditorDone = null;
     if (_photoEditor != null) {
       _photoEditor = null;
-      if (rebuild && mounted) setState(() {});
+      if (rebuild && mounted) {
+        setState(() {});
+        final back = _focusBeforeEditor;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (back != null && back.context != null && back.canRequestFocus) {
+            back.requestFocus();
+          } else {
+            _composerFocus.requestFocus();
+          }
+        });
+      }
     }
+    _focusBeforeEditor = null;
     if (done != null && !done.isCompleted) done.complete(result);
   }
 

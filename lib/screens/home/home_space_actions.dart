@@ -390,7 +390,17 @@ extension _HomeSpaceActions on HomePageState {
     await _loadBondRequests();
     await _loadSpaces();
     if (!mounted) return;
-    showToast(context, 'Bond pinned 💞', type: ToastType.success);
+    // Our day: the moment they chose each other, named — then their Space.
+    await showOurDay(context,
+        partner: ContactNames.instance.displayName(
+            of: req['from_user'] is Map ? req['from_user'] as Map : null,
+            userId: req['from_user_id'],
+            registered: ((req['from_user'] is Map
+                        ? (req['from_user'] as Map)['username']
+                        : null) ??
+                    '')
+                .toString()));
+    if (!mounted) return;
     _openSpace(res); // the freshly created Space
   }
 

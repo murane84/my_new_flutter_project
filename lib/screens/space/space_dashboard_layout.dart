@@ -22,6 +22,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
       );
 
       final banners = <Widget>[
+        _anniversaryCard(scheme),
         _pendingPartnerBanner(scheme),
         _bringAlongBanner(scheme),
         _milestoneBanner(scheme),

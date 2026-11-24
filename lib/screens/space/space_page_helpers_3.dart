@@ -112,6 +112,77 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
   }
 
   // ── milestones ───────────────────────────────────────────────────────────
+  /// 💞 The bond's day (brand strategy: Aluta keeps the relationship's
+  /// history): on each anniversary of the bond, and on its 100th, 500th and
+  /// 1000th day, a quiet card at the top of Our Space — one tap sends a
+  /// "thinking of you" for the day. Never a push asking them to come back.
+  Widget _anniversaryCard(ColorScheme scheme) {
+    if (_partnerId == null) return const SizedBox.shrink();
+    final raw = (_space['close_since'] ?? _space['stats']?['close_since'] ?? '')
+        .toString();
+    final since = DateTime.tryParse(raw)?.toLocal();
+    if (since == null) return const SizedBox.shrink();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = DateTime(since.year, since.month, since.day);
+    final days = today.difference(start).inDays;
+    if (days <= 0) return const SizedBox.shrink();
+    final years = today.year - start.year;
+    final yearly = years > 0 &&
+        today.month == start.month &&
+        today.day == start.day;
+    final round = days == 100 || days == 500 || days == 1000;
+    if (!yearly && !round) return const SizedBox.shrink();
+    final title = yearly
+        ? (years == 1 ? 'One year together' : '$years years together')
+        : '$days days together';
+    final sw = yearly
+        ? (years == 1 ? 'Mwaka mmoja pamoja' : 'Miaka $years pamoja')
+        : 'Siku $days pamoja';
+    final ink = readableOn(_accent);
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(Radii.lg),
+          gradient: LinearGradient(
+            colors: [_accent.withValues(alpha: 0.85), _accent],
+          ),
+        ),
+        child: Row(
+          children: [
+            const Text('💞', style: TextStyle(fontSize: 28)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Today: $title',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                          color: ink)),
+                  const SizedBox(height: 2),
+                  Text('$sw · since ${_closeSince()}',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          color: ink.withValues(alpha: 0.9))),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: ink),
+              onPressed: _nudge,
+              child: const Text('Send love'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _milestoneBanner(ColorScheme scheme) {
     final reached = (_space['stats'] as Map?)?['milestone_reached'];
     if (reached is! Map) return const SizedBox.shrink();

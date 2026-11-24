@@ -121,6 +121,7 @@ import '../widgets/section_switch.dart';
 import '../widgets/section_swipe_path.dart';
 import 'policy_gate.dart';
 import 'welcome_ritual.dart';
+import '../widgets/our_day_moment.dart';
 import 'add_friend_sheet.dart';
 import 'spinning_vinyl_ring.dart';
 import '../widgets/presence_ring_avatar.dart';
@@ -2842,9 +2843,19 @@ class HomePageState extends rp.ConsumerState<HomePage>
               '${data['from_username'] ?? 'Someone'} accepted — your Space is '
                   'live 🎉')
           .toString();
-      if (mounted) showToast(context, _inMyNames(data, line), type: ToastType.success);
       _loadBondRequests();
       _loadSpaces();
+      // Our day — the same moment on this phone as on theirs.
+      if (mounted) {
+        final who = ContactNames.instance.displayName(
+            userId: data['from_id'],
+            registered: (data['from_username'] ?? '').toString());
+        if (who.trim().isNotEmpty) {
+          unawaited(showOurDay(context, partner: who));
+        } else {
+          showToast(context, _inMyNames(data, line), type: ToastType.success);
+        }
+      }
       return;
     }
     // A bond request was declined or withdrawn → clear it from my lists quietly.

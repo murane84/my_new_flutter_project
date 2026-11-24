@@ -124,6 +124,18 @@ class _OurDayState extends State<_OurDay> with SingleTickerProviderStateMixin {
                           color: Colors.white.withAlpha(185),
                           fontSize: 13.5,
                           height: 1.5)),
+                  const SizedBox(height: 12),
+                  // Names the bond's signature: their record turning in the
+                  // chat when they write (only bonded people see it).
+                  Text(
+                      "Now you'll see their record turn when they write to you.\n"
+                      'Sasa utaona rekodi yao ikizunguka wanapokuandikia.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: Colors.white.withAlpha(160),
+                          fontSize: 12.5,
+                          fontStyle: FontStyle.italic,
+                          height: 1.5)),
                   const SizedBox(height: 22),
                   FilledButton(
                     style: FilledButton.styleFrom(

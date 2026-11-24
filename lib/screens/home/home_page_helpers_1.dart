@@ -1787,11 +1787,35 @@ extension _HomePageHelpers1 on HomePageState {
     final status = await ApiService().fetchPolicyStatus();
     if (!mounted || status == null) return;
     if (status['needs_acceptance'] != true) return;
-    await showPolicyGate(
+    // A brand-new account (first acceptance, not a policy update): the
+    // first-open ritual comes first — the promise before the paperwork.
+    var findPeople = false;
+    if (status['is_update'] != true && await _firstOpen()) {
+      findPeople = await showWelcomeRitual(context,
+          inviter: await ApiService().myInviterName());
+      if (!mounted) return;
+    }
+    final ok = await showPolicyGate(
       context,
       status: status,
       onLogout: _signOutFromGate,
     );
+    if (ok && findPeople && mounted) unawaited(_findFriendsFromContacts());
+  }
+
+  /// Whether this account hasn't been welcomed on this device yet (marks it).
+  Future<bool> _firstOpen() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final me = p.getString('my_user_id') ?? '';
+      if (me.isEmpty) return false;
+      final key = 'aluta_welcomed_$me';
+      if (p.getBool(key) == true) return false;
+      await p.setBool(key, true);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// The active story group for a friend id (null if none), used to draw the

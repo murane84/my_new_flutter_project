@@ -49,6 +49,34 @@ class ApiService {
 
   static String? _clientBuild;
 
+  /// My Aluta membership: member number, Founding Circle, who invited me,
+  /// invites left — or null when it can't be fetched. Cached per session.
+  static Map<String, dynamic>? _membership;
+  Future<Map<String, dynamic>?> myMembership({bool fresh = false}) async {
+    if (_membership != null && !fresh) return _membership;
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http
+          .get(Uri.parse('${await _baseUrl}/users/me/membership'),
+              headers: _authHeaders(token))
+          .timeout(const Duration(seconds: 8));
+      if (resp.statusCode != 200) return null;
+      final d = jsonDecode(resp.body);
+      if (d is Map<String, dynamic>) _membership = d;
+      return _membership;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Who brought me to Aluta (their name), if anyone did.
+  Future<String?> myInviterName() async {
+    final m = await myMembership();
+    final n = (m?['invited_by_name'] ?? '').toString().trim();
+    return n.isEmpty ? null : n;
+  }
+
   /// Start-up: this install's build number, for [_authHeaders].
   static Future<void> warmClientBuild() async {
     try {

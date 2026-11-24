@@ -120,6 +120,7 @@ import '../services/story_posting.dart';
 import '../widgets/section_switch.dart';
 import '../widgets/section_swipe_path.dart';
 import 'policy_gate.dart';
+import 'welcome_ritual.dart';
 import 'add_friend_sheet.dart';
 import 'spinning_vinyl_ring.dart';
 import '../widgets/presence_ring_avatar.dart';

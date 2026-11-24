@@ -749,7 +749,7 @@ class _MediaComposePageState extends State<_MediaComposePage> {
             TextButton.icon(
               onPressed: _bytes == null || _posting ? null : _edit,
               icon: const Icon(Icons.brush_rounded, color: Colors.white),
-              label: Text(_editedMime == null ? 'Draw' : 'Edit drawing',
+              label: const Text('Draw',
                   style: const TextStyle(
                       color: Colors.white, fontWeight: FontWeight.w700)),
             ),

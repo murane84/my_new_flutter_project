@@ -581,11 +581,12 @@ class _HoldHeartsState extends State<_HoldHearts>
   }
 }
 
-/// A bonded partner typing: their record on the turntable — Aluta's sign
-/// for "my person is here". Drawn to read at a glance in both themes: a rim
-/// that lifts it off the bubble, grooves, a rose label with a white mark that
-/// visibly orbits, a sheen that sweeps round, and a still tonearm resting on
-/// it. Turns at 33⅓ rpm; with reduced motion it rests, still recognisable.
+/// A bonded partner typing: their record turning — Aluta's sign for "my
+/// person is here". Drawn to read at a glance in both themes: a rim that
+/// lifts it off the bubble, grooves, a sheen, a rose label with a white mark,
+/// and two rose typing dots riding the grooves on opposite sides — they show
+/// the turn and take turns to pulse (the old typing dots, folded into the
+/// record). 33⅓ rpm; with reduced motion it rests, still recognisable.
 class _SpinningRecord extends StatefulWidget {
   const _SpinningRecord({super.key});
 
@@ -598,6 +599,9 @@ class _SpinningRecordState extends State<_SpinningRecord>
   // 33⅓ rpm → one turn every 1.8 s.
   late final AnimationController _c = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1800));
+  // The dots' pulse — the typing-dots rhythm, on its own beat.
+  late final AnimationController _beat = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1200));
 
   @override
   void didChangeDependencies() {
@@ -605,14 +609,17 @@ class _SpinningRecordState extends State<_SpinningRecord>
     final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     if (still) {
       _c.stop();
+      _beat.stop();
     } else if (!_c.isAnimating) {
       _c.repeat();
+      _beat.repeat();
     }
   }
 
   @override
   void dispose() {
     _c.dispose();
+    _beat.dispose();
     super.dispose();
   }
 
@@ -623,16 +630,16 @@ class _SpinningRecordState extends State<_SpinningRecord>
     return Semantics(
       label: 'Typing',
       child: SizedBox(
-        width: 34,
+        width: 26,
         height: 24,
         child: AnimatedBuilder(
-          animation: _c,
+          animation: Listenable.merge([_c, _beat]),
           builder: (_, _) => CustomPaint(
             painter: _RecordPainter(
               turn: _c.value,
+              beat: _beat.value,
               accent: scheme.primary,
               isDark: isDark,
-              arm: isDark ? Colors.white70 : const Color(0xFF6B5A60),
             ),
           ),
         ),
@@ -644,13 +651,21 @@ class _SpinningRecordState extends State<_SpinningRecord>
 class _RecordPainter extends CustomPainter {
   _RecordPainter(
       {required this.turn,
+      required this.beat,
       required this.accent,
-      required this.isDark,
-      required this.arm});
+      required this.isDark});
   final double turn; // 0..1
+  final double beat; // 0..1 — the dots' pulse
   final Color accent;
   final bool isDark;
-  final Color arm;
+
+  // One dot's swell over the beat: a quick rise and fall in its half, rest
+  // in the other (so the two alternate like typing dots).
+  static double _swell(double phase) {
+    final p = phase % 1.0;
+    if (p > 0.5) return 0;
+    return math.sin(p / 0.5 * math.pi);
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -705,23 +720,30 @@ class _RecordPainter extends CustomPainter {
     // Spindle.
     canvas.drawCircle(
         Offset.zero, r * 0.07, Paint()..color = const Color(0xFF151012));
+    // Two typing dots on the grooves, opposite each other: they carry the
+    // turn, and pulse in turn.
+    for (var i = 0; i < 2; i++) {
+      final s = _swell(beat + i * 0.5);
+      final at = Offset(0, (i == 0 ? -1 : 1) * r * 0.68);
+      final dotR = r * (0.12 + 0.05 * s);
+      canvas.drawCircle(
+          at,
+          dotR + 1.2,
+          Paint()
+            ..color = accent.withAlpha((60 * s).round())
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5));
+      canvas.drawCircle(at, dotR,
+          Paint()..color = Color.lerp(accent, Colors.white, 0.18 * s)!);
+    }
     canvas.restore();
-
-    // Tonearm (still): pivot top-right, stylus resting on the outer grooves.
-    final pivot = Offset(size.width - 3, 3);
-    final stylus = Offset(c.dx + r * 0.55, c.dy + r * 0.38);
-    final armPaint = Paint()
-      ..color = arm
-      ..strokeWidth = 1.6
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(pivot, Offset(pivot.dx, c.dy + r * 0.15), armPaint);
-    canvas.drawLine(Offset(pivot.dx, c.dy + r * 0.15), stylus, armPaint);
-    canvas.drawCircle(pivot, 2.2, Paint()..color = arm);
   }
 
   @override
   bool shouldRepaint(covariant _RecordPainter o) =>
-      o.turn != turn || o.accent != accent || o.isDark != isDark;
+      o.turn != turn ||
+      o.beat != beat ||
+      o.accent != accent ||
+      o.isDark != isDark;
 }
 
 /// Two photos side by side (theirs | mine) as one JPEG for a duo status —

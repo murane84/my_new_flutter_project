@@ -4884,6 +4884,14 @@ class _ChatPageState extends State<ChatPage>
   }
 
   void _jumpToQuoted(String quoted, {String? fromId}) {
+    // Quoted from an older Aluta that showed only the "update" note in
+    // place of an encrypted message: it can't say which one it was.
+    if (quoted.trim().startsWith('🔒 Encrypted message — update Aluta')) {
+      showToast(context,
+          'They replied before updating Aluta — that message can\'t be found',
+          type: ToastType.info);
+      return;
+    }
     final target = _findQuotedMessage(quoted, replyId: fromId);
     if (target == null) {
       showToast(context, 'That message isn\'t on this device anymore',

@@ -388,8 +388,8 @@ def send_message(
     else:
         # 🔒 Members whose Aluta can't open sealed group messages: their old
         # app's sockets get the note instead of the lock's code.
-        old = ([int(u) for u in members if int(u) != current_user.id
-                and not e2ee_msgs.reads_sealed_groups(db, int(u))]
+        old = (sorted(e2ee_msgs.old_readers(
+                   db, [u for u in members if int(u) != current_user.id]))
                if (msg.content or "").startswith(e2ee_msgs.SCOPE_PREFIX)
                else [])
         safe_broadcast_users(

@@ -61,6 +61,19 @@ def reads_sealed_groups(db, user_id: int, request=None) -> bool:
                for d in _live_devices(db, int(user_id)))
 
 
+def old_readers(db, user_ids) -> set:
+    """Of [user_ids], those none of whose devices opens sealed group
+    messages — in a few queries (a big group isn't asked person by person)."""
+    ids = {int(u) for u in user_ids}
+    if not ids:
+        return set()
+    from e2ee_scope import _devices_of
+    devs = _devices_of(db, ids)
+    return {u for u in ids
+            if not any("m2" in (getattr(d, "caps", None) or "").split(",")
+                       for d in devs.get(u, []))}
+
+
 def for_old_app(data: dict) -> dict:
     """A message as an Aluta that can't open sealed group messages shows it:
     the note in place of the lock's code."""

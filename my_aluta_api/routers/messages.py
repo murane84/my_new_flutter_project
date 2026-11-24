@@ -98,12 +98,14 @@ def _fanout_others(db, msg, me: int, event: dict):
     # get the "update Aluta" note, never the lock's code.
     sealed = bool(getattr(msg, "conversation_id", None)) and \
         (getattr(msg, "content", None) or "").startswith(e2ee_msgs.SCOPE_PREFIX)
-    for uid in _access_ids(db, msg):
+    ids = _access_ids(db, msg)
+    old = e2ee_msgs.old_readers(db, ids) if sealed else set()
+    for uid in ids:
         if uid != me:
             # A group heart meant for someone else goes out locked.
             ev = ({**event, "data": hearts.redact(data, uid)}
                   if isinstance(data, dict) else event)
-            if sealed and not e2ee_msgs.reads_sealed_groups(db, int(uid)):
+            if int(uid) in old:
                 ev = {**ev, "_seal_old": [int(uid)]}
             safe_notify_user(int(uid), ev)
 

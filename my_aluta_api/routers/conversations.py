@@ -378,12 +378,17 @@ def send_message(
     serialized = _serialize(msg)
     members = cc.member_ids(db, cid)
     if getattr(msg, "heart_for", None):
-        # A heart for one member: each copy is cut to what that member may see.
+        # A heart for one member: each copy is cut to what that member may see
+        # (an older Aluta: the "update" note, never the lock's code).
+        hold = (e2ee_msgs.old_readers(db, members)
+                if (msg.content or "").startswith(e2ee_msgs.SCOPE_PREFIX)
+                else set())
         for uid in members:
             if int(uid) != int(current_user.id):
                 safe_notify_user(int(uid), {
                     "type": "new_message",
                     "data": hearts.redact(serialized, uid),
+                    **({"_seal_old": [int(uid)]} if int(uid) in hold else {}),
                 })
     else:
         # 🔒 Members whose Aluta can't open sealed group messages: their old

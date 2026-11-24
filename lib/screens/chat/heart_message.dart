@@ -18,6 +18,7 @@ import '../../services/haptics.dart';
 import '../../utils/motion.dart';
 import '../../utils/radii.dart';
 import '../../utils/depth.dart';
+import '../../utils/time_utils.dart' show receiptTime;
 
 // ─── Secret hearts — the signature love note ────────────────────────────────
 // A "secret heart" (message_type 'heart') arrives covered, beating softly. It
@@ -136,6 +137,8 @@ String heartOpensLabel(DateTime when, {String prefix = 'Opens '}) {
   required bool isMe,
   DateTime? unlockAt,
   DateTime? openedAt,
+  // When the heart was sent: "Opened …" shows its day when it differs.
+  DateTime? sentAt,
   bool isGroup = false,
   int openCount = 0,
   int? openTotal,
@@ -204,7 +207,7 @@ String heartOpensLabel(DateTime when, {String prefix = 'Opens '}) {
   if (openedAt != null) {
     return (
       icon: Icons.favorite_rounded,
-      text: 'Opened ${DateFormat('h:mm a').format(openedAt)}',
+      text: 'Opened ${receiptTime(openedAt, sentAt: sentAt)}',
       warm: true,
     );
   }
@@ -1059,7 +1062,8 @@ class _HeartBubbleState extends State<HeartBubble>
       icon = Icons.hourglass_top_rounded;
     } else if (widget.isMe) {
       if (widget.openedAt != null) {
-        text = 'Opened ${DateFormat('h:mm a').format(widget.openedAt!)}';
+        text =
+            'Opened ${receiptTime(widget.openedAt!, sentAt: widget.sentAt)}';
         icon = Icons.favorite_rounded;
         color = _accent;
       } else {

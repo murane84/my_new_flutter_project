@@ -629,6 +629,8 @@ class _ChatPageState extends State<ChatPage>
   int? _mentionBase;
   // This visit already opened at the message that tagged me (once only).
   bool _openedAtMention = false;
+  // The message whose info sheet is open: its time, for the receipt times.
+  String? _infoSentIso;
   // Group settings mirrored from the server (chat/chat_polls_admin.dart).
   bool _adminsOnly = false;
   // Rituals (chat/chat_rituals.dart): already shown/used today.
@@ -5518,8 +5520,10 @@ class _ChatPageState extends State<ChatPage>
 
   void _showBrowserFrom(List<Map<String, dynamic>> msgs, Key key) {
     String shortDate(String iso) {
-      final d = DateTime.tryParse(iso)?.toLocal();
-      if (d == null) return '';
+      // Read as UTC like every chat time (a naive one near midnight could
+      // land on the wrong day).
+      if (iso.trim().isEmpty) return '';
+      final d = parseServerTime(iso);
       const mon = [
         'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -6184,6 +6188,9 @@ class _ChatPageState extends State<ChatPage>
               openedAt: (msg['opened_at'] ?? '').toString().isEmpty
                   ? null
                   : parseServerTime(msg['opened_at'].toString()),
+              sentAt: (msg['timestamp'] ?? '').toString().isEmpty
+                  ? null
+                  : parseServerTime(msg['timestamp'].toString()),
               isGroup: _isGroup,
               // Group heart for one member → "Only Neema can open it" /
               // "Neema opened it"; for everyone → "For everyone · 2 of 5".

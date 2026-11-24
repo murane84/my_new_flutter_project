@@ -34,9 +34,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
   String _viewerSentTime(int i) {
     final m = (i >= 0 && i < _viewerMsgs.length) ? _viewerMsgs[i] : null;
     final iso = m?['timestamp']?.toString();
-    final t = iso != null ? DateTime.tryParse(iso) : null;
-    if (t == null) return '';
-    final local = t.toLocal();
+    if (iso == null || iso.trim().isEmpty) return '';
+    // Server time read as UTC (a naive timestamp was taken as local time —
+    // 3 hours off in Dar), on the app's 12-hour clock like every bubble.
+    final local = parseServerTime(iso);
     final now = DateTime.now();
     final today = local.year == now.year &&
         local.month == now.month &&
@@ -44,10 +45,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
     final y = now.subtract(const Duration(days: 1));
     final yday =
         local.year == y.year && local.month == y.month && local.day == y.day;
-    final hm = DateFormat('HH:mm').format(local);
+    final hm = DateFormat('h:mm a').format(local);
     if (today) return 'Today at $hm';
     if (yday) return 'Yesterday at $hm';
-    return DateFormat('MMM d, HH:mm').format(local);
+    return '${DateFormat('d MMM').format(local)}, $hm';
   }
 
   Widget _videoBubble(
@@ -1209,6 +1210,8 @@ extension _ChatPageHelpers3 on _ChatPageState {
   /// but not read), and Sent (not yet delivered) — for a message I sent to the
   /// group. One scrollable sheet, one section per category.
   void _showMessageInfo(Map<String, dynamic> msg) {
+    // Receipt times in the sheet are read against this message's own day.
+    _infoSentIso = msg['timestamp']?.toString();
     final rawId = msg['id'];
     if (rawId == null) return;
     final mid = rawId is int ? rawId : int.tryParse(rawId.toString()) ?? 0;
@@ -1637,17 +1640,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
   }
 
   /// Compact timestamp for a Message-info row (today → time only, else date).
-  String _infoTime(String iso) {
-    final t = DateTime.tryParse(iso);
-    if (t == null) return '';
-    final local = t.toLocal();
-    final now = DateTime.now();
-    final sameDay =
-        local.year == now.year && local.month == now.month && local.day == now.day;
-    return sameDay
-        ? DateFormat('HH:mm').format(local)
-        : DateFormat('MMM d, HH:mm').format(local);
-  }
+  // The same rule as the book card's times (utils/time_utils.dart): the
+  // app's 12-hour clock, server time read as UTC, and the day shown whenever
+  // it isn't the day the message was sent.
+  String _infoTime(String iso) => receiptTimeOf(iso, sentRaw: _infoSentIso);
 
   // Parse the server reactions JSON ({"<uid>":"<emoji>"}) into a unique,
   // display-ready list of emojis.
@@ -2415,8 +2411,10 @@ extension _ChatPageHelpers3 on _ChatPageState {
     if (mid == null || cid == null || cid == 0) return const [];
     final info = await ApiService().messageInfo(cid, mid);
     if (info == null) return const [];
+    // With its day whenever that isn't the day the message was sent.
+    final sentIso = msg['timestamp']?.toString();
     String at(dynamic iso) =>
-        (iso == null || '$iso'.isEmpty) ? '' : _timeOnly('$iso');
+        receiptTimeOf(iso?.toString(), sentRaw: sentIso);
     List<Map> list(String k) =>
         ((info[k] as List?) ?? const []).whereType<Map>().toList();
     // A secret heart counts who OPENED it, not who saw the chat. (The

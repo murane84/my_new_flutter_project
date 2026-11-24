@@ -26,6 +26,38 @@ DateTime parseServerTime(String raw) {
 String localTimeOnly(String raw) =>
     DateFormat('h:mm a').format(parseServerTime(raw));
 
+/// A receipt's time ("Opened …", "Delivered …", "Read by …"), read beside
+/// the message it belongs to: just the time when it happened the same day the
+/// message was sent — otherwise with its day, so "Opened 3:31 PM" under a
+/// 6:32 PM message can never look like it was opened before it was sent.
+///   same day as sent → "3:31 PM"
+///   today            → "Today, 3:31 PM"
+///   yesterday        → "Yesterday, 3:31 PM"
+///   this year        → "13 Nov, 3:31 PM"
+///   older            → "13 Nov 2025, 3:31 PM"
+/// [sentAt]: the message's own time (when unknown, today is the reference).
+String receiptTime(DateTime when, {DateTime? sentAt}) {
+  final w = when.toLocal();
+  final time = DateFormat('h:mm a').format(w);
+  DateTime day(DateTime d) => DateTime(d.year, d.month, d.day);
+  final ref = day((sentAt ?? DateTime.now()).toLocal());
+  final d = day(w);
+  if (d == ref) return time;
+  final today = day(DateTime.now());
+  if (d == today) return 'Today, $time';
+  if (d == today.subtract(const Duration(days: 1))) return 'Yesterday, $time';
+  if (w.year == today.year) return '${DateFormat('d MMM').format(w)}, $time';
+  return '${DateFormat('d MMM yyyy').format(w)}, $time';
+}
+
+/// [receiptTime] for server timestamps ('' when there's none).
+String receiptTimeOf(String? raw, {String? sentRaw}) {
+  if (raw == null || raw.trim().isEmpty) return '';
+  final sent =
+      (sentRaw == null || sentRaw.trim().isEmpty) ? null : parseServerTime(sentRaw);
+  return receiptTime(parseServerTime(raw), sentAt: sent);
+}
+
 /// Human "last seen" label in local time.
 String formatLastSeen(String raw) {
   if (raw.trim().isEmpty) return '';

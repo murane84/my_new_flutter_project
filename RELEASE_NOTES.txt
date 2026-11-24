@@ -1,3 +1,18 @@
-🔒 Group chats: members on an older Aluta now see "Encrypted message — update Aluta to read it" instead of code, and read everything once they update — nothing is lost.
-🔒 A group starts encrypting only when everyone's Aluta can read it.
-💬 Replies that quoted a locked message now show the real words, name the right person, and jump to the original.
+🎵 When you bond with someone, Aluta now asks for the song that is yours — and remembers it on your anniversaries.
+💞 Our day: when a bond is accepted, both of you share the moment — and Aluta keeps the date.
+🎁 Invite your people: every member has invitations, and the first 1,000 carry a Founding Circle number.
+👋 Coming back? Aluta greets you with what your people sent while you were away.
+🌍 New here? Aluta welcomes you, shows you who invited you, and helps you find the people you already know.
+✍️ After creating your account, you're signed straight in.
+💿 Your bonded person's record now turns while they write to you.
+🖥️ On desktop, editing a photo covers only the chat — your Circle and your music stay right beside it.
+🎨 Picking a colour in the photo editor now does what you expect — and text can be recoloured after you add it.
+📸 Sending several photos: Skip one, or stop the rest — Aluta tells you what wasn't sent.
+✨ GIFs stay animated and stickers keep their see-through edges.
+🎬 Videos can now have a caption, just like photos.
+🖌️ Draw on your status photos, and post several at once.
+⏱️ Video statuses play up to 30 seconds.
+📲 Photos and videos shared into Aluta from other apps get the same editor and captions.
+💬 Messages lift smoothly when you hover — no more shaky text.
+🔒 Your chats say it plainly: not even Aluta can read them.
+📄 Our Privacy Policy and Terms are updated for invitations — you'll be asked to accept them once.

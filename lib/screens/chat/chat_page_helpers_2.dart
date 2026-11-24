@@ -572,8 +572,14 @@ extension _ChatPageHelpers2 on _ChatPageState {
   /// the music player beside it, routes and dialogs still layer above it,
   /// Escape cancels, and leaving the chat closes it unsent.
   Future<Map<String, dynamic>?> _openPhotoEditorInPane(Uint8List bytes,
-      {int index = 0, int total = 0}) {
-    _closePhotoEditor(null); // never two at once
+      {int index = 0, int total = 0}) async {
+    // One at a time: a photo that arrives while one is being edited (a paste,
+    // a dropped file, a share into Aluta) waits its turn — it never throws
+    // away the edits in progress.
+    while (_photoEditorDone != null) {
+      await _photoEditorDone!.future;
+      if (!mounted) return null;
+    }
     final done = Completer<Map<String, dynamic>?>();
     _photoEditorDone = done;
     setState(() {

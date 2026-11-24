@@ -807,7 +807,7 @@ class _MediaComposePageState extends State<_MediaComposePage> {
               onPressed: _bytes == null || _posting ? null : _edit,
               icon: const Icon(Icons.brush_rounded, color: Colors.white),
               label: const Text('Draw',
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: Colors.white, fontWeight: FontWeight.w700)),
             ),
         ],

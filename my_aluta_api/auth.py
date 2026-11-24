@@ -311,6 +311,13 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
     if invite is not None:
         invites.use_invite(db, invite, new_user)
         db.commit()
+    # Off the waiting list once they've joined (as the Privacy Policy says).
+    invites.leave_waitlist(db, new_user.email, phone)
+    # Their member number: the next in the order of joining.
+    try:
+        invites.number_members(db)
+    except Exception:  # noqa: BLE001
+        db.rollback()
 
     return {
         "message": "User registered successfully",

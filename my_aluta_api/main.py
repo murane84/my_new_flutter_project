@@ -283,6 +283,7 @@ def ensure_media_schema():
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS policy_version INTEGER DEFAULT 0",
         # Invitations (invites.py): who brought them to Aluta.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS invited_by INTEGER",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS member_no INTEGER",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS policy_accepted_at TIMESTAMPTZ",
         # Monetization: the 'Together' entitlement (free | together) + when it began.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_tier VARCHAR DEFAULT 'free'",
@@ -415,6 +416,26 @@ def backfill_dm_conversations():
 
 
 backfill_dm_conversations()
+
+
+def number_existing_members():
+    """Member numbers for accounts made before invitations (invites.py), in
+    their true order of joining — once; later accounts get theirs at sign-up."""
+    try:
+        from database import SessionLocal
+        import invites
+        db = SessionLocal()
+        try:
+            n = invites.number_members(db)
+            if n:
+                print(f"[invites] numbered {n} member(s)")
+        finally:
+            db.close()
+    except Exception as e:  # noqa: BLE001
+        print(f"[invites] numbering skipped: {e}")
+
+
+number_existing_members()
 
 
 # ✅ Log whether push notifications can actually be sent. If this prints

@@ -57,9 +57,54 @@ def use_invite(db: Session, invite: Invite, new_user: User) -> None:
     new_user.invited_by = invite.inviter_id
 
 
+def leave_waitlist(db: Session, email, phone) -> None:
+    """A waiting-list entry goes once its person has joined."""
+    keys = {str(x).strip().lower() for x in (email, phone) if x}
+    if not keys:
+        return
+    try:
+        db.query(WaitlistEntry).filter(WaitlistEntry.contact.in_(keys)).delete(
+            synchronize_session=False)
+        db.commit()
+    except Exception:  # noqa: BLE001
+        db.rollback()
+
+
+def number_members(db: Session) -> int:
+    """Give every account without a member number one, in the true order of
+    joining, after the highest already given. Run at start-up (existing
+    accounts) and at registration (the new one). Returns how many."""
+    from sqlalchemy import func
+    top = db.query(func.max(User.member_no)).scalar() or 0
+    rows = (db.query(User).filter(User.member_no.is_(None))
+            .order_by(User.id.asc()).all())
+    for u in rows:
+        top += 1
+        u.member_no = top
+    if rows:
+        db.commit()
+    return len(rows)
+
+
 def member_number(db: Session, user: User) -> int:
-    """Their place in the order of joining (1 = the first account)."""
-    return db.query(User.id).filter(User.id <= user.id).count()
+    """Their place in the order of joining (1 = the first account) — worked
+    out once, then kept: a permanent mark never shifts when an earlier
+    account is deleted."""
+    n = getattr(user, "member_no", None)
+    if n:
+        return int(n)
+    from sqlalchemy import func
+    n = db.query(User.id).filter(User.id <= user.id).count()
+    # (never a number an earlier member already holds)
+    top = db.query(func.max(User.member_no)).filter(User.id < user.id).scalar()
+    if top and n <= int(top):
+        n = int(top) + 1
+    try:
+        user.member_no = n
+        db.commit()
+    except Exception:  # noqa: BLE001
+        db.rollback()
+    return n
 
 
 def _used(db: Session, uid: int) -> int:

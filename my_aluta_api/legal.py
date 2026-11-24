@@ -17,8 +17,8 @@ To publish an update:
 """
 
 # Bump this (and the date) whenever the policy or terms materially change.
-CURRENT_POLICY_VERSION = 9
-POLICY_EFFECTIVE_DATE = "23 November 2026"
+CURRENT_POLICY_VERSION = 10
+POLICY_EFFECTIVE_DATE = "24 November 2026"
 
 # The docs are served by the API itself (see main.py), so the client only needs
 # the paths; it prefixes them with the API origin. Kept relative so the same
@@ -106,6 +106,13 @@ POLICY_SUMMARY = {
         "chats of any size. A newcomer to a group reads only what comes after "
         "they join, unless its admins share earlier messages. Please review "
         "and accept to continue."
+    ),
+    10: (
+        "We've updated Aluta's Privacy Policy: Aluta now has invitations. If "
+        "you joined with a friend's invite, we keep who invited you — shown "
+        "only to the two of you — and the invite codes you create; your member "
+        "number is your place in the order accounts were made. Deleting your "
+        "account removes them. Please review and accept to continue."
     ),
 }
 

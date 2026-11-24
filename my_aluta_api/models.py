@@ -51,6 +51,9 @@ class User(Base):
     # Who brought them to Aluta (an invitation they joined with) — kept for
     # both: "Asha brought you here" (invites.py).
     invited_by = Column(Integer, nullable=True, index=True)
+    # Their place in the order of joining, fixed the first time it's shown
+    # (an earlier account deleted later never moves it) — invites.py.
+    member_no = Column(Integer, nullable=True)
 
     # Legal consent: the highest Privacy Policy / Terms version this user has
     # accepted (see legal.py). 0 means "never accepted"; whenever the server's

@@ -678,7 +678,7 @@ List<Widget> _legalBody(BuildContext context, String raw) {
 // the backend CURRENT_POLICY_VERSION is bumped), update this content too.
 const String _privacy = '''
 Aluta — Privacy Policy
-Development / Beta build · Last updated: 23 November 2026
+Development / Beta build · Last updated: 24 November 2026
 
 Aluta is an app in active development, provided for early testing. Features and
 data practices change frequently, and it is not yet intended for public
@@ -689,6 +689,12 @@ information. It is a good-faith draft by the developer, not legal advice.
 - Account details: your username and email address, your password (stored only as
   a secure one-way hash, never in plain text), an optional phone number and
   profile picture, and — if you enable two-factor authentication — a TOTP secret.
+- Invitations: if you joined with a friend's invite, which member invited you
+  (shown only to the two of you as "brought you here"), and the invite codes you
+  create — anyone you give a code to sees your first name before joining. Your
+  member number is your place in the order Aluta accounts were created. If you
+  join the waiting list, the email or phone number you give, used only to tell you
+  when you can join.
 - Presence: your online status and a "last seen" time, so friends can see when
   you are available. You choose who sees your last seen (your circle, only
   your Our Space bonds, or nobody); it works both ways. Stories, statuses and
@@ -832,7 +838,7 @@ For any privacy questions or requests, use Help & feedback in the app menu
 
 const String _terms = '''
 Aluta — Terms of Service
-Development / Beta build · Last updated: 23 November 2026
+Development / Beta build · Last updated: 24 November 2026
 
 Aluta is in active development, provided for early testing. Features change
 frequently, data may be reset, and the service may be unavailable or contain
@@ -928,7 +934,7 @@ Help & feedback in the app ("Get help"), or email support@ozilane.com.
 
 const String _about = '''
 About Aluta
-Development / Beta build · Last updated: 23 November 2026
+Development / Beta build · Last updated: 24 November 2026
 
 Aluta is a social app that brings your conversations and your music into one
 place — private and group chat, voice and group calls, ephemeral Stories, a

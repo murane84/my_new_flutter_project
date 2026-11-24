@@ -1791,10 +1791,12 @@ extension _HomePageHelpers1 on HomePageState {
     // first-open ritual comes first — the promise before the paperwork.
     var findPeople = false;
     if (status['is_update'] != true && await _firstOpen()) {
-      findPeople = await showWelcomeRitual(context,
-          inviter: await ApiService().myInviterName());
+      final inviter = await ApiService().myInviterName();
+      if (!mounted) return;
+      findPeople = await showWelcomeRitual(context, inviter: inviter);
       if (!mounted) return;
     }
+    if (!mounted) return;
     final ok = await showPolicyGate(
       context,
       status: status,

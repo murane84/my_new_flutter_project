@@ -240,6 +240,10 @@ bool _isEmojiOnly(String text) {
 // Chat photos use the app-wide upload rule (utils/image_compress.dart).
 Uint8List _compressChatImage(Uint8List input) => compressPhotoForUpload(input);
 
+/// How a photo's preview ended: sent, skipped (batch: on to the next one) or
+/// stopped (cancelled — in a batch, the rest aren't sent).
+enum _PhotoOutcome { sent, skipped, stopped }
+
 // ─── ChatPage ────────────────────────────────────────────────────────────────
 
 class ChatPage extends StatefulWidget {
@@ -480,6 +484,10 @@ class _ChatPageState extends State<ChatPage>
   // panel docked in the chat view (not a full-screen modal), so it stays
   // within the conversation and never covers the mini player.
   String? _captionFileName;
+  // What the caption bar is for: a file (default) or a video, and an optional
+  // "Video 2 of 3" line.
+  IconData _captionIcon = Icons.insert_drive_file_rounded;
+  String? _captionNote;
   TextEditingController? _captionCtrl;
   Completer<String?>? _captionCompleter;
 
@@ -3144,12 +3152,22 @@ class _ChatPageState extends State<ChatPage>
         picked = one == null ? const [] : [one];
       }
       if (picked.isEmpty) return;
-      if (picked.length > 1 && mounted) {
-        showToast(context, 'Sending ${picked.length} videos…');
-      }
-      for (final x in picked) {
+      for (var i = 0; i < picked.length; i++) {
         if (!mounted) break;
-        await _processAndSendVideo(x);
+        final many = picked.length > 1;
+        final sent = await _processAndSendVideo(picked[i],
+            note: many ? 'Video ${i + 1} of ${picked.length}' : null);
+        final left = picked.length - i - 1;
+        if (!sent && left > 0) {
+          if (mounted) {
+            showToast(
+                context,
+                left == 1
+                    ? "1 more video wasn't sent"
+                    : "$left more videos weren't sent");
+          }
+          break;
+        }
       }
     } catch (_) {
       if (mounted) {
@@ -3160,7 +3178,9 @@ class _ChatPageState extends State<ChatPage>
 
   /// Compress (mobile), cap-check and send a video FILE as a 'video' message.
   /// Shared by the gallery picker and the in-app camera (recorded clips).
-  Future<void> _processAndSendVideo(XFile x) async {
+  /// True once it's on its way; false when the caption bar was cancelled (or
+  /// it couldn't be sent) — a batch then stops.
+  Future<bool> _processAndSendVideo(XFile x, {String? note}) async {
     try {
       final name0 = x.name;
       final ext =
@@ -3177,8 +3197,13 @@ class _ChatPageState extends State<ChatPage>
         if (mounted) {
           showToast(context, 'Could not read video', type: ToastType.error);
         }
-        return;
+        return false;
       }
+      if (!mounted) return false;
+      // A caption, like a photo's — in the composer slot, Send or ✕.
+      final caption = await _askFileCaption(filename,
+          icon: Icons.videocam_rounded, note: note);
+      if (caption == null || !mounted) return false;
       final cap = PlanLimits.instance.fileBytes; // my plan's size
       const compressAbove = 12 * 1024 * 1024;
 
@@ -3211,21 +3236,24 @@ class _ChatPageState extends State<ChatPage>
           showToast(context, 'Video is too large to send (${PlanLimits.instance.fileNote}).',
               type: ToastType.error);
         }
-        return;
+        return false;
       }
       await _uploadAndSend(
           bytes: bytes,
           filename: filename,
           mime: mime,
           type: 'video',
+          caption: caption.trim(),
           // Big clips ride ephemeral: purged from the server once the
           // recipient caches them (GlimpseVideo caches on play) or after the
           // TTL, so a 200 MB video never lives on the server long-term.
           ephemeral: bytes.length > 15 * 1024 * 1024);
+      return true;
     } catch (_) {
       if (mounted) {
         showToast(context, 'Could not send video', type: ToastType.error);
       }
+      return false;
     } finally {
       try {
         await VideoCompress.deleteAllCache();
@@ -3777,16 +3805,21 @@ class _ChatPageState extends State<ChatPage>
   // caption (possibly empty) on Send, or null if cancelled/dismissed.
   // Shows an inline caption bar inside the chat view and resolves once the
   // user taps Send (returns the caption, possibly empty) or Cancel (null).
-  Future<String?> _askFileCaption(String filename) async {
-    // Defensively resolve any previous pending request.
-    if (_captionCompleter != null && !_captionCompleter!.isCompleted) {
-      _captionCompleter!.complete(null);
+  Future<String?> _askFileCaption(String filename,
+      {IconData icon = Icons.insert_drive_file_rounded, String? note}) async {
+    // One at a time: a second request (another paste, a video) waits for the
+    // caption in progress — it never cancels it.
+    while (_captionCompleter != null && !_captionCompleter!.isCompleted) {
+      await _captionCompleter!.future;
+      if (!mounted) return null;
     }
     final ctrl = TextEditingController();
     final completer = Completer<String?>();
     if (mounted) {
       setState(() {
         _captionFileName = filename;
+        _captionIcon = icon;
+        _captionNote = note;
         _captionCtrl = ctrl;
         _captionCompleter = completer;
       });

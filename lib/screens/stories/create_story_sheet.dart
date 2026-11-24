@@ -109,7 +109,7 @@ Future<void> showCreateStorySheet(
               tile(Icons.gif_box_rounded, 'GIF / Sticker', 'sticker',
                   'Share an animated GIF or sticker'),
               tile(Icons.photo_library_rounded, 'Photo', 'gallery',
-                  'Pick a picture from your gallery'),
+                  'Pick one or several from your gallery'),
               tile(Icons.photo_camera_rounded, 'Camera', 'camera',
                   'Take a photo or record a video'),
               tile(Icons.videocam_rounded, 'Video clip', 'video',
@@ -177,11 +177,41 @@ Future<void> showCreateStorySheet(
       file = r?.file;
       cameraVideo = r?.isVideo ?? false;
     } else {
-      file = await picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 90,
-        maxWidth: 1600,
-      );
+      // Several at once: each gets its own compose page ("Photo i of N"),
+      // like a chat batch — Skip moves on, back stops the rest.
+      final many =
+          await picker.pickMultiImage(imageQuality: 90, maxWidth: 1600);
+      if (many.length > 1) {
+        if (!context.mounted) return;
+        for (var i = 0; i < many.length; i++) {
+          if (!context.mounted) return;
+          final r = await Navigator.push<String>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => _MediaComposePage(
+                kind: 'photo',
+                file: many[i],
+                onPosted: onPosted,
+                index: i + 1,
+                total: many.length,
+              ),
+            ),
+          );
+          final left = many.length - i - 1;
+          if (r == null && left > 0) {
+            if (context.mounted) {
+              showToast(
+                  context,
+                  left == 1
+                      ? "1 more photo wasn't posted"
+                      : "$left more photos weren't posted");
+            }
+            return;
+          }
+        }
+        return;
+      }
+      file = many.isEmpty ? null : many.first;
     }
   } catch (_) {
     file = null;
@@ -421,7 +451,13 @@ class _MediaComposePage extends StatefulWidget {
     required this.kind,
     required this.file,
     required this.onPosted,
+    this.index = 0,
+    this.total = 0,
   });
+  // In a batch of photos: which one (1-based) of how many. 0/0 = single.
+  // The page pops 'posted', 'skip', or null (backed out → the batch stops).
+  final int index;
+  final int total;
 
   @override
   State<_MediaComposePage> createState() => _MediaComposePageState();
@@ -487,8 +523,10 @@ class _MediaComposePageState extends State<_MediaComposePage> {
   }
 
   Future<Uint8List?> _prepared() async {
-    var bytes = _bytes;
-    if (bytes == null) return null;
+    final held = _bytes;
+    if (held == null) return null;
+    // Typed non-null: it's reassigned inside try blocks below.
+    Uint8List bytes = held;
     var mime = _editedMime ?? _mimeFor(widget.file, widget.kind);
     var name = widget.file.name;
     String renamed(String ext) {
@@ -629,7 +667,7 @@ class _MediaComposePageState extends State<_MediaComposePage> {
     }
     final first = partner.name.trim().split(RegExp(r'\s+')).first;
     _toast('Sent to $first — it goes live when they add their half 💞');
-    Navigator.pop(context);
+    Navigator.pop(context, 'posted');
   }
 
   Widget _songChip() {
@@ -731,20 +769,39 @@ class _MediaComposePageState extends State<_MediaComposePage> {
       return;
     }
     widget.onPosted();
-    Navigator.pop(context);
+    Navigator.pop(context, 'posted');
   }
 
   void _toast(String msg) => showToast(context, msg);
 
   @override
   Widget build(BuildContext context) {
+    final batch = widget.total > 1;
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text('New story'),
+        title: batch
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('New story', style: TextStyle(fontSize: 16)),
+                  Text('Photo ${widget.index} of ${widget.total}',
+                      style: const TextStyle(
+                          fontSize: 11.5, color: Colors.white70)),
+                ],
+              )
+            : const Text('New story'),
         actions: [
+          if (batch)
+            TextButton(
+              onPressed: _posting ? null : () => Navigator.pop(context, 'skip'),
+              child: const Text('Skip',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w700)),
+            ),
           if (widget.kind == 'photo')
             TextButton.icon(
               onPressed: _bytes == null || _posting ? null : _edit,

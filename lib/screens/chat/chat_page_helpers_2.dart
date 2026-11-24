@@ -1609,17 +1609,28 @@ extension _ChatPageHelpers2 on _ChatPageState {
                     color: scheme.primary.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(Radii.md),
                   ),
-                  child: Icon(Icons.insert_drive_file_rounded,
+                  child: Icon(_captionIcon,
                       color: accentInk(scheme), size: 20),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: scheme.onSurface)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: scheme.onSurface)),
+                      if (_captionNote != null)
+                        Text(_captionNote!,
+                            style: TextStyle(
+                                fontSize: 11.5,
+                                color: scheme.onSurfaceVariant)),
+                    ],
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close_rounded, size: 18),

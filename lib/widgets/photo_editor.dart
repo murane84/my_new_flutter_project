@@ -71,6 +71,7 @@ void _drawArrow(
 
 class PhotoEditorScreen extends StatefulWidget {
   const PhotoEditorScreen({
+    super.key,
     required this.imageBytes,
     this.friendName = '',
     this.index = 0,

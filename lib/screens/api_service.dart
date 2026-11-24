@@ -44,7 +44,7 @@ class ApiService {
     'X-Aluta-Seal': '1',
     // Which Aluta this is: the server answers every build in a form it can
     // show (an older one gets the older form or a clear note — compat.py).
-    if (_clientBuild != null) 'X-Aluta-Build': _clientBuild!,
+    'X-Aluta-Build': ?_clientBuild,
   };
 
   static String? _clientBuild;

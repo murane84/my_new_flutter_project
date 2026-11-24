@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from sqlalchemy import func
@@ -94,11 +94,17 @@ def _fanout_others(db, msg, me: int, event: dict):
     """Notify everyone who can see the message except the actor (works for both
     DMs — the other party — and groups — every other member)."""
     data = event.get("data")
+    # 🔒 A sealed group message (edited, pinned…): an older Aluta's sockets
+    # get the "update Aluta" note, never the lock's code.
+    sealed = bool(getattr(msg, "conversation_id", None)) and \
+        (getattr(msg, "content", None) or "").startswith(e2ee_msgs.SCOPE_PREFIX)
     for uid in _access_ids(db, msg):
         if uid != me:
             # A group heart meant for someone else goes out locked.
             ev = ({**event, "data": hearts.redact(data, uid)}
                   if isinstance(data, dict) else event)
+            if sealed and not e2ee_msgs.reads_sealed_groups(db, int(uid)):
+                ev = {**ev, "_seal_old": [int(uid)]}
             safe_notify_user(int(uid), ev)
 
 def _seal_check(message, sender_id: int) -> None:
@@ -352,6 +358,7 @@ def cancel_held(held_id: int, db: Session = Depends(get_db),
 # 🔎 SEARCH MESSAGES (across the user's DMs + groups)
 @router.get("/search")
 def search_messages(
+    request: Request,
     q: str = Query("", max_length=200),
     limit: int = 40,
     # Stage 2 filters (all optional):
@@ -539,6 +546,9 @@ def search_messages(
             item["friend_name"] = name
             item["friend_avatar"] = avatar
         out.append(item)
+    # 🔒 An Aluta that can't open sealed group messages: a note, not code.
+    if out and not e2ee_msgs.reads_sealed_groups(db, me, request):
+        out = [e2ee_msgs.for_old_app(i) for i in out]
     return out
 
 # 2️⃣ MESSAGE DELIVERED (auto when fetching messages)

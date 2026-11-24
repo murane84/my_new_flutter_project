@@ -4687,9 +4687,11 @@ class ApiService {
     final can = SealMedia.kinds.contains(type) &&
         (conversationId == null
             ? await SealIngress.canSealMedia(receiverId, cap: cap)
+            // (a group: its members' Aluta must open sealed group messages
+            // — "m2"; 1.0.19 opened sealed 1:1 photos but not a group's)
             : await SealIngress.canSealGroupMedia(
                 conversationId, await groupMembers(conversationId),
-                cap: cap));
+                cap: 'm2'));
     if (!can) return (bytes: bytes, path: null, key: null);
     if (!kIsWeb && bytes.length > SealMedia.maxBytes) {
       final dir = await getTemporaryDirectory();

@@ -186,12 +186,11 @@ echo   changes too - promote first, or commit them later.
 echo  ************************************************************
 set /p OKPRO=Type YES to promote: 
 if /i not "%OKPRO%"=="YES" (echo Not promoted. & exit /b 0)
-for %%p in (android-universal android windows) do (
-  echo == promoting %%p ==
-  curl.exe -sS --fail-with-body -X POST "%URL%/admin/release/promote" ^
-    -H "X-Release-Key: %ALUTA_RELEASE_KEY%" -F "platform=%%p" || goto :pubfail
-  echo.
-)
+REM Universal first (quiet), then arm64 - it must work, and it's what tells
+REM everyone - then Windows. A missing universal / Windows beta only warns.
+call :promote_one android-universal || echo   (no universal beta build - skipped)
+call :promote_one android || goto :pubfail
+call :promote_one windows || echo   (no Windows beta build - skipped)
 echo == what phones see now ==
 curl.exe -s "%URL%/app/latest?platform=android"
 echo.
@@ -200,6 +199,13 @@ call deploy_web.bat || goto :err
 set CH=public
 set REQ=
 goto :done
+
+:promote_one
+echo == promoting %1 ==
+curl.exe -sS --fail-with-body -X POST "%URL%/admin/release/promote" ^
+  -H "X-Release-Key: %ALUTA_RELEASE_KEY%" -F "platform=%1" || exit /b 1
+echo.
+exit /b 0
 
 :pubfail
 echo.

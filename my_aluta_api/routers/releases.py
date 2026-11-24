@@ -110,6 +110,21 @@ def is_beta(uid) -> bool:
         return False
 
 
+def beta_ids() -> set[int]:
+    """Everyone in the beta circle (one query)."""
+    try:
+        from database import SessionLocal
+        from models import User
+        db = SessionLocal()
+        try:
+            return {r[0] for r in db.query(User.id).filter(
+                User.beta_circle.is_(True)).all()}
+        finally:
+            db.close()
+    except Exception:
+        return set()
+
+
 def _beta_ahead(platform: str) -> dict | None:
     """The beta build for [platform] while it's newer than the public one."""
     b = _meta(platform, "beta")
@@ -665,6 +680,16 @@ def promote(request: Request, platform: str = Form(...)):
     b = _meta(platform, "beta")
     if not b:
         raise HTTPException(status_code=404, detail="No beta build to promote")
+    p = _meta(platform)
+    try:
+        if p and int(b.get("build") or 0) <= int(p.get("build") or 0):
+            # A stale beta must never replace a newer public build.
+            raise HTTPException(
+                status_code=409,
+                detail=f"The public build ({p.get('version')}) is already "
+                       f"this one or newer")
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=409, detail="Unreadable build numbers")
     src = os.path.join(_dir("beta"), PLATFORMS[platform])
     dst_dir = _dir()
     fd, tmp = tempfile.mkstemp(dir=dst_dir, suffix=".part")
@@ -753,7 +778,8 @@ def _announce(meta: dict) -> int:
         from websocket_manager import broadcast_event, connected_users
         uids = list(connected_users.keys())
         if beta:  # a beta build reaches the beta circle only
-            uids = [u for u in uids if is_beta(u)]
+            circle = beta_ids()
+            uids = [u for u in uids if u in circle]
         told = len(uids)
         # 1.0.4 apps only understand the older `app_update` event: send
         # both until everyone is on the server-first build.

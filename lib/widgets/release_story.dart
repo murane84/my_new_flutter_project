@@ -16,7 +16,12 @@ import '../utils/app_config.dart';
 /// card: the version, its name, its story. A fix-only release (no name) shows
 /// nothing; a fresh install shows nothing (the welcome ritual is theirs); and
 /// each version is told at most once per device.
-Future<void> maybeShowReleaseStory(BuildContext context) async {
+///
+/// [welcomedNow]: the welcome ritual ran on this open (a brand-new account) —
+/// then this version is simply noted. Otherwise a device with no note yet is
+/// an existing member's first update to a story-aware Aluta, and is told.
+Future<void> maybeShowReleaseStory(BuildContext context,
+    {bool welcomedNow = false}) async {
   const key = 'release_story_seen';
   try {
     final info = await PackageInfo.fromPlatform();
@@ -24,8 +29,8 @@ Future<void> maybeShowReleaseStory(BuildContext context) async {
     final p = await SharedPreferences.getInstance();
     final seen = p.getString(key);
     await p.setString(key, mine);
-    // First run on this device, or nothing new → nothing to tell.
-    if (seen == null || seen == mine) return;
+    // Nothing new, or a brand-new member (the welcome is theirs) → nothing.
+    if (seen == mine || (seen == null && welcomedNow)) return;
     final base = await AppConfig.baseUrl;
     final r = await http
         .get(Uri.parse('$base/app/story?version='

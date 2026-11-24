@@ -1794,7 +1794,9 @@ extension _HomePageHelpers1 on HomePageState {
     // A brand-new account (first acceptance, not a policy update): the
     // first-open ritual comes first — the promise before the paperwork.
     var findPeople = false;
+    var welcomed = false;
     if (status['is_update'] != true && await _firstOpen()) {
+      welcomed = true;
       final inviter = await ApiService().myInviter();
       if (!mounted) return;
       final photo = inviter?.avatar;
@@ -1810,8 +1812,11 @@ extension _HomePageHelpers1 on HomePageState {
       onLogout: _signOutFromGate,
     );
     if (ok && findPeople && mounted) unawaited(_findFriendsFromContacts());
-    // A policy update often ships with a release: its story after the gate.
-    if (ok && !findPeople && mounted) unawaited(maybeShowReleaseStory(context));
+    // A policy update often ships with a release: its story after the gate
+    // (a brand-new account just had its welcome — the version is only noted).
+    if (ok && mounted) {
+      unawaited(maybeShowReleaseStory(context, welcomedNow: welcomed));
+    }
   }
 
   /// Whether this account hasn't been welcomed on this device yet (marks it).

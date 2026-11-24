@@ -150,11 +150,33 @@ class SealIngress {
       final ok = opened != SealSpace.waitingForKey &&
           opened != SealSpace.unlockFailed &&
           !SealScope.isSealed(opened);
-      // (a quote holds the words; a sealed media's key never shows)
-      out = out.replaceAll(
-          l, ok ? SealPayload.textOf(opened) : '🔒 Message');
+      // As a reply quotes a message: its own quote left out, its first
+      // line (a photo / file with no words: its label) — so the quote keeps
+      // its shape, names its author and leads to the original. A sealed
+      // media's key never shows.
+      out = out.replaceAll(l, ok ? _quoteLabel(opened) : '🔒 Message');
     }
     m['content'] = out;
+  }
+
+  /// What a reply quotes of an opened message (chat page _replyQuoteText):
+  /// the words without the message's own quote, first line only; a photo /
+  /// video / voice note / file without words by its label.
+  static String _quoteLabel(String opened) {
+    final text = SealPayload.textOf(opened);
+    final lines = text.split('\n');
+    final skip = lines.takeWhile((x) => x.startsWith('> ')).length;
+    final rest =
+        (skip == 0 ? text : lines.skip(skip + 1).join('\n')).trim();
+    final first = rest.split('\n').first.trim();
+    if (first.isNotEmpty) return first;
+    final media = SealPayload.mediaOf(opened);
+    if (media == null) return '🔒 Message';
+    final mime = '${media['mm'] ?? ''}';
+    if (mime.startsWith('image/')) return '📷 Photo';
+    if (mime.startsWith('video/')) return '🎬 Video';
+    if (mime.startsWith('audio/')) return '🎤 Voice note';
+    return '📎 ${media['n'] ?? 'File'}';
   }
 
   /// A plain group message carrying a lock's code (an older Aluta's quote).

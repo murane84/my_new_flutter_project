@@ -82,6 +82,14 @@ def for_old_app(data: dict) -> dict:
         data = dict(data)
         data["content"] = UPDATE_NOTE
         data["seal_update"] = 1
+        # A sealed photo / file's key is inside those words: it can't be
+        # opened there either — the note stands for the whole message.
+        if data.get("media_mime") == SEALED_MEDIA_MIME:
+            data["message_type"] = "text"
+            for k in ("media_url", "media_name", "media_mime", "media_size",
+                      "media_duration"):
+                if k in data:
+                    data[k] = None
     return data
 
 

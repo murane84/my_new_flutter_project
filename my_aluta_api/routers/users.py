@@ -318,6 +318,14 @@ def hard_delete_user(db: Session, user: User) -> None:
         if uid in ids:
             row.members = ",".join(x for x in ids if x != uid)
 
+    # Their invitations go too; who they brought keeps their account, just
+    # not the "brought you here" line.
+    from models import Invite
+    db.query(Invite).filter(Invite.inviter_id == user.id).delete(
+        synchronize_session=False)
+    db.query(User).filter(User.invited_by == user.id).update(
+        {User.invited_by: None}, synchronize_session=False)
+
     # Deleting the user cascades their messages (ORM relationship) and their
     # friend / mute / block rows (FK ON DELETE CASCADE).
     db.delete(user)

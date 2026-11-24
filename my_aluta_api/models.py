@@ -48,6 +48,9 @@ class User(Base):
     # user sets their own password. Prompts a forced change at next sign-in.
     must_change_password = Column(
         Boolean, default=False, nullable=False, server_default="false")
+    # Who brought them to Aluta (an invitation they joined with) — kept for
+    # both: "Asha brought you here" (invites.py).
+    invited_by = Column(Integer, nullable=True, index=True)
 
     # Legal consent: the highest Privacy Policy / Terms version this user has
     # accepted (see legal.py). 0 means "never accepted"; whenever the server's
@@ -1611,6 +1614,30 @@ class SealScope(Base):
     epoch = Column(Integer, nullable=False, default=1)
     created_by = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Invite(Base):
+    """💌 A member's personal invitation to Aluta (invites.py): a short code
+    their friend joins with — "Asha brought you here" for both of them."""
+    __tablename__ = "invites"
+
+    id = Column(Integer, primary_key=True)
+    code = Column(String(24), unique=True, index=True, nullable=False)
+    inviter_id = Column(Integer, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    used_by = Column(Integer, nullable=True)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class WaitlistEntry(Base):
+    """🕰️ Someone waiting to join Aluta without an inviter yet (invites.py)."""
+    __tablename__ = "waitlist"
+
+    id = Column(Integer, primary_key=True)
+    contact = Column(String(160), unique=True, index=True, nullable=False)
+    name = Column(String(80), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    invited_at = Column(DateTime(timezone=True), nullable=True)
 
 
 class SealScopeEpoch(Base):

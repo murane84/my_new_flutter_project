@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:email_validator/email_validator.dart';
@@ -28,6 +30,10 @@ class RegisterPageState extends State<RegisterPage> {
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
   final _phoneController = TextEditingController();
+  // A friend's invite code (optional): "Asha brought you here".
+  final _inviteController = TextEditingController();
+  String? _inviteFrom;
+  Timer? _inviteCheck;
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
@@ -61,6 +67,8 @@ class RegisterPageState extends State<RegisterPage> {
     _passwordController.dispose();
     _confirmController.dispose();
     _phoneController.dispose();
+    _inviteController.dispose();
+    _inviteCheck?.cancel();
     super.dispose();
   }
 
@@ -105,6 +113,7 @@ class RegisterPageState extends State<RegisterPage> {
       _passwordController.text.trim(),
       _usernameController.text.trim(),
       phone: _phoneController.text.trim(),
+      invite: _inviteController.text.trim(),
     );
 
     if (!mounted) return;
@@ -431,6 +440,26 @@ class RegisterPageState extends State<RegisterPage> {
                                     ),
                                   ),
                                 ],
+                                const SizedBox(height: 14),
+                                // A friend's invite (optional) — who brought
+                                // them shows as soon as the code is known.
+                                _buildField(
+                                  controller: _inviteController,
+                                  label: 'Invite code (optional)',
+                                  icon: Icons.card_giftcard_outlined,
+                                  validator: (_) => null,
+                                  onChanged: _onInviteChanged,
+                                ),
+                                if (_inviteFrom != null) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '$_inviteFrom invited you 💞',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: scheme.primary),
+                                  ),
+                                ],
                                 const SizedBox(height: 24),
 
                                 // Create Account button — pill width, centred
@@ -525,6 +554,21 @@ class RegisterPageState extends State<RegisterPage> {
     );
   }
 
+  /// A friend's code typed: who invited them, shown once it's known.
+  void _onInviteChanged(String v) {
+    _inviteCheck?.cancel();
+    final code = v.trim();
+    if (code.length < 6) {
+      if (_inviteFrom != null) setState(() => _inviteFrom = null);
+      return;
+    }
+    _inviteCheck = Timer(const Duration(milliseconds: 500), () async {
+      final from = await ApiService().inviteFrom(code);
+      if (!mounted || _inviteController.text.trim() != code) return;
+      setState(() => _inviteFrom = from);
+    });
+  }
+
   Widget _buildField({
     required TextEditingController controller,
     required String label,
@@ -533,6 +577,7 @@ class RegisterPageState extends State<RegisterPage> {
     Widget? suffix,
     TextInputType? keyboardType,
     String? Function(String?)? validator,
+    ValueChanged<String>? onChanged,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final onColor = isDark ? Colors.white : const Color(0xFF2A1414);
@@ -545,6 +590,7 @@ class RegisterPageState extends State<RegisterPage> {
         isDark ? Colors.white : Theme.of(context).colorScheme.primary;
     return TextFormField(
       controller: controller,
+      onChanged: onChanged,
       obscureText: obscure,
       keyboardType: keyboardType,
       validator: validator,

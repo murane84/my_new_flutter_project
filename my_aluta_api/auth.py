@@ -52,6 +52,7 @@ class UserCreate(BaseModel):
     # Phone is now MANDATORY (like email) and expected in E.164 form
     # (+<country code><number>), so contacts can be matched across countries.
     phone: str
+    invite: Optional[str] = None   # a friend's invite code (invites.py)
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -286,6 +287,16 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=400, detail="That phone number is already registered.")
 
+    # 💌 Joined with a friend's invitation (invites.py). While Aluta opens
+    # in waves (ALUTA_INVITE_ONLY), an invitation is the way in.
+    import invites
+    invite = invites.find_open_invite(db, user.invite)
+    if invite is None and invites.invite_only():
+        raise HTTPException(
+            status_code=403,
+            detail="Aluta is opening in waves — join with a friend's invite, "
+                   "or join the waiting list at aluta.ozilane.com")
+
     hashed_password = get_password_hash(user.password)
     new_user = User(
         username=user.username,
@@ -297,6 +308,9 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+    if invite is not None:
+        invites.use_invite(db, invite, new_user)
+        db.commit()
 
     return {
         "message": "User registered successfully",

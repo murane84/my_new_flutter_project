@@ -70,6 +70,39 @@ class ApiService {
     }
   }
 
+  /// My invite code to share (one open at a time), or the server's reason
+  /// when I can't invite more right now (`{'error': …}`).
+  Future<Map<String, dynamic>?> myInviteCode() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      final resp = await http.post(
+          Uri.parse('${await _baseUrl}/users/me/invites'),
+          headers: _authHeaders(token));
+      final d = _tryDecode(resp.body);
+      if (resp.statusCode == 200 && d != null) return d;
+      return {'error': (d?['detail'] ?? 'Couldn’t make an invite').toString()};
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Who invited with [code] (their first name), or null when the code isn't
+  /// open. Before signing in (the registration screen).
+  Future<String?> inviteFrom(String code) async {
+    try {
+      final resp = await http
+          .get(Uri.parse('${await _baseUrl}/invites/'
+              '${Uri.encodeComponent(code.trim())}'))
+          .timeout(const Duration(seconds: 8));
+      if (resp.statusCode != 200) return null;
+      final f = (_tryDecode(resp.body)?['from'] ?? '').toString().trim();
+      return f.isEmpty ? null : f;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Who brought me to Aluta (their name), if anyone did.
   Future<String?> myInviterName() async {
     final m = await myMembership();
@@ -694,6 +727,7 @@ class ApiService {
     String password,
     String username, {
     String? phone,
+    String? invite, // a friend's invite code
   }) async {
     try {
       final response = await http.post(
@@ -704,6 +738,8 @@ class ApiService {
           'password': password,
           'username': username,
           if (phone != null && phone.isNotEmpty) 'phone': phone,
+          if (invite != null && invite.trim().isNotEmpty)
+            'invite': invite.trim(),
         }),
       );
 

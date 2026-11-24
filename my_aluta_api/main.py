@@ -63,6 +63,7 @@ from routers import e2ee_keys as e2ee_keys_router
 import e2ee_handover
 import e2ee_scope
 import e2ee_backup
+import invites
 from websocket_routes import router as websocket_router
 import websocket_manager
 from sqlalchemy import text
@@ -199,6 +200,7 @@ app.include_router(e2ee_keys_router.router)
 app.include_router(e2ee_handover.router)
 app.include_router(e2ee_scope.router)
 app.include_router(e2ee_backup.router)
+app.include_router(invites.router)
 # Releases outside the Play Store: /download page, /app/latest (in-app update
 # check), /admin/release uploader. Files on the Railway volume, not Postgres.
 app.include_router(releases_router.router)
@@ -279,6 +281,8 @@ def ensure_media_schema():
         # Legal consent: which Privacy Policy / Terms version the user accepted,
         # and when. Existing rows default to 0 so they're re-prompted once.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS policy_version INTEGER DEFAULT 0",
+        # Invitations (invites.py): who brought them to Aluta.
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS invited_by INTEGER",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS policy_accepted_at TIMESTAMPTZ",
         # Monetization: the 'Together' entitlement (free | together) + when it began.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_tier VARCHAR DEFAULT 'free'",

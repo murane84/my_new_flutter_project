@@ -24,6 +24,7 @@ import '../utils/prefs_now.dart';
 import 'stories/camera_capture.dart' show capturePhoto;
 import '../utils/radii.dart';
 import '../widgets/skeleton.dart';
+import '../widgets/membership_card.dart';
 import '../e2ee/seal_ingress.dart';
 
 /// Profile popup: edit username / phone / password (email is fixed), or
@@ -676,6 +677,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     // The editable identity + password column (left pane on wide screens).
     List<Widget> editBlocks() => [
+          const MembershipCard(),
           emailTile,
           const SizedBox(height: 22),
           _heading('Your details', scheme),

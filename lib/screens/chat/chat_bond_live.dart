@@ -581,7 +581,11 @@ class _HoldHeartsState extends State<_HoldHearts>
   }
 }
 
-/// A bonded partner typing: a little record turning slowly (no pulsing).
+/// A bonded partner typing: their record on the turntable — Aluta's sign
+/// for "my person is here". Drawn to read at a glance in both themes: a rim
+/// that lifts it off the bubble, grooves, a rose label with a white mark that
+/// visibly orbits, a sheen that sweeps round, and a still tonearm resting on
+/// it. Turns at 33⅓ rpm; with reduced motion it rests, still recognisable.
 class _SpinningRecord extends StatefulWidget {
   const _SpinningRecord({super.key});
 
@@ -591,9 +595,20 @@ class _SpinningRecord extends StatefulWidget {
 
 class _SpinningRecordState extends State<_SpinningRecord>
     with SingleTickerProviderStateMixin {
+  // 33⅓ rpm → one turn every 1.8 s.
   late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(seconds: 3))
-    ..repeat();
+      vsync: this, duration: const Duration(milliseconds: 1800));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (still) {
+      _c.stop();
+    } else if (!_c.isAnimating) {
+      _c.repeat();
+    }
+  }
 
   @override
   void dispose() {
@@ -603,40 +618,110 @@ class _SpinningRecordState extends State<_SpinningRecord>
 
   @override
   Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
-    return SizedBox(
-      width: 26,
-      height: 16,
-      child: Center(
-        child: RotationTransition(
-          turns: _c,
-          child: Container(
-            width: 16,
-            height: 16,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const SweepGradient(colors: [
-                Color(0xFF111111),
-                Color(0xFF3A3A3A),
-                Color(0xFF111111),
-                Color(0xFF2A2A2A),
-                Color(0xFF111111),
-              ]),
-              border: Border.all(color: Colors.black26, width: 0.5),
-            ),
-            child: Center(
-              child: Container(
-                width: 6,
-                height: 6,
-                decoration:
-                    BoxDecoration(shape: BoxShape.circle, color: accent),
-              ),
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Semantics(
+      label: 'Typing',
+      child: SizedBox(
+        width: 34,
+        height: 24,
+        child: AnimatedBuilder(
+          animation: _c,
+          builder: (_, _) => CustomPaint(
+            painter: _RecordPainter(
+              turn: _c.value,
+              accent: scheme.primary,
+              isDark: isDark,
+              arm: isDark ? Colors.white70 : const Color(0xFF6B5A60),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+class _RecordPainter extends CustomPainter {
+  _RecordPainter(
+      {required this.turn,
+      required this.accent,
+      required this.isDark,
+      required this.arm});
+  final double turn; // 0..1
+  final Color accent;
+  final bool isDark;
+  final Color arm;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = size.height / 2;
+    final c = Offset(r, r);
+    // Glow (dark) / soft shadow (light): lifts the disc off the bubble.
+    canvas.drawCircle(
+        c,
+        r - 0.5,
+        Paint()
+          ..color = isDark ? accent.withAlpha(70) : Colors.black.withAlpha(40)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5));
+    // The disc.
+    canvas.drawCircle(c, r - 1, Paint()..color = const Color(0xFF151012));
+    // Rim: rose in dark mode, a fine dark edge in light.
+    canvas.drawCircle(
+        c,
+        r - 1,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2
+          ..color = isDark ? accent.withAlpha(200) : const Color(0xFF000000));
+
+    canvas.save();
+    canvas.translate(c.dx, c.dy);
+    canvas.rotate(turn * 2 * math.pi);
+    // Grooves.
+    final groove = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.6
+      ..color = Colors.white.withAlpha(38);
+    for (final f in const [0.82, 0.68, 0.56]) {
+      canvas.drawCircle(Offset.zero, r * f, groove);
+    }
+    // Sheen: two opposite light wedges that sweep round with the turn.
+    final sheen = Paint()
+      ..shader = SweepGradient(colors: [
+        Colors.white.withAlpha(0),
+        Colors.white.withAlpha(90),
+        Colors.white.withAlpha(0),
+        Colors.white.withAlpha(0),
+        Colors.white.withAlpha(60),
+        Colors.white.withAlpha(0),
+        Colors.white.withAlpha(0),
+      ], stops: const [0.0, 0.08, 0.18, 0.5, 0.58, 0.68, 1.0])
+          .createShader(Rect.fromCircle(center: Offset.zero, radius: r));
+    canvas.drawCircle(Offset.zero, r - 1.6, sheen);
+    // Rose label, with a white mark that orbits as it turns.
+    canvas.drawCircle(Offset.zero, r * 0.40, Paint()..color = accent);
+    canvas.drawCircle(Offset(0, -r * 0.24), r * 0.09,
+        Paint()..color = Colors.white.withAlpha(235));
+    // Spindle.
+    canvas.drawCircle(
+        Offset.zero, r * 0.07, Paint()..color = const Color(0xFF151012));
+    canvas.restore();
+
+    // Tonearm (still): pivot top-right, stylus resting on the outer grooves.
+    final pivot = Offset(size.width - 3, 3);
+    final stylus = Offset(c.dx + r * 0.55, c.dy + r * 0.38);
+    final armPaint = Paint()
+      ..color = arm
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(pivot, Offset(pivot.dx, c.dy + r * 0.15), armPaint);
+    canvas.drawLine(Offset(pivot.dx, c.dy + r * 0.15), stylus, armPaint);
+    canvas.drawCircle(pivot, 2.2, Paint()..color = arm);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RecordPainter o) =>
+      o.turn != turn || o.accent != accent || o.isDark != isDark;
 }
 
 /// Two photos side by side (theirs | mine) as one JPEG for a duo status —

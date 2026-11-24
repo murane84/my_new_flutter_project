@@ -9864,13 +9864,18 @@ class _HoverChevronState extends State<_HoverChevron> {
           },
           onExit: (_) => _leaveSoon(),
           // The bubble lifts a hair while the pill is out — the two move
-          // as one.
+          // as one. The lift lands on WHOLE device pixels every frame (and
+          // never overshoots): a fractional offset re-rasterises the text
+          // between pixels each frame, which read as the words shivering.
           child: TweenAnimationBuilder<double>(
             tween: Tween(end: _hover ? 1 : 0),
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutBack,
-            builder: (_, t, child) =>
-                Transform.translate(offset: Offset(0, -1.0 * t), child: child),
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            builder: (ctx, t, child) {
+              final dpr = MediaQuery.devicePixelRatioOf(ctx);
+              final dy = (-1.5 * t * dpr).roundToDouble() / dpr;
+              return Transform.translate(offset: Offset(0, dy), child: child);
+            },
             child: _HoverScope(hovering: _hover, child: widget.child),
           ),
         ),

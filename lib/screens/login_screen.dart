@@ -53,6 +53,12 @@ class LoginPageState extends State<LoginPage> {
       if (args is Map<String, String>) {
         _emailController.text = args['email'] ?? '';
         _passwordController.text = args['password'] ?? '';
+        // Just registered: straight in — no typing the same details again.
+        if (args['auto'] == '1' &&
+            _emailController.text.isNotEmpty &&
+            _passwordController.text.isNotEmpty) {
+          _performLogin();
+        }
       }
     });
     _checkBioLogin();

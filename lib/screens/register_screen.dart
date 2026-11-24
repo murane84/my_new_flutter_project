@@ -111,7 +111,7 @@ class RegisterPageState extends State<RegisterPage> {
     setState(() => _isLoading = false);
 
     if (result['success'] == true) {
-      showSuccessSnackBar(context, 'Account created! Please sign in.');
+      showSuccessSnackBar(context, 'Karibu Aluta — welcome in 💞');
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
@@ -121,6 +121,7 @@ class RegisterPageState extends State<RegisterPage> {
             arguments: {
               'email': _emailController.text.trim(),
               'password': _passwordController.text.trim(),
+              'auto': '1', // signed straight in
             },
           ),
           transitionsBuilder: (ctx, anim, sanim, child) =>

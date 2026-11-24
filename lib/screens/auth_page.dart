@@ -140,16 +140,45 @@ class AuthPage extends StatelessWidget {
                           letterSpacing: 3,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 10),
+                      // The promise (brand strategy): your people, close —
+                      // in both of Aluta's languages.
                       Text(
-                        'Closer, in harmony',
+                        'Your people, close',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: titleColor,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Watu wako, karibu',
+                        textAlign: TextAlign.center,
                         style: TextStyle(
                           color: subColor,
                           fontSize: 15,
-                          letterSpacing: 0.5,
+                          fontStyle: FontStyle.italic,
+                          letterSpacing: 0.4,
                         ),
                       ),
-                      const SizedBox(height: 56),
+                      const SizedBox(height: 18),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Text(
+                          'Nobody reaches you unless you’ve chosen each '
+                          'other — and not even we can read your words.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: subColor,
+                            fontSize: 13,
+                            height: 1.45,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 40),
                       // Sign In — filled pill
                       SizedBox(
                         width: 220,

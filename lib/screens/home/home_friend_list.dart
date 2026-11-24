@@ -624,22 +624,51 @@ extension _HomeFriendListView on HomePageState {
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 110),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.chat_bubble_outline,
-                  size: 48, color: scheme.outlineVariant),
-              const SizedBox(height: 10),
-              Text('No conversations yet',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: scheme.onSurfaceVariant)),
-              const SizedBox(height: 6),
-              Text('Pull down to refresh',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: scheme.onSurfaceVariant.withAlpha(150))),
-            ],
+          // Aluta is its people: an empty Circle is an invitation to find
+          // them, never a dead end.
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.favorite_border_rounded,
+                    size: 48, color: scheme.primary.withAlpha(170)),
+                const SizedBox(height: 14),
+                Text('Your people live here',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurface)),
+                const SizedBox(height: 4),
+                Text('Watu wako wanaishi hapa',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontStyle: FontStyle.italic,
+                        color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 12),
+                Text(
+                    'On Aluta, you and a friend choose each other. Find the '
+                    'people you already know who are here.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: () => _findFriendsFromContacts(),
+                  icon: const Icon(Icons.people_alt_rounded, size: 18),
+                  label: const Text('Find my people'),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: _showAddFriend,
+                  child: const Text('Add someone by name or number'),
+                ),
+              ],
+            ),
           ),
         ),
       ],

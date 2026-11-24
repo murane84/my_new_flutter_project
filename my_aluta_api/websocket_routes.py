@@ -539,6 +539,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
             if etype == "client_info":
                 # Which Aluta this person runs (sent on every connect).
                 # Anyone who invited them to this version hears they're here.
+                # (This socket's build: what it can be sent — compat.py.)
+                try:
+                    import compat
+                    compat.note_socket_build(websocket, data.get("build"))
+                except Exception:  # noqa: BLE001
+                    pass
                 try:
                     import app_installs
                     loop = asyncio.get_running_loop()

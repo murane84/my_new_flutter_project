@@ -105,8 +105,9 @@ def _fanout_others(db, msg, me: int, event: dict):
             # A group heart meant for someone else goes out locked.
             ev = ({**event, "data": hearts.redact(data, uid)}
                   if isinstance(data, dict) else event)
-            if int(uid) in old:
-                ev = {**ev, "_seal_old": [int(uid)]}
+            if sealed:  # (each socket decides by its build — compat.py)
+                ev = {**ev, "_seal_old": [int(uid)] if int(uid) in old
+                      else []}
             safe_notify_user(int(uid), ev)
 
 def _seal_check(message, sender_id: int) -> None:

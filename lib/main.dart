@@ -20,6 +20,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'services/share_inbox.dart';
 import 'utils/brand_theme.dart';
 import 'screens/theme_provider.dart';
+import 'screens/api_service.dart';
 import 'screens/home_page.dart';
 import 'screens/preload_screen.dart';
 import 'screens/login_screen.dart';
@@ -136,6 +137,9 @@ void main() async {
   Future.delayed(const Duration(seconds: 4), _liftNativeSplash);
   // My Vibration choice, read before the first tap can buzz.
   unawaited(Haptics.init());
+  // Which Aluta this is, on every request (the server answers each build
+  // in a form it can show).
+  unawaited(ApiService.warmClientBuild());
   // My text style (and the plan that unlocks Harmony) before the first
   // screens paint.
   unawaited(warmPrefsNow().then((_) {

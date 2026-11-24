@@ -380,26 +380,27 @@ def send_message(
     if getattr(msg, "heart_for", None):
         # A heart for one member: each copy is cut to what that member may see
         # (an older Aluta: the "update" note, never the lock's code).
-        hold = (e2ee_msgs.old_readers(db, members)
-                if (msg.content or "").startswith(e2ee_msgs.SCOPE_PREFIX)
-                else set())
+        sealed = (msg.content or "").startswith(e2ee_msgs.SCOPE_PREFIX)
+        hold = e2ee_msgs.old_readers(db, members) if sealed else set()
         for uid in members:
             if int(uid) != int(current_user.id):
                 safe_notify_user(int(uid), {
                     "type": "new_message",
                     "data": hearts.redact(serialized, uid),
-                    **({"_seal_old": [int(uid)]} if int(uid) in hold else {}),
+                    **({"_seal_old": [int(uid)] if int(uid) in hold else []}
+                       if sealed else {}),
                 })
     else:
         # 🔒 Members whose Aluta can't open sealed group messages: their old
         # app's sockets get the note instead of the lock's code.
+        # (Each socket decides by its own build — compat.py.)
+        sealed = (msg.content or "").startswith(e2ee_msgs.SCOPE_PREFIX)
         old = (sorted(e2ee_msgs.old_readers(
                    db, [u for u in members if int(u) != current_user.id]))
-               if (msg.content or "").startswith(e2ee_msgs.SCOPE_PREFIX)
-               else [])
+               if sealed else [])
         safe_broadcast_users(
             members, {"type": "new_message", "data": serialized,
-                      **({"_seal_old": old} if old else {})},
+                      **({"_seal_old": old} if sealed else {})},
             exclude=current_user.id,
         )
     safe_notify_user(current_user.id, {"type": "message_sent", "data": serialized})

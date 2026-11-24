@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart' show getTemporaryDirectory;
 import '../utils/net.dart' as http;
 import 'package:http_parser/http_parser.dart' show MediaType;
 import 'package:logger/logger.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'token_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -41,7 +42,20 @@ class ApiService {
     // 🔒 This Aluta opens sealed group messages: send them as they are (an
     // older one gets an "update Aluta" note in place of the lock's code).
     'X-Aluta-Seal': '1',
+    // Which Aluta this is: the server answers every build in a form it can
+    // show (an older one gets the older form or a clear note — compat.py).
+    if (_clientBuild != null) 'X-Aluta-Build': _clientBuild!,
   };
+
+  static String? _clientBuild;
+
+  /// Start-up: this install's build number, for [_authHeaders].
+  static Future<void> warmClientBuild() async {
+    try {
+      final b = (await PackageInfo.fromPlatform()).buildNumber.trim();
+      if (int.tryParse(b) != null) _clientBuild = b;
+    } catch (_) {}
+  }
 
   // Delegates to the platform-aware token store (web-safe).
   Future<String?> _getToken() async => getToken();

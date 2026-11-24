@@ -52,8 +52,14 @@ def reads_sealed_groups(db, user_id: int, request=None) -> bool:
     """Whether this reader's Aluta opens sealed group messages: it says so
     (SEAL_HEADER), or one of their devices can (cap "m2")."""
     try:
-        if request is not None and request.headers.get(SEAL_HEADER):
-            return True
+        if request is not None:
+            import compat
+            by_build = compat.build_supports(compat.request_build(request),
+                                             "sealed_groups")
+            if by_build is not None:
+                return by_build
+            if request.headers.get(SEAL_HEADER):
+                return True
     except Exception:  # noqa: BLE001
         pass
     from routers.e2ee_keys import _live_devices

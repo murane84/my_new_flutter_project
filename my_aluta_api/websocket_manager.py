@@ -164,12 +164,21 @@ def _serialize_event(event: dict) -> dict:
     return json.loads(json.dumps(event, default=default))
 
 def _for_socket(ws, user_id: int, event: dict) -> dict:
+    """An event about a sealed group message ("_seal_old": the readers
+    whose devices can't open them) as THIS socket's Aluta can show it: by
+    the build it said it is (compat.py) — an old linked computer too — or,
+    when it didn't say, by its ?seal=1 and the person's devices."""
     old = event.get("_seal_old")
     if old is None:
         return event
     event = {k: v for k, v in event.items() if k != "_seal_old"}
-    if user_id in old and ws not in seal_sockets and \
-            isinstance(event.get("data"), dict):
+    if not isinstance(event.get("data"), dict):
+        return event
+    import compat
+    can = compat.socket_supports(ws, "sealed_groups")
+    if can is None:
+        can = ws in seal_sockets or user_id not in old
+    if not can:
         from e2ee_msgs import for_old_app
         event["data"] = for_old_app(event["data"])
     return event

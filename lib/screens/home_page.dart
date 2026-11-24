@@ -177,6 +177,7 @@ import '../utils/keyboard.dart';
 part 'home/home_playback.dart'; // playback bus + per-tick value-notifiers
 part 'home/home_widgets.dart'; // panel toggle, scrolling text, logout glyph, live-invite dialog
 part 'home/home_friend_list.dart'; // friend/chat list, Our Space hero, chips, tiles
+part 'home/home_welcome_back.dart'; // people-first greeting for a returning member
 part 'home/home_space_actions.dart'; // Our Space + friend action flows (open/pin/unpin/moment + sheets)
 part 'home/home_phone_body.dart'; // phone layout body + expandable player sheet
 part 'home/home_banners.dart'; // live-session + call-return banners, live chip
@@ -241,6 +242,10 @@ class HomePageState extends rp.ConsumerState<HomePage>
   bool _isCurrentUserOnline = true;
   bool _isGoingOnline = false;
   int? _myUserId;
+  // People-first welcome (home_welcome_back.dart): due on open, and again
+  // after 3 hours or more away.
+  bool _welcomeDue = true;
+  DateTime? _awaySince;
   // App-wide notification socket so "Listen Together" invites reach the user on
   // ANY screen — not only when the matching chat happens to be open.
   WebSocketManager? _notifyWs;
@@ -1167,6 +1172,16 @@ class HomePageState extends rp.ConsumerState<HomePage>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       _bgSince ??= DateTime.now();
+      _awaySince ??= DateTime.now();
+    }
+    if (state == AppLifecycleState.resumed) {
+      final away = _awaySince;
+      _awaySince = null;
+      if (away != null &&
+          DateTime.now().difference(away) >= const Duration(hours: 3)) {
+        _welcomeDue = true;
+        unawaited(_fetchFriends(quiet: true));
+      }
     }
     if (state == AppLifecycleState.resumed) {
       // Back in the app on the Circle list's top → news blinks in place.
@@ -3310,6 +3325,12 @@ class HomePageState extends rp.ConsumerState<HomePage>
       // Save fresh data to cache
       await _saveFriendsCache(friends);
       ContactNames.instance.rememberAll(friends);
+      if (_welcomeDue) {
+        _welcomeDue = false;
+        // (after this frame: the list is in place under the greeting)
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _welcomeBack(friends));
+      }
       setState(() {
         _allFriends = friends;
         // Respect an active search query — mirrors _fetchGroups so a background

@@ -654,13 +654,27 @@ extension _ChatPageHelpers2 on _ChatPageState {
   /// Several photos, one after another ("Photo i of N"): Skip moves on, ✕
   /// stops the rest — and says how many weren't sent. Every multi-photo path
   /// (gallery, paste, drop, share) goes through here.
+  /// Each photo's bytes are read only when its turn comes (30 picked photos
+  /// never sit in memory at once).
   Future<void> _sendPhotoBatch(
-      List<({Uint8List bytes, String name, String mime})> photos) async {
+      List<({Future<Uint8List> Function() load, String name, String mime})>
+          photos) async {
     final many = photos.length > 1;
     for (var i = 0; i < photos.length; i++) {
       if (!mounted) return;
       final p = photos[i];
-      final r = await _previewAndSendImage(p.bytes, p.name, p.mime,
+      Uint8List bytes;
+      try {
+        bytes = await p.load();
+      } catch (_) {
+        bytes = Uint8List(0);
+      }
+      if (!mounted) return;
+      if (bytes.isEmpty) {
+        showToast(context, 'Could not read ${p.name}', type: ToastType.error);
+        continue;
+      }
+      final r = await _previewAndSendImage(bytes, p.name, p.mime,
           index: many ? i + 1 : 0, total: many ? photos.length : 0);
       if (r == _PhotoOutcome.stopped) {
         final left = photos.length - i - 1;
@@ -747,7 +761,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
       if (files.isEmpty) return;
       await _sendPhotoBatch([
         for (final x in files)
-          (bytes: await x.readAsBytes(), name: x.name, mime: 'image/jpeg'),
+          (load: x.readAsBytes, name: x.name, mime: 'image/jpeg'),
       ]);
     } catch (_) {
       if (mounted) {
@@ -1524,7 +1538,8 @@ extension _ChatPageHelpers2 on _ChatPageState {
     final fileCap = PlanLimits.instance.fileBytes; // my plan's size
     const ephemeralOver = 15 * 1024 * 1024; // big files: cache-then-purge
     // Photos go together, after the files, as one "Photo i of N" batch.
-    final photos = <({Uint8List bytes, String name, String mime})>[];
+    final photos =
+        <({Future<Uint8List> Function() load, String name, String mime})>[];
     var asked = false; // the first FILE (not photo) gets the caption sheet
     for (var i = 0; i < paths.length; i++) {
       final path = paths[i];
@@ -1542,11 +1557,8 @@ extension _ChatPageHelpers2 on _ChatPageState {
       final name = path.split(RegExp(r'[\\/]+')).last;
       final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
       if (imgExt.contains(ext)) {
-        photos.add((
-          bytes: Uint8List.fromList(bytes),
-          name: name,
-          mime: _mimeForExt(ext)
-        ));
+        final held = Uint8List.fromList(bytes);
+        photos.add((load: () async => held, name: name, mime: _mimeForExt(ext)));
         continue;
       }
       if (bytes.length > fileCap) {

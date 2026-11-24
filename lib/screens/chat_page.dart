@@ -882,37 +882,49 @@ class _ChatPageState extends State<ChatPage>
   Future<void> _consumeSharedMedia(List<String> paths) async {
     // Tell the host to drop these now so a later rebuild can't re-send them.
     widget.onShareConsumed?.call();
+    // Same paths as picking them here: photos as one "Photo i of N" batch
+    // (editor + caption), videos as one "Video i of N" batch (caption),
+    // other files straight away.
+    final photos =
+        <({Future<Uint8List> Function() load, String name, String mime})>[];
+    final videos = <XFile>[];
     for (final p in paths) {
       if (!mounted) return;
       try {
         final file = File(p);
         if (!await file.exists()) continue;
-        final bytes = await file.readAsBytes();
-        if (bytes.isEmpty || !mounted) continue;
         final name = p.split(Platform.pathSeparator).last;
         final ext =
             name.contains('.') ? name.split('.').last.toLowerCase() : '';
         const imgExts = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic'};
         if (_videoExts.contains(ext)) {
-          await _sendSharedVideo(
-              bytes, name.isNotEmpty ? name : 'shared.mp4', ext, p);
-        } else if (imgExts.contains(ext)) {
-          await _previewAndSendImage(
-              bytes, name.isNotEmpty ? name : 'shared.jpg', 'image/jpeg');
-        } else {
-          // Any other file (pdf, audio, apk, doc, zip …) — send as a document.
-          await _uploadAndSend(
-            bytes: bytes,
-            filename: name.isNotEmpty ? name : 'shared_file',
-            mime: _mimeForExt(ext),
-            type: 'file',
-            ephemeral: bytes.length > 15 * 1024 * 1024,
-          );
+          videos.add(XFile(p, name: name.isNotEmpty ? name : 'shared.mp4'));
+          continue;
         }
+        if (imgExts.contains(ext)) {
+          photos.add((
+            load: file.readAsBytes,
+            name: name.isNotEmpty ? name : 'shared.jpg',
+            mime: _mimeForExt(ext),
+          ));
+          continue;
+        }
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty || !mounted) continue;
+        // Any other file (pdf, audio, apk, doc, zip …) — send as a document.
+        await _uploadAndSend(
+          bytes: bytes,
+          filename: name.isNotEmpty ? name : 'shared_file',
+          mime: _mimeForExt(ext),
+          type: 'file',
+          ephemeral: bytes.length > 15 * 1024 * 1024,
+        );
       } catch (_) {
         /* skip a bad path, continue with the rest */
       }
     }
+    if (photos.isNotEmpty) await _sendPhotoBatch(photos);
+    if (videos.isNotEmpty && mounted) await _sendVideoBatch(videos);
   }
 
   void _onConnStatusChanged() {
@@ -3152,23 +3164,7 @@ class _ChatPageState extends State<ChatPage>
         picked = one == null ? const [] : [one];
       }
       if (picked.isEmpty) return;
-      for (var i = 0; i < picked.length; i++) {
-        if (!mounted) break;
-        final many = picked.length > 1;
-        final sent = await _processAndSendVideo(picked[i],
-            note: many ? 'Video ${i + 1} of ${picked.length}' : null);
-        final left = picked.length - i - 1;
-        if (!sent && left > 0) {
-          if (mounted) {
-            showToast(
-                context,
-                left == 1
-                    ? "1 more video wasn't sent"
-                    : "$left more videos weren't sent");
-          }
-          break;
-        }
-      }
+      await _sendVideoBatch(picked);
     } catch (_) {
       if (mounted) {
         showToast(context, 'Could not pick video', type: ToastType.error);
@@ -3178,6 +3174,29 @@ class _ChatPageState extends State<ChatPage>
 
   /// Compress (mobile), cap-check and send a video FILE as a 'video' message.
   /// Shared by the gallery picker and the in-app camera (recorded clips).
+  /// Several videos, one after another ("Video i of N"), each with its
+  /// caption; ✕ stops the rest and says how many weren't sent. Gallery picks
+  /// and videos shared into Aluta both come through here.
+  Future<void> _sendVideoBatch(List<XFile> videos) async {
+    final many = videos.length > 1;
+    for (var i = 0; i < videos.length; i++) {
+      if (!mounted) return;
+      final sent = await _processAndSendVideo(videos[i],
+          note: many ? 'Video ${i + 1} of ${videos.length}' : null);
+      final left = videos.length - i - 1;
+      if (!sent && left > 0) {
+        if (mounted) {
+          showToast(
+              context,
+              left == 1
+                  ? "1 more video wasn't sent"
+                  : "$left more videos weren't sent");
+        }
+        return;
+      }
+    }
+  }
+
   /// True once it's on its way; false when the caption bar was cancelled (or
   /// it couldn't be sent) — a batch then stops.
   Future<bool> _processAndSendVideo(XFile x, {String? note}) async {
@@ -3758,7 +3777,8 @@ class _ChatPageState extends State<ChatPage>
     final fileCap = PlanLimits.instance.fileBytes; // my plan's size
     const ephemeralOver = 15 * 1024 * 1024;
     // Photos go together, after the files, as one "Photo i of N" batch.
-    final photos = <({Uint8List bytes, String name, String mime})>[];
+    final photos =
+        <({Future<Uint8List> Function() load, String name, String mime})>[];
     var asked = false; // the first FILE (not photo) gets the caption sheet
     for (var i = 0; i < files.length; i++) {
       if (!mounted) return;
@@ -3772,7 +3792,7 @@ class _ChatPageState extends State<ChatPage>
           f.mime.startsWith('image/') || imgExt.contains(ext);
       if (isImage) {
         final mime = f.mime.isNotEmpty ? f.mime : _mimeForExt(ext);
-        photos.add((bytes: bytes, name: name, mime: mime));
+        photos.add((load: () async => bytes, name: name, mime: mime));
         continue;
       }
       if (bytes.length > fileCap) {

@@ -826,55 +826,6 @@ extension _ChatPageHelpers1 on _ChatPageState {
     );
   }
 
-  /// Send a shared-in video: compress a big clip on-device, enforce the cap,
-  /// then upload (same flow as the in-chat video picker).
-  Future<void> _sendSharedVideo(
-      List<int> bytes, String filename, String ext, String path) async {
-    String mime = ext == 'mov'
-        ? 'video/quicktime'
-        : (ext == 'webm' ? 'video/webm' : 'video/mp4');
-    final cap = PlanLimits.instance.fileBytes; // my plan's size
-    const compressAbove = 12 * 1024 * 1024;
-    if (!kIsWeb && _isMobile && bytes.length > compressAbove) {
-      if (mounted) showToast(context, 'Compressing video…');
-      try {
-        final info = await VideoCompress.compressVideo(
-          path,
-          quality: VideoQuality.MediumQuality,
-          deleteOrigin: false,
-          includeAudio: true,
-        );
-        final cf = info?.file;
-        if (cf != null) {
-          final cb = await cf.readAsBytes();
-          if (cb.isNotEmpty && cb.length < bytes.length) {
-            bytes = cb;
-            mime = 'video/mp4';
-            final dot = filename.lastIndexOf('.');
-            filename =
-                '${dot > 0 ? filename.substring(0, dot) : filename}.mp4';
-          }
-        }
-      } catch (_) {/* keep the original bytes on any failure */}
-    }
-    if (bytes.length > cap) {
-      if (mounted) {
-        showToast(context, 'Video is too large to send (${PlanLimits.instance.fileNote}).',
-            type: ToastType.error);
-      }
-      return;
-    }
-    await _uploadAndSend(
-        bytes: bytes,
-        filename: filename,
-        mime: mime,
-        type: 'video',
-        ephemeral: bytes.length > 15 * 1024 * 1024);
-    try {
-      await VideoCompress.deleteAllCache();
-    } catch (_) {}
-  }
-
   void _startPolling() {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) => _poll());

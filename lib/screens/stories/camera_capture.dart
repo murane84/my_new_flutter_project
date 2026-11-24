@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../../utils/motion.dart';
 import '../../utils/radii.dart';
+import '../../utils/toast_helper.dart';
 
 /// What a camera capture produced: the file plus whether it is a video (so the
 /// caller can route a recorded clip through the video pipeline and a still
@@ -84,7 +85,8 @@ bool _webSecureContext() {
 }
 
 void _camToast(BuildContext context, String msg) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  // The app's own toast, like everywhere else (was a Material snackbar).
+  showToast(context, msg, type: ToastType.error);
 }
 
 /// A friendly, cause-specific message for a camera failure — so the UI never

@@ -136,6 +136,7 @@ import '../services/song_names.dart';
 import '../services/drafts.dart';
 import '../services/song_insights.dart' show SongInsights, SongFeel;
 import '../services/plan_limits.dart';
+import '../utils/image_compress.dart';
 import '../services/cover_art.dart';
 import '../widgets/song_art.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -236,25 +237,8 @@ bool _isEmojiOnly(String text) {
   return true;
 }
 
-// Compress a chat image for upload: downscale to ≤1600px on the long edge and
-// re-encode as JPEG q78. Runs in a background isolate (via compute) so large
-// screenshots don't jank the UI. Returns the input unchanged if it can't decode.
-Uint8List _compressChatImage(Uint8List input) {
-  try {
-    final decoded = img.decodeImage(input);
-    if (decoded == null) return input;
-    const maxDim = 1600;
-    img.Image out = decoded;
-    if (decoded.width > maxDim || decoded.height > maxDim) {
-      out = decoded.width >= decoded.height
-          ? img.copyResize(decoded, width: maxDim)
-          : img.copyResize(decoded, height: maxDim);
-    }
-    return Uint8List.fromList(img.encodeJpg(out, quality: 78));
-  } catch (_) {
-    return input;
-  }
-}
+// Chat photos use the app-wide upload rule (utils/image_compress.dart).
+Uint8List _compressChatImage(Uint8List input) => compressPhotoForUpload(input);
 
 // ─── ChatPage ────────────────────────────────────────────────────────────────
 
@@ -3745,6 +3729,9 @@ class _ChatPageState extends State<ChatPage>
     const imgExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
     final fileCap = PlanLimits.instance.fileBytes; // my plan's size
     const ephemeralOver = 15 * 1024 * 1024;
+    // Photos go together, after the files, as one "Photo i of N" batch.
+    final photos = <({Uint8List bytes, String name, String mime})>[];
+    var asked = false; // the first FILE (not photo) gets the caption sheet
     for (var i = 0; i < files.length; i++) {
       if (!mounted) return;
       final f = files[i];
@@ -3757,7 +3744,7 @@ class _ChatPageState extends State<ChatPage>
           f.mime.startsWith('image/') || imgExt.contains(ext);
       if (isImage) {
         final mime = f.mime.isNotEmpty ? f.mime : _mimeForExt(ext);
-        await _previewAndSendImage(bytes, name, mime);
+        photos.add((bytes: bytes, name: name, mime: mime));
         continue;
       }
       if (bytes.length > fileCap) {
@@ -3768,7 +3755,8 @@ class _ChatPageState extends State<ChatPage>
         continue;
       }
       String? caption = '';
-      if (i == 0) {
+      if (!asked) {
+        asked = true;
         caption = await _askFileCaption(name);
         if (caption == null) return; // cancelled the whole paste
       }
@@ -3782,6 +3770,7 @@ class _ChatPageState extends State<ChatPage>
         ephemeral: bytes.length > ephemeralOver,
       );
     }
+    if (photos.isNotEmpty) await _sendPhotoBatch(photos);
   }
 
   // A compact sheet to add a caption before sending a pasted file. Returns the

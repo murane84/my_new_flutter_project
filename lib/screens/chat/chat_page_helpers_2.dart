@@ -634,13 +634,56 @@ extension _ChatPageHelpers2 on _ChatPageState {
         ],
       );
 
+  /// What a photo's real type is, from its first bytes — callers often only
+  /// know "a picture" (pickers re-encode, shares and pastes guess).
+  String _sniffImageMime(List<int> b, String fallback) {
+    if (b.length >= 12) {
+      if (b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47) {
+        return 'image/png';
+      }
+      if (b[0] == 0x47 && b[1] == 0x49 && b[2] == 0x46) return 'image/gif';
+      if (b[0] == 0xFF && b[1] == 0xD8) return 'image/jpeg';
+      if (b[0] == 0x52 && b[1] == 0x49 && b[2] == 0x46 && b[3] == 0x46 &&
+          b[8] == 0x57 && b[9] == 0x45 && b[10] == 0x42 && b[11] == 0x50) {
+        return 'image/webp';
+      }
+    }
+    return fallback;
+  }
+
+  /// Several photos, one after another ("Photo i of N"): Skip moves on, ✕
+  /// stops the rest — and says how many weren't sent. Every multi-photo path
+  /// (gallery, paste, drop, share) goes through here.
+  Future<void> _sendPhotoBatch(
+      List<({Uint8List bytes, String name, String mime})> photos) async {
+    final many = photos.length > 1;
+    for (var i = 0; i < photos.length; i++) {
+      if (!mounted) return;
+      final p = photos[i];
+      final r = await _previewAndSendImage(p.bytes, p.name, p.mime,
+          index: many ? i + 1 : 0, total: many ? photos.length : 0);
+      if (r == _PhotoOutcome.stopped) {
+        final left = photos.length - i - 1;
+        if (left > 0 && mounted) {
+          showToast(
+              context,
+              left == 1
+                  ? "1 more photo wasn't sent"
+                  : "$left more photos weren't sent");
+        }
+        return;
+      }
+    }
+  }
+
   /// Show a full-screen preview of the picked image with a caption box, so the
   /// user can add a message and send image + text as ONE bubble. Returns
   /// without sending if the user backs out of the preview.
-  Future<bool> _previewAndSendImage(
+  Future<_PhotoOutcome> _previewAndSendImage(
       Uint8List bytes, String filename, String mime,
       {int index = 0, int total = 0}) async {
-    if (!mounted) return false;
+    if (!mounted) return _PhotoOutcome.stopped;
+    mime = _sniffImageMime(bytes, mime);
     // Wide screens: over this chat pane only — the Circle list and the music
     // player stay usable beside it. Phones: the full-screen editor.
     final wide = MediaQuery.sizeOf(context).width >= 900;
@@ -659,17 +702,29 @@ extension _ChatPageHelpers2 on _ChatPageState {
           );
     // null → the user cancelled/backed out. Otherwise the map carries the
     // (possibly annotated) bytes, its mime, and the caption.
-    if (result == null || !mounted) return false;
+    if (result == null || !mounted) return _PhotoOutcome.stopped;
+    if (result['skip'] == true) return _PhotoOutcome.skipped;
     final outBytes = (result['bytes'] as Uint8List?) ?? bytes;
     final outMime = (result['mime'] as String?) ?? mime;
     final caption = ((result['caption'] as String?) ?? '').trim();
     final hd = (result['hd'] as bool?) ?? false;
-    // If the editor flattened to PNG, make the filename match so the server
-    // stores the right extension/content-type.
+    // The filename's extension matches what's actually sent (a flattened
+    // edit is PNG; a GIF/WebP/PNG stays itself).
     var outName = filename;
-    if (outMime == 'image/png' && !outName.toLowerCase().endsWith('.png')) {
+    const extFor = {
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'image/jpeg': 'jpg',
+    };
+    final want = extFor[outMime];
+    final lower = outName.toLowerCase();
+    final hasRight = want != null &&
+        (lower.endsWith('.$want') ||
+            (want == 'jpg' && lower.endsWith('.jpeg')));
+    if (want != null && !hasRight) {
       final dot = outName.lastIndexOf('.');
-      outName = '${dot > 0 ? outName.substring(0, dot) : outName}.png';
+      outName = '${dot > 0 ? outName.substring(0, dot) : outName}.$want';
     }
     await _uploadAndSend(
       bytes: outBytes,
@@ -679,7 +734,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
       caption: caption,
       hd: hd,
     );
-    return true;
+    return _PhotoOutcome.sent;
   }
 
   // Gallery supports selecting several photos at once. A single pick keeps the
@@ -690,21 +745,10 @@ extension _ChatPageHelpers2 on _ChatPageState {
       final files = await ImagePicker()
           .pickMultiImage(imageQuality: 92, maxWidth: 2560);
       if (files.isEmpty) return;
-      if (files.length == 1) {
-        final x = files.first;
-        final bytes = await x.readAsBytes();
-        await _previewAndSendImage(bytes, x.name, 'image/jpeg');
-        return;
-      }
-      for (var i = 0; i < files.length; i++) {
-        if (!mounted) break;
-        final x = files[i];
-        final bytes = await x.readAsBytes();
-        final sent = await _previewAndSendImage(
-            bytes, x.name, 'image/jpeg',
-            index: i + 1, total: files.length);
-        if (!sent) break; // user backed out → stop sending the rest
-      }
+      await _sendPhotoBatch([
+        for (final x in files)
+          (bytes: await x.readAsBytes(), name: x.name, mime: 'image/jpeg'),
+      ]);
     } catch (_) {
       if (mounted) {
         showToast(context, 'Could not pick images', type: ToastType.error);
@@ -800,16 +844,18 @@ extension _ChatPageHelpers2 on _ChatPageState {
         if (type == 'image' &&
             sendMime != 'image/gif' &&
             (!hd || tooBigForRaw) &&
-            sendBytes.length > 350 * 1024) {
+            sendBytes.length > kPhotoCompressOver) {
           try {
             final compressed = await compute(
                 _compressChatImage, Uint8List.fromList(sendBytes));
             if (compressed.isNotEmpty && compressed.length < sendBytes.length) {
               sendBytes = compressed;
-              sendMime = 'image/jpeg';
+              // JPEG, or PNG when it kept see-through parts.
+              sendMime = compressedPhotoMime(compressed);
+              final png = sendMime == 'image/png';
               final dot = sendName.lastIndexOf('.');
               sendName =
-                  '${dot > 0 ? sendName.substring(0, dot) : sendName}.jpg';
+                  '${dot > 0 ? sendName.substring(0, dot) : sendName}.${png ? 'png' : 'jpg'}';
               if (hd && tooBigForRaw && mounted) {
                 showToast(context, 'Original too large — sent compressed',
                     type: ToastType.info);
@@ -1477,6 +1523,9 @@ extension _ChatPageHelpers2 on _ChatPageState {
     const imgExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
     final fileCap = PlanLimits.instance.fileBytes; // my plan's size
     const ephemeralOver = 15 * 1024 * 1024; // big files: cache-then-purge
+    // Photos go together, after the files, as one "Photo i of N" batch.
+    final photos = <({Uint8List bytes, String name, String mime})>[];
+    var asked = false; // the first FILE (not photo) gets the caption sheet
     for (var i = 0; i < paths.length; i++) {
       final path = paths[i];
       List<int> bytes;
@@ -1493,8 +1542,11 @@ extension _ChatPageHelpers2 on _ChatPageState {
       final name = path.split(RegExp(r'[\\/]+')).last;
       final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
       if (imgExt.contains(ext)) {
-        await _previewAndSendImage(
-            Uint8List.fromList(bytes), name, _mimeForExt(ext));
+        photos.add((
+          bytes: Uint8List.fromList(bytes),
+          name: name,
+          mime: _mimeForExt(ext)
+        ));
         continue;
       }
       if (bytes.length > fileCap) {
@@ -1507,7 +1559,8 @@ extension _ChatPageHelpers2 on _ChatPageState {
       // Only the FIRST file gets the caption sheet; extra files send plain so a
       // multi-file paste isn't a caption gauntlet.
       String? caption = '';
-      if (i == 0) {
+      if (!asked) {
+        asked = true;
         caption = await _askFileCaption(name);
         if (caption == null) return; // cancelled the whole paste
       }
@@ -1523,6 +1576,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
         ephemeral: bytes.length > ephemeralOver,
       );
     }
+    if (photos.isNotEmpty) await _sendPhotoBatch(photos);
   }
 
   // Compact caption panel (file chip + caption field + send) that stands in

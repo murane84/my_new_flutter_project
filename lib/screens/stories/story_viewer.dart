@@ -822,7 +822,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   void _onVideoTick() {
     final v = _video;
     if (v == null || !v.value.isInitialized) return;
-    final dur = v.value.duration;
+    // A status video plays at most kStatusVideoMax (a gallery pick can be
+    // longer than the picker's limit on some phones).
+    final full = v.value.duration;
+    final dur = full > kStatusVideoMax ? kStatusVideoMax : full;
     final pos = v.value.position;
     if (dur > Duration.zero && pos >= dur - const Duration(milliseconds: 120)) {
       _next();
@@ -954,7 +957,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   double _activeFraction() {
     final item = _story;
     if (item.isVideo && _video != null && _video!.value.isInitialized) {
-      final dur = _video!.value.duration.inMilliseconds;
+      final full = _video!.value.duration.inMilliseconds;
+      final dur = full > kStatusVideoMax.inMilliseconds
+          ? kStatusVideoMax.inMilliseconds
+          : full;
       if (dur <= 0) return 0;
       return (_video!.value.position.inMilliseconds / dur).clamp(0.0, 1.0);
     }

@@ -229,10 +229,19 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
   bool get _hasEdits =>
       _strokes.isNotEmpty || _shapes.isNotEmpty || _emojis.isNotEmpty;
 
+  // An animated GIF: drawing on it flattens it to a still (said so on screen).
+  late final bool _isGif = widget.imageBytes.length > 3 &&
+      widget.imageBytes[0] == 0x47 &&
+      widget.imageBytes[1] == 0x49 &&
+      widget.imageBytes[2] == 0x46;
+
+  bool get _inBatch => widget.total > 1;
+
   Future<void> _send() async {
     setState(() => _busy = true);
     Uint8List outBytes = widget.imageBytes;
-    String mime = 'image/jpeg';
+    // Unedited: the caller keeps the photo's own type (a GIF stays a GIF).
+    String? mime;
     if (_hasEdits) {
       final rendered = await _renderAnnotated();
       if (rendered != null) {
@@ -381,6 +390,8 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
+          // In a batch, ✕ stops the rest (Skip moves on to the next one).
+          tooltip: _inBatch ? "Stop — don't send the rest" : 'Cancel',
           icon: const Icon(Icons.close_rounded),
           onPressed: () => _finish(null),
         ),
@@ -399,6 +410,13 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
             : Text('Send to ${widget.friendName}',
                 style: const TextStyle(fontSize: 16)),
         actions: [
+          if (_inBatch)
+            TextButton(
+              onPressed: _busy ? null : () => _finish({'skip': true}),
+              child: const Text('Skip',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w700)),
+            ),
           IconButton(
             tooltip: 'Undo',
             onPressed: _history.isEmpty ? null : _undo,
@@ -627,6 +645,14 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
               ],
             ),
           ),
+          if (_isGif && _hasEdits)
+            Container(
+              color: Colors.black,
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+              child: const Text(
+                  'Drawing on a GIF sends it as a still photo · undo to keep it moving',
+                  style: TextStyle(color: Colors.white60, fontSize: 11.5)),
+            ),
           // ── Caption + send ──────────────────────────────────────────────
           Container(
             color: Colors.black,

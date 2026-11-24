@@ -9,6 +9,7 @@ import '../../services/track_title.dart' show displayTitleForPath;
 import '../../utils/adaptive_sheet.dart';
 import '../../utils/file_bytes.dart';
 import '../../utils/radii.dart';
+import '../../utils/toast_helper.dart';
 import '../api_service.dart';
 import '../home_page.dart' show playlistNotifier, playbackBus;
 
@@ -71,8 +72,7 @@ Future<LoadedSong?> pickLoadedSong(BuildContext context,
     {String title = 'Choose a song', String? subtitle}) async {
   final songs = loadedSongs();
   if (songs.isEmpty) {
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
-        content: Text('Load some songs in the music player first')));
+    showToast(context, 'Load some songs in the music player first');
     return null;
   }
   return showAdaptiveSheet<LoadedSong>(

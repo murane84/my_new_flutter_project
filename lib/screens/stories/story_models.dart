@@ -3,6 +3,9 @@
 /// they can be used from any widget.
 library;
 
+/// How long a video status plays (the picker's and camera's limit too).
+const Duration kStatusVideoMax = Duration(seconds: 30);
+
 class StoryItem {
   final String id;
   final int authorId;

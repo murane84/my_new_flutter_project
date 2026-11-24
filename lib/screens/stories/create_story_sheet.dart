@@ -1,7 +1,8 @@
 import 'dart:io' show File;
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show compute, defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
@@ -24,6 +25,10 @@ import '../../utils/adaptive_sheet.dart';
 import '../../utils/depth.dart';
 import '../../widgets/keyboard_swap_panel.dart';
 import 'song_moment.dart';
+import 'story_models.dart' show kStatusVideoMax;
+import '../../utils/image_compress.dart';
+import '../../utils/toast_helper.dart';
+import '../../services/plan_limits.dart';
 import 'story_viewer.dart' show StoryHooks;
 
 
@@ -162,12 +167,12 @@ Future<void> showCreateStorySheet(
     if (choice == 'video') {
       file = await picker.pickVideo(
         source: ImageSource.gallery,
-        maxDuration: const Duration(seconds: 30),
+        maxDuration: kStatusVideoMax,
       );
     } else if (choice == 'camera') {
       // The in-app camera can take a photo or record a clip (up to 30s).
       final r = await captureMedia(context,
-          maxVideoDuration: const Duration(seconds: 30));
+          maxVideoDuration: kStatusVideoMax);
       file = r?.file;
       cameraVideo = r?.isVideo ?? false;
     } else {
@@ -452,6 +457,65 @@ class _MediaComposePageState extends State<_MediaComposePage> {
     setState(() => _bytes = b);
   }
 
+  // What actually goes up — the same rules as a chat photo/video: photos
+  // shrink (≤1600px, see-through kept), big phone videos compress, and
+  // anything still over the plan's size says so plainly.
+  String? _upMime;
+  String? _upName;
+  Future<Uint8List?> _prepared() async {
+    var bytes = _bytes;
+    if (bytes == null) return null;
+    var mime = _mimeFor(widget.file, widget.kind);
+    var name = widget.file.name;
+    String renamed(String ext) {
+      final dot = name.lastIndexOf('.');
+      return '${dot > 0 ? name.substring(0, dot) : name}.$ext';
+    }
+
+    if (widget.kind == 'photo' &&
+        mime != 'image/gif' &&
+        bytes.length > kPhotoCompressOver) {
+      try {
+        final c = await compute(compressPhotoForUpload, bytes);
+        if (c.isNotEmpty && c.length < bytes.length) {
+          bytes = c;
+          mime = compressedPhotoMime(c);
+          name = renamed(mime == 'image/png' ? 'png' : 'jpg');
+        }
+      } catch (_) {/* keep the original */}
+    }
+    final phone = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    if (widget.kind == 'video' &&
+        phone &&
+        widget.file.path.isNotEmpty &&
+        bytes.length > 12 * 1024 * 1024) {
+      _toast('Compressing video…');
+      try {
+        final info = await VideoCompress.compressVideo(widget.file.path,
+            quality: VideoQuality.MediumQuality,
+            deleteOrigin: false,
+            includeAudio: true);
+        final cb = await info?.file?.readAsBytes();
+        if (cb != null && cb.isNotEmpty && cb.length < bytes.length) {
+          bytes = Uint8List.fromList(cb);
+          mime = 'video/mp4';
+          name = renamed('mp4');
+        }
+      } catch (_) {/* keep the original */}
+    }
+    if (bytes.length > PlanLimits.instance.fileBytes) {
+      _toast(widget.kind == 'video'
+          ? 'Video is too large to post (${PlanLimits.instance.fileNote}).'
+          : 'Photo is too large to post (${PlanLimits.instance.fileNote}).');
+      return null;
+    }
+    _upMime = mime;
+    _upName = name;
+    return bytes;
+  }
+
   Future<void> _initVideo() async {
     // Preview plays from the picked file path (native only); web/desktop with
     // no backend fall back to the filmstrip card.
@@ -511,16 +575,21 @@ class _MediaComposePageState extends State<_MediaComposePage> {
   /// A duo status: this photo goes to my person as "add your half"; when
   /// they do, one side-by-side status goes live from both of us.
   Future<void> _sendDuo(({int id, String name}) partner) async {
-    final bytes = _bytes;
-    if (bytes == null || _posting) return;
+    if (_bytes == null || _posting) return;
     setState(() => _posting = true);
-    final mime = _mimeFor(widget.file, widget.kind);
+    final bytes = await _prepared();
+    if (!mounted) return;
+    if (bytes == null) {
+      setState(() => _posting = false);
+      return;
+    }
+    final mime = _upMime!;
     // 🔒 Locked on this phone when their Aluta can open it, like any photo.
     Map<String, dynamic>? sent;
     try {
       sent = await ApiService().sendMediaTo(partner.id, bytes,
           type: 'image',
-          filename: widget.file.name,
+          filename: _upName!,
           mime: mime,
           content: '📸 Duo status — add your half 💞',
           meta: jsonEncode({'duo': 1}));
@@ -591,13 +660,18 @@ class _MediaComposePageState extends State<_MediaComposePage> {
   }
 
   Future<void> _post() async {
-    final bytes = _bytes;
-    if (bytes == null || _posting) return;
+    if (_bytes == null || _posting) return;
     setState(() => _posting = true);
-    final mime = _mimeFor(widget.file, widget.kind);
+    final bytes = await _prepared();
+    if (!mounted) return;
+    if (bytes == null) {
+      setState(() => _posting = false);
+      return;
+    }
+    final mime = _upMime!;
     final assetId = await ApiService().uploadStoryMedia(
       bytes: bytes,
-      filename: widget.file.name,
+      filename: _upName!,
       mime: mime,
     );
     if (!mounted) return;
@@ -635,10 +709,7 @@ class _MediaComposePageState extends State<_MediaComposePage> {
     Navigator.pop(context);
   }
 
-  void _toast(String msg) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
-  }
+  void _toast(String msg) => showToast(context, msg);
 
   @override
   Widget build(BuildContext context) {
@@ -668,6 +739,15 @@ class _MediaComposePageState extends State<_MediaComposePage> {
             // breathing room; the Scaffold lifts this bar above the keyboard.
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
+              if (widget.kind == 'video' &&
+                  (_video?.value.duration ?? Duration.zero) > kStatusVideoMax)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                      'Statuses play the first ${kStatusVideoMax.inSeconds} seconds of a video.',
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 12.5)),
+                ),
               if (widget.kind == 'photo')
                 Row(children: [
                   Flexible(child: _songChip()),
@@ -973,10 +1053,7 @@ class _MusicStoryPageState extends State<_MusicStoryPage> {
     Navigator.pop(context);
   }
 
-  void _toast(String msg) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
-  }
+  void _toast(String msg) => showToast(context, msg);
 
   @override
   Widget build(BuildContext context) {
@@ -1359,9 +1436,7 @@ class _TextStoryPageState extends State<_TextStoryPage> {
     Navigator.pop(context);
   }
 
-  void _toast(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
+  void _toast(String msg) => showToast(context, msg);
 
   Future<void> _addSticker() async {
     final ok = await pickAndPostSticker(context, onPosted: widget.onPosted);
@@ -1631,8 +1706,7 @@ class _StickerComposePageState extends State<_StickerComposePage> {
     if (!mounted) return;
     setState(() => _posting = false);
     if (created == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not post sticker')));
+      showToast(context, 'Could not post sticker', type: ToastType.error);
       return;
     }
     widget.onPosted();

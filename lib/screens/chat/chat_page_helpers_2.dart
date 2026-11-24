@@ -599,7 +599,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
             autofocus: true,
             child: Material(
               color: Colors.black,
-              child: _ImagePreviewScreen(
+              child: PhotoEditorScreen(
                 imageBytes: bytes,
                 friendName: widget.friendName,
                 index: index,
@@ -692,7 +692,7 @@ extension _ChatPageHelpers2 on _ChatPageState {
         : await Navigator.of(context).push<Map<String, dynamic>?>(
             MaterialPageRoute(
               fullscreenDialog: true,
-              builder: (_) => _ImagePreviewScreen(
+              builder: (_) => PhotoEditorScreen(
                 imageBytes: bytes,
                 friendName: widget.friendName,
                 index: index,

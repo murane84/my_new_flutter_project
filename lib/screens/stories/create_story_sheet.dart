@@ -27,6 +27,7 @@ import '../../widgets/keyboard_swap_panel.dart';
 import 'song_moment.dart';
 import 'story_models.dart' show kStatusVideoMax;
 import '../../utils/image_compress.dart';
+import '../../widgets/photo_editor.dart';
 import '../../utils/toast_helper.dart';
 import '../../services/plan_limits.dart';
 import 'story_viewer.dart' show StoryHooks;
@@ -462,15 +463,39 @@ class _MediaComposePageState extends State<_MediaComposePage> {
   // anything still over the plan's size says so plainly.
   String? _upMime;
   String? _upName;
+  // Set once the photo was drawn on (the editor flattens it to PNG).
+  String? _editedMime;
+
+  /// The same editor as a chat photo — draw, highlight, shapes, emoji, text —
+  /// then back here for the caption, song and post.
+  Future<void> _edit() async {
+    final b = _bytes;
+    if (b == null || _posting) return;
+    final r = await Navigator.of(context).push<Map<String, dynamic>?>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => PhotoEditorScreen(imageBytes: b, editOnly: true),
+      ),
+    );
+    final out = r?['bytes'];
+    final mime = r?['mime'] as String?;
+    if (!mounted || out is! Uint8List || mime == null) return; // unchanged
+    setState(() {
+      _bytes = out;
+      _editedMime = mime;
+    });
+  }
+
   Future<Uint8List?> _prepared() async {
     var bytes = _bytes;
     if (bytes == null) return null;
-    var mime = _mimeFor(widget.file, widget.kind);
+    var mime = _editedMime ?? _mimeFor(widget.file, widget.kind);
     var name = widget.file.name;
     String renamed(String ext) {
       final dot = name.lastIndexOf('.');
       return '${dot > 0 ? name.substring(0, dot) : name}.$ext';
     }
+    if (_editedMime == 'image/png') name = renamed('png');
 
     if (widget.kind == 'photo' &&
         mime != 'image/gif' &&
@@ -719,6 +744,16 @@ class _MediaComposePageState extends State<_MediaComposePage> {
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         title: const Text('New story'),
+        actions: [
+          if (widget.kind == 'photo')
+            TextButton.icon(
+              onPressed: _bytes == null || _posting ? null : _edit,
+              icon: const Icon(Icons.brush_rounded, color: Colors.white),
+              label: Text(_editedMime == null ? 'Draw' : 'Edit drawing',
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w700)),
+            ),
+        ],
       ),
       body: Column(
         children: [

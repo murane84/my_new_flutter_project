@@ -1,4 +1,13 @@
-part of '../chat_page.dart';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:flutter/material.dart';
+
+import '../utils/radii.dart';
+import '../utils/readable.dart';
+import 'aluta_composer_field.dart';
+import 'edge_scroll_row.dart';
+import 'genie_menu.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Image preview + lightweight annotation editor.
@@ -10,6 +19,9 @@ part of '../chat_page.dart';
 // edit exists the annotated image is flattened via a Canvas onto the ORIGINAL
 // full-resolution bytes → PNG; otherwise the original bytes are sent untouched.
 // Returns a map {caption, bytes, mime, hd} (or null if cancelled).
+// One editor for the whole app: chat photos (with caption + send) and status
+// photos ([editOnly]: just the marks, then Done — the status page keeps its
+// own caption and song).
 // ─────────────────────────────────────────────────────────────────────────────
 enum _EditTool { move, pen, highlight, circle, box, arrow }
 
@@ -57,14 +69,18 @@ void _drawArrow(
   c.drawLine(b, base - perp * headW, p);
 }
 
-class _ImagePreviewScreen extends StatefulWidget {
-  const _ImagePreviewScreen({
+class PhotoEditorScreen extends StatefulWidget {
+  const PhotoEditorScreen({
     required this.imageBytes,
-    required this.friendName,
+    this.friendName = '',
     this.index = 0,
     this.total = 0,
     this.onDone,
+    this.editOnly = false,
   });
+  // Status photos: draw / text / shapes, then Done → {bytes, mime}. No
+  // caption, HD or send here (the status page has its own).
+  final bool editOnly;
   final Uint8List imageBytes;
   // Shown inside the chat pane (wide screens) instead of as a page: how it
   // closes (null = cancelled). Without it, it pops its route.
@@ -76,10 +92,10 @@ class _ImagePreviewScreen extends StatefulWidget {
   final int total;
 
   @override
-  State<_ImagePreviewScreen> createState() => _ImagePreviewScreenState();
+  State<PhotoEditorScreen> createState() => _PhotoEditorScreenState();
 }
 
-class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
+class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
   final GlobalKey _boundaryKey = GlobalKey();
   final TextEditingController _captionCtrl = TextEditingController();
   bool _hd = false;
@@ -395,7 +411,9 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
           icon: const Icon(Icons.close_rounded),
           onPressed: () => _finish(null),
         ),
-        title: widget.total > 1
+        title: widget.editOnly
+            ? const Text('Edit photo', style: TextStyle(fontSize: 16))
+            : widget.total > 1
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -653,7 +671,32 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
                   'Drawing on a GIF sends it as a still photo · undo to keep it moving',
                   style: TextStyle(color: Colors.white60, fontSize: 11.5)),
             ),
-          // ── Caption + send ──────────────────────────────────────────────
+          // ── Caption + send (or Done, for a status photo) ───────────────
+          if (widget.editOnly)
+            Container(
+              color: Colors.black,
+              padding: EdgeInsets.fromLTRB(
+                  12, 6, 12, MediaQuery.of(context).padding.bottom + 10),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                      backgroundColor: scheme.primary,
+                      foregroundColor: readableOn(scheme.primary)),
+                  onPressed: _busy ? null : _send,
+                  icon: _busy
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: readableOn(scheme.primary)))
+                      : const Icon(Icons.check_rounded),
+                  label: const Text('Done'),
+                ),
+              ),
+            )
+          else
           Container(
             color: Colors.black,
             padding: EdgeInsets.only(

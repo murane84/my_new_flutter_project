@@ -137,6 +137,7 @@ import '../services/drafts.dart';
 import '../services/song_insights.dart' show SongInsights, SongFeel;
 import '../services/plan_limits.dart';
 import '../utils/image_compress.dart';
+import '../widgets/photo_editor.dart';
 import '../services/cover_art.dart';
 import '../widgets/song_art.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -180,7 +181,6 @@ import '../utils/depth.dart';
 // imports & privacy, zero behaviour change):
 part 'chat/chat_bubble_parts.dart';   // wallpaper, action tile, bubble
                                        // border, voice note, swipe-to-reply
-part 'chat/chat_image_editor.dart';    // image preview + annotation editor
 part 'chat/chat_composer_parts.dart';  // recording bar, edit + offline banners
 part 'chat/chat_page_helpers_1.dart'; // _ChatPageState helpers (30 methods)
 part 'chat/chat_page_helpers_2.dart'; // _ChatPageState helpers (38 methods)

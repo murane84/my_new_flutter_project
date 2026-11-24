@@ -58,6 +58,7 @@ class _MembershipCardState extends State<MembershipCard> {
     final by = (m['invited_by_name'] ?? '').toString().trim();
     final brought = (m['brought'] as num?)?.toInt() ?? 0;
     final left = (m['invites_left'] as num?)?.toInt();
+    final beta = m['beta_circle'] == true;
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(16),
@@ -86,6 +87,20 @@ class _MembershipCardState extends State<MembershipCard> {
               ),
             ),
           ]),
+          if (beta) ...[
+            const SizedBox(height: 6),
+            Row(children: [
+              Icon(Icons.science_rounded, size: 15, color: scheme.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text('Beta circle · new Aluta reaches you first',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.primary)),
+              ),
+            ]),
+          ],
           if (by.isNotEmpty || brought > 0) ...[
             const SizedBox(height: 6),
             Text(

@@ -1349,6 +1349,7 @@ def _user_row(u: User, c) -> dict:
         "last_seen": _iso(_aware(u.last_seen)),
         "created_at": _iso(_aware(getattr(u, "created_at", None))),
         "plan": _plan_of(u),
+        "beta": bool(getattr(u, "beta_circle", False)),
         **_acct_state(c),
     }
 
@@ -1424,6 +1425,41 @@ def _act_target(db: Session, ctx: AdminCtx, user_id: int,
     if u.id == ctx.user.id or (u.email or "").lower() in _owner_emails():
         raise HTTPException(403, "Not on the owner's own account")
     return u
+
+
+class BetaIn(BaseModel):
+    password: str
+    on: bool
+
+
+@router.get("/beta")
+def admin_beta(ctx: AdminCtx = Depends(admin_ctx),
+               db: Session = Depends(get_db)):
+    """Who's in the beta circle (the strategy aims for 20–50 people)."""
+    rows = db.query(User).filter(User.beta_circle.is_(True)).order_by(
+        User.username).limit(200).all()
+    return {"count": len(rows),
+            "members": [{"id": u.id, "username": u.username} for u in rows]}
+
+
+@router.post("/users/{user_id}/beta")
+def admin_user_beta(user_id: int, payload: BetaIn,
+                    ctx: AdminCtx = Depends(admin_ctx),
+                    db: Session = Depends(get_db)):
+    """Add someone to the beta circle, or take them out. Unlike the account
+    actions this works on the owner's own account too (you test first)."""
+    require_full(ctx)
+    _step_up(ctx, payload.password)
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(404, "No such user")
+    u.beta_circle = bool(payload.on)
+    _audit(db, "beta_circle_on" if payload.on else "beta_circle_off",
+           user_id=ctx.user.id, device_id=ctx.device.id,
+           target=f"user:{u.id}", ip=ctx.ip, detail={})
+    db.commit()
+    count = db.query(User.id).filter(User.beta_circle.is_(True)).count()
+    return {"ok": True, "beta": u.beta_circle, "circle": count}
 
 
 def _control(db: Session, user_id: int):

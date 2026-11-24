@@ -138,6 +138,25 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
         ),
       );
 
+  /// The beta circle: new builds reach them first (they live with a build
+  /// before everyone gets it). Works on your own account too.
+  Future<void> _beta(bool on) async {
+    final name = _open?['username'];
+    final pw = await askPassword(context,
+        title: on
+            ? 'Add $name to the beta circle?'
+            : 'Take $name out of the beta circle?',
+        message: on
+            ? 'Beta builds reach them first, before you promote them to '
+                'everyone. Keep the circle small (20–50 people).'
+            : 'They go back to the public build: nothing to reinstall — they '
+                'get the next public release as usual.',
+        action: on ? 'Add to beta' : 'Remove');
+    if (pw == null) return;
+    await _act('beta', {'password': pw, 'on': on},
+        done: on ? 'In the beta circle' : 'Out of the beta circle');
+  }
+
   Future<void> _pause() async {
     final name = _open?['username'];
     final reason = TextEditingController();
@@ -410,6 +429,8 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                 '${u['ozilane_key'] == true ? 'Ozilane Key linked' : 'no Ozilane Key'}'),
             line(Icons.system_update_rounded, 'Aluta',
                 app == null ? '—' : '${app['version']} · ${app['slot']}'),
+            line(Icons.science_rounded, 'Beta circle',
+                u['beta'] == true ? 'In — gets builds first' : 'No'),
             if ((u['reason'] ?? '').toString().isNotEmpty)
               line(Icons.info_outline_rounded, 'Reason',
                   u['reason'].toString()),
@@ -427,6 +448,30 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
             ]),
           ),
         const SizedBox(height: 12),
+        // The beta circle — your own account included (you test first).
+        if (status == 'active')
+          AdminSection(
+            icon: Icons.science_rounded,
+            title: 'Beta circle',
+            subtitle: 'New builds reach the circle first; you promote them '
+                'to everyone with release.bat promote.',
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: u['beta'] == true
+                  ? OutlinedButton.icon(
+                      onPressed: () => _beta(false),
+                      icon: const Icon(Icons.remove_circle_outline_rounded,
+                          size: 18),
+                      label: const Text('Take out of the beta circle'),
+                    )
+                  : FilledButton.tonalIcon(
+                      onPressed: () => _beta(true),
+                      icon: const Icon(Icons.science_rounded, size: 18),
+                      label: const Text('Add to the beta circle'),
+                    ),
+            ),
+          ),
+        if (status == 'active') const SizedBox(height: 12),
         if (!isYou)
           AdminSection(
             icon: Icons.manage_accounts_rounded,

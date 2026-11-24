@@ -122,6 +122,7 @@ import '../widgets/section_swipe_path.dart';
 import 'policy_gate.dart';
 import 'welcome_ritual.dart';
 import '../widgets/our_day_moment.dart';
+import '../widgets/release_story.dart';
 import 'add_friend_sheet.dart';
 import 'spinning_vinyl_ring.dart';
 import '../widgets/presence_ring_avatar.dart';

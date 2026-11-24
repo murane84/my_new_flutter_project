@@ -284,6 +284,8 @@ def ensure_media_schema():
         # Invitations (invites.py): who brought them to Aluta.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS invited_by INTEGER",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS member_no INTEGER",
+        # The beta circle: new builds reach them before everyone else.
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS beta_circle BOOLEAN DEFAULT FALSE",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS policy_accepted_at TIMESTAMPTZ",
         # Monetization: the 'Together' entitlement (free | together) + when it began.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_tier VARCHAR DEFAULT 'free'",

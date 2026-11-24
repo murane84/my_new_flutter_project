@@ -54,6 +54,8 @@ class User(Base):
     # Their place in the order of joining, fixed the first time it's shown
     # (an earlier account deleted later never moves it) — invites.py.
     member_no = Column(Integer, nullable=True)
+    # The beta circle (routers/releases.py): new builds reach them first.
+    beta_circle = Column(Boolean, default=False)
 
     # Legal consent: the highest Privacy Policy / Terms version this user has
     # accepted (see legal.py). 0 means "never accepted"; whenever the server's

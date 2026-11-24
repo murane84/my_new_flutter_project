@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../screens/api_service.dart';
+import '../screens/token_helper.dart' show getToken;
 import '../utils/adaptive_sheet.dart';
 import '../utils/app_config.dart';
 import '../utils/radii.dart';
@@ -316,17 +317,28 @@ class AppUpdater {
   bool _busy = false;
   final ValueNotifier<double?> progress = ValueNotifier<double?>(null);
 
+  /// Signed in → who's asking, so the beta circle sees its beta build (and
+  /// may download it). Signed out → the public build, as before.
+  Future<Map<String, String>> _who() async {
+    try {
+      final t = await getToken();
+      if (t != null && t.isNotEmpty) return {'Authorization': 'Bearer $t'};
+    } catch (_) {}
+    return const {};
+  }
+
   /// The newest release if it's newer than this install, else null.
   Future<Map<String, dynamic>?> _newer() async {
     final base = await AppConfig.baseUrl;
     final slot = await _slot();
+    final who = await _who();
     var resp = await http
-        .get(Uri.parse('$base/app/latest?platform=$slot'))
+        .get(Uri.parse('$base/app/latest?platform=$slot'), headers: who)
         .timeout(const Duration(seconds: 12));
     // No universal build published → the arm64 one is the only choice.
     if (resp.statusCode == 404 && slot == 'android-universal') {
       resp = await http
-          .get(Uri.parse('$base/app/latest?platform=android'))
+          .get(Uri.parse('$base/app/latest?platform=android'), headers: who)
           .timeout(const Duration(seconds: 12));
     }
     // Never call a failed answer "up to date" — that's how an unpublished
@@ -813,6 +825,8 @@ class AppUpdater {
           have > 0 && await f.tag.exists() ? (await f.tag.readAsString()).trim() : '';
       if (tag.isEmpty) have = 0; // can't prove the part is the same file
       final req = http.Request('GET', Uri.parse(url));
+      // A beta build downloads for the beta circle only.
+      if (url.contains('/download/beta/')) req.headers.addAll(await _who());
       if (have > 0) {
         req.headers['Range'] = 'bytes=$have-';
         req.headers['If-Range'] = tag;
@@ -955,7 +969,15 @@ class AppUpdater {
   Future<String?> install(Map<String, dynamic> rel) async {
     if (!_android) {
       final base = await AppConfig.baseUrl;
-      final url = '$base${rel['url'] ?? '/download/aluta-windows.zip'}';
+      var url = '$base${rel['url'] ?? '/download/aluta-windows.zip'}';
+      // The browser can't send our header: a beta zip carries the sign-in
+      // the way our web media does (?token=).
+      if (url.contains('/download/beta/')) {
+        final t = await getToken();
+        if (t != null && t.isNotEmpty) {
+          url = '$url?token=${Uri.encodeQueryComponent(t)}';
+        }
+      }
       final ok = await launchUrl(Uri.parse(url),
           mode: LaunchMode.externalApplication);
       return ok

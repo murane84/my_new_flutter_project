@@ -444,9 +444,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
     # builds, so someone offline at publish time is told the moment they
     # come back (the app prompts once per build, then re-reminds every 6 h).
     try:
-        from routers.releases import latest_versions
+        from routers.releases import is_beta, latest_versions
+        # The beta circle hears the beta build while it's ahead.
+        beta = await asyncio.get_running_loop().run_in_executor(
+            None, is_beta, uid)
         await websocket.send_json({"type": "app_versions",
-                                   "versions": latest_versions()})
+                                   "versions": latest_versions(beta=beta)})
     except Exception:
         pass
     # Messages that reached them while they were away → delivered now (the

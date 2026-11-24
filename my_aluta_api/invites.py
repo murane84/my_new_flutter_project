@@ -157,6 +157,8 @@ def my_membership(db: Session = Depends(get_db),
         "invited_by_name": inviter.username if inviter else None,
         # Their face in the new member's welcome ("Asha brought you here").
         "invited_by_avatar": inviter.avatar_url if inviter else None,
+        # In the beta circle → the profile says so (new builds reach them first).
+        "beta_circle": bool(getattr(me, "beta_circle", False)),
         "brought": brought,
         "invites_left": (max(0, INVITES_PER_MEMBER - _used(db, me.id))
                          if invite_only() else None),

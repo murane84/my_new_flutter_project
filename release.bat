@@ -20,7 +20,20 @@ REM                                 REQUIRED update: older builds are blocked
 REM                                 until they install it. Asks to confirm.
 REM                                 Only for a real breaking change.
 REM
+REM          release.bat beta       (with any of the above, e.g.
+REM                                 "release.bat beta" or "release.bat beta
+REM                                 minor") builds and publishes to the BETA
+REM                                 CIRCLE only (set in the admin panel). The
+REM                                 server deploys; the web stays as it is.
+REM          release.bat promote    the beta circle has lived with it: the
+REM                                 beta build becomes everyone's, and the web
+REM                                 is deployed (built from THIS folder - so
+REM                                 promote before starting new changes).
+REM
 REM What's new: write it in RELEASE_NOTES.txt (one change per line) first.
+REM A named release (optional): RELEASE_NAME.txt (one line, e.g. "Our song")
+REM and RELEASE_STORY.txt (two or three sentences) - shown once in the app
+REM after updating, and on the download page.
 REM
 REM Auto-publish: set your publish key ONCE on this PC (it stays private):
 REM          setx ALUTA_RELEASE_KEY "your-UPLOAD_KEY-value"
@@ -33,10 +46,17 @@ set DEFINE=--dart-define=PROD_URL=%URL%
 
 del /f /q ".git\HEAD.lock" ".git\index.lock" ".git\refs\heads\main.lock" 2>nul
 
-set KIND=%1
+set CH=public
+set A1=%1
+set A2=%2
+set A3=%3
+if /i "%A1%"=="promote" goto :promote
+if /i "%A1%"=="beta" (set CH=beta& set A1=%A2%& set A2=%A3%)
+set KIND=%A1%
 set REQ=
-if /i "%1"=="required" (set REQ=1& set KIND=%2)
-if /i "%2"=="required" set REQ=1
+if /i "%A1%"=="required" (set REQ=1& set KIND=%A2%)
+if /i "%A2%"=="required" set REQ=1
+if "%CH%"=="beta" echo ==== BETA: this build goes to the beta circle only ====
 if /i "%KIND%"=="publish" goto :publish_only
 
 copy /y pubspec.yaml pubspec.yaml.bak >nul
@@ -100,12 +120,17 @@ echo  ************************************************************
 set /p OKREQ=Type YES to make it required (anything else = normal update): 
 if /i "%OKREQ%"=="YES" (set MINF=-F "min_build=%BUILD%") else (set REQ=& echo Publishing as a normal update.)
 :req_done
+set NFLAGS=
+if exist RELEASE_NAME.txt set NFLAGS=-F "name=<RELEASE_NAME.txt"
+if exist RELEASE_STORY.txt set NFLAGS=%NFLAGS% -F "story=<RELEASE_STORY.txt"
 if "%ALUTA_RELEASE_KEY%"=="" (
   echo.
   echo No ALUTA_RELEASE_KEY in this window - opening the uploader page.
   echo Version %NAME%, build %BUILD%. Files are in dist\
   if "%REQ%"=="1" echo REQUIRED: put %BUILD% in "Lowest build that may keep working" on the page.
-  if "%DEPLOY%"=="1" call deploy_web.bat
+  if "%CH%"=="beta" echo BETA: choose "beta" as the Channel on the page.
+  if "%DEPLOY%"=="1" if "%CH%"=="beta" git push origin HEAD:main
+  if "%DEPLOY%"=="1" if not "%CH%"=="beta" call deploy_web.bat
   start "" "%URL%/admin/release"
   exit /b 0
 )
@@ -117,6 +142,12 @@ call :publish windows aluta-%NAME%-windows.zip || goto :pubfail
 echo == what phones see now ==
 curl.exe -s "%URL%/app/latest?platform=android"
 echo.
+if "%DEPLOY%"=="1" if "%CH%"=="beta" (
+  echo == server only - the web waits for "release.bat promote" ==
+  git push origin HEAD:main || goto :err
+  for /f %%b in ('git rev-parse --abbrev-ref HEAD') do if not "%%b"=="main" git push origin %%b
+  goto :done
+)
 if "%DEPLOY%"=="1" (
   echo == web + server ==
   call deploy_web.bat || goto :err
@@ -125,6 +156,12 @@ if "%DEPLOY%"=="1" (
 :done
 echo.
 echo ============================================================
+if "%CH%"=="beta" (
+  echo  Aluta %NAME% ^(build %BUILD%^) is out to the BETA CIRCLE.
+  echo  When they've lived with it a few days:  release.bat promote
+  echo ============================================================
+  goto :eof
+)
 echo  Aluta %NAME% (build %BUILD%) is out.
 echo  Open apps get an "is ready" toast now; closed phones get a
 echo  notification; anyone else sees it at next open.
@@ -132,6 +169,37 @@ echo  Check: %URL%/app/latest?platform=android shows build %BUILD%
 if "%REQ%"=="1" echo  REQUIRED: older builds are blocked until they update.
 echo ============================================================
 goto :eof
+
+:promote
+if "%ALUTA_RELEASE_KEY%"=="" (
+  echo Promoting needs ALUTA_RELEASE_KEY in this window.
+  exit /b 1
+)
+for /f "delims=" %%v in ('node tools\bump_version.js show') do set VER=%%v
+call :split_version
+echo.
+echo  ************************************************************
+echo   PROMOTE: the beta build becomes everyone's Aluta, and the web
+echo   is deployed from THIS folder (version %NAME%, build %BUILD%).
+echo   If you've changed code since the beta, the web gets those
+echo   changes too - promote first, or commit them later.
+echo  ************************************************************
+set /p OKPRO=Type YES to promote: 
+if /i not "%OKPRO%"=="YES" (echo Not promoted. & exit /b 0)
+for %%p in (android-universal android windows) do (
+  echo == promoting %%p ==
+  curl.exe -sS --fail-with-body -X POST "%URL%/admin/release/promote" ^
+    -H "X-Release-Key: %ALUTA_RELEASE_KEY%" -F "platform=%%p" || goto :pubfail
+  echo.
+)
+echo == what phones see now ==
+curl.exe -s "%URL%/app/latest?platform=android"
+echo.
+echo == web + server ==
+call deploy_web.bat || goto :err
+set CH=public
+set REQ=
+goto :done
 
 :pubfail
 echo.
@@ -151,7 +219,8 @@ echo == publishing %1 ==
 curl.exe -sS --fail-with-body -X POST "%URL%/admin/release" ^
   -H "X-Release-Key: %ALUTA_RELEASE_KEY%" ^
   -F "key=%ALUTA_RELEASE_KEY%" -F "platform=%1" -F "version=%NAME%" ^
-  -F "build=%BUILD%" -F "notes=<RELEASE_NOTES.txt" %MINF% -F "file=@dist\%2" || exit /b 1
+  -F "build=%BUILD%" -F "notes=<RELEASE_NOTES.txt" %MINF% -F "channel=%CH%" ^
+  %NFLAGS% -F "file=@dist\%2" || exit /b 1
 echo.
 exit /b 0
 

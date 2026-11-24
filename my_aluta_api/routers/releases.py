@@ -11,7 +11,16 @@ so storage stays flat and the download links never change.
   GET  /app/latest?platform=…     {"version","build","notes","size",…}
   GET  /admin/release             uploader page (needs RELEASE_KEY)
   POST /admin/release             multipart: key, platform, version, build,
-                                  notes, min_build, file
+                                  notes, min_build, channel, name, story, file
+  POST /admin/release/promote     key header; platform → the beta build
+                                  becomes the public one
+  GET  /app/story?version=…       a release's name + story ("What's new")
+
+Two channels (brand strategy: the beta circle lives with a build first, the
+public gets it later). A beta publish goes to releases/beta/ and reaches only
+members of the beta circle (users.beta_circle, set in the admin panel): their
+/app/latest and socket `app_versions` show it, its files download only for
+them. Everyone else keeps the public build until it's promoted.
 """
 from __future__ import annotations
 
@@ -25,7 +34,10 @@ import tempfile
 import threading
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+import shutil
+
+from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
+                     UploadFile)
 from fastapi.responses import FileResponse, HTMLResponse
 
 router = APIRouter(tags=["Releases"])
@@ -47,10 +59,15 @@ _MIME = {
 MAX_BYTES = 200 * 1024 * 1024  # 200 MB — an arm64 APK is ~30 MB
 
 
-def _dir() -> str:
+CHANNELS = ("public", "beta")
+
+
+def _dir(channel: str = "public") -> str:
     base = os.getenv("RAILWAY_VOLUME_MOUNT_PATH") or os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "_releases_local")
     d = os.path.join(base, "releases")
+    if channel == "beta":
+        d = os.path.join(d, "beta")
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -59,19 +76,80 @@ def _on_volume() -> bool:
     return bool(os.getenv("RAILWAY_VOLUME_MOUNT_PATH"))
 
 
-def _meta_path(platform: str) -> str:
-    return os.path.join(_dir(), f"{platform}.json")
+def _meta_path(platform: str, channel: str = "public") -> str:
+    return os.path.join(_dir(channel), f"{platform}.json")
 
 
-def _meta(platform: str) -> dict | None:
+def _meta(platform: str, channel: str = "public") -> dict | None:
     try:
-        with open(_meta_path(platform), encoding="utf-8") as f:
+        with open(_meta_path(platform, channel), encoding="utf-8") as f:
             data = json.load(f)
-        if os.path.isfile(os.path.join(_dir(), PLATFORMS[platform])):
+        if os.path.isfile(os.path.join(_dir(channel), PLATFORMS[platform])):
             return data
     except Exception:
         pass
     return None
+
+
+# ── The beta circle ──────────────────────────────────────────────────────────
+
+def is_beta(uid) -> bool:
+    """Is this user in the beta circle? (False on any doubt.)"""
+    if not uid:
+        return False
+    try:
+        from database import SessionLocal
+        from models import User
+        db = SessionLocal()
+        try:
+            u = db.query(User.beta_circle).filter(User.id == int(uid)).first()
+            return bool(u and u[0])
+        finally:
+            db.close()
+    except Exception:
+        return False
+
+
+def _beta_ahead(platform: str) -> dict | None:
+    """The beta build for [platform] while it's newer than the public one."""
+    b = _meta(platform, "beta")
+    if not b:
+        return None
+    p = _meta(platform)
+    try:
+        if p and int(b.get("build") or 0) <= int(p.get("build") or 0):
+            return None
+    except (TypeError, ValueError):
+        return None
+    return b
+
+
+def _meta_for(platform: str, beta: bool) -> tuple[dict | None, str]:
+    """What this person should see for [platform]: (meta, channel)."""
+    if beta:
+        b = _beta_ahead(platform)
+        if b:
+            return b, "beta"
+    return _meta(platform), "public"
+
+
+def _uid_from(request: Request) -> int | None:
+    """The signed-in caller, if the request carries a valid token (the
+    update check works signed out too — it then sees the public build)."""
+    auth_h = request.headers.get("authorization", "")
+    tok = auth_h[7:].strip() if auth_h.lower().startswith("bearer ") else ""
+    if not tok:
+        return None
+    try:
+        from auth import _resolve_user_from_token
+        from database import SessionLocal
+        db = SessionLocal()
+        try:
+            return _resolve_user_from_token(tok, db).id
+        finally:
+            db.close()
+    except Exception:
+        return None
 
 
 def _key_ok(key: str) -> bool:
@@ -171,21 +249,46 @@ def _public(slot: str, m: dict) -> dict:
 
 
 @router.get("/app/latest")
-def latest(platform: str = "android"):
-    """What the app compares its own build number with."""
+def latest(request: Request, platform: str = "android"):
+    """What the app compares its own build number with. A member of the beta
+    circle (signed-in request) sees the beta build while it's ahead."""
     if platform not in PLATFORMS:
         raise HTTPException(status_code=404, detail="Unknown platform")
-    m = _meta(platform)
+    m, channel = _meta_for(platform, is_beta(_uid_from(request)))
     if m is None:
         raise HTTPException(status_code=404, detail="No release yet")
-    return {**_public(platform, m), "url": f"/download/{PLATFORMS[platform]}"}
+    where = "/download/beta/" if channel == "beta" else "/download/"
+    return {**_public(platform, m), "channel": channel,
+            "url": f"{where}{PLATFORMS[platform]}"}
 
 
-def _serve(platform: str):
-    path = os.path.join(_dir(), PLATFORMS[platform])
+@router.get("/app/story")
+def release_story(version: str = ""):
+    """A release's name and short story, for the once-after-updating "What's
+    new" moment: the published build of that version (public or beta), else
+    the history. {} when it has none (a fix-only release)."""
+    v = (version or "").strip()[:32]
+    if not v:
+        return {}
+    found = []
+    for ch in CHANNELS:
+        for slot in ("android", "windows"):
+            m = _meta(slot, ch)
+            if m and m.get("version") == v:
+                found.append(m)
+    found += [h for h in _history() if h.get("version") == v]
+    for m in found:
+        if (m.get("name") or "").strip():
+            return {"version": v, "name": m.get("name"),
+                    "story": m.get("story") or "", "notes": m.get("notes") or ""}
+    return {}
+
+
+def _serve(platform: str, channel: str = "public"):
+    path = os.path.join(_dir(channel), PLATFORMS[platform])
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Not published yet")
-    m = _meta(platform) or {}
+    m = _meta(platform, channel) or {}
     v = m.get("version")
     # A versioned file name in the browser's download list.
     stem, ext = os.path.splitext(PLATFORMS[platform])
@@ -204,6 +307,35 @@ def download_apk():
 @router.get("/download/aluta-universal.apk", include_in_schema=False)
 def download_universal():
     return _serve("android-universal")
+
+
+def _beta_user(request: Request, token: str = ""):
+    """The beta files are for the beta circle only (token as a header, or
+    ?token= for a browser)."""
+    uid = _uid_from(request)
+    if uid is None and token:
+        try:
+            from auth import _resolve_user_from_token
+            from database import SessionLocal
+            db = SessionLocal()
+            try:
+                uid = _resolve_user_from_token(token, db).id
+            finally:
+                db.close()
+        except Exception:
+            uid = None
+    if not is_beta(uid):
+        raise HTTPException(status_code=403,
+                            detail="This build is for the beta circle")
+
+
+@router.get("/download/beta/{name}", include_in_schema=False)
+def download_beta(name: str, request: Request, token: str = ""):
+    _beta_user(request, token)
+    slot = next((s for s, f in PLATFORMS.items() if f == name), None)
+    if slot is None:
+        raise HTTPException(status_code=404, detail="Unknown file")
+    return _serve(slot, "beta")
 
 
 @router.get("/download/aluta-windows.zip", include_in_schema=False)
@@ -249,7 +381,8 @@ def _history() -> list:
 def _remember(meta: dict) -> None:
     h = [x for x in _history() if x.get("build") != meta["build"]]
     h.insert(0, {k: meta.get(k) for k in ("version", "build", "notes",
-                                           "updated_at", "size")})
+                                           "updated_at", "size", "name",
+                                           "story")})
     try:
         with open(os.path.join(_dir(), "history.json"), "w",
                   encoding="utf-8") as f:
@@ -330,8 +463,14 @@ def download_page(request: Request):
         notes = _notes_li(a.get("notes"))
         uni = (f'<a class="sub" href="/download/aluta-universal.apk"><span data-i18n="uni">Older or '
                f'32-bit phone? Get the universal APK</span> ({_mb(u.get("size"))})</a>' if u else "")
-        new = (f'<div class="new"><h3 data-i18n="new">What’s new</h3><ul>{notes}</ul></div>'
-               if notes else "")
+        rel_name = (a.get("name") or "").strip()
+        rel_story = (a.get("story") or "").strip()
+        story_html = ((f'<p class="story"><b>{e(rel_name)}</b>'
+                       + (f' — {e(rel_story)}' if rel_story else "") + '</p>')
+                      if rel_name else "")
+        new = (f'<div class="new"><h3 data-i18n="new">What’s new</h3>'
+               f'{story_html}<ul>{notes}</ul></div>'
+               if (notes or story_html) else "")
         and_card = f"""<div class="card" id="c-and">
     <div class="app"><img src="/icons/Icon-192.png" alt="">
       <div><h2>Aluta for Android</h2><p data-i18n="free">Free · no ads in the way</p></div></div>
@@ -419,9 +558,14 @@ progress{{width:100%;margin-top:12px}}</style></head><body>
 <option value="android">android — arm64 APK (app-arm64-v8a-release.apk)</option>
 <option value="android-universal">android-universal — universal APK (app-release.apk)</option>
 <option value="windows">windows — zipped Release folder</option></select>
+<label>Channel</label><select name="channel">
+<option value="public">public — everyone</option>
+<option value="beta">beta — the beta circle only (promote it later)</option></select>
 <label>Version (e.g. 1.0.3)</label><input name="version" required>
 <label>Build number (the +N in pubspec, e.g. 4)</label><input name="build" type="number" min="1" required>
 <label>Lowest build that may keep working (optional — older ones must update)</label><input name="min_build" type="number" min="0">
+<label>Release name (optional — e.g. "Our song")</label><input name="name" maxlength="60">
+<label>Its short story (optional — shown once after updating)</label><textarea name="story" rows="3" maxlength="600"></textarea>
 <label>What's new (one per line)</label><textarea name="notes" rows="5"></textarea>
 <label>File (.apk / .zip)</label><input name="file" type="file" required>
 <button>Publish</button></form><progress id="p" value="0" max="1" hidden></progress><pre id="o"></pre>
@@ -443,16 +587,20 @@ async def publish(
     notes: str = Form(""),
     min_build: int | None = Form(None),
     announce: bool = Form(True),
+    channel: str = Form("public"),
+    name: str = Form(""),
+    story: str = Form(""),
     file: UploadFile = File(...),
 ):
     if not _key_ok(key):
         raise HTTPException(status_code=403, detail="Wrong key")
     if platform not in PLATFORMS:
         raise HTTPException(status_code=400, detail="Unknown platform")
+    channel = channel if channel in CHANNELS else "public"
     version = version.strip()[:32]
     if not version or build < 1:
         raise HTTPException(status_code=400, detail="Version and build needed")
-    d = _dir()
+    d = _dir(channel)
     # Stream to a temp file beside the target (never the whole file in RAM),
     # then swap it in atomically — a half upload never replaces a good one.
     sha = hashlib.sha256()
@@ -481,26 +629,70 @@ async def publish(
         "build": int(build),
         "min_build": int(min_build) if min_build else 0,
         "notes": notes.strip()[:2000],
+        # A named release: one line of name, a short story (brand strategy:
+        # "an event, not a list of fixes"). Empty for a quiet fix release.
+        "name": name.strip()[:60],
+        "story": story.strip()[:600],
+        "channel": channel,
         "size": size,
         "sha256": sha.hexdigest(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    with open(_meta_path(platform), "w", encoding="utf-8") as f:
+    with open(_meta_path(platform, channel), "w", encoding="utf-8") as f:
         json.dump(meta, f)
-    if platform == "android":
+    if platform == "android" and channel == "public":
         _remember(meta)
     announced = _announce(meta) if announce else 0
     return {"ok": True, "on_volume": _on_volume(), "announced": announced,
             **meta}
 
 
-def latest_versions() -> dict:
+@router.post("/admin/release/promote", include_in_schema=False)
+def promote(request: Request, platform: str = Form(...)):
+    """The beta circle has lived with it: the beta build of [platform]
+    becomes the public one (same file, same version), and everyone hears."""
+    import time
+    now = time.time()
+    ip = _ip(request)
+    if _locked(ip, now):
+        raise HTTPException(status_code=429, detail="Too many wrong keys — try later")
+    if not _key_ok(request.headers.get("x-release-key", "")):
+        _fails.setdefault(ip, []).append(now)
+        _fails.setdefault("*", []).append(now)
+        raise HTTPException(status_code=403, detail="Wrong key")
+    if platform not in PLATFORMS:
+        raise HTTPException(status_code=400, detail="Unknown platform")
+    b = _meta(platform, "beta")
+    if not b:
+        raise HTTPException(status_code=404, detail="No beta build to promote")
+    src = os.path.join(_dir("beta"), PLATFORMS[platform])
+    dst_dir = _dir()
+    fd, tmp = tempfile.mkstemp(dir=dst_dir, suffix=".part")
+    os.close(fd)
+    try:
+        shutil.copyfile(src, tmp)
+        os.replace(tmp, os.path.join(dst_dir, PLATFORMS[platform]))
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    meta = {**b, "channel": "public",
+            "promoted_at": datetime.now(timezone.utc).isoformat()}
+    with open(_meta_path(platform), "w", encoding="utf-8") as f:
+        json.dump(meta, f)
+    if platform == "android":
+        _remember(meta)
+    announced = _announce(meta)
+    return {"ok": True, "announced": announced, **meta}
+
+
+def latest_versions(beta: bool = False) -> dict:
     """{slot: {"version", "build", "min_build"}} for every published app,
     plus "web" (the deployed web build). Sent to each socket on connect and
-    to everyone on publish — the server is what starts an update prompt."""
+    to everyone on publish — the server is what starts an update prompt.
+    [beta]: a member of the beta circle sees the beta build while it's ahead."""
     out: dict = {}
     for slot in PLATFORMS:
-        m = _meta(slot)
+        m, _ch = _meta_for(slot, beta)
         if m:
             out[slot] = {"version": m.get("version"),
                          "build": _vc(slot, m.get("build")),
@@ -550,15 +742,18 @@ def _announce(meta: dict) -> int:
     Returns how many sockets were told."""
     if meta["platform"] not in _ANNOUNCE:
         return 0
+    beta = meta.get("channel") == "beta"
     evt = {
         "type": "app_versions",
-        "versions": latest_versions(),
+        "versions": latest_versions(beta=beta),
         "announce": meta["platform"],  # what was just published
     }
     told = 0
     try:
         from websocket_manager import broadcast_event, connected_users
         uids = list(connected_users.keys())
+        if beta:  # a beta build reaches the beta circle only
+            uids = [u for u in uids if is_beta(u)]
         told = len(uids)
         # 1.0.4 apps only understand the older `app_update` event: send
         # both until everyone is on the server-first build.
@@ -581,12 +776,13 @@ def _announce(meta: dict) -> int:
             {"type": "app_update", "platform": "android",
              "version": meta["version"],
              "build": _vc("android", meta["build"]),
-             "note": first[:120]},)).start()
+             "note": first[:120]}, beta)).start()
     return told
 
 
-def _push_android(data: dict) -> None:
-    """One data push per Android user (background thread — FCM is slow)."""
+def _push_android(data: dict, beta_only: bool = False) -> None:
+    """One data push per Android user (background thread — FCM is slow);
+    [beta_only]: just the beta circle."""
     try:
         from database import SessionLocal
         from models import DeviceToken
@@ -595,8 +791,13 @@ def _push_android(data: dict) -> None:
             return
         db = SessionLocal()
         try:
-            uids = [r[0] for r in db.query(DeviceToken.user_id).filter(
-                DeviceToken.platform == "android").distinct().all()]
+            q = db.query(DeviceToken.user_id).filter(
+                DeviceToken.platform == "android")
+            if beta_only:
+                from models import User
+                q = q.join(User, User.id == DeviceToken.user_id).filter(
+                    User.beta_circle.is_(True))
+            uids = [r[0] for r in q.distinct().all()]
         finally:
             db.close()
         for uid in uids:

@@ -104,10 +104,16 @@ class ApiService {
   }
 
   /// Who brought me to Aluta (their name), if anyone did.
-  Future<String?> myInviterName() async {
+  Future<String?> myInviterName() async => (await myInviter())?.name;
+
+  /// Who brought me to Aluta: their name and photo (relative URL; null when
+  /// they have none, or an older server doesn't say).
+  Future<({String name, String? avatar})?> myInviter() async {
     final m = await myMembership();
     final n = (m?['invited_by_name'] ?? '').toString().trim();
-    return n.isEmpty ? null : n;
+    if (n.isEmpty) return null;
+    final a = (m?['invited_by_avatar'] ?? '').toString().trim();
+    return (name: n, avatar: a.isEmpty ? null : a);
   }
 
   /// Start-up: this install's build number, for [_authHeaders].

@@ -2851,7 +2851,16 @@ class HomePageState extends rp.ConsumerState<HomePage>
             userId: data['from_id'],
             registered: (data['from_username'] ?? '').toString());
         if (who.trim().isNotEmpty) {
-          unawaited(showOurDay(context, partner: who));
+          unawaited(() async {
+            final next = await showOurDay(context, partner: who);
+            if (next == null || !mounted) return;
+            // Their Space, once the list has it (just reloaded above).
+            await _loadSpaces();
+            final fid = (data['from_id'] as num?)?.toInt();
+            final space = fid == null ? null : _bondWith(fid);
+            if (space == null || !mounted) return;
+            _openSpace(space, startWithSong: next == 'song');
+          }());
         } else {
           showToast(context, _inMyNames(data, line), type: ToastType.success);
         }

@@ -9,10 +9,12 @@ import '../services/haptics.dart';
 ///
 /// Two rings drift together and lock; the date is named — the day Aluta
 /// will remember for them. Shown on both phones: the one that accepted, and
-/// the one whose request was accepted.
-Future<void> showOurDay(BuildContext context,
+/// the one whose request was accepted. Then the first private moment: choose
+/// the song that is theirs. Returns 'song' (choose our song), 'space' (open
+/// Our Space) or null (dismissed).
+Future<String?> showOurDay(BuildContext context,
     {required String partner, DateTime? date}) {
-  return showGeneralDialog(
+  return showGeneralDialog<String>(
     context: context,
     barrierDismissible: true,
     barrierLabel: 'Our day',
@@ -137,11 +139,19 @@ class _OurDayState extends State<_OurDay> with SingleTickerProviderStateMixin {
                           fontStyle: FontStyle.italic,
                           height: 1.5)),
                   const SizedBox(height: 22),
-                  FilledButton(
+                  FilledButton.icon(
                     style: FilledButton.styleFrom(
                         backgroundColor: accent,
                         foregroundColor: Colors.white),
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () => Navigator.of(context).pop('song'),
+                    icon: const Icon(Icons.music_note_rounded),
+                    label: const Text('Choose our song'),
+                  ),
+                  const SizedBox(height: 6),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                        foregroundColor: Colors.white.withAlpha(200)),
+                    onPressed: () => Navigator.of(context).pop('space'),
                     child: const Text('Open our Space'),
                   ),
                 ]),

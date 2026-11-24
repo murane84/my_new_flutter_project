@@ -531,6 +531,9 @@ class RelationshipSpacePage extends StatefulWidget {
   // Together, Groups, Friends, Profile, Sign out… without minimising first.
   // HomePage supplies this (it owns those actions); null → the ⋮ is hidden.
   final WidgetBuilder? mainMenuBuilder;
+  // Opened from "our day" → Choose our song: the add-a-song sheet opens as
+  // soon as the Space has loaded.
+  final bool startWithSong;
 
   const RelationshipSpacePage({
     super.key,
@@ -541,6 +544,7 @@ class RelationshipSpacePage extends StatefulWidget {
     this.myAvatarUrl,
     this.onChanged,
     this.mainMenuBuilder,
+    this.startWithSong = false,
   });
 
   @override
@@ -763,7 +767,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     // Paint the saved copy (space + streak + recap + card order) before the
     // first frame, then refresh everything in ONE update.
     _paintCachedSync();
-    _load();
+    _load().then((_) {
+      if (widget.startWithSong && mounted) _addToPlaylist();
+    });
     if (!_localPainted) _loadLocalPrefs();
     // Repaint when the partner starts/stops/changes what they're playing, so the
     // "tune in together" card appears and clears live.

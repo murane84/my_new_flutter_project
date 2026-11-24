@@ -1791,9 +1791,12 @@ extension _HomePageHelpers1 on HomePageState {
     // first-open ritual comes first — the promise before the paperwork.
     var findPeople = false;
     if (status['is_update'] != true && await _firstOpen()) {
-      final inviter = await ApiService().myInviterName();
+      final inviter = await ApiService().myInviter();
       if (!mounted) return;
-      findPeople = await showWelcomeRitual(context, inviter: inviter);
+      final photo = inviter?.avatar;
+      findPeople = await showWelcomeRitual(context,
+          inviter: inviter?.name,
+          inviterPhoto: photo == null ? null : _avatarFull(photo));
       if (!mounted) return;
     }
     if (!mounted) return;

@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import '../services/haptics.dart';
+import '../services/keystroke_sounds.dart';
+import '../utils/net_image.dart';
 import 'spinning_vinyl_ring.dart';
+import 'token_helper.dart' show mediaAuthHeaders;
 
 /// 🌍 The first-open ritual (brand strategy: "arriving somewhere").
 ///
@@ -11,12 +16,16 @@ import 'spinning_vinyl_ring.dart';
 /// here"), when they came through someone's invitation.
 ///
 /// Returns true when they tapped Find my people.
-Future<bool> showWelcomeRitual(BuildContext context, {String? inviter}) async {
+/// [inviterPhoto]: their photo (full URL) — it fills the turning ring, so
+/// the first face a new member sees is the person who brought them.
+Future<bool> showWelcomeRitual(BuildContext context,
+    {String? inviter, String? inviterPhoto}) async {
   final r = await Navigator.of(context).push<bool>(PageRouteBuilder(
     opaque: true,
     fullscreenDialog: true,
     transitionDuration: const Duration(milliseconds: 600),
-    pageBuilder: (_, _, _) => _WelcomeRitual(inviter: inviter),
+    pageBuilder: (_, _, _) =>
+        _WelcomeRitual(inviter: inviter, inviterPhoto: inviterPhoto),
     transitionsBuilder: (_, a, _, child) =>
         FadeTransition(opacity: a, child: child),
   ));
@@ -24,8 +33,9 @@ Future<bool> showWelcomeRitual(BuildContext context, {String? inviter}) async {
 }
 
 class _WelcomeRitual extends StatefulWidget {
-  const _WelcomeRitual({this.inviter});
+  const _WelcomeRitual({this.inviter, this.inviterPhoto});
   final String? inviter;
+  final String? inviterPhoto;
 
   @override
   State<_WelcomeRitual> createState() => _WelcomeRitualState();
@@ -45,6 +55,14 @@ class _WelcomeRitualState extends State<_WelcomeRitual>
   void initState() {
     super.initState();
     Haptics.lightImpact();
+    // One soft note as the ring starts turning — Aluta's own message tone
+    // (it follows the "message tones" setting; browsers stay silent until a
+    // tap anyway, so the web skips it).
+    if (!kIsWeb) {
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (mounted) KeystrokeSounds.instance.playReceived();
+      });
+    }
   }
 
   @override
@@ -61,6 +79,13 @@ class _WelcomeRitualState extends State<_WelcomeRitual>
           child: child,
         ),
       );
+
+  /// The inviter's face when they came through someone; else Aluta's mark.
+  ImageProvider _ringImage() {
+    final u = (widget.inviterPhoto ?? '').trim();
+    if (u.isEmpty) return const AssetImage('assets/images/logo.png');
+    return authNetworkImageProvider(u, mediaAuthHeaders(u));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -90,12 +115,12 @@ class _WelcomeRitualState extends State<_WelcomeRitual>
                           ring: 5,
                           color: accent,
                           child: ClipOval(
-                            child: Image.asset('assets/images/logo.png',
+                            child: Image(
+                                image: _ringImage(),
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => const Icon(
-                                    Icons.favorite_rounded,
-                                    color: accent,
-                                    size: 48)),
+                                errorBuilder: (_, _, _) => Image.asset(
+                                    'assets/images/logo.png',
+                                    fit: BoxFit.cover)),
                           ),
                         ),
                       ),

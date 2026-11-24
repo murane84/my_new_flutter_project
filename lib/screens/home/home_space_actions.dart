@@ -57,7 +57,8 @@ extension _HomeSpaceActions on HomePageState {
   /// Open a Space's relationship profile, then refresh the hero on return.
   /// [origin] (a tap point on the bond hero/chip) makes the page genie out of
   /// and back into that exact spot; falls back to the last recorded space tap.
-  Future<void> _openSpace(Map<String, dynamic> space, {Offset? origin}) async {
+  Future<void> _openSpace(Map<String, dynamic> space,
+      {Offset? origin, bool startWithSong = false}) async {
     // Extra privacy: a fingerprint / PIN check before a Space opens (no-op
     // unless the user enabled biometric quick-unlock). A failed/cancelled
     // check simply doesn't open it.
@@ -84,6 +85,7 @@ extension _HomeSpaceActions on HomePageState {
         myName: _username.isNotEmpty ? _username : 'You',
         myAvatarUrl: _avatarFull(_myAvatar),
         onChanged: _loadSpaces,
+        startWithSong: startWithSong,
         // Hand Our Space the SAME app-wide ⋮ menu the home header uses, so the
         // user can navigate the platform (Together, Groups, Friends, Profile,
         // Sign out…) without minimising the Space first. Built here because
@@ -390,8 +392,9 @@ extension _HomeSpaceActions on HomePageState {
     await _loadBondRequests();
     await _loadSpaces();
     if (!mounted) return;
-    // Our day: the moment they chose each other, named — then their Space.
-    await showOurDay(context,
+    // Our day: the moment they chose each other, named — then their Space
+    // (straight to choosing their song, when they tap that).
+    final next = await showOurDay(context,
         partner: ContactNames.instance.displayName(
             of: req['from_user'] is Map ? req['from_user'] as Map : null,
             userId: req['from_user_id'],
@@ -401,7 +404,8 @@ extension _HomeSpaceActions on HomePageState {
                     '')
                 .toString()));
     if (!mounted) return;
-    _openSpace(res); // the freshly created Space
+    // The freshly created Space.
+    _openSpace(res, startWithSong: next == 'song');
   }
 
   /// Politely decline an incoming bond request.

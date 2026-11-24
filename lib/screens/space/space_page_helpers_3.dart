@@ -140,6 +140,16 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
         ? (years == 1 ? 'Mwaka mmoja pamoja' : 'Miaka $years pamoja')
         : 'Siku $days pamoja';
     final ink = readableOn(_accent);
+    // What Aluta kept for them — only what's really recorded: their song and
+    // the days they listened together.
+    final stats = (_space['stats'] as Map?) ?? const {};
+    final song = ((stats['your_song'] as Map?)?['title'] ?? '').toString();
+    final daysTogether = (stats['days_in_song'] as num?)?.toInt() ?? 0;
+    final kept = <String>[
+      if (song.trim().isNotEmpty) '♪ Your song: ${song.trim()}',
+      if (daysTogether > 0)
+        '$daysTogether day${daysTogether == 1 ? '' : 's'} you listened together',
+    ];
     return Padding(
       padding: const EdgeInsets.only(top: 14),
       child: Container(
@@ -150,7 +160,10 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
             colors: [_accent.withValues(alpha: 0.85), _accent],
           ),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+        Row(
           children: [
             const Text('💞', style: TextStyle(fontSize: 28)),
             const SizedBox(width: 12),
@@ -177,6 +190,19 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
               onPressed: _nudge,
               child: const Text('Send love'),
             ),
+          ],
+        ),
+            for (final line in kept)
+              Padding(
+                padding: const EdgeInsets.only(left: 40, top: 4),
+                child: Text(line,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: ink.withValues(alpha: 0.92))),
+              ),
           ],
         ),
       ),

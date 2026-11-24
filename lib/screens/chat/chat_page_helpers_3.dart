@@ -2652,7 +2652,7 @@ extension _ChatPageHelpers3 on _ChatPageState {
               TextSpan(
                   text: '${_sealedMediaSeen ? 'Messages and media are' : 'Text messages are'}'
                       ' end-to-end encrypted${again ? ' again' : ''}. '
-                      '${_isGroup ? 'Only the group’s members can read them.' : 'Only the two of you can read them. '}'),
+                      '${_isGroup ? 'Only the group’s members can read them — not even Aluta. ' : 'Only the two of you can read them — not even Aluta. '}'),
               // (The safety-code check is for 1:1 chats.)
               if (!_isGroup)
                 TextSpan(

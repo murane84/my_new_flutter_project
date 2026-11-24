@@ -635,9 +635,6 @@ class _ChatPageState extends State<ChatPage>
   bool _gnDoneToday = false;
   bool _memoryDoneToday = false;
   bool _annivToday = false;
-  int _streakDays = 0;
-  bool _streakAlive = false;
-  bool _streakNudged = false;
   bool _ritualsFlagsLoaded = false;
   bool _bondRitualsRan = false;
   // Song playing when the current voice note started (its caption).

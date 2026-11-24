@@ -60,15 +60,8 @@ extension _ChatRituals on _ChatPageState {
     }
     // Bonded: say "I'm here" now (Here together) and show any planned day.
     _bondHereTick();
-    // The "In tune" streak with this partner (keep-it-alive chip).
-    final sid = _defaultKeepSpaceId;
-    if (sid == null) return;
-    final st = await ApiService().getStreak(sid);
-    if (!mounted || st == null || _activeConvKey != convAtStart) return;
-    rebuildWith(() {
-      _streakDays = (st['current_days'] as num?)?.toInt() ?? 0;
-      _streakAlive = st['alive'] == true;
-    });
+    // (No evening "keep the streak alive" chip: the brand rules out streak
+    // guilt. The "days in tune" count stays, quietly, on the Circle.)
   }
 
   /// A music nudge asked to pre-fill this chat (text, maybe as a heart).
@@ -101,8 +94,6 @@ extension _ChatRituals on _ChatPageState {
   /// A different chat opened in this same page → forget the last one's.
   void _resetRituals() {
     _gnDoneToday = _memoryDoneToday = _annivToday = false;
-    _streakAlive = _streakNudged = false;
-    _streakDays = 0;
     _recordSong = null;
     _ritualsFlagsLoaded = false;
     _bondRitualsRan = false;
@@ -169,67 +160,6 @@ extension _ChatRituals on _ChatPageState {
   void _dismissGoodNight() {
     rebuildWith(() => _gnDoneToday = true);
     _markRitual('gn_done_${widget.friendId}');
-  }
-
-  /// Evening, a live streak, and today's "both wrote" not done yet.
-  bool get _streakAtRisk {
-    if (!_bondedDm || _streakNudged || !_streakAlive || _streakDays < 2) {
-      return false;
-    }
-    if (DateTime.now().hour < 18) return false;
-    // Listening together today keeps the streak too (the server counts it).
-    if (_listenedToday) return false;
-    final w = _wroteToday;
-    return !(w.mine && w.theirs);
-  }
-
-  /// We listened together today (a "Listened together" log in this chat).
-  bool get _listenedToday {
-    final now = DateTime.now();
-    for (final m in _messages) {
-      final d = _ts(m['timestamp']);
-      if (d == null) continue;
-      if (d.year != now.year || d.month != now.month || d.day != now.day) {
-        break; // newest-first: past today
-      }
-      if ((m['message_type'] ?? '') == 'live' &&
-          (m['content'] ?? '').toString().trim() == 'listened') {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /// Who has written in this chat today (messages are newest-first).
-  ({bool mine, bool theirs}) get _wroteToday {
-    final now = DateTime.now();
-    var mine = false, theirs = false;
-    for (final m in _messages) {
-      final d = _ts(m['timestamp']);
-      if (d == null) continue;
-      if (d.year != now.year || d.month != now.month || d.day != now.day) {
-        break; // newest-first: past today
-      }
-      if (m['sender_id']?.toString() == _myId) {
-        mine = true;
-      } else {
-        theirs = true;
-      }
-      if (mine && theirs) break;
-    }
-    return (mine: mine, theirs: theirs);
-  }
-
-  /// The streak chip's line, saying who still needs to show up today.
-  String get _streakNudgeLine {
-    final w = _wroteToday;
-    final first = _livePeerLabel.trim().split(RegExp(r'\s+')).first;
-    final days = '$_streakDays days in tune';
-    if (w.mine && !w.theirs) {
-      return '$days — nudge $first, or play one song together';
-    }
-    if (w.theirs && !w.mine) return '$days — reply tonight to keep it going';
-    return '$days — keep the fire: play one song together tonight';
   }
 
   /// Oldest-first: the most meaningful (furthest back) same-day message.
@@ -324,7 +254,6 @@ extension _ChatRituals on _ChatPageState {
           ...songChips.map((_) => true),
           rituals && _showGoodNight,
           rituals && _annivToday && !_isGroup,
-          rituals && _streakAtRisk,
           memo != null && !_heartMode,
         ].where((b) => b).length >
         1;
@@ -370,27 +299,6 @@ extension _ChatRituals on _ChatPageState {
           rebuildWith(() => _annivToday = false);
           _markRitual('anniv_done_${widget.friendId}');
         },
-      ));
-    }
-    if (rituals && _streakAtRisk) {
-      chips.add(_ritualChip(
-        inRow: many,
-        scheme: scheme,
-        isDark: isDark,
-        icon: Icons.local_fire_department_rounded,
-        // One flame: the chip's icon (no 🔥 emoji in the text as well).
-        label: _streakNudgeLine,
-        onTap: () {
-          rebuildWith(() => _streakNudged = true);
-          final w = _wroteToday;
-          if (w.theirs && !w.mine) {
-            _composerFocus.requestFocus(); // "reply tonight"
-          } else {
-            // "…play one song together" → your song, in sync.
-            unawaited(_startListenTogether(presetTitle: _yourSongTitle));
-          }
-        },
-        onClose: () => rebuildWith(() => _streakNudged = true),
       ));
     }
     final memory = memo;

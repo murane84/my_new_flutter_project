@@ -1,4 +1,3 @@
-🎧 Listen Together: when a guest skips to the next song, they now hear that song — not the previous one under the new title.
-🎧 Listen Together: songs you keep from a room are always saved whole.
-⬆️ Updates no longer get stuck on "Opening the installer…" — Aluta asks for permission to install first and tells you if the installer didn't open.
-⬆️ Clearer update progress: "Checking the download…" before the installer opens; a dropped download continues where it stopped.
+🔒 Group chats: members on an older Aluta now see "Encrypted message — update Aluta to read it" instead of code, and read everything once they update — nothing is lost.
+🔒 A group starts encrypting only when everyone's Aluta can read it.
+💬 Replies that quoted a locked message now show the real words, name the right person, and jump to the original.

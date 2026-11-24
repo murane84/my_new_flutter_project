@@ -583,10 +583,10 @@ class _HoldHeartsState extends State<_HoldHearts>
 
 /// A bonded partner typing: their record turning — Aluta's sign for "my
 /// person is here". Drawn to read at a glance in both themes: a rim that
-/// lifts it off the bubble, grooves, a sheen, a rose label with a white mark,
-/// and two rose typing dots riding the grooves on opposite sides — they show
-/// the turn and take turns to pulse (the old typing dots, folded into the
-/// record). 33⅓ rpm; with reduced motion it rests, still recognisable.
+/// lifts it off the bubble, grooves, a sheen that shows the turn, a plain rose
+/// label, and two rose typing dots riding the grooves on opposite sides that
+/// take turns to pulse (the old typing dots, folded into the record). Nothing
+/// else — at this size, every extra mark is noise. 33⅓ rpm; with reduced motion it rests, still recognisable.
 class _SpinningRecord extends StatefulWidget {
   const _SpinningRecord({super.key});
 
@@ -713,10 +713,8 @@ class _RecordPainter extends CustomPainter {
       ], stops: const [0.0, 0.08, 0.18, 0.5, 0.58, 0.68, 1.0])
           .createShader(Rect.fromCircle(center: Offset.zero, radius: r));
     canvas.drawCircle(Offset.zero, r - 1.6, sheen);
-    // Rose label, with a white mark that orbits as it turns.
+    // Rose label.
     canvas.drawCircle(Offset.zero, r * 0.40, Paint()..color = accent);
-    canvas.drawCircle(Offset(0, -r * 0.24), r * 0.09,
-        Paint()..color = Colors.white.withAlpha(235));
     // Spindle.
     canvas.drawCircle(
         Offset.zero, r * 0.07, Paint()..color = const Color(0xFF151012));

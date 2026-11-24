@@ -14,7 +14,9 @@ import re
 import secrets
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+import time
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -29,6 +31,29 @@ router = APIRouter(tags=["Invites"])
 INVITES_PER_MEMBER = 5
 FOUNDING_CIRCLE = 1000
 _ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no look-alikes (l/1, o/0)
+
+
+# Public endpoints (no account): a few tries per address, so codes can't be
+# swept for names and the waiting list can't be flooded.
+_hits: dict = {}
+
+
+def _slow_down(request: Request, kind: str, per_ip: int, window: float,
+               overall: int | None = None) -> None:
+    xff = request.headers.get("x-forwarded-for", "")
+    ip = (xff.split(",")[-1].strip() if xff else
+          (request.client.host if request.client else "?"))
+    now = time.time()
+    for key, cap in (((kind, ip), per_ip), ((kind, "*"), overall)):
+        if cap is None:
+            continue
+        seen = [x for x in _hits.get(key, []) if now - x < window]
+        if len(seen) >= cap:
+            _hits[key] = seen
+            raise HTTPException(status_code=429,
+                                detail="Too many tries — try again later")
+        seen.append(now)
+        _hits[key] = seen
 
 
 def invite_only() -> bool:
@@ -160,9 +185,10 @@ def new_invite(db: Session = Depends(get_db),
 
 
 @router.get("/invites/{code}")
-def invite_info(code: str, db: Session = Depends(get_db)):
+def invite_info(code: str, request: Request, db: Session = Depends(get_db)):
     """Public: who invited (first name only) — for the join page and the
     registration screen. Nothing else about them."""
+    _slow_down(request, "invite", per_ip=20, window=600)
     inv = find_open_invite(db, code)
     if inv is None:
         raise HTTPException(status_code=404, detail="That invite isn't open")
@@ -177,8 +203,10 @@ class WaitlistIn(BaseModel):
 
 
 @router.post("/waitlist")
-def join_waitlist(body: WaitlistIn, db: Session = Depends(get_db)):
+def join_waitlist(body: WaitlistIn, request: Request,
+                  db: Session = Depends(get_db)):
     """Public: an email or phone number waiting for a wave to open."""
+    _slow_down(request, "waitlist", per_ip=5, window=3600, overall=500)
     c = body.contact.strip().lower()
     if not (re.fullmatch(r"[^@\s]+@[^@\s]+\.[a-z]{2,}", c)
             or re.fullmatch(r"\+\d{8,15}", c)):

@@ -567,6 +567,67 @@ extension _ChatPageHelpers2 on _ChatPageState {
     }
   }
 
+  /// The photo editor laid over exactly this chat pane (wide screens). It
+  /// lives in the chat page's own tree, so it never covers the Circle list or
+  /// the music player beside it, routes and dialogs still layer above it,
+  /// Escape cancels, and leaving the chat closes it unsent.
+  Future<Map<String, dynamic>?> _openPhotoEditorInPane(Uint8List bytes,
+      {int index = 0, int total = 0}) {
+    _closePhotoEditor(null); // never two at once
+    final done = Completer<Map<String, dynamic>?>();
+    _photoEditorDone = done;
+    setState(() {
+      _photoEditor = CallbackShortcuts(
+        key: ValueKey(done), // a fresh editor per photo
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): () =>
+              _closePhotoEditor(null),
+        },
+        // System back (wide Android tablets) closes the editor, not the chat.
+        child: PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) _closePhotoEditor(null);
+          },
+          child: Focus(
+            autofocus: true,
+            child: Material(
+              color: Colors.black,
+              child: _ImagePreviewScreen(
+                imageBytes: bytes,
+                friendName: widget.friendName,
+                index: index,
+                total: total,
+                onDone: _closePhotoEditor,
+              ),
+            ),
+          ),
+        ),
+      );
+    });
+    return done.future;
+  }
+
+  void _closePhotoEditor(Map<String, dynamic>? result,
+      {bool rebuild = true}) {
+    final done = _photoEditorDone;
+    _photoEditorDone = null;
+    if (_photoEditor != null) {
+      _photoEditor = null;
+      if (rebuild && mounted) setState(() {});
+    }
+    if (done != null && !done.isCompleted) done.complete(result);
+  }
+
+  /// The chat page with the pane photo editor on top while it's open. Always
+  /// a Stack, so opening/closing never rebuilds the conversation beneath.
+  Widget _withPhotoEditor(Widget page) => Stack(
+        children: [
+          page,
+          if (_photoEditor != null) Positioned.fill(child: _photoEditor!),
+        ],
+      );
+
   /// Show a full-screen preview of the picked image with a caption box, so the
   /// user can add a message and send image + text as ONE bubble. Returns
   /// without sending if the user backs out of the preview.
@@ -574,17 +635,22 @@ extension _ChatPageHelpers2 on _ChatPageState {
       Uint8List bytes, String filename, String mime,
       {int index = 0, int total = 0}) async {
     if (!mounted) return false;
-    final result = await Navigator.of(context).push<Map<String, dynamic>?>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => _ImagePreviewScreen(
-          imageBytes: bytes,
-          friendName: widget.friendName,
-          index: index,
-          total: total,
-        ),
-      ),
-    );
+    // Wide screens: over this chat pane only — the Circle list and the music
+    // player stay usable beside it. Phones: the full-screen editor.
+    final wide = MediaQuery.sizeOf(context).width >= 900;
+    final result = wide
+        ? await _openPhotoEditorInPane(bytes, index: index, total: total)
+        : await Navigator.of(context).push<Map<String, dynamic>?>(
+            MaterialPageRoute(
+              fullscreenDialog: true,
+              builder: (_) => _ImagePreviewScreen(
+                imageBytes: bytes,
+                friendName: widget.friendName,
+                index: index,
+                total: total,
+              ),
+            ),
+          );
     // null → the user cancelled/backed out. Otherwise the map carries the
     // (possibly annotated) bytes, its mime, and the caption.
     if (result == null || !mounted) return false;

@@ -38,7 +38,8 @@ class _EmojiMark {
   final String emoji;
   Offset pos; // fractional centre (0..1)
   double size; // logical font size
-  final Color? color;
+  Color? color; // a text label can be recoloured after it's placed
+  bool get isText => color != null;
 }
 
 /// Draw a line from [a] to [b] with an arrowhead at [b]. Uses only Offset
@@ -62,8 +63,12 @@ class _ImagePreviewScreen extends StatefulWidget {
     required this.friendName,
     this.index = 0,
     this.total = 0,
+    this.onDone,
   });
   final Uint8List imageBytes;
+  // Shown inside the chat pane (wide screens) instead of as a page: how it
+  // closes (null = cancelled). Without it, it pops its route.
+  final void Function(Map<String, dynamic>? result)? onDone;
   final String friendName;
   // When sending a batch from the gallery, which photo this is (1-based) and
   // how many in total — shown as "Photo i of N". 0/0 = a single photo.
@@ -92,6 +97,8 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
   bool _busy = false;
   bool _showEmojiTray = false;
   _ShapeMark? _drafting;
+  // The text label last added / touched — a colour picked in Move recolours it.
+  _EmojiMark? _picked;
 
   static const List<Color> _palette = [
     Color(0xFFFF3B30), // red
@@ -151,8 +158,12 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
     final txt = t.trim();
     if (txt.isEmpty) return;
     setState(() {
-      _emojis.add(_EmojiMark(txt, const Offset(0.5, 0.5), 30, color: _color));
+      final mark = _EmojiMark(txt, const Offset(0.5, 0.5), 30, color: _color);
+      _emojis.add(mark);
       _history.add('emoji');
+      // Ready to drag or recolour straight away.
+      _picked = mark;
+      _tool = _EditTool.move;
     });
   }
 
@@ -197,6 +208,7 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
     _emojis.clear();
     _history.clear();
     _drafting = null;
+    _picked = null;
   }
 
   void _undo() {
@@ -208,7 +220,8 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
       } else if (last == 'shape' && _shapes.isNotEmpty) {
         _shapes.removeLast();
       } else if (last == 'emoji' && _emojis.isNotEmpty) {
-        _emojis.removeLast();
+        final gone = _emojis.removeLast();
+        if (identical(gone, _picked)) _picked = null;
       }
     });
   }
@@ -228,11 +241,37 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
       }
     }
     if (!mounted) return;
-    Navigator.of(context).pop(<String, dynamic>{
+    _finish(<String, dynamic>{
       'caption': _captionCtrl.text,
       'bytes': outBytes,
       'mime': mime,
       'hd': _hd,
+    });
+  }
+
+  /// Close with [result] (null = cancelled): its route, or the chat pane.
+  void _finish(Map<String, dynamic>? result) {
+    final done = widget.onDone;
+    if (done != null) {
+      done(result);
+    } else {
+      Navigator.of(context).pop(result);
+    }
+  }
+
+  /// A colour picked: what draws next uses it. In Move it recolours the
+  /// text label in hand; with none, it starts drawing (a colour with nothing
+  /// to colour looked like it did nothing).
+  void _pickColor(Color col) {
+    setState(() {
+      _color = col;
+      if (_tool != _EditTool.move) return;
+      final t = _picked;
+      if (t != null && t.isText && _emojis.contains(t)) {
+        t.color = col;
+      } else {
+        _tool = _EditTool.pen;
+      }
     });
   }
 
@@ -307,7 +346,11 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
         final tp = TextPainter(
           text: TextSpan(
               text: em.emoji,
-              style: TextStyle(fontSize: em.size * scale, color: em.color)),
+              // Same weight as on screen — what you see is what's sent.
+              style: TextStyle(
+                  fontSize: em.size * scale,
+                  color: em.color,
+                  fontWeight: em.isText ? FontWeight.w700 : null)),
           textDirection: TextDirection.ltr,
         )..layout();
         tp.paint(canvas,
@@ -339,7 +382,7 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.close_rounded),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => _finish(null),
         ),
         title: widget.total > 1
             ? Column(
@@ -453,10 +496,24 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
                               ),
                             ),
                             // Emoji / text stickers (draggable).
+                            // Centred on pos — exactly as they're drawn into
+                            // the sent image (a wide text label used to sit
+                            // off to the right of where it landed).
                             ..._emojis.map((em) => Positioned(
-                                  left: em.pos.dx * w - em.size / 2,
-                                  top: em.pos.dy * h - em.size / 2,
+                                  left: em.pos.dx * w,
+                                  top: em.pos.dy * h,
+                                  child: FractionalTranslation(
+                                  translation: const Offset(-0.5, -0.5),
                                   child: GestureDetector(
+                                    onTap: em.isText
+                                        ? () => setState(() {
+                                              _picked = em;
+                                              _tool = _EditTool.move;
+                                            })
+                                        : null,
+                                    onPanStart: em.isText
+                                        ? (_) => setState(() => _picked = em)
+                                        : null,
                                     onPanUpdate: (d) {
                                       setState(() {
                                         em.pos += Offset(
@@ -466,15 +523,28 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
                                             em.pos.dy.clamp(0.0, 1.0));
                                       });
                                     },
-                                    child: Text(em.emoji,
-                                        style: TextStyle(
-                                            fontSize: em.size,
-                                            color: em.color,
-                                            fontWeight: em.color != null
-                                                ? FontWeight.w700
-                                                : null)),
+                                    // The text in hand wears a thin frame
+                                    // (screen only — never in the photo).
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                            color: identical(em, _picked) &&
+                                                    _tool == _EditTool.move
+                                                ? Colors.white70
+                                                : Colors.transparent),
+                                        borderRadius:
+                                            BorderRadius.circular(6),
+                                      ),
+                                      child: Text(em.emoji,
+                                          style: TextStyle(
+                                              fontSize: em.size,
+                                              color: em.color,
+                                              fontWeight: em.isText
+                                                  ? FontWeight.w700
+                                                  : null)),
+                                    ),
                                   ),
-                                )),
+                                ))),
                           ],
                         );
                       }),
@@ -524,19 +594,32 @@ class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
                 _moreMenu(scheme),
                 const Spacer(),
                 for (final col in _palette)
-                  GestureDetector(
-                    onTap: () => setState(() => _color = col),
-                    child: Container(
-                      width: 22,
-                      height: 22,
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      decoration: BoxDecoration(
-                        color: col,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color:
-                              _color == col ? Colors.white : Colors.white24,
-                          width: _color == col ? 2.5 : 1,
+                  Tooltip(
+                    message: _tool == _EditTool.move &&
+                            _picked != null &&
+                            _emojis.contains(_picked)
+                        ? 'Colour this text'
+                        : 'Draw in this colour',
+                    child: GestureDetector(
+                      onTap: () => _pickColor(col),
+                      // The chosen one stands out: bigger, with a ring that
+                      // shows on every swatch (the accent on a white one).
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 140),
+                        width: _color == col ? 28 : 22,
+                        height: _color == col ? 28 : 22,
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          color: col,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: _color == col
+                                ? (col.computeLuminance() > 0.7
+                                    ? scheme.primary
+                                    : Colors.white)
+                                : Colors.white24,
+                            width: _color == col ? 3 : 1,
+                          ),
                         ),
                       ),
                     ),

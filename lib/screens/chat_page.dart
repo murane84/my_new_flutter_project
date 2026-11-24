@@ -325,6 +325,10 @@ class _ChatPageState extends State<ChatPage>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   // Runs of call bubbles the user unfolded (keyed by the run's newest id).
   final Set<String> _openCallRuns = {};
+  // Wide screens: the photo editor shown over this chat pane only (the list
+  // and the music player stay in reach) — and how it ends.
+  Widget? _photoEditor;
+  Completer<Map<String, dynamic>?>? _photoEditorDone;
   // True when this screen is showing a GROUP conversation (vs a 1:1 DM).
   bool get _isGroup => widget.isGroup && widget.conversationId != null;
   int get _cid => widget.conversationId ?? 0;
@@ -927,6 +931,8 @@ class _ChatPageState extends State<ChatPage>
 
   @override
   void dispose() {
+    // Left the chat with the photo editor open: it goes, unsent.
+    _closePhotoEditor(null, rebuild: false);
     if (MentionSelf.onTap == _mentionTap) MentionSelf.onTap = null;
     unawaited(_SongBed.stop(fadeMs: 300)); // a song bed never outlives the chat
     pendingVoiceReply.removeListener(_onPendingVoice);
@@ -8456,7 +8462,7 @@ class _ChatPageState extends State<ChatPage>
 
     final String headerTitle = _isGroup ? widget.groupTitle : widget.friendName;
     final String headerAvatar = _isGroup ? widget.groupAvatar : _friendAvatar;
-    return Scaffold(
+    return _withPhotoEditor(Scaffold(
       appBar: AppBar(
         title: Row(
           children: [
@@ -8586,7 +8592,7 @@ class _ChatPageState extends State<ChatPage>
         ],
       ),
       body: _wrapViewerBack(_songDropTarget(_pasteWrapper(body))),
-    );
+    ));
   }
 }
 

@@ -38,6 +38,9 @@ class ApiService {
   Map<String, String> _authHeaders(String token) => {
     'Authorization': 'Bearer $token',
     'Content-Type': 'application/json',
+    // 🔒 This Aluta opens sealed group messages: send them as they are (an
+    // older one gets an "update Aluta" note in place of the lock's code).
+    'X-Aluta-Seal': '1',
   };
 
   // Delegates to the platform-aware token store (web-safe).
@@ -1519,12 +1522,14 @@ class ApiService {
             : groupList;
         if (members == null) {
           if (stay || sealedMedia != null) return null; // can't tell now
-        } else if (members.length > SealIngress.groupMaxMembers &&
-            !stay &&
+        } else if (!stay &&
             sealedMedia == null &&
-            !await SealIngress.canSealGroupMedia(conversationId, members)) {
-          // A group of more than 32 whose members' Aluta can't all read its
-          // named key yet, never sealed before: as before.
+            !await SealIngress.canSealGroupMedia(conversationId, members,
+                cap: 'm2')) {
+          // A group never sealed before whose members' Aluta can't all open
+          // sealed group messages yet (1.0.19 and older — they'd see the
+          // lock's code; "m2" says an Aluta opens them): as before, until
+          // they update.
         } else if (groupPoll &&
             !await SealIngress.canSealGroupMedia(conversationId, groupList,
                 cap: 'm2')) {

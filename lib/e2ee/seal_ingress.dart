@@ -111,7 +111,9 @@ class SealIngress {
     }
     final asked = <String>{};
     for (final m in list) {
-      if (isGroupSealed(m)) await openGroup(m, asked: asked);
+      if (isGroupSealed(m) || _quotesLock(m)) {
+        await openGroup(m, asked: asked);
+      }
     }
     return list;
   }
@@ -123,6 +125,48 @@ class SealIngress {
   static const String lockedGroup =
       '🔒 Sent before this device could read the group';
 
+  // A lock's code as an older Aluta copied it into a plain message (it
+  // quoted a sealed message it couldn't open): "🔒s1.<scope>.<epoch>.<…>".
+  static final RegExp _lockInText =
+      RegExp(r'🔒s1\.[A-Za-z0-9:,]+\.[0-9]+\.[A-Za-z0-9_\-]+');
+
+  /// A plain message quoting a sealed one by its code (an older Aluta's
+  /// reply): the code opened in place — the quote reads as the words, names
+  /// its author and leads to the original — or a quiet "🔒 Message".
+  static Future<void> _openQuotedLocks(
+      Map<String, dynamic> m, Set<String>? asked) async {
+    final c = m['content'];
+    if (c is! String || !c.contains(SealScope.prefix)) return;
+    final locks = _lockInText.allMatches(c).map((x) => x.group(0)!).toSet();
+    if (locks.isEmpty) return;
+    var out = c;
+    for (final l in locks) {
+      String opened;
+      try {
+        opened = await SealSpace.instance.open(l, asked: asked);
+      } catch (_) {
+        opened = SealSpace.unlockFailed;
+      }
+      final ok = opened != SealSpace.waitingForKey &&
+          opened != SealSpace.unlockFailed &&
+          !SealScope.isSealed(opened);
+      // (a quote holds the words; a sealed media's key never shows)
+      out = out.replaceAll(
+          l, ok ? SealPayload.textOf(opened) : '🔒 Message');
+    }
+    m['content'] = out;
+  }
+
+  /// A plain group message carrying a lock's code (an older Aluta's quote).
+  static bool _quotesLock(Map<String, dynamic> m) {
+    final c = m['content'];
+    return m['conversation_id'] != null &&
+        m['e2ee'] == null &&
+        c is String &&
+        !c.startsWith(SealScope.prefix) &&
+        c.contains(SealScope.prefix);
+  }
+
   static bool isGroupSealed(Map<String, dynamic> m) =>
       SealScope.isSealed(m['content']) && m['is_deleted'] != true;
 
@@ -130,7 +174,10 @@ class SealIngress {
   /// sealed photo / file gets its key and real name back.
   static Future<void> openGroup(Map<String, dynamic> m,
       {Set<String>? asked}) async {
-    if (!isGroupSealed(m)) return;
+    if (!isGroupSealed(m)) {
+      await _openQuotedLocks(m, asked);
+      return;
+    }
     m['e2ee_group'] = 1;
     String opened;
     try {
@@ -250,7 +297,7 @@ class SealIngress {
     }
     for (final k in const ['data', 'message']) {
       final d = event[k];
-      if (d is Map<String, dynamic> && isGroupSealed(d)) {
+      if (d is Map<String, dynamic> && (isGroupSealed(d) || _quotesLock(d))) {
         await openGroup(d);
         continue;
       }

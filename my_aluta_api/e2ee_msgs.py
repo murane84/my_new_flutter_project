@@ -38,6 +38,39 @@ def scope_sealed(msg) -> bool:
 
 LOCKED_PREVIEW = "🔒 Message"   # what lists / pushes show for an encrypted text
 
+# 🔒 An Aluta from before sealed group messages (1.0.19 and older, or one
+# whose devices can't open them — no "m2"): it would print the lock's code
+# as if it were the words (and quote that code in replies). It gets this
+# note instead; the sealed message itself stays, and the same phone opens
+# it once updated (its key copy was made for it), or a member's phone
+# hands a new one its keys.
+UPDATE_NOTE = "🔒 Encrypted message — update Aluta to read it"
+SEAL_HEADER = "x-aluta-seal"   # sent by every Aluta that opens them
+
+
+def reads_sealed_groups(db, user_id: int, request=None) -> bool:
+    """Whether this reader's Aluta opens sealed group messages: it says so
+    (SEAL_HEADER), or one of their devices can (cap "m2")."""
+    try:
+        if request is not None and request.headers.get(SEAL_HEADER):
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    from routers.e2ee_keys import _live_devices
+    return any("m2" in (getattr(d, "caps", None) or "").split(",")
+               for d in _live_devices(db, int(user_id)))
+
+
+def for_old_app(data: dict) -> dict:
+    """A message as an Aluta that can't open sealed group messages shows it:
+    the note in place of the lock's code."""
+    c = data.get("content")
+    if isinstance(c, str) and c.startswith(SCOPE_PREFIX):
+        data = dict(data)
+        data["content"] = UPDATE_NOTE
+        data["seal_update"] = 1
+    return data
+
 
 def _bad(detail: str):
     raise HTTPException(status_code=400, detail=detail)

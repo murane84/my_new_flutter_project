@@ -5,8 +5,13 @@ from typing import Dict, List, Optional
 from fastapi import WebSocket
 from collections import defaultdict
 import json
+import weakref
 
 connected_users: Dict[int, List[WebSocket]] = defaultdict(list)
+# 🔒 Sockets of an Aluta that opens sealed group messages (it says so when
+# connecting: ?seal=1). An event naming "_seal_old" readers gives their other
+# (older) sockets the "update Aluta" note instead of the lock's code.
+seal_sockets: "weakref.WeakSet[WebSocket]" = weakref.WeakSet()
 
 # ── "Now playing" presence ───────────────────────────────────────────────────
 # user_id -> {"track": {...}, "ts": epoch}. What each user is listening to right
@@ -158,12 +163,24 @@ def _serialize_event(event: dict) -> dict:
     # Safe deep serialization
     return json.loads(json.dumps(event, default=default))
 
+def _for_socket(ws, user_id: int, event: dict) -> dict:
+    old = event.get("_seal_old")
+    if old is None:
+        return event
+    event = {k: v for k, v in event.items() if k != "_seal_old"}
+    if user_id in old and ws not in seal_sockets and \
+            isinstance(event.get("data"), dict):
+        from e2ee_msgs import for_old_app
+        event["data"] = for_old_app(event["data"])
+    return event
+
+
 async def notify_user(user_id: int, event: dict):
     user_id = int(user_id)
     if user_id in connected_users:
         for ws in connected_users[user_id]:
             try:
-                event_copy = _serialize_event(event)
+                event_copy = _serialize_event(_for_socket(ws, user_id, event))
                 await ws.send_json(event_copy)
             except Exception as e:
                 print(f"⚠️ Failed sending to user {user_id}: {e}")

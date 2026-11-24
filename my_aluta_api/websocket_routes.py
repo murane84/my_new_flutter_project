@@ -388,7 +388,8 @@ async def _now_playing_update(uid: int, track, playing: bool, username: str,
 
 
 @router.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""):
+async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = "",
+                             seal: int = 0):
     # Accept the handshake first so we can deliver a proper 4401 close frame to
     # the client when auth fails (closing *before* accept surfaces as a generic
     # handshake error, not a 4401). This mirrors the /live socket.
@@ -414,6 +415,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = ""
     # already accepted above to run the auth check.)
     uid = int(user_id)
     connected_users[uid].append(websocket)
+    if seal:
+        # An Aluta that opens sealed group messages (see seal_sockets).
+        from websocket_manager import seal_sockets
+        seal_sockets.add(websocket)
     print(f"✅ User {uid} connected. Total sockets: {len(connected_users[uid])}")
 
     # First socket = they just came online → one-shot "tell me when they're

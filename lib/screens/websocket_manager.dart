@@ -82,7 +82,8 @@ class WebSocketManager {
       // No token in the address: addresses land in server / proxy logs.
       // It goes as the socket's FIRST message instead (the server waits for
       // it before anything else).
-      final uri = Uri.parse('$wsBase/ws/$userId');
+      // (?seal=1: this Aluta opens sealed group messages)
+      final uri = Uri.parse('$wsBase/ws/$userId?seal=1');
 
       _logger.i('Connecting to WebSocket: $uri');
       _channel = WebSocketChannel.connect(uri);

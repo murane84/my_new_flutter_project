@@ -8,7 +8,8 @@ import re
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
+                     Request)
 from sqlalchemy.orm import Session
 
 import crud
@@ -264,6 +265,7 @@ def ack_conversation_cached(
 @router.get("/{cid}/messages", response_model=List[schemas.MessageWithSender])
 def get_messages(
     cid: int,
+    request: Request,
     skip: int = 0,
     limit: int = 20,
     db: Session = Depends(get_db),
@@ -306,7 +308,11 @@ def get_messages(
             exclude=current_user.id,
         )
     # A heart meant for another member arrives locked (no note, no file).
-    return [hearts.redact(_serialize(m), current_user.id) for m in msgs]
+    out = [hearts.redact(_serialize(m), current_user.id) for m in msgs]
+    # 🔒 An Aluta that can't open sealed group messages: a note, not code.
+    if not e2ee_msgs.reads_sealed_groups(db, current_user.id, request):
+        out = [e2ee_msgs.for_old_app(d) for d in out]
+    return out
 
 
 @router.post("/{cid}/messages", response_model=schemas.MessageWithSender)
@@ -380,8 +386,15 @@ def send_message(
                     "data": hearts.redact(serialized, uid),
                 })
     else:
+        # 🔒 Members whose Aluta can't open sealed group messages: their old
+        # app's sockets get the note instead of the lock's code.
+        old = ([int(u) for u in members if int(u) != current_user.id
+                and not e2ee_msgs.reads_sealed_groups(db, int(u))]
+               if (msg.content or "").startswith(e2ee_msgs.SCOPE_PREFIX)
+               else [])
         safe_broadcast_users(
-            members, {"type": "new_message", "data": serialized},
+            members, {"type": "new_message", "data": serialized,
+                      **({"_seal_old": old} if old else {})},
             exclude=current_user.id,
         )
     safe_notify_user(current_user.id, {"type": "message_sent", "data": serialized})

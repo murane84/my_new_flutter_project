@@ -126,6 +126,10 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
 
   /// No photo: the doodle ('default'), the motif or the Aluta watermark.
   void _selectPattern(String style) {
+    // Already showing it: nothing changes (Save stays as it was).
+    if ((_bgUrl ?? '').isEmpty && _pendingBytes == null && _bgStyle == style) {
+      return;
+    }
     setState(() {
       _bgUrl = null;
       _bgStyle = style;
@@ -193,7 +197,9 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
       // (full strength: a 92-px tile has room for only a few marks)
       'watermark' =>
         AlutaWatermarkWallpaper(tint: accent, isDark: isDark, strength: 1),
-      'default' => AlutaDoodleWallpaper(tint: accent, isDark: isDark),
+      // (on the page's own surface, as Our Space draws it)
+      'default' => AlutaDoodleWallpaper(
+          tint: accent, isDark: isDark, base: scheme.surface),
       _ => ColoredBox(
           color: scheme.surface,
           child: CustomPaint(

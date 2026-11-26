@@ -523,6 +523,19 @@ class SealSpace {
     return seal(SealScope.membersOf(scope)!, text, fixed: fixed);
   }
 
+  /// Whether this device holds a current copy of someone else's named key
+  /// (so [sealNamedAsReader] will work). Never makes or moves it on.
+  Future<bool> holdsNamedAsReader(String scope) => _locked(() async {
+        try {
+          if (!SealTab.inUse) return false;
+          await _keys.load();
+          if (!_keys.isReady) return false;
+          return await _currentKey(scope, make: false) != null;
+        } catch (_) {
+          return false;
+        }
+      });
+
   /// Seal [text] with someone ELSE's named key that this device holds as
   /// one of its readers (a duo's co-author's Stories key; a reaction to a
   /// status). Never makes or moves the key on — only its owner does.
@@ -735,7 +748,7 @@ class SealSpace {
     return out;
   }
 
-  /// "m<moment id>|❤️" / "d<diary entry id>|❤️" → that reaction of mine as
+  /// `m<moment id>|❤️` / `d<diary entry id>|❤️` → that reaction of mine as
   /// the server holds it (plain or sealed).
   static final Map<String, String> myReactionAsHeld = {};
 

@@ -276,6 +276,7 @@ extension _ChatBondLive on _ChatPageState {
       if (jpg == null) throw Exception('compose');
       final assetId = await ApiService().uploadStoryMedia(
           duo: true,
+          coAuthorId: partnerId,
           bytes: jpg, filename: 'duo.jpg', mime: 'image/jpeg');
       if (assetId == null) throw Exception('upload');
       final them = _livePeerLabel.trim().split(RegExp(r'\s+')).first;

@@ -5419,13 +5419,20 @@ class ApiService {
     required String filename,
     required String mime,
     bool duo = false,
+    int? coAuthorId,
   }) async {
     Uint8List? key;
     List<int> up = bytes;
     bool seal;
     try {
-      // (A duo too: its key is sealed for both audiences in createStory.)
-      seal = await _storiesSealable();
+      // A duo too, when I hold my person's Stories key (its key is sealed
+      // for both audiences in createStory); without it, plain as before —
+      // their older Aluta's viewers couldn't open it.
+      seal = await _storiesSealable() &&
+          (!duo ||
+              (coAuthorId != null &&
+                  await SealSpace.instance
+                      .holdsNamedAsReader(SealScope.story(coAuthorId))));
     } on SealTooMany {
       _tooManyForStatus();
       return null;
@@ -5560,7 +5567,18 @@ class ApiService {
           songAssetId == null ? null : _storyMediaKeys[songAssetId];
       String? mediaUrlKey, songUrlKey, captionCo, mediaUrlKeyCo;
       final me = await SealIngress.myUid();
+      // A duo goes sealed only when I hold my person's Stories key (their
+      // Aluta shares it from 1.0.26); otherwise plain, as before — unless
+      // its photo already went up sealed (then it can't be posted).
+      final coReady = coAuthorId == null ||
+          await SealSpace.instance
+              .holdsNamedAsReader(SealScope.story(coAuthorId));
+      if (!coReady && mediaKey != null) {
+        _logger.w('createStory: sealed duo photo, no co-author key');
+        return null;
+      }
       final seal = me != null &&
+          coReady &&
           (mediaKey != null || songKey != null || await _storiesSealable());
       if (seal && coAuthorId != null) {
         // Their viewers must open it too: never a duo only half sealed.

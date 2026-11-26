@@ -231,6 +231,7 @@ def _space_brief(db: Session, space: RelationshipSpace,
         "theme": space.theme,
         "background_url": space.background_url,
         "background_url_key": getattr(space, "background_key", None),
+        "background_style": getattr(space, "background_style", None),
         "is_primary": bool(space.is_primary),
         "plan_tier": space.plan_tier,
         "close_since": space.created_at.isoformat() if space.created_at else None,
@@ -1337,6 +1338,15 @@ def update_space(
                 status_code=400,
                 detail="background_url must be a preset (/wallpapers/<id>) or empty",
             )
+    if getattr(payload, "background_style", None) is not None:
+        st = payload.background_style.strip().lower()
+        if st in ("", "motif"):
+            space.background_style = None
+        elif st == "watermark":
+            space.background_style = "watermark"
+        else:
+            raise HTTPException(status_code=400,
+                                detail="background_style must be motif or watermark")
     if payload.is_primary is True:
         # Exactly one hero: demote the others first.
         db.query(RelationshipSpace).filter(

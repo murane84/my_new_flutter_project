@@ -38,6 +38,7 @@ import '../e2ee/seal_media.dart';
 import '../utils/romantic_pattern.dart';
 import '../services/wallpapers_service.dart';
 import '../widgets/wallpaper_gallery.dart';
+import '../widgets/aluta_watermark.dart';
 import '../utils/file_bytes.dart';
 import '../services/notif_service.dart'
     show syncDiaryReminders, cancelDiaryReminder, PlanReminder;
@@ -1600,6 +1601,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         initialPrimary: _space['is_primary'] == true,
         spaceId: _id,
         initialBackgroundUrl: _space['background_url'] as String?,
+        initialBackgroundStyle: _space['background_style'] as String?,
         apiBase: widget.apiBase,
         inTuneUnlocked: _hasStreakUnlock('theme_in_tune'),
         onSpaceUpdated: (m) {

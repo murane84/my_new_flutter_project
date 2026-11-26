@@ -345,6 +345,16 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
     if (bgUrl.isNotEmpty) {
       return _photoBackdrop(scheme, resolveAvatarUrl(bgUrl, widget.apiBase) ?? bgUrl);
     }
+    // The Aluta watermark (chosen in Settings), in this Space's colour —
+    // the same lattice as the chat wallpaper, sharing its strength slider.
+    if (_space['background_style'] == 'watermark') {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      return ValueListenableBuilder<double>(
+        valueListenable: motifStrength,
+        builder: (_, v, _) =>
+            AlutaWatermarkWallpaper(tint: _accent, isDark: isDark, strength: v),
+      );
+    }
     Widget glow(double size, double alpha) => Container(
           width: size,
           height: size,

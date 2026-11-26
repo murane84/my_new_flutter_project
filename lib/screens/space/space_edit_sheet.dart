@@ -11,6 +11,8 @@ class _EditSpaceSheet extends StatefulWidget {
   final bool initialPrimary;
   final int spaceId;
   final String? initialBackgroundUrl;
+  /// With no photo: null / 'motif' (the default pattern) or 'watermark'.
+  final String? initialBackgroundStyle;
   final String apiBase;
   final void Function(Map<String, dynamic>)? onSpaceUpdated;
   // Whether the bond has earned the "In tune" shared theme (§5.7) — adds its
@@ -23,6 +25,7 @@ class _EditSpaceSheet extends StatefulWidget {
     required this.initialPrimary,
     required this.spaceId,
     this.initialBackgroundUrl,
+    this.initialBackgroundStyle,
     required this.apiBase,
     this.onSpaceUpdated,
     this.inTuneUnlocked = false,
@@ -48,6 +51,9 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
   late String _theme = widget.initialTheme;
   late bool _primary = widget.initialPrimary;
   late String? _bgUrl = widget.initialBackgroundUrl;
+  // The pattern when there's no photo: 'motif' (default) or 'watermark'.
+  late String _bgStyle =
+      widget.initialBackgroundStyle == 'watermark' ? 'watermark' : 'motif';
   // Remember the last wallpaper and the last device photo separately, so each
   // background tile keeps its own preview and the user can flip between them
   // without the other tile going blank.
@@ -114,9 +120,11 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     });
   }
 
-  void _selectDefault() {
+  /// No photo: the romantic motif ('motif') or the Aluta watermark.
+  void _selectPattern(String style) {
     setState(() {
       _bgUrl = null;
+      _bgStyle = style;
       _pendingBytes = null;
       _bgDirty = true;
     });
@@ -171,6 +179,46 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
       _pendingBytes = null;
       _bgDirty = true;
     });
+  }
+
+  /// A tiny live preview of a pattern background in [accent].
+  Widget _patternThumb(ColorScheme scheme, Color accent,
+      {required bool watermark}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final pattern = watermark
+        // (full strength: a 92-px tile has room for only a few marks)
+        ? AlutaWatermarkWallpaper(tint: accent, isDark: isDark, strength: 1)
+        : ColoredBox(
+            color: scheme.surface,
+            child: CustomPaint(
+              painter: RomanticPatternPainter(
+                  color: accent.withValues(alpha: isDark ? 0.22 : 0.20)),
+            ),
+          );
+    // Its icon on a solid disc on top, like the other tiles' icons.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        pattern,
+        Center(
+          child: Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: Color.alphaBlend(
+                  accent.withValues(alpha: 0.16), scheme.surface),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+                watermark
+                    ? Icons.water_drop_rounded
+                    : Icons.auto_awesome_rounded,
+                size: 21,
+                color: readableTint(accent, scheme.surface)),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _bgOption(ColorScheme scheme,
@@ -242,7 +290,8 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                               color: Colors.black.withValues(alpha: 0.35),
                               shape: BoxShape.circle,
                             ),
-                            child: Icon(icon, size: 18, color: readableOn(accent)),
+                            // (on a dark disc over the photo: always white)
+                            child: Icon(icon, size: 18, color: Colors.white),
                           ),
                         ),
                       ],
@@ -269,7 +318,9 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
               style: TextStyle(
                   fontSize: 12,
                   fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                  color: selected ? accent : scheme.onSurface)),
+                  color: selected
+                      ? readableTint(accent, _cardColor(scheme))
+                      : scheme.onSurface)),
         ],
       ),
     );
@@ -298,7 +349,8 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
       } else if ((_bgUrl ?? '').startsWith('/wallpapers/')) {
         bgUpdated = await ApiService()
             .updateSpace(widget.spaceId, backgroundUrl: _bgUrl);
-      } else if ((_bgUrl ?? '').isEmpty) {
+      } else if ((_bgUrl ?? '').isEmpty &&
+          (widget.initialBackgroundUrl ?? '').isNotEmpty) {
         bgUpdated = await ApiService().clearSpaceBackground(widget.spaceId);
       }
       if (!mounted) return;
@@ -311,6 +363,9 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
       theme: _theme,
       // Only ever promote to hero here (never demote to headless).
       isPrimary: (_primary && !widget.initialPrimary) ? true : null,
+      // No photo: which pattern (a photo, when set, still wins).
+      backgroundStyle:
+          _bgDirty && (_bgUrl ?? '').isEmpty ? _bgStyle : null,
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -476,6 +531,23 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
             ),
           ),
         ),
+        // The chosen pattern, as the page will wear it.
+        Positioned.fill(
+          child: IgnorePointer(
+            child: ValueListenableBuilder<double>(
+              valueListenable: motifStrength,
+              builder: (_, v, _) => _bgStyle == 'watermark'
+                  ? AlutaWatermarkWallpaper(
+                      tint: accent, isDark: isDark, strength: v)
+                  : CustomPaint(
+                      painter: RomanticPatternPainter(
+                        color: accent.withValues(
+                            alpha: motifAccentAlpha(isDark ? 0.06 : 0.055)),
+                      ),
+                    ),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -556,14 +628,26 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // The same two patterns as the chat wallpapers, in this
+              // Space's colour (each tile previews its pattern).
               _bgOption(
                 scheme,
-                selected: (_bgUrl ?? '').isEmpty,
-                onTap: _busy ? null : _selectDefault,
-                label: 'Default',
+                selected: (_bgUrl ?? '').isEmpty && _bgStyle == 'motif',
+                onTap: _busy ? null : () => _selectPattern('motif'),
+                label: 'Motif',
                 icon: Icons.auto_awesome_rounded,
+                thumbnail: _patternThumb(scheme, accent, watermark: false),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
+              _bgOption(
+                scheme,
+                selected: (_bgUrl ?? '').isEmpty && _bgStyle == 'watermark',
+                onTap: _busy ? null : () => _selectPattern('watermark'),
+                label: 'Watermark',
+                icon: Icons.water_drop_rounded,
+                thumbnail: _patternThumb(scheme, accent, watermark: true),
+              ),
+              const SizedBox(width: 10),
               _bgOption(
                 scheme,
                 selected: (_bgUrl ?? '').startsWith('/wallpapers/'),
@@ -587,7 +671,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                     : null,
                 dim: !(_bgUrl ?? '').startsWith('/wallpapers/'),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               _bgOption(
                 scheme,
                 selected: _bgUrl == '__pending_photo__' ||

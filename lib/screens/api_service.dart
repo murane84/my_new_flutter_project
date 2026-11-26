@@ -2729,6 +2729,7 @@ class ApiService {
     String? theme,
     bool? isPrimary,
     String? backgroundUrl,
+    String? backgroundStyle, // 'motif' | 'watermark' (with no photo)
   }) async {
     try {
       // 🔒 A Space's name is sealed for its members (like its words).
@@ -2745,6 +2746,7 @@ class ApiService {
           'theme': ?theme,
           'is_primary': ?isPrimary,
           'background_url': ?backgroundUrl,
+          'background_style': ?backgroundStyle,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {

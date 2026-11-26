@@ -914,7 +914,11 @@ extension _ChatPageHelpers1 on _ChatPageState {
   }
 
   Widget _chatMotifWallpaper(ColorScheme scheme, bool isDark) {
-    final motifColor = isDark ? Colors.white : scheme.primary;
+    // The theme colour in both modes (lifted on dark, as the watermark does),
+    // so Motif follows the Appearance colour like the other patterns.
+    final motifColor = isDark
+        ? Color.lerp(scheme.primary, Colors.white, 0.35)!
+        : scheme.primary;
     // Concentration follows the user's motif-strength setting, live.
     return ValueListenableBuilder<double>(
       valueListenable: motifStrength,

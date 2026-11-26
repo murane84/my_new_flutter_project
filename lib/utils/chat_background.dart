@@ -157,7 +157,52 @@ String chatConvKey({int? friendId, int? conversationId}) {
 
 /// The wallpaper a given chat should show: its own override, else the all-chats
 /// default.
-ChatBg chatBackgroundFor(String convKey) => _overrides[convKey] ?? _all;
+ChatBg chatBackgroundFor(String convKey) =>
+    _keyed(_overrides[convKey] ?? _all);
+
+// 🔒 A sealed Our Space photo reused as a chat wallpaper: its address WITH
+// its key ("…#ask=…") stays on this device. The account backup carries the
+// bare address only; each device puts the key back from its own Our Space
+// list (which it opens itself).
+final Map<String, String> _spaceKeyed = {}; // '/attachments/<id>' → keyed
+
+/// Learn the keys of my Our Space background photos (from the opened Spaces
+/// list), so a wallpaper restored from the account opens here too.
+void learnSpaceBackgroundKeys(Iterable<dynamic> spaces) {
+  var changed = false;
+  for (final s in spaces) {
+    if (s is! Map) continue;
+    final bg = (s['background_url'] ?? '').toString();
+    final i = bg.indexOf('#');
+    if (!bg.startsWith('/attachments/') || i < 0) continue;
+    final bare = bg.substring(0, i);
+    if (_spaceKeyed[bare] != bg) {
+      _spaceKeyed[bare] = bg;
+      changed = true;
+    }
+  }
+  if (changed) chatBgRevision.value++;
+}
+
+ChatBg _keyed(ChatBg b) {
+  final u = b.url;
+  if (!b.isPhoto || u == null || u.contains('#')) return b;
+  final i = u.indexOf('/attachments/');
+  if (i < 0) return b;
+  final k = _spaceKeyed[u.substring(i)];
+  if (k == null) return b;
+  return ChatBg(b.mode, u.substring(0, i) + k, wideUrl: b.wideUrl);
+}
+
+/// For the account backup: never a key (the fragment) off this device.
+Map<String, dynamic> _shareable(ChatBg b) {
+  final j = b.toJson();
+  for (final f in const ['url', 'wide']) {
+    final v = j[f];
+    if (v is String && v.contains('#')) j[f] = v.substring(0, v.indexOf('#'));
+  }
+  return j;
+}
 
 /// Like [chatBackgroundFor], but before the user has ever chosen a wallpaper
 /// each kind of chat starts with its own character: a bonded (couple) chat
@@ -166,19 +211,19 @@ ChatBg chatBackgroundFor(String convKey) => _overrides[convKey] ?? _all;
 ChatBg chatBackgroundSmart(String convKey,
     {required bool isGroup, bool bonded = false}) {
   final o = _overrides[convKey];
-  if (o != null) return o;
-  if (_allChosen) return _all;
+  if (o != null) return _keyed(o);
+  if (_allChosen) return _keyed(_all);
   // "Bonded" is about THIS DM's person — never a group, and never just
   // "I have a Space with someone".
   if (!isGroup && (bonded || _bondedKeys.contains(convKey))) {
     return const ChatBg('motif', null);
   }
   if (isGroup) return const ChatBg('watermark', null);
-  return _all;
+  return _keyed(_all);
 }
 
 /// The all-chats default (what a chat with no override shows).
-ChatBg get chatBackgroundAll => _all;
+ChatBg get chatBackgroundAll => _keyed(_all);
 
 /// Whether a chat has its own wallpaper distinct from the all-chats default.
 bool hasChatOverride(String convKey) => _overrides.containsKey(convKey);
@@ -263,8 +308,8 @@ void _markChanged() {
 }
 
 Map<String, dynamic> _snapshot() => {
-      'all': _all.toJson(),
-      'overrides': _overrides.map((k, v) => MapEntry(k, v.toJson())),
+      'all': _shareable(_all),
+      'overrides': _overrides.map((k, v) => MapEntry(k, _shareable(v))),
       'all_chosen': _allChosen,
       'apply_all': _applyAllPref,
       'clarity': wallpaperClarity.value,

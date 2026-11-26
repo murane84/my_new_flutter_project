@@ -6061,6 +6061,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
       final raw = prefs.getString(_kSpacesCache);
       if (raw == null || !mounted) return;
       final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+      learnSpaceBackgroundKeys(list); // (a sealed one reused as a wallpaper)
       if (_spaces.isEmpty) setState(() => _spaces = list);
     } catch (_) {}
   }
@@ -6079,6 +6080,7 @@ class HomePageState extends rp.ConsumerState<HomePage>
     for (final s in spaces) {
       ContactNames.instance.rememberAll(s['members'] as List?);
     }
+    learnSpaceBackgroundKeys(spaces);
     setState(() => _spaces = spaces);
     try {
       final prefs = await SharedPreferences.getInstance();

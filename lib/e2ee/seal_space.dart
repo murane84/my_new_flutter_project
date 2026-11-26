@@ -718,7 +718,9 @@ class SealSpace {
     for (final (item, raw) in raws) {
       final opened = item['my_reactions'];
       if (opened is! List || opened.length != raw.length) continue;
-      final kind = item.containsKey('kind') ? 'm' : 'd';
+      // A diary entry (it has a plan date field) or a pinned moment — both
+      // have a 'kind', so that can't tell them apart.
+      final kind = item.containsKey('plan_date') ? 'd' : 'm';
       // (what I took off since is no longer held)
       myReactionAsHeld
           .removeWhere((k, _) => k.startsWith('$kind${item['id']}|'));

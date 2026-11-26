@@ -809,11 +809,12 @@ Space's name, photos, videos, voice notes, songs and background (including anyth
 you keep from a chat) are end-to-end encrypted too, and so are Stories, locked with a
 key only the people your status choice includes hold. Group chats of any size get a
 new key whenever someone joins or leaves. A song you send your bonded partner joins
-Our Playlist by its title, which our server can see. Not yet end-to-end encrypted:
-duo statuses, the picture a sticker or GIF status shows, reactions to Stories, the
-song copies in Our Playlist and the titles of songs kept in Our Space, dedication
-voice notes, and reactions inside Our Space. The server still sees who
-you talk to and when, so it can deliver messages.
+Our Playlist by its title, which our server can see. Duo statuses, the picture a
+sticker or GIF status shows, reactions to Stories, the song copies in Our Playlist,
+songs kept in Our Space (titles included), dedication voice notes and reactions
+inside Our Space are end-to-end encrypted too — for reactions, the server can tell
+that two are the same emoji, never which. The server still sees Our Playlist's song
+titles, and who you talk to and when, so it can deliver messages.
 
 7. Children
 Aluta is not directed to children. You must be at least the age of digital

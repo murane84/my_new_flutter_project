@@ -381,6 +381,13 @@ Future<void> syncChatBackgroundWithAccount() async {
       await p.setInt(_kRev, rev);
       await _push(rev);
     }
+    // An older Aluta backed up a sealed photo's key in plain: replace the
+    // account copy with the bare one (the key stays on the devices).
+    if (data != null && jsonEncode(data).contains('#ask=')) {
+      final rev = DateTime.now().millisecondsSinceEpoch;
+      await p.setInt(_kRev, rev);
+      await _push(rev);
+    }
     await p.setBool(_kSynced, true);
     _bgSyncedThisInstall = true;
   } catch (_) {}

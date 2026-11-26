@@ -1367,7 +1367,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
         padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(Radii.lg),
-          color: _accent.withValues(alpha: 0.12),
+          color: _cardFill(scheme, 0.12),
           border: Border.all(color: _accent.withValues(alpha: 0.35)),
         ),
         child: Row(

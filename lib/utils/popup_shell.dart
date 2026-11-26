@@ -304,7 +304,10 @@ class AppPopupShell extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withAlpha(120),
+        // The same tint, made solid: a photo backdrop (Our Space) never
+        // shows through behind the title.
+        color: Color.alphaBlend(
+            scheme.surfaceContainerHighest.withAlpha(120), scheme.surface),
         border: Border(
           bottom: BorderSide(color: scheme.outlineVariant.withAlpha(70)),
         ),

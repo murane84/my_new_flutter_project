@@ -797,24 +797,35 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     );
   }
 
-  Widget _titleRow(ColorScheme scheme, Color accent) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(Radii.md),
+  // On a solid pill: the title sits over the chosen background photo,
+  // which may be dark or busy at any clarity.
+  Widget _titleRow(ColorScheme scheme, Color accent) => Container(
+        padding: const EdgeInsets.fromLTRB(4, 4, 14, 4),
+        decoration: BoxDecoration(
+          color: _cardColor(scheme),
+          borderRadius: BorderRadius.circular(Radii.xl),
+          border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(Radii.md),
+              ),
+              child: Icon(Icons.tune_rounded, size: 18, color: accent),
             ),
-            child: Icon(Icons.tune_rounded, size: 18, color: accent),
-          ),
-          const SizedBox(width: 10),
-          Text('Settings',
-              style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                  color: scheme.onSurface)),
-        ],
+            const SizedBox(width: 10),
+            Text('Settings',
+                style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                    color: scheme.onSurface)),
+          ],
+        ),
       );
 
   /// Inside Our Space, right under the pinned hero: a slim bar (back · title

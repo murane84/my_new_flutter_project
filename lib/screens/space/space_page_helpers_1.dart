@@ -290,6 +290,20 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
     }
   }
 
+  /// Every card on the Our Space page sits on this: the theme's surface with
+  /// a [tint] of the Space colour — always OPAQUE, so a photo background
+  /// (at any clarity) never shows through behind the words. (A see-through
+  /// tint looked the same on the plain theme and went unreadable on a busy
+  /// picture.)
+  Color _cardFill(ColorScheme scheme, [double tint = 0.08]) =>
+      Color.alphaBlend(_accent.withValues(alpha: tint), scheme.surface);
+
+  /// A banner in the Space colour itself, opaque (its words use
+  /// readableOn(_accent)).
+  LinearGradient get _accentBannerFill => LinearGradient(
+        colors: [Color.lerp(_accent, Colors.white, 0.12)!, _accent],
+      );
+
   /// The page's ambient backdrop: a barely-there vertical wash of the Space
   /// colour top and bottom, plus two large soft glows drifting in from the
   /// corners — subtle atmosphere so the hero and tiles read as floating.
@@ -1059,7 +1073,8 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
       {VoidCallback? onMenu}) {
     switch (section) {
       case 'diary':
-        return _diaryBookView(scheme, isWide, onMenu: onMenu);
+        return _solidPanel(
+            scheme, _diaryBookView(scheme, isWide, onMenu: onMenu));
       case 'playlist':
         final tracks = ((_space['playlist'] as List?) ?? const [])
             .whereType<Map>()
@@ -1187,6 +1202,38 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
   }
 
   Widget _sectionPanel(
+    ColorScheme scheme,
+    IconData icon,
+    String title, {
+    required Widget body,
+    Widget? footer,
+    VoidCallback? onMenu,
+  }) {
+    return _solidPanel(
+        scheme,
+        _sectionPanelBody(scheme, icon, title,
+            body: body, footer: footer, onMenu: onMenu));
+  }
+
+  /// One solid panel under a whole section (its title and everything
+  /// between its rows): a photo background at any clarity never shows
+  /// through behind the words. Every section uses it (the Diary too).
+  Widget _solidPanel(ColorScheme scheme, Widget child) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: _cardFill(scheme, 0.04),
+          borderRadius: BorderRadius.circular(Radii.xl),
+          border: Border.all(color: _accent.withValues(alpha: 0.18)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(Radii.xl),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+            child: child,
+          ),
+        ),
+      );
+
+  Widget _sectionPanelBody(
     ColorScheme scheme,
     IconData icon,
     String title, {

@@ -60,7 +60,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
         padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(Radii.lg),
-          color: _accent.withValues(alpha: 0.10),
+          color: _cardFill(scheme, 0.10),
           border: Border.all(color: _accent.withValues(alpha: 0.35)),
         ),
         child: Column(
@@ -182,9 +182,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(Radii.lg),
-          gradient: LinearGradient(
-            colors: [_accent.withValues(alpha: 0.85), _accent],
-          ),
+          gradient: _accentBannerFill,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -252,9 +250,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(Radii.lg),
-          gradient: LinearGradient(
-            colors: [_accent.withValues(alpha: 0.85), _accent],
-          ),
+          gradient: _accentBannerFill,
         ),
         child: Row(
           children: [
@@ -273,7 +269,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                   Text(line,
                       style: TextStyle(
                           fontSize: 12,
-                          color: Colors.white.withValues(alpha: 0.9))),
+                          color: readableOn(_accent).withValues(alpha: 0.9))),
                 ],
               ),
             ),

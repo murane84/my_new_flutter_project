@@ -37,7 +37,7 @@ extension _SpaceWords on _RelationshipSpacePageState {
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(Radii.lg),
-          color: _accent.withValues(alpha: 0.08),
+          color: _cardFill(scheme),
           border: Border.all(color: _accent.withValues(alpha: 0.30)),
         ),
         child: Column(

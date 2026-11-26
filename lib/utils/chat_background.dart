@@ -225,6 +225,10 @@ ChatBg chatBackgroundSmart(String convKey,
 /// The all-chats default (what a chat with no override shows).
 ChatBg get chatBackgroundAll => _keyed(_all);
 
+/// Whether the user ever picked an all-chats wallpaper. Until then each kind
+/// of chat wears its own (couples Motif, groups Watermark, others Default).
+bool get chatBackgroundAllChosen => _allChosen;
+
 /// Whether a chat has its own wallpaper distinct from the all-chats default.
 bool hasChatOverride(String convKey) => _overrides.containsKey(convKey);
 

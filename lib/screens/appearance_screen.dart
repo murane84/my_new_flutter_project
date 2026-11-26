@@ -772,7 +772,9 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
                         Row(children: [
                           Expanded(
                               child: _quick(scheme, Icons.blur_on_rounded,
-                                  'Default', current.mode == 'default',
+                                  'Default',
+                                  chatBackgroundAllChosen &&
+                                      current.mode == 'default',
                                   () => applyClose('default'))),
                           const SizedBox(width: 10),
                           Expanded(
@@ -928,7 +930,11 @@ class _ChatWallpaperSectionState extends State<_ChatWallpaperSection> {
                                   fontWeight: FontWeight.w700,
                                   color: scheme.onSurface)),
                           const SizedBox(height: 2),
-                          Text('${_labelFor(bg)} · all chats',
+                          // Never picked: say what chats really wear.
+                          Text(
+                              chatBackgroundAllChosen
+                                  ? '${_labelFor(bg)} · all chats'
+                                  : 'Automatic · couples Motif, groups Watermark',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(

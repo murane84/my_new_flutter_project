@@ -2445,12 +2445,14 @@ class ApiService {
   }
 
   /// Same, for the bond with [partnerId] (you and them).
-  Future<String?> _sealPairText(int partnerId, String? text) async {
+  Future<String?> _sealPairText(int partnerId, String? text,
+      {bool fixed = false}) async {
     if (text == null || text.trim().isEmpty) return text;
     final me = await SealIngress.myUid();
     if (me == null) return text;
     try {
-      return await SealSpace.instance.seal([me, partnerId], text);
+      return await SealSpace.instance
+          .seal([me, partnerId], text, fixed: fixed);
     } on SealSpaceNotReady {
       return text;
     }
@@ -5760,7 +5762,9 @@ class ApiService {
                 : null);
         if (raw != null) {
           try {
-            final s = await _sealPairText(authorId, raw);
+            // Sealed the same way each time: the server knows a status
+            // kept twice (it matches the ref) without reading it.
+            final s = await _sealPairText(authorId, raw, fixed: true);
             if (s != null && SealScope.isSealed(s)) pairRef = s;
           } catch (_) {
             return 'Couldn\'t keep it — check your connection';

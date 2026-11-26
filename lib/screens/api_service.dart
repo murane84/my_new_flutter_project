@@ -2338,6 +2338,19 @@ class ApiService {
     }
   }
 
+  /// A song's reference for Our Space (a local path, or a sealed song's
+  /// address WITH its key), sealed for its members. A key never goes plain:
+  /// throws when it should be sealed and can't be (the caller fails).
+  Future<String?> _sealSongRef(int spaceId, String? ref) async {
+    if (ref == null || ref.isEmpty) return ref;
+    final keyed = _keyedAddress.hasMatch(ref);
+    final s = await _sealSpaceText(spaceId, ref);
+    if (keyed && (s == null || !SealScope.isSealed(s))) {
+      throw StateError('song key not sealed');
+    }
+    return s;
+  }
+
   static final _keyedAddress =
       RegExp(r'/attachments/[A-Za-z0-9_-]+#ask=[A-Za-z0-9_-]+');
 
@@ -3123,7 +3136,7 @@ class ApiService {
       // address (the title stays readable: it's how the playlist finds the
       // same song twice — said in the policy).
       memo = await _sealSpaceText(spaceId, memo);
-      ref = await _sealSpaceText(spaceId, ref);
+      ref = await _sealSongRef(spaceId, ref);
       String? audioKey;
       (audioUrl, audioKey) = await _splitMediaKey(spaceId, audioUrl);
       final token = await _getToken();
@@ -3436,7 +3449,7 @@ class ApiService {
       // 🔒 Our Space words are sealed for its members — and so is the song's
       // reference (a local path, or a sealed song's address WITH its key).
       answerText = await _sealSpaceText(spaceId, answerText);
-      trackRef = await _sealSpaceText(spaceId, trackRef);
+      trackRef = await _sealSongRef(spaceId, trackRef);
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(
@@ -3497,7 +3510,7 @@ class ApiService {
       // went plain before), and a sealed voice note's key goes sealed beside
       // its address.
       note = await _sealSpaceText(spaceId, note);
-      ref = await _sealSpaceText(spaceId, ref);
+      ref = await _sealSongRef(spaceId, ref);
       String? voiceKey;
       (voiceNoteUrl, voiceKey) = await _splitMediaKey(spaceId, voiceNoteUrl);
       final token = await _getToken();
@@ -3567,7 +3580,7 @@ class ApiService {
       // 🔒 Our Space words are sealed for its members — and so is the song's
       // reference (a local path, or a sealed song's address WITH its key).
       message = await _sealSpaceText(spaceId, message);
-      trackRef = await _sealSpaceText(spaceId, trackRef);
+      trackRef = await _sealSongRef(spaceId, trackRef);
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(

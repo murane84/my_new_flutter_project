@@ -299,9 +299,15 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
       Color.alphaBlend(_accent.withValues(alpha: tint), scheme.surface);
 
   /// A banner in the Space colour itself, opaque (its words use
-  /// readableOn(_accent)).
+  /// readableOn(_accent)). Its soft end leans AWAY from the words' ink
+  /// (darker under white words, lighter under dark ones), so no part of
+  /// it reads worse than the Space colour itself.
   LinearGradient get _accentBannerFill => LinearGradient(
-        colors: [Color.lerp(_accent, Colors.white, 0.12)!, _accent],
+        colors: [
+          Color.lerp(_accent,
+              inkIsLightOn(_accent) ? Colors.black : Colors.white, 0.12)!,
+          _accent,
+        ],
       );
 
   /// The page's ambient backdrop: a barely-there vertical wash of the Space

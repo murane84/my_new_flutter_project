@@ -256,17 +256,13 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
     final hasStats = hasPartner && (days > 0 || streak > 0);
     final daysTogether = hasPartner ? _daysTogether() : null;
     // Alive right now: their record turns while they play, and the line
-    // under the name says so (else, softly, that they're online).
+    // under the name says so. (Only what's live — "online" from the last
+    // load could be hours old on an open page, so it isn't claimed here.)
     final pid = _partnerId;
     final playing = pid != null && SteadyListening.instance.isPlaying(pid);
-    final online = hasPartner && others.first['is_online'] == true;
-    final live = !hasPartner
-        ? null
-        : playing
-            ? '🎧 $_partnerFirstName is listening'
-            : online
-                ? '$_partnerFirstName is online'
-                : null;
+    final live = hasPartner && playing
+        ? '🎧 $_partnerFirstName is listening'
+        : null;
 
     // Every word on the banner uses one ink that reads on THIS theme (white
     // on most, near-black on pale ones like butter or petal).

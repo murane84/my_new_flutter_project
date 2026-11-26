@@ -18,11 +18,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
       padding: const EdgeInsets.only(bottom: 14),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(Radii.lg),
-          color: scheme.surfaceContainerHighest,
-          border: Border.all(color: _accent.withValues(alpha: 0.35)),
-        ),
+        decoration: _auraCard(scheme),
         child: Row(
           children: [
             Icon(left ? Icons.link_off_rounded : Icons.hourglass_top_rounded,
@@ -57,20 +53,11 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
       padding: const EdgeInsets.only(bottom: 14),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(Radii.lg),
-          color: _cardFill(scheme, 0.10),
-          border: Border.all(color: _accent.withValues(alpha: 0.35)),
-        ),
+        decoration: _auraCard(scheme, tint: 0.10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('🎶 OUR SONG THIS WEEK',
-                style: TextStyle(
-                    fontSize: 10.5,
-                    letterSpacing: 1.2,
-                    fontWeight: FontWeight.w800,
-                    color: _accent)),
+            _eyebrow(Icons.music_note_rounded, 'Our song this week'),
             const SizedBox(height: 6),
             Text('“$title”',
                 maxLines: 2,
@@ -624,8 +611,8 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                 color: _accent.withValues(alpha: 0.9),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.graphic_eq_rounded,
-                  color: Colors.white, size: 20),
+              child: Icon(Icons.graphic_eq_rounded,
+                  color: readableOn(_accent), size: 20),
             ),
             const SizedBox(width: 12),
             Expanded(

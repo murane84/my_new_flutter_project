@@ -1324,17 +1324,17 @@ extension _SpacePageHelpers4 on _RelationshipSpacePageState {
       child: Material(
         // Opaque (tint blended onto the surface) so the wallpaper never bleeds
         // through this card, matching the other Our Space cards.
-        color: Color.alphaBlend(
-            _accent.withValues(alpha: 0.10), scheme.surface),
+        color: _cardFill(scheme, 0.06),
         borderRadius: BorderRadius.circular(Radii.lg),
         child: InkWell(
           onTap: _openDiary,
           borderRadius: BorderRadius.circular(Radii.lg),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            // (the same hairline as every dashboard card)
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(Radii.lg),
-              border: Border.all(color: _accent.withValues(alpha: 0.30)),
+              border: Border.all(color: _accent.withValues(alpha: 0.24)),
             ),
             child: Row(
               children: [

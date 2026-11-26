@@ -1385,11 +1385,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       padding: const EdgeInsets.only(bottom: 14),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(Radii.lg),
-          color: _cardFill(scheme, 0.12),
-          border: Border.all(color: _accent.withValues(alpha: 0.35)),
-        ),
+        decoration: _auraCard(scheme, tint: 0.12),
         child: Row(
           children: [
             const Text('💞', style: TextStyle(fontSize: 24)),

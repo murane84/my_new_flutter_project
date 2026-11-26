@@ -19,6 +19,8 @@ from typing import Optional
 FEATURE_BUILD = {
     # 1.0.20 (build 21): group messages sealed with the members' key.
     "sealed_groups": 21,
+    # 1.0.26 (build 27): opens sealed reactions in a status's "Viewed by".
+    "sealed_story_reactions": 27,
 }
 
 BUILD_HEADER = "x-aluta-build"

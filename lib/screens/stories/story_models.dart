@@ -6,6 +6,24 @@ library;
 /// How long a video status plays (the picker's and camera's limit too).
 const Duration kStatusVideoMax = Duration(seconds: 30);
 
+/// A status picture's address, only if it's one Aluta loads: our own
+/// attachments or GIPHY. 🔒 A sticker status's picture is sealed, so the
+/// server can't check it any more — the phone does, after opening it (a
+/// lock that didn't open, or any other site, shows nothing).
+String? _safeArt(String? u) {
+  final s = (u ?? '').trim();
+  if (s.isEmpty) return null;
+  if (s.startsWith('/attachments/')) return s;
+  final uri = Uri.tryParse(s);
+  final host = (uri?.host ?? '').toLowerCase();
+  if (uri != null &&
+      uri.scheme == 'https' &&
+      (host == 'giphy.com' || host.endsWith('.giphy.com'))) {
+    return s;
+  }
+  return null;
+}
+
 class StoryItem {
   final String id;
   final int authorId;
@@ -72,7 +90,7 @@ class StoryItem {
         caption: j['caption'] as String?,
         musicTitle: j['music_title'] as String?,
         musicArtist: j['music_artist'] as String?,
-        musicArtUrl: j['music_art_url'] as String?,
+        musicArtUrl: _safeArt(j['music_art_url'] as String?),
         background: j['background'] as String?,
         thumb: j['thumb'] as String?,
         songUrl: j['song_url'] as String?,

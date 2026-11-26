@@ -511,14 +511,28 @@ class _DedicateComposeSheetState extends State<_DedicateComposeSheet> {
       try {
         final bytes = await VoiceRec.bytesOf(_voicePath!);
         if (bytes.isNotEmpty) {
-          final up = await ApiService().uploadMedia(
-            bytes: bytes,
+          // 🔒 Locked for the two of you when both Aluta can open it (its
+          // key then goes sealed beside it — createDedication).
+          voiceUrl = await ApiService().uploadSpaceMedia(
+            widget.spaceId,
+            bytes,
             filename: 'dedication_voice.${VoiceRec.ext}',
             mime: VoiceRec.mime,
+            kind: 'audio',
           );
-          voiceUrl = up?['url'] as String?;
         }
-      } catch (_) {}
+      } catch (_) {
+        voiceUrl = null;
+      }
+      // A recorded voice note that didn't go up is never dropped quietly
+      // (it may have needed locking and couldn't be, right now).
+      if (voiceUrl == null) {
+        if (!mounted) return;
+        setState(() => _sending = false);
+        showToast(context, 'Couldn’t attach your voice note — check your '
+            'connection and try again', type: ToastType.error);
+        return;
+      }
     }
     final res = await ApiService().createDedication(
       widget.spaceId,

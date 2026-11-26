@@ -2314,6 +2314,30 @@ class ApiService {
     }
   }
 
+  /// 🔒 A reaction in Our Space: the emoji sealed for its members the same
+  /// way every time, so the server can still toggle and count it without
+  /// learning which emoji it is. Plain while the partner's Aluta can't read
+  /// sealed Our Space (as for its words). An empty one (a toggle-off) stays.
+  Future<String> _sealReaction(int spaceId, String emoji,
+      {required String item}) async {
+    if (emoji.trim().isEmpty || SealScope.isSealed(emoji)) return emoji;
+    // Already mine: send it exactly as the server holds it (a ❤️ from
+    // before sealing is plain), so the tap takes it off rather than adding
+    // a second one.
+    final held = SealSpace.myReactionAsHeld['$item|${emoji.trim()}'];
+    if (held != null) return held;
+    if (SealSpace.instance.scopeOfSpace(spaceId) == null) {
+      await getSpace(spaceId); // learns its members
+    }
+    if (SealSpace.instance.scopeOfSpace(spaceId) == null) return emoji;
+    try {
+      return await SealSpace.instance
+          .sealForSpace(spaceId, emoji.trim(), fixed: true);
+    } on SealSpaceNotReady {
+      return emoji;
+    }
+  }
+
   static final _keyedAddress =
       RegExp(r'/attachments/[A-Za-z0-9_-]+#ask=[A-Za-z0-9_-]+');
 
@@ -2804,7 +2828,9 @@ class ApiService {
       caption = await _sealSpaceText(spaceId, caption);
       // A kept heart carries its words inside its ref (the snapshot).
       String? refKey;
-      if (kind == 'heart') {
+      // A kept heart carries its words inside its ref; a kept song its title
+      // (🔒 sealed whole, like the heart — its address inside included).
+      if (kind == 'heart' || kind == 'song' || kind == 'dedication') {
         final keyed = ref != null && _keyedAddress.hasMatch(ref);
         ref = await _sealSpaceText(spaceId, ref);
         // A sealed file's key inside the snapshot never goes plain.
@@ -2876,7 +2902,9 @@ class ApiService {
       final resp = await http.post(
         Uri.parse('${await _baseUrl}/spaces/$spaceId/moments/$momentId/react'),
         headers: _authHeaders(token),
-        body: jsonEncode({'emoji': emoji}),
+        body: jsonEncode({
+          'emoji': await _sealReaction(spaceId, emoji, item: 'm$momentId')
+        }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final data = await SealSpace.instance.decode(resp.body);
@@ -3062,12 +3090,14 @@ class ApiService {
   /// Point a soundtrack song at a freshly re-shared copy (self-heal).
   Future<bool> healTrackAudio(int spaceId, int trackId, String url) async {
     try {
+      // 🔒 A sealed fresh copy: its key sealed beside the address.
+      final (bare, key) = await _splitMediaKey(spaceId, url);
       final token = await _getToken();
       if (token == null) return false;
       final resp = await http.patch(
         Uri.parse('${await _baseUrl}/spaces/$spaceId/playlist/$trackId/audio'),
         headers: _authHeaders(token),
-        body: jsonEncode({'audio_url': url}),
+        body: jsonEncode({'audio_url': bare, 'audio_url_key': ?key}),
       );
       return resp.statusCode >= 200 && resp.statusCode < 300;
     } catch (e) {
@@ -3088,8 +3118,14 @@ class ApiService {
     String? audioUrl,
   }) async {
     try {
-      // 🔒 Our Space words are sealed for its members.
+      // 🔒 Our Space words are sealed for its members; so is the adder's
+      // file reference, and a sealed song copy's key goes sealed beside its
+      // address (the title stays readable: it's how the playlist finds the
+      // same song twice — said in the policy).
       memo = await _sealSpaceText(spaceId, memo);
+      ref = await _sealSpaceText(spaceId, ref);
+      String? audioKey;
+      (audioUrl, audioKey) = await _splitMediaKey(spaceId, audioUrl);
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(
@@ -3102,6 +3138,7 @@ class ApiService {
           'memo': ?memo,
           'source': ?source,
           'audio_url': ?audioUrl,
+          'audio_url_key': ?audioKey,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
@@ -3396,8 +3433,10 @@ class ApiService {
     String? mood,
   }) async {
     try {
-      // 🔒 Our Space words are sealed for its members.
+      // 🔒 Our Space words are sealed for its members — and so is the song's
+      // reference (a local path, or a sealed song's address WITH its key).
       answerText = await _sealSpaceText(spaceId, answerText);
+      trackRef = await _sealSpaceText(spaceId, trackRef);
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(
@@ -3453,8 +3492,14 @@ class ApiService {
     String? voiceNoteUrl,
   }) async {
     try {
-      // 🔒 Our Space words are sealed for its members.
+      // 🔒 Our Space words are sealed for its members; so is the song's
+      // reference (it can be a sealed song's address WITH its key — that
+      // went plain before), and a sealed voice note's key goes sealed beside
+      // its address.
       note = await _sealSpaceText(spaceId, note);
+      ref = await _sealSpaceText(spaceId, ref);
+      String? voiceKey;
+      (voiceNoteUrl, voiceKey) = await _splitMediaKey(spaceId, voiceNoteUrl);
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(
@@ -3467,6 +3512,7 @@ class ApiService {
           'mood': ?mood,
           'note': ?note,
           'voice_note_url': ?voiceNoteUrl,
+          'voice_note_url_key': ?voiceKey,
         }),
       );
       if (resp.statusCode == 413) SessionEvents.instance.markSpaceFull();
@@ -3518,8 +3564,10 @@ class ApiService {
     String mode = 'message',
   }) async {
     try {
-      // 🔒 Our Space words are sealed for its members.
+      // 🔒 Our Space words are sealed for its members — and so is the song's
+      // reference (a local path, or a sealed song's address WITH its key).
       message = await _sealSpaceText(spaceId, message);
+      trackRef = await _sealSpaceText(spaceId, trackRef);
       final token = await _getToken();
       if (token == null) return null;
       final resp = await http.post(
@@ -3769,7 +3817,9 @@ class ApiService {
       final resp = await http.post(
         Uri.parse('${await _baseUrl}/spaces/$spaceId/diary/$entryId/react'),
         headers: _authHeaders(token),
-        body: jsonEncode({'emoji': emoji}),
+        body: jsonEncode({
+          'emoji': await _sealReaction(spaceId, emoji, item: 'd$entryId')
+        }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final data = await SealSpace.instance.decode(resp.body);
@@ -5361,7 +5411,8 @@ class ApiService {
     List<int> up = bytes;
     bool seal;
     try {
-      seal = !duo && await _storiesSealable();
+      // (A duo too: its key is sealed for both audiences in createStory.)
+      seal = await _storiesSealable();
     } on SealTooMany {
       _tooManyForStatus();
       return null;
@@ -5486,17 +5537,37 @@ class ApiService {
       final token = await _getToken();
       if (token == null) return null;
       // 🔒 Sealed with my Stories key when everyone who may see it can open
-      // it (a duo goes as before: its co-author's audience isn't mine).
-      // Locked media never goes without its key sealed beside it.
+      // it. A duo also carries its caption and photo key sealed with my
+      // person's Stories key (I hold it as one of their viewers), for the
+      // people who see it under them. Locked media never goes without its
+      // key sealed beside it.
       final mediaKey =
           mediaAssetId == null ? null : _storyMediaKeys[mediaAssetId];
       final songKey =
           songAssetId == null ? null : _storyMediaKeys[songAssetId];
-      String? mediaUrlKey, songUrlKey;
+      String? mediaUrlKey, songUrlKey, captionCo, mediaUrlKeyCo;
       final me = await SealIngress.myUid();
-      final seal = coAuthorId == null &&
-          me != null &&
+      final seal = me != null &&
           (mediaKey != null || songKey != null || await _storiesSealable());
+      if (seal && coAuthorId != null) {
+        // Their viewers must open it too: never a duo only half sealed.
+        final co = SealScope.story(coAuthorId);
+        String frag(Uint8List k) =>
+            '${SealMedia.fragment}${base64Url.encode(k).replaceAll('=', '')}';
+        try {
+          if (caption != null && caption.isNotEmpty) {
+            captionCo =
+                await SealSpace.instance.sealNamedAsReader(co, caption);
+          }
+          if (mediaKey != null) {
+            mediaUrlKeyCo =
+                await SealSpace.instance.sealNamedAsReader(co, frag(mediaKey));
+          }
+        } on SealError {
+          _logger.w('createStory: no copy of the co-author\'s key');
+          return null;
+        }
+      }
       if (seal) {
         final scope = SealScope.story(me);
         Future<String?> s(String? v) async => v == null || v.isEmpty
@@ -5511,6 +5582,9 @@ class ApiService {
             ? st
             : String.fromCharCodes(st.runes.take(200)));
         thumb = await s(thumb);
+        // A sticker / GIF status's picture (the phone checks the address
+        // when it opens it).
+        if (kind == 'sticker') musicArtUrl = await s(musicArtUrl);
         String frag(Uint8List k) =>
             '${SealMedia.fragment}${base64Url.encode(k).replaceAll('=', '')}';
         if (mediaKey != null) mediaUrlKey = await s(frag(mediaKey));
@@ -5537,6 +5611,8 @@ class ApiService {
           'co_author_id': ?coAuthorId,
           'media_url_key': ?mediaUrlKey,
           'song_url_key': ?songUrlKey,
+          'caption_co': ?captionCo,
+          'media_url_key_co': ?mediaUrlKeyCo,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
@@ -5585,7 +5661,8 @@ class ApiService {
         headers: _authHeaders(token),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final data = jsonDecode(resp.body);
+        // 🔒 Reactions to a sealed status are sealed: opened here.
+        final data = await SealSpace.instance.decode(resp.body);
         if (data is List) {
           return data
               .whereType<Map>()
@@ -5601,8 +5678,23 @@ class ApiService {
   }
 
   /// Note my quick reaction on a story (shows in the author's "Viewed by").
-  Future<void> reactToStory(String storyId, String emoji) async {
+  /// 🔒 A sealed status's reaction goes sealed with the Stories key of
+  /// [underId] — whose list I saw it in (its author, or a duo's co-author);
+  /// when it can't be sealed, it isn't noted at all (the reaction still
+  /// reaches them in our chat).
+  Future<void> reactToStory(String storyId, String emoji,
+      {bool sealed = false, int? underId}) async {
     try {
+      if (sealed) {
+        if (underId == null) return;
+        try {
+          emoji = await SealSpace.instance
+              .sealNamedAsReader(SealScope.story(underId), emoji);
+        } on SealError {
+          return;
+        }
+        if (!SealScope.isSealed(emoji)) return;
+      }
       final token = await _getToken();
       if (token == null) return;
       await http.post(
@@ -5622,9 +5714,28 @@ class ApiService {
       String? caption,
       String? mediaUrl,
       String? musicTitle,
-      String? musicArtist}) async {
+      String? musicArtist,
+      String? artUrl}) async {
     try {
       String? sealed;
+      // 🔒 A sticker's picture / a song's title and artist become Our Space
+      // words: sealed for the two of you (older servers ignore 'ref').
+      String? pairRef;
+      if (authorId != null) {
+        final raw = artUrl != null && artUrl.isNotEmpty
+            ? artUrl
+            : (musicTitle != null && musicTitle.isNotEmpty
+                ? jsonEncode({'title': musicTitle, 'artist': musicArtist ?? ''})
+                : null);
+        if (raw != null) {
+          try {
+            final s = await _sealPairText(authorId, raw);
+            if (s != null && SealScope.isSealed(s)) pairRef = s;
+          } catch (_) {
+            return 'Couldn\'t keep it — check your connection';
+          }
+        }
+      }
       // 🔒 A sealed photo / video: its address-with-key sealed for the two
       // of you (the kept moment opens like any sealed one).
       String? refKey;
@@ -5657,9 +5768,11 @@ class ApiService {
         body: jsonEncode({
           'caption': ?sealed,
           'ref_key': ?refKey,
-          // A sealed status's song: its title for the kept moment.
-          'title': ?musicTitle,
-          'artist': ?musicArtist,
+          'ref': ?pairRef,
+          // A song's title plain only when it couldn't go sealed (an older
+          // partner): never both.
+          if (pairRef == null) 'title': ?musicTitle,
+          if (pairRef == null) 'artist': ?musicArtist,
         }),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) return null;

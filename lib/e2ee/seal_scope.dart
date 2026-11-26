@@ -92,6 +92,18 @@ class SealScope {
     return '$prefix$scope.$epoch.$body';
   }
 
+  /// Seal [text] the same way every time for this key (a reaction emoji):
+  /// the nonce comes from the key and the text (a synthetic IV), so equal
+  /// emoji give equal sealed strings — the server can match a toggle and
+  /// count reactions without learning which emoji they are. Only for short
+  /// values where "these two are the same" is fine to show.
+  static Future<String> sealFixed(
+      List<int> key, String scope, int epoch, String text) async {
+    final mac = await sealHmac(
+        key, utf8.encode('AlutaSpace fixed v1|$scope|$epoch|$text'));
+    return seal(key, scope, epoch, text, nonce: mac.sublist(0, 12));
+  }
+
   /// Open a sealed field with its scope key.
   static Future<String> open(List<int> key, String sealed) async {
     final k = keyOf(sealed);

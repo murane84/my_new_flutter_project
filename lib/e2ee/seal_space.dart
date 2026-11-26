@@ -485,7 +485,7 @@ class SealSpace {
   /// [stay]: the caller knows this chat was sealed before (a group whose
   /// members changed has a new scope): never back to plain.
   Future<String> seal(Iterable<int> members, String text,
-          {bool stay = false}) =>
+          {bool stay = false, bool fixed = false}) =>
       _locked(() async {
         if (text.isEmpty || SealScope.isSealed(text)) return text;
         if (!SealTab.inUse) throw SealError('Aluta is in use in another tab');
@@ -508,16 +508,35 @@ class SealSpace {
         if (!_keys.isReady) throw SealError('my keys are not ready yet');
         final k = await _currentKey(scope);
         if (k == null) throw SealError('no key for this space yet');
-        return SealScope.seal(k.$2, scope, k.$1, text);
+        // [fixed]: the same text seals the same way (a reaction).
+        return fixed
+            ? SealScope.sealFixed(k.$2, scope, k.$1, text)
+            : SealScope.seal(k.$2, scope, k.$1, text);
       });
 
   /// Seal [text] for a Space by id (its members as last seen in a Space
   /// answer — the app always loads the Space before writing in it).
-  Future<String> sealForSpace(int spaceId, String text) {
+  Future<String> sealForSpace(int spaceId, String text,
+      {bool fixed = false}) {
     final scope = _spaceScopes[spaceId];
     if (scope == null) throw SealSpaceNotReady();
-    return seal(SealScope.membersOf(scope)!, text);
+    return seal(SealScope.membersOf(scope)!, text, fixed: fixed);
   }
+
+  /// Seal [text] with someone ELSE's named key that this device holds as
+  /// one of its readers (a duo's co-author's Stories key; a reaction to a
+  /// status). Never makes or moves the key on — only its owner does.
+  /// Throws [SealError] when this device holds no current copy.
+  Future<String> sealNamedAsReader(String scope, String text) =>
+      _locked(() async {
+        if (text.isEmpty || SealScope.isSealed(text)) return text;
+        if (!SealTab.inUse) throw SealError('Aluta is in use in another tab');
+        await _keys.load();
+        if (!_keys.isReady) throw SealError('my keys are not ready yet');
+        final k = await _currentKey(scope, make: false);
+        if (k == null) throw SealError('no copy of this key here');
+        return SealScope.seal(k.$2, scope, k.$1, text);
+      });
 
   /// Seal [text] with NAMED scope [scope] (a big group `g:<id>`, Stories
   /// `s:<id>`): its key is made for whoever belongs today, and moved on
@@ -675,9 +694,80 @@ class SealSpace {
     }
   }
 
-  Future<dynamic> decode(String body) {
+  Future<dynamic> decode(String body) async {
     final j = jsonDecode(body);
-    return openJson(j);
+    // My reactions as the server holds them (plain from before sealing, or
+    // sealed): a toggle must send that exact form to match.
+    final raws = <(Map, List)>[];
+    void grab(dynamic v) {
+      if (v is List) {
+        for (final x in v) {
+          grab(x);
+        }
+      } else if (v is Map) {
+        final m = v['my_reactions'];
+        if (m is List && v['id'] != null) raws.add((v, List.of(m)));
+        for (final x in v.values) {
+          if (x is Map || x is List) grab(x);
+        }
+      }
+    }
+
+    grab(j);
+    final out = await openJson(j);
+    for (final (item, raw) in raws) {
+      final opened = item['my_reactions'];
+      if (opened is! List || opened.length != raw.length) continue;
+      final kind = item.containsKey('kind') ? 'm' : 'd';
+      // (what I took off since is no longer held)
+      myReactionAsHeld
+          .removeWhere((k, _) => k.startsWith('$kind${item['id']}|'));
+      for (var i = 0; i < raw.length; i++) {
+        if (opened[i] is String && raw[i] is String) {
+          myReactionAsHeld['$kind${item['id']}|${opened[i]}'] =
+              raw[i] as String;
+        }
+      }
+    }
+    _mergeReactions(out);
+    return out;
+  }
+
+  /// "m<moment id>|❤️" / "d<diary entry id>|❤️" → that reaction of mine as
+  /// the server holds it (plain or sealed).
+  static final Map<String, String> myReactionAsHeld = {};
+
+  /// Our Space reactions come as `[{emoji, count}]` (+ `my_reactions`). A
+  /// sealed emoji and a plain one (from an older partner's Aluta), once
+  /// opened, can be the same emoji twice: one chip each, counts added.
+  static void _mergeReactions(dynamic v) {
+    if (v is List) {
+      for (final x in v) {
+        _mergeReactions(x);
+      }
+      return;
+    }
+    if (v is! Map) return;
+    final r = v['reactions'];
+    if (r is List && r.isNotEmpty && r.every((e) => e is Map && e['emoji'] is String)) {
+      final merged = <String, Map<String, dynamic>>{};
+      for (final e in r.cast<Map>()) {
+        final k = e['emoji'] as String;
+        final c = (e['count'] as num?)?.toInt() ?? 0;
+        final cur = merged[k];
+        if (cur == null) {
+          merged[k] = Map<String, dynamic>.from(e);
+        } else {
+          cur['count'] = ((cur['count'] as num?)?.toInt() ?? 0) + c;
+        }
+      }
+      if (merged.length != r.length) v['reactions'] = merged.values.toList();
+    }
+    final mine = v['my_reactions'];
+    if (mine is List) v['my_reactions'] = mine.toSet().toList();
+    for (final x in v.values) {
+      if (x is Map || x is List) _mergeReactions(x);
+    }
   }
 
   /// Hand this device's held keys over (QR linking): {scope: {cur, keys}}.

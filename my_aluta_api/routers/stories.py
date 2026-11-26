@@ -17,7 +17,8 @@ from datetime import datetime, timedelta, timezone
 
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Response
+from fastapi import (APIRouter, Body, Depends, HTTPException, Request,
+                     Response)
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -107,14 +108,23 @@ def _media_url(story: Story) -> str | None:
     return None
 
 
-def _story_out(story: Story, *, viewed: bool, view_count: int = 0) -> schemas.StoryOut:
+def _story_out(story: Story, *, viewed: bool, view_count: int = 0,
+               under: int | None = None) -> schemas.StoryOut:
+    """[under]: whose list it's shown in. A sealed duo shown under its
+    co-author carries the words and key sealed with THEIR Stories key (what
+    that audience holds); anywhere else, the poster's."""
+    co_view = (under is not None
+               and under == getattr(story, "co_author_id", None)
+               and under != story.author_id
+               and (getattr(story, "media_key_co", None)
+                    or getattr(story, "caption_co", None)))
     return schemas.StoryOut(
         id=story.id,
         author_id=story.author_id,
         kind=story.kind,
         media_url=_media_url(story),
         media_mime=story.media_mime,
-        caption=story.caption,
+        caption=(story.caption_co if co_view else story.caption),
         music_title=story.music_title,
         music_artist=story.music_artist,
         music_art_url=story.music_art_url,
@@ -125,7 +135,8 @@ def _story_out(story: Story, *, viewed: bool, view_count: int = 0) -> schemas.St
         song_title=getattr(story, "song_title", None),
         song_start_ms=getattr(story, "song_start_ms", None),
         co_author_id=getattr(story, "co_author_id", None),
-        media_url_key=getattr(story, "media_key", None),
+        media_url_key=(story.media_key_co if co_view
+                       else getattr(story, "media_key", None)),
         song_url_key=getattr(story, "song_key", None),
         created_at=story.created_at,
         expires_at=story.expires_at,
@@ -140,6 +151,13 @@ SEALED = "🔒s1."
 
 def _sealed(v) -> bool:
     return isinstance(v, str) and v.startswith(SEALED)
+
+
+def _sealed_for(v, uid: int, cap: int):
+    """[v] if it's sealed with [uid]'s Stories key and not over [cap], else
+    None."""
+    v = (v or "").strip()
+    return v if v.startswith(f"{SEALED}s:{uid}.") and len(v) <= cap else None
 
 
 def _sealed_key(v, author_id: int):
@@ -234,7 +252,14 @@ def create_story(
     # Any picture URL (sticker / GIF, a song's art) is loaded by every
     # viewer's phone, so only our GIF provider or our own attachments —
     # never an arbitrary site that would learn who in my circle opened it.
-    if payload.music_art_url and payload.music_art_url.strip():
+    # 🔒 Sealed with my Stories key (a sticker / GIF status): the app checks
+    # it's a GIPHY address when it opens it, and loads nothing else.
+    art_sealed = _sealed(payload.music_art_url)
+    if art_sealed and not _sealed_for(payload.music_art_url, current_user.id,
+                                      2000 * 6 + 200):
+        raise HTTPException(status_code=400, detail="Unsupported picture")
+    if payload.music_art_url and payload.music_art_url.strip() \
+            and not art_sealed:
         from urllib.parse import urlparse
         u = payload.music_art_url.strip()
         host = (urlparse(u).hostname or "").lower()
@@ -278,6 +303,13 @@ def create_story(
         if song_id else None,
         song_start_ms=max(0, int(payload.song_start_ms or 0)) if song_id else None,
         co_author_id=co,
+        # (only for a duo, and only sealed with the co-author's own key)
+        caption_co=(_sealed_for(getattr(payload, "caption_co", None), int(co),
+                                2000 * 6 + 200) if co is not None else None),
+        media_key_co=(_sealed_for(getattr(payload, "media_url_key_co", None),
+                                  int(co), 2000)
+                      if co is not None and kind in ("photo", "video")
+                      else None),
         media_key=(_sealed_key(getattr(payload, "media_url_key", None),
                                current_user.id)
                    if kind in ("photo", "video") else None),
@@ -385,6 +417,7 @@ def stories_feed(
                     s,
                     viewed=seen,
                     view_count=counts.get(s.id, 0) if is_me else 0,
+                    under=aid,
                 )
             )
         return schemas.StoryGroupOut(
@@ -478,6 +511,7 @@ def mark_viewed(
 @router.get("/{story_id}/viewers", response_model=list[schemas.StoryViewerOut])
 def story_viewers(
     story_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -502,8 +536,13 @@ def story_viewers(
     # visible_to assumes friends: someone who has since unfriended / blocked
     # keeps their time hidden, like their last seen.
     mutual = _story_circle(db, current_user.id)
+    # 🔒 A sealed reaction: an Aluta older than build 27 doesn't open this
+    # list — it gets a plain 🔒 rather than the sealed text as an "emoji".
+    import compat
+    opens = compat.build_supports(compat.request_build(request),
+                                  "sealed_story_reactions")
     reacts = {
-        int(r.user_id): r.emoji
+        int(r.user_id): (r.emoji if (opens or not _sealed(r.emoji)) else "🔒")
         for r in db.query(StoryReaction).filter(
             StoryReaction.story_id == story_id).all()
     }
@@ -531,10 +570,18 @@ def react_to_story(
 ):
     """Note my quick reaction on a story (latest wins) so the author's
     "Viewed by" shows it. The app also sends it to their DM."""
-    emoji = (payload.emoji or "").strip()[:16]
+    raw = (payload.emoji or "").strip()
+    # 🔒 A sealed status's reaction is sealed too (the Stories key of whoever
+    # it was seen under: the author, or a duo's co-author).
+    emoji = raw if _sealed(raw) else raw[:16]
     if not emoji:
         raise HTTPException(status_code=400, detail="Pick a reaction")
     story = db.query(Story).filter(Story.id == story_id).first()
+    if story is not None and _sealed(emoji) and not (
+            _sealed_for(emoji, story.author_id, 16 * 6 + 200) or (
+                story.co_author_id is not None and
+                _sealed_for(emoji, int(story.co_author_id), 16 * 6 + 200))):
+        raise HTTPException(status_code=400, detail="Pick a reaction")
     if not story or story.expires_at <= _now():
         raise HTTPException(status_code=404, detail="Story not found")
     if story.author_id == current_user.id or not _may_see_story(
@@ -594,17 +641,34 @@ def keep_story_in_space(
     elif story.kind == "music":
         kind = "song"
         title, artist = story.music_title or "", story.music_artist or ""
-        # 🔒 A sealed status's song: the keeper's app tells its title (a
-        # kept song's title is plain in Our Space, as for a kept chat song).
-        if _sealed(title) or _sealed(artist):
+        pair_ref = (body or {}).get("ref")
+        if isinstance(pair_ref, str) and pair_ref.startswith(
+                f"🔒s1.{min(me, author)},{max(me, author)}.") \
+                and len(pair_ref) <= 4000:
+            # 🔒 The keeper's app sealed {title, artist} for the two of us.
+            title = artist = None
+        # 🔒 A sealed status's song from an older app: it tells the title
+        # (kept plain, as before).
+        if title is not None and (_sealed(title) or _sealed(artist)):
             title = str((body or {}).get("title") or "")[:300]
             artist = str((body or {}).get("artist") or "")[:300]
             if not title:
                 raise HTTPException(status_code=400,
                                     detail="Update Aluta to keep this status")
-        ref = _json.dumps({"title": title, "artist": artist})
+        ref = (pair_ref if title is None
+               else _json.dumps({"title": title, "artist": artist}))
     elif story.kind == "sticker" and story.music_art_url:
         kind, ref = "gif", story.music_art_url
+        if _sealed(ref):
+            # 🔒 Sealed with the author's Stories key: the keeper's app
+            # sends the picture sealed for the two of us instead.
+            pr = (body or {}).get("ref")
+            if not (isinstance(pr, str) and pr.startswith(
+                    f"🔒s1.{min(me, author)},{max(me, author)}.")
+                    and len(pr) <= 4000):
+                raise HTTPException(status_code=400,
+                                    detail="Update Aluta to keep this status")
+            ref = pr
     elif story.kind == "text" and (story.caption or "").strip():
         kind = "note"
     if kind is None:

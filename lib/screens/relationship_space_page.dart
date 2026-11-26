@@ -1451,15 +1451,15 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
             showToast(context, 'Sharing the song with your partner…',
                 type: ToastType.info);
           }
-          final up = await ApiService().uploadMedia(
-            bytes: bytes,
+          // 🔒 Locked for the two of you when both Aluta can open it.
+          audioUrl = await ApiService().uploadSpaceMedia(
+            _id,
+            bytes,
             filename: ref.split(RegExp(r'[\\/]+')).last,
             mime: _audioMimeFor(ref),
+            kind: 'song',
             ephemeral: true,
           );
-          if (up != null && up['url'] != null) {
-            audioUrl = up['url'] as String;
-          }
         }
       } catch (_) {}
     }

@@ -89,6 +89,22 @@ def _sealed(v) -> bool:
     return isinstance(v, str) and v.startswith(SEALED)
 
 
+def _reaction_emoji(raw) -> str:
+    """A reaction: an emoji (≤16), or — 🔒 sealed for the pair — the same
+    emoji sealed the same way every time (its nonce comes from the key and
+    the emoji), so a toggle and the counts still match while the server
+    never learns which emoji it is."""
+    e = (raw or "").strip()
+    if _sealed(e):
+        if len(e) > 16 * 6 + 200:
+            raise HTTPException(status_code=400,
+                                detail="A reaction needs an emoji")
+        return e
+    if not e or len(e) > 16:
+        raise HTTPException(status_code=400, detail="A reaction needs an emoji")
+    return e
+
+
 def _fit(v, n: int):
     """Plain text: cut to n characters. Sealed: kept whole (≤ ~6× n)."""
     if v is None:
@@ -131,6 +147,7 @@ class _TrackBody(BaseModel):
     memo: Optional[str] = None
     source: Optional[str] = None
     audio_url: Optional[str] = None
+    audio_url_key: Optional[str] = None  # 🔒 its address-with-key, sealed
 
 
 class _MemoBody(BaseModel):
@@ -678,6 +695,7 @@ def _track_dict(db: Session, t: PlaylistTrack, current_user_id: int) -> dict:
         "artist": t.artist,
         "ref": t.ref,
         "audio_url": t.audio_url,
+        "audio_url_key": getattr(t, "audio_url_key", None),
         "added_by": t.added_by,
         "added_by_username": adder.username if adder else None,
         "mine": t.added_by == current_user_id,
@@ -1417,9 +1435,7 @@ def react_moment(
     owner. Sending the same emoji again clears it (toggle)."""
     moment = _moment_for_member_or_404(db, moment_id, current_user.id)
 
-    emoji = (payload.emoji or "").strip()
-    if not emoji or len(emoji) > 16:
-        raise HTTPException(status_code=400, detail="A reaction needs an emoji")
+    emoji = _reaction_emoji(payload.emoji)
     # Multi-emoji toggle (like the diary): the same emoji again removes it; a
     # person may hold several distinct emojis.
     existing = db.query(MomentReaction).filter(
@@ -1462,7 +1478,9 @@ def react_moment(
                         _active_partner(db, sp, current_user.id) is not None:
                     who = current_user.username or "Your partner"
                     _push(int(moment.author_id), "Our Space 💞",
-                          f"{who} reacted {emoji} to your moment",
+                          (f"{who} reacted {emoji} to your moment"
+                           if _said(emoji) else
+                           f"{who} reacted to your moment"),
                           "space_moment_react",
                           actor_id=current_user.id, actor_name=who)
             except Exception:
@@ -1777,13 +1795,14 @@ _VALID_TRACK_SOURCES = {"manual", "share", "listen_together",
 
 def _upsert_soundtrack_track(db: Session, pk: str, user_id: int, title: str,
                              artist=None, ref=None, source="manual",
-                             memo=None, audio_url=None):
+                             memo=None, audio_url=None, audio_url_key=None):
     """Add a track to the bond's soundtrack, de-duping on title+artist. Thin
     wrapper over bonding.record_soundtrack_track so every feed (manual, share,
     listen-together, question, dedication) goes through one place."""
     src = source if source in _VALID_TRACK_SOURCES else "manual"
     return bonding.record_soundtrack_track(
-        db, pk, user_id, title, artist, ref, src, memo, audio_url)
+        db, pk, user_id, title, artist, ref, src, memo, audio_url,
+        audio_url_key=(_sealed_or_none(audio_url_key) if audio_url else None))
 
 @router.get("/{space_id}/playlist")
 def get_playlist(
@@ -1814,7 +1833,7 @@ def add_track(
     track, created = _upsert_soundtrack_track(
         db, pk, current_user.id, payload.title, payload.artist, payload.ref,
         source=(payload.source or "manual"), memo=payload.memo,
-        audio_url=payload.audio_url,
+        audio_url=payload.audio_url, audio_url_key=payload.audio_url_key,
     )
     if track is None:
         raise HTTPException(status_code=400, detail="A track needs a title")
@@ -1886,6 +1905,7 @@ def annotate_track(
 
 class _TrackAudioBody(BaseModel):
     audio_url: str
+    audio_url_key: Optional[str] = None  # 🔒 the fresh copy's key, sealed
 
 
 @router.patch("/{space_id}/playlist/{track_id}/audio")
@@ -1913,6 +1933,8 @@ def heal_track_audio(
     if not url.startswith("/attachments/") and not url.startswith("http"):
         raise HTTPException(status_code=400, detail="Bad audio url")
     track.audio_url = url[:500]
+    # A fresh copy brings its own key (or none: a plain copy).
+    track.audio_url_key = _sealed_or_none(payload.audio_url_key)
     db.commit()
     db.refresh(track)
     return _track_dict(db, track, current_user.id)
@@ -2660,6 +2682,7 @@ class _DedicationBody(BaseModel):
     mood: Optional[str] = None
     note: Optional[str] = None
     voice_note_url: Optional[str] = None
+    voice_note_url_key: Optional[str] = None  # 🔒 address-with-key, sealed
 
 
 _VALID_CAPSULE_MODES = {"message", "sync_listen"}
@@ -2769,6 +2792,7 @@ def _dedication_dict(db: Session, d: Dedication, current_user_id: int) -> dict:
         "mood": d.mood,
         "note": d.note,
         "voice_note_url": d.voice_note_url,
+        "voice_note_url_key": getattr(d, "voice_note_url_key", None),
         "opened": d.opened_at is not None,
         "opened_at": d.opened_at.isoformat() if d.opened_at else None,
         "created_at": d.created_at.isoformat() if d.created_at else None,
@@ -2861,6 +2885,8 @@ def create_dedication(
         mood=(((payload.mood or "").strip())[:60] or None),
         note=(_fit((payload.note or "").strip(), 500) or None),
         voice_note_url=((payload.voice_note_url or "").strip() or None),
+        voice_note_url_key=(_sealed_or_none(payload.voice_note_url_key)
+                            if payload.voice_note_url else None),
     )
     db.add(d)
     db.commit()
@@ -3237,9 +3263,7 @@ def react_diary_entry(
     if pk is None:
         raise HTTPException(status_code=404, detail="Entry not found")
     entry = _diary_entry_or_404(db, pk, entry_id)
-    emoji = (payload.emoji or "").strip()
-    if not emoji or len(emoji) > 16:
-        raise HTTPException(status_code=400, detail="A reaction needs an emoji")
+    emoji = _reaction_emoji(payload.emoji)
     existing = db.query(DiaryReaction).filter(
         DiaryReaction.entry_id == entry.id,
         DiaryReaction.user_id == current_user.id,
@@ -3258,9 +3282,10 @@ def react_diary_entry(
         try:
             who = current_user.username or "Your partner"
             title = _said(entry.title).strip()
+            e = f" {_said(emoji)}" if _said(emoji) else ""
             _push(int(entry.author_id), "Our Diary 💞",
-                  f"{who} reacted {emoji} to “{title}”" if title
-                  else f"{who} reacted {emoji} to your memory",
+                  f"{who} reacted{e} to “{title}”" if title
+                  else f"{who} reacted{e} to your memory",
                   "space_diary_react", actor_id=current_user.id,
                   actor_name=who)
         except Exception:

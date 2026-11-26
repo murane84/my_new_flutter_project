@@ -320,7 +320,11 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       setState(() => _confetti = true);
     }
     // A quick reaction also shows beside my name in their "Viewed by".
-    if (quick != null) ApiService().reactToStory(item.id, quick);
+    // 🔒 Sealed for a sealed status (with the key of whose list I saw it in).
+    if (quick != null) {
+      ApiService().reactToStory(item.id, quick,
+          sealed: item.sealed, underId: _group.authorId);
+    }
     final content = '> ${await _quoteFor(to, item)}\n\n$text';
     final sent = await _sendWithGif(to, content, gifUrl);
     if (!mounted) return;
@@ -2202,7 +2206,8 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
               caption: item.caption,
               mediaUrl: item.mediaUrl,
               musicTitle: item.isMusic ? item.musicTitle : null,
-              musicArtist: item.isMusic ? item.musicArtist : null);
+              musicArtist: item.isMusic ? item.musicArtist : null,
+              artUrl: item.kind == 'sticker' ? item.musicArtUrl : null);
           if (!mounted) return;
           if (err == null) _floatUp('💞');
           showToast(

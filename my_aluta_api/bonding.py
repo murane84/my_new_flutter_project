@@ -158,7 +158,7 @@ def bond_stats(db: Session, a: int, b: int,
 
 def record_soundtrack_track(db: Session, pair_key_str: str, user_id,
                             title, artist=None, ref=None, source="manual",
-                            memo=None, audio_url=None):
+                            memo=None, audio_url=None, audio_url_key=None):
     """Add a track to a bond's soundtrack (playlist_tracks), de-duping on
     title+artist so the same song flowing in from several sources never piles
     up. Backfills a missing memo/ref on an existing match. Best-effort; returns
@@ -197,6 +197,8 @@ def record_soundtrack_track(db: Session, pair_key_str: str, user_id,
             changed = True
         if audio_url and not match.audio_url:
             match.audio_url = audio_url
+            # (its sealed key travels with it)
+            match.audio_url_key = audio_url_key
             changed = True
         if changed:
             try:
@@ -208,7 +210,7 @@ def record_soundtrack_track(db: Session, pair_key_str: str, user_id,
     track = PlaylistTrack(
         pair_key=pair_key_str, added_by=user_id, title=title, artist=artist,
         ref=ref, source=source, memo=memo,
-        audio_url=audio_url,
+        audio_url=audio_url, audio_url_key=audio_url_key,
     )
     db.add(track)
     try:

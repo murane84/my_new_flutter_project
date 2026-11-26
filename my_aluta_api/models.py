@@ -564,6 +564,11 @@ class Story(Base):
     # A duo status: posted by one partner WITH the other — it shows in both
     # people's status lists as one post.
     co_author_id = Column(Integer, nullable=True)
+    # 🔒 A sealed duo, as its co-author's audience opens it (their Stories
+    # key): the caption and the photo's key. Served to whoever sees the duo
+    # under the co-author.
+    caption_co = Column(Text, nullable=True)
+    media_key_co = Column(Text, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), index=True, nullable=False)
@@ -827,6 +832,8 @@ class PlaylistTrack(Base):
     # song bytes, this holds the /attachments/<id> URL both partners cache so
     # either can start a Listen Together from a local copy. NULL = title-only.
     audio_url = Column(String, nullable=True)
+    # 🔒 A sealed song copy: its address WITH its key, sealed for the pair.
+    audio_url_key = Column(Text, nullable=True)
     # How this track entered the soundtrack: manual | share | listen_together |
     # question | dedication. Drives the little source chip in the UI.
     source = Column(String, nullable=False, default="manual",
@@ -1035,6 +1042,9 @@ class Dedication(Base):
     mood = Column(String, nullable=True)
     note = Column(Text, nullable=True)
     voice_note_url = Column(String, nullable=True)
+    # 🔒 A sealed voice note: its address WITH its key, sealed for the two
+    # of them (the app puts the key back on voice_note_url when it opens).
+    voice_note_url_key = Column(Text, nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

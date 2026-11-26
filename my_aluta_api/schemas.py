@@ -402,6 +402,11 @@ class StoryCreate(BaseModel):
     # 🔒 A sealed status: its media's / song's key, sealed ("🔒s1.s:<me>.…").
     media_url_key: Optional[str] = None
     song_url_key: Optional[str] = None
+    # 🔒 A duo, for its co-author's audience: the same caption and media
+    # key sealed with THEIR Stories key ("🔒s1.s:<co>.…") — the poster holds
+    # it as one of their viewers.
+    caption_co: Optional[str] = None
+    media_url_key_co: Optional[str] = None
 
 
 class StoryOut(BaseModel):

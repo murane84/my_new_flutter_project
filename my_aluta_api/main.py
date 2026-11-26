@@ -299,6 +299,9 @@ def ensure_media_schema():
         "ALTER TABLE playlist_tracks ADD COLUMN IF NOT EXISTS source VARCHAR DEFAULT 'manual'",
         "ALTER TABLE playlist_tracks ADD COLUMN IF NOT EXISTS memo TEXT",
         "ALTER TABLE playlist_tracks ADD COLUMN IF NOT EXISTS audio_url VARCHAR",
+        # 🔒 Sealed song copies / dedication voice notes: the key, sealed.
+        "ALTER TABLE playlist_tracks ADD COLUMN IF NOT EXISTS audio_url_key TEXT",
+        "ALTER TABLE dedications ADD COLUMN IF NOT EXISTS voice_note_url_key TEXT",
         # Daily "Us" question — mood variant (an emoji + label answer).
         "ALTER TABLE daily_prompt_answers ADD COLUMN IF NOT EXISTS mood VARCHAR",
         # Pinned-moment reactions become Slack-style multi-emoji (like the
@@ -340,6 +343,9 @@ def ensure_media_schema():
         "ALTER TABLE stories ADD COLUMN IF NOT EXISTS song_key TEXT",
         "ALTER TABLE stories ADD COLUMN IF NOT EXISTS song_start_ms INTEGER",
         "ALTER TABLE stories ADD COLUMN IF NOT EXISTS co_author_id INTEGER",
+        # 🔒 A sealed duo for its co-author's audience.
+        "ALTER TABLE stories ADD COLUMN IF NOT EXISTS caption_co TEXT",
+        "ALTER TABLE stories ADD COLUMN IF NOT EXISTS media_key_co TEXT",
         # Ozilane Key: opaque per-user subject, linked-at cache, two-step flag.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_subject VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS ozkey_linked_at TIMESTAMPTZ",

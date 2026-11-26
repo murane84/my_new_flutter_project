@@ -177,13 +177,16 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
       try {
         final bytes = await readFileBytes(local);
         if (bytes.isEmpty) return;
-        final up = await ApiService().uploadMedia(
-          bytes: bytes,
-          filename: local.split(RegExp(r'[\\/]+')).last,
-          mime: _audioMimeFor(local),
-          ephemeral: true,
-        );
-        final url = (up?['url'] as String?) ?? '';
+        // 🔒 The fresh copy is locked like the first one.
+        final url = await ApiService().uploadSpaceMedia(
+              _id,
+              bytes,
+              filename: local.split(RegExp(r'[\\/]+')).last,
+              mime: _audioMimeFor(local),
+              kind: 'song',
+              ephemeral: true,
+            ) ??
+            '';
         if (url.isNotEmpty) await ApiService().healTrackAudio(_id, id, url);
       } catch (_) {}
       return;

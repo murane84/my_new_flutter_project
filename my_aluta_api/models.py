@@ -658,7 +658,8 @@ class RelationshipSpace(Base):
     # 🔒 A sealed background photo: its address with the key, sealed.
     background_key = Column(Text, nullable=True)
     # With no photo: the pattern behind the page — None = the romantic
-    # motif (the default), 'watermark' = the Aluta mark lattice. A photo wins.
+    # motif (what a Space starts with), 'default' = the chat's music doodle,
+    # 'watermark' = the Aluta mark lattice. A photo wins.
     background_style = Column(String, nullable=True)
     # The single hero card at the top of the friend list. Exactly one primary
     # per owner (enforced in the router on create / set-primary).

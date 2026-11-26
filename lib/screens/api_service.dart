@@ -2729,7 +2729,7 @@ class ApiService {
     String? theme,
     bool? isPrimary,
     String? backgroundUrl,
-    String? backgroundStyle, // 'motif' | 'watermark' (with no photo)
+    String? backgroundStyle, // 'default' | 'motif' | 'watermark' (no photo)
   }) async {
     try {
       // 🔒 A Space's name is sealed for its members (like its words).

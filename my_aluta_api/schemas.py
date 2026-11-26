@@ -508,8 +508,9 @@ class SpaceUpdate(BaseModel):
     # go through POST /{id}/background; this field only accepts presets or a
     # clear, so a client can't point a Space at an arbitrary attachment URL.
     background_url: Optional[str] = None
-    # Without a photo: "motif" (or "") for the default pattern, "watermark"
-    # for the Aluta mark. Older apps don't send it (and ignore it in replies:
+    # Without a photo: "motif" (or "") for the romantic pattern a Space starts
+    # with, "default" for the chat's music doodle, "watermark" for the Aluta
+    # mark. Older apps don't send it (and ignore it in replies:
     # they show the motif).
     background_style: Optional[str] = None
 

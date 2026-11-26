@@ -51,9 +51,13 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
   late String _theme = widget.initialTheme;
   late bool _primary = widget.initialPrimary;
   late String? _bgUrl = widget.initialBackgroundUrl;
-  // The pattern when there's no photo: 'motif' (default) or 'watermark'.
-  late String _bgStyle =
-      widget.initialBackgroundStyle == 'watermark' ? 'watermark' : 'motif';
+  // The pattern when there's no photo: 'default' (the chat's doodle),
+  // 'motif' (what a Space starts with) or 'watermark'.
+  late String _bgStyle = switch (widget.initialBackgroundStyle) {
+    'watermark' => 'watermark',
+    'default' => 'default',
+    _ => 'motif',
+  };
   // Remember the last wallpaper and the last device photo separately, so each
   // background tile keeps its own preview and the user can flip between them
   // without the other tile going blank.
@@ -120,7 +124,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
     });
   }
 
-  /// No photo: the romantic motif ('motif') or the Aluta watermark.
+  /// No photo: the doodle ('default'), the motif or the Aluta watermark.
   void _selectPattern(String style) {
     setState(() {
       _bgUrl = null;
@@ -182,19 +186,22 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
   }
 
   /// A tiny live preview of a pattern background in [accent].
-  Widget _patternThumb(ColorScheme scheme, Color accent,
-      {required bool watermark}) {
+  Widget _patternThumb(
+      ColorScheme scheme, Color accent, String style, IconData icon) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final pattern = watermark
-        // (full strength: a 92-px tile has room for only a few marks)
-        ? AlutaWatermarkWallpaper(tint: accent, isDark: isDark, strength: 1)
-        : ColoredBox(
-            color: scheme.surface,
-            child: CustomPaint(
-              painter: RomanticPatternPainter(
-                  color: accent.withValues(alpha: isDark ? 0.22 : 0.20)),
-            ),
-          );
+    final Widget pattern = switch (style) {
+      // (full strength: a 92-px tile has room for only a few marks)
+      'watermark' =>
+        AlutaWatermarkWallpaper(tint: accent, isDark: isDark, strength: 1),
+      'default' => AlutaDoodleWallpaper(tint: accent, isDark: isDark),
+      _ => ColoredBox(
+          color: scheme.surface,
+          child: CustomPaint(
+            painter: RomanticPatternPainter(
+                color: accent.withValues(alpha: isDark ? 0.22 : 0.20)),
+          ),
+        ),
+    };
     // Its icon on a solid disc on top, like the other tiles' icons.
     return Stack(
       fit: StackFit.expand,
@@ -209,10 +216,7 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
                   accent.withValues(alpha: 0.16), scheme.surface),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-                watermark
-                    ? Icons.water_drop_rounded
-                    : Icons.auto_awesome_rounded,
+            child: Icon(icon,
                 size: 21,
                 color: readableTint(accent, scheme.surface)),
           ),
@@ -536,15 +540,18 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
           child: IgnorePointer(
             child: ValueListenableBuilder<double>(
               valueListenable: motifStrength,
-              builder: (_, v, _) => _bgStyle == 'watermark'
-                  ? AlutaWatermarkWallpaper(
-                      tint: accent, isDark: isDark, strength: v)
-                  : CustomPaint(
-                      painter: RomanticPatternPainter(
-                        color: accent.withValues(
-                            alpha: motifAccentAlpha(isDark ? 0.06 : 0.055)),
-                      ),
+              builder: (_, v, _) => switch (_bgStyle) {
+                'watermark' => AlutaWatermarkWallpaper(
+                    tint: accent, isDark: isDark, strength: v),
+                'default' => AlutaDoodleWallpaper(
+                    tint: accent, isDark: isDark, base: scheme.surface),
+                _ => CustomPaint(
+                    painter: RomanticPatternPainter(
+                      color: accent.withValues(
+                          alpha: motifAccentAlpha(isDark ? 0.06 : 0.055)),
                     ),
+                  ),
+              },
             ),
           ),
         ),
@@ -625,29 +632,33 @@ class _EditSpaceSheetState extends State<_EditSpaceSheet> {
               ],
             ],
           ),
+          // The same choices as the chat wallpaper — Default · Motif ·
+          // Watermark, then the Gallery and your own photo — in this
+          // Space's colour (each pattern tile previews itself).
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // The same two patterns as the chat wallpapers, in this
-              // Space's colour (each tile previews its pattern).
-              _bgOption(
-                scheme,
-                selected: (_bgUrl ?? '').isEmpty && _bgStyle == 'motif',
-                onTap: _busy ? null : () => _selectPattern('motif'),
-                label: 'Motif',
-                icon: Icons.auto_awesome_rounded,
-                thumbnail: _patternThumb(scheme, accent, watermark: false),
-              ),
-              const SizedBox(width: 10),
-              _bgOption(
-                scheme,
-                selected: (_bgUrl ?? '').isEmpty && _bgStyle == 'watermark',
-                onTap: _busy ? null : () => _selectPattern('watermark'),
-                label: 'Watermark',
-                icon: Icons.water_drop_rounded,
-                thumbnail: _patternThumb(scheme, accent, watermark: true),
-              ),
-              const SizedBox(width: 10),
+              for (final p in const [
+                ('default', 'Default', Icons.blur_on_rounded),
+                ('motif', 'Motif', Icons.auto_awesome_rounded),
+                ('watermark', 'Watermark', Icons.water_drop_rounded),
+              ]) ...[
+                if (p.$1 != 'default') const SizedBox(width: 10),
+                _bgOption(
+                  scheme,
+                  selected: (_bgUrl ?? '').isEmpty && _bgStyle == p.$1,
+                  onTap: _busy ? null : () => _selectPattern(p.$1),
+                  label: p.$2,
+                  icon: p.$3,
+                  thumbnail: _patternThumb(scheme, accent, p.$1, p.$3),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               _bgOption(
                 scheme,
                 selected: (_bgUrl ?? '').startsWith('/wallpapers/'),

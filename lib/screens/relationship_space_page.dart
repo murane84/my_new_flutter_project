@@ -39,6 +39,7 @@ import '../utils/romantic_pattern.dart';
 import '../services/wallpapers_service.dart';
 import '../widgets/wallpaper_gallery.dart';
 import '../widgets/aluta_watermark.dart';
+import '../widgets/aluta_doodle_wallpaper.dart';
 import '../utils/file_bytes.dart';
 import '../services/notif_service.dart'
     show syncDiaryReminders, cancelDiaryReminder, PlanReminder;

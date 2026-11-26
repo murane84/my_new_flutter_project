@@ -107,6 +107,7 @@ import 'package:flutter_linkify/flutter_linkify.dart';
 import 'chat/formatted_text.dart';
 import 'chat/heart_message.dart';
 import '../widgets/aluta_watermark.dart';
+import '../widgets/aluta_doodle_wallpaper.dart';
 import 'chat/conversation_media.dart';
 import '../services/keystroke_sounds.dart';
 import '../services/upload_manager.dart';
@@ -8106,8 +8107,8 @@ class _ChatPageState extends State<ChatPage>
                               bottomInset: 64),
                         );
                       }
-                      return _ChatWallpaper(
-                          isDark: isDark, brand: scheme.primary);
+                      return AlutaDoodleWallpaper(
+                          isDark: isDark, tint: scheme.primary);
                     },
                   ),
                 ),

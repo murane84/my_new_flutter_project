@@ -1342,11 +1342,12 @@ def update_space(
         st = payload.background_style.strip().lower()
         if st in ("", "motif"):
             space.background_style = None
-        elif st == "watermark":
-            space.background_style = "watermark"
+        elif st in ("watermark", "default"):
+            space.background_style = st
         else:
-            raise HTTPException(status_code=400,
-                                detail="background_style must be motif or watermark")
+            raise HTTPException(
+                status_code=400,
+                detail="background_style must be default, motif or watermark")
     if payload.is_primary is True:
         # Exactly one hero: demote the others first.
         db.query(RelationshipSpace).filter(

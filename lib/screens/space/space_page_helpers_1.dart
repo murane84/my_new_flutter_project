@@ -355,6 +355,13 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
             AlutaWatermarkWallpaper(tint: _accent, isDark: isDark, strength: v),
       );
     }
+    // "Default": the chat's music doodle, in this Space's colour.
+    if (_space['background_style'] == 'default') {
+      return AlutaDoodleWallpaper(
+          tint: _accent,
+          isDark: Theme.of(context).brightness == Brightness.dark,
+          base: scheme.surface);
+    }
     Widget glow(double size, double alpha) => Container(
           width: size,
           height: size,

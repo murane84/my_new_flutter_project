@@ -298,6 +298,32 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
   Color _cardFill(ColorScheme scheme, [double tint = 0.08]) =>
       Color.alphaBlend(_accent.withValues(alpha: tint), scheme.surface);
 
+  /// The one Aluta card on the dashboard: opaque surface with a touch of the
+  /// Space colour, a hairline in it, the same corner everywhere. [tint]
+  /// lifts a card that's waiting on you a little more.
+  BoxDecoration _auraCard(ColorScheme scheme, {double tint = 0.06}) =>
+      BoxDecoration(
+        color: _cardFill(scheme, tint),
+        borderRadius: BorderRadius.circular(Radii.lg),
+        border: Border.all(color: _accent.withValues(alpha: 0.24)),
+      );
+
+  /// The one section label: a small icon and spaced capitals in the Space
+  /// colour (like "OUR WORLD" on the hero).
+  Widget _eyebrow(IconData icon, String text) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: _accent),
+          const SizedBox(width: 6),
+          Text(text.toUpperCase(),
+              style: TextStyle(
+                  fontSize: 10.5,
+                  letterSpacing: 1.2,
+                  fontWeight: FontWeight.w800,
+                  color: _accent)),
+        ],
+      );
+
   /// A banner in the Space colour itself, opaque (its words use
   /// readableOn(_accent)). Its soft end leans AWAY from the words' ink
   /// (darker under white words, lighter under dark ones), so no part of
@@ -498,7 +524,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
           icon: Icons.favorite_rounded,
           label: 'Pinned moments',
           count: momentsCount,
-          subtitle: 'Dedications & notes',
+          subtitle: 'Photos, songs & dedications',
           onTap: () => _openMoments(_globalCenter(_kMoments))),
       if (_partnerId != null)
         _featureTile(scheme,
@@ -571,38 +597,20 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
     // drop shadow + faint top highlight + hairline rim) carrying a 3D icon chip,
     // the title + subtitle beside it, and the count/chevron trailing. Half the
     // height of the old stacked tile.
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Material(
+    // The same Aluta card as the rest of the page; it lifts a little only
+    // while the pointer is on it (desktop), so the page stays flat and calm.
+    return _HoverLift(
       key: tileKey,
+      radius: Radii.lg,
+      shadow: _accent.withValues(alpha: 0.22),
+      child: Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(Radii.xl),
+      borderRadius: BorderRadius.circular(Radii.lg),
       child: Ink(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(Radii.xl),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [scheme.surface, scheme.surfaceContainerHighest],
-          ),
-          border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: 0.35)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
-              blurRadius: Depth.md,
-              offset: const Offset(0, 6),
-            ),
-            BoxShadow(
-              color: Colors.white.withValues(alpha: isDark ? 0.04 : 0.7),
-              blurRadius: Depth.xs,
-              spreadRadius: -1,
-              offset: const Offset(0, -1),
-            ),
-          ],
-        ),
+        decoration: _auraCard(scheme, tint: 0.04),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(Radii.xl),
+          borderRadius: BorderRadius.circular(Radii.lg),
           hoverColor: _accent.withValues(alpha: 0.06),
           highlightColor: _accent.withValues(alpha: 0.05),
           splashColor: _accent.withValues(alpha: 0.10),
@@ -610,29 +618,15 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             child: Row(
               children: [
-                // 3D icon chip.
+                // Icon well, the same soft disc as the other cards' icons.
                 Container(
-                  width: 44,
-                  height: 44,
+                  width: 42,
+                  height: 42,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(Radii.lg),
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        _accent.withValues(alpha: 0.24),
-                        _accent.withValues(alpha: 0.12),
-                      ],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _accent.withValues(alpha: 0.22),
-                        blurRadius: Depth.sm,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                    borderRadius: BorderRadius.circular(Radii.md),
+                    color: _accent.withValues(alpha: 0.16),
                   ),
-                  child: Icon(icon, color: _accent, size: 22),
+                  child: Icon(icon, color: _accent, size: 21),
                 ),
                 const SizedBox(width: 13),
                 Expanded(
@@ -691,6 +685,7 @@ extension _SpacePageHelpers1 on _RelationshipSpacePageState {
             ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -1328,4 +1323,46 @@ class _NewDotState extends State<_NewDot> with SingleTickerProviderStateMixin {
       ),
     );
   }
+}
+
+/// Lifts [child] a touch (1 px up, a soft shadow in the Space colour) while
+/// a pointer hovers it. Nothing on touch screens: the page stays flat.
+class _HoverLift extends StatefulWidget {
+  final Widget child;
+  final double radius;
+  final Color shadow;
+  const _HoverLift(
+      {super.key,
+      required this.child,
+      required this.radius,
+      required this.shadow});
+
+  @override
+  State<_HoverLift> createState() => _HoverLiftState();
+}
+
+class _HoverLiftState extends State<_HoverLift> {
+  bool _on = false;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+        onEnter: (_) => setState(() => _on = true),
+        onExit: (_) => setState(() => _on = false),
+        child: AnimatedContainer(
+          duration: Motion.quick,
+          curve: Curves.easeOut,
+          transform: Matrix4.translationValues(0, _on ? -1.5 : 0, 0),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(widget.radius),
+            boxShadow: [
+              BoxShadow(
+                color: _on ? widget.shadow : widget.shadow.withValues(alpha: 0),
+                blurRadius: Depth.md,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: widget.child,
+        ),
+      );
 }

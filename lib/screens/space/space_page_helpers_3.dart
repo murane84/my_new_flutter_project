@@ -13,10 +13,9 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
       return const SizedBox.shrink();
     }
     final left = status == 'partner_left';
-    final name =
-        _others.isNotEmpty ? ContactNames.instance.displayName(of: _others.first, registered: (_others.first['username'] ?? 'them').toString()) : 'them';
+    final name = _partnerFirstName;
     return Padding(
-      padding: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
@@ -55,7 +54,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
     final days = (ws['days'] as num?)?.toInt() ?? 0;
     if (title.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
         decoration: BoxDecoration(
@@ -177,7 +176,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
         '$daysTogether day${daysTogether == 1 ? '' : 's'} you listened together',
     ];
     return Padding(
-      padding: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
@@ -245,7 +244,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
         ? "You're on a roll together"
         : 'A milestone worth marking';
     return Padding(
-      padding: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
@@ -521,9 +520,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
         track != null && (track['title'] ?? '').toString().trim().isNotEmpty;
     if (active) return _tuneInCard(scheme);
     // Nobody's playing — a calm invite rather than an empty space.
-    final name = _others.isNotEmpty
-        ? ContactNames.instance.displayName(of: _others.first, registered: (_others.first['username'] ?? 'them').toString())
-        : 'them';
+    final name = _partnerFirstName;
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Material(
@@ -533,12 +530,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
           onTap: _listenTogether,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: Color.alphaBlend(
-                  _accent.withValues(alpha: 0.10), scheme.surface),
-              borderRadius: BorderRadius.circular(Radii.lg),
-              border: Border.all(color: _accent.withValues(alpha: 0.26)),
-            ),
+            decoration: _auraCard(scheme),
             child: Row(
               children: [
                 Container(
@@ -573,14 +565,17 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                   ),
                 ),
                 const SizedBox(width: 10),
+                // An open invite, not the page's call to action: a soft key
+                // (the filled one is kept for what's waiting on you).
                 Container(
                   width: 36,
                   height: 36,
                   alignment: Alignment.center,
-                  decoration:
-                      BoxDecoration(color: _accent, shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                      color: _accent.withValues(alpha: 0.16),
+                      shape: BoxShape.circle),
                   child: Icon(Icons.play_arrow_rounded,
-                      color: scheme.onPrimary, size: 22),
+                      color: _accent, size: 22),
                 ),
               ],
             ),
@@ -600,9 +595,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
     final a = (track['artist'] ?? '').toString().trim();
     if (t.isEmpty) return const SizedBox.shrink();
     final line = a.isNotEmpty ? '$t — $a' : t;
-    final name = _others.isNotEmpty
-        ? ContactNames.instance.displayName(of: _others.first, registered: (_others.first['username'] ?? 'They').toString())
-        : 'They';
+    final name = _others.isNotEmpty ? _partnerFirstName : 'They';
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Container(
@@ -1212,6 +1205,8 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
         onPlaySong: (t) => _playCrateTrack(t),
       ),
     ));
+    // Played: the card quietens (see _recapCard).
+    if (mounted) _markRecapPlayed(month);
   }
 
   bool _hasStreakUnlock(String kind) {
@@ -1257,24 +1252,16 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
     }
     final summary = bits.isEmpty ? 'A month of the two of you' : bits.join(' · ');
     final month = (r['month'] ?? '').toString();
+    // Once played on this device, it stays as a quiet way back in (the only
+    // one on the page) instead of announcing itself as new all month.
+    final played = _recapPlayed == month;
 
     return GestureDetector(
       onTap: () => _openMixtape(month),
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color.alphaBlend(_accent.withValues(alpha: 0.16), scheme.surface),
-              Color.alphaBlend(_accent.withValues(alpha: 0.05), scheme.surface),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(Radii.lg),
-          border: Border.all(color: _accent.withValues(alpha: 0.26)),
-        ),
+        decoration: _auraCard(scheme, tint: played ? 0.04 : 0.10),
         child: Row(
           children: [
             // Mini cover: the month's first photo, or a vinyl tile.
@@ -1319,7 +1306,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                           color: _accent.withValues(alpha: 0.16),
                           borderRadius: BorderRadius.circular(Radii.xl),
                         ),
-                        child: Text('is ready',
+                        child: Text(played ? 'replay' : 'is ready',
                             style: TextStyle(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
@@ -1341,9 +1328,11 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
               width: 40,
               height: 40,
               alignment: Alignment.center,
-              decoration: BoxDecoration(color: _accent, shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                  color: played ? _accent.withValues(alpha: 0.16) : _accent,
+                  shape: BoxShape.circle),
               child: Icon(Icons.play_arrow_rounded,
-                  color: scheme.onPrimary, size: 24),
+                  color: played ? _accent : readableOn(_accent), size: 24),
             ),
           ],
         ),
@@ -1359,6 +1348,35 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
     );
   }
 
+  /// The one thing to do together today, for the streak card's button:
+  /// today's question when it's still waiting on me (it's right there on
+  /// the page), else a moment for them. Listening has its own card above.
+  (String, IconData, VoidCallback) _streakInvite() {
+    final q = (_space['question'] as Map?)?.cast<String, dynamic>();
+    final body = ((q?['prompt'] as Map?)?['body'] ?? '').toString();
+    final waiting = q != null && body.isNotEmpty && q['answered'] != true;
+    if (waiting && _cardOrder.contains('question')) {
+      return ("Answer today's question", Icons.favorite_rounded,
+          _goToQuestion);
+    }
+    return ('Pin a moment for $_partnerFirstName',
+        Icons.push_pin_rounded, _sendMoment);
+  }
+
+  /// Bring today's question into view and, for a written one, its field.
+  void _goToQuestion() {
+    final ctx = _qCardKey.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(ctx,
+            duration: Motion.emphasized,
+            curve: Curves.easeOutCubic,
+            alignment: 0.15)
+        .then((_) {
+      // (a mood / song question has no field: just the card)
+      if (mounted && _qFocus.context != null) _qFocus.requestFocus();
+    });
+  }
+
   Widget _streakCard(ColorScheme scheme) {
     final s = _streak;
     if (s == null || s['bonded'] != true) return const SizedBox.shrink();
@@ -1370,26 +1388,28 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
     final toNext = (s['days_to_next'] as num?)?.toInt();
     final on = current > 0;
 
+    // Had one before: pick it back up (never "New" beside a best of 8).
+    final again = !on && longest > 0;
     String sub;
     double progress;
     if (next != null && toNext != null) {
       sub = on
           ? '$toNext day${toNext == 1 ? '' : 's'} to ${_stageForMilestone(next)}'
-          : 'Do something together today to begin';
+          : again
+              ? 'Your best was $longest day${longest == 1 ? '' : 's'} — '
+                  'one thing together today starts it again'
+              : 'Do something together today to begin';
       progress = next > 0 ? (current / next).clamp(0.0, 1.0) : 0.0;
     } else {
       sub = 'In tune — your deepest run yet';
       progress = 1.0;
     }
 
+    final invite = _streakInvite();
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Color.alphaBlend(_accent.withValues(alpha: 0.08), scheme.surface),
-        borderRadius: BorderRadius.circular(Radii.lg),
-        border: Border.all(color: _accent.withValues(alpha: 0.22)),
-      ),
+      decoration: _auraCard(scheme),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1403,26 +1423,30 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                 child: Text(
                   on
                       ? '$current day${current == 1 ? '' : 's'} in tune'
-                      : 'Start your streak',
+                      : again
+                          ? 'Pick it back up'
+                          : 'Start your streak',
                   style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
                       color: scheme.onSurface),
                 ),
               ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _accent.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(Radii.xl),
+              // The stage is earned: shown while a streak runs.
+              if (on)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _accent.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(Radii.xl),
+                  ),
+                  child: Text(stage,
+                      style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: _accent)),
                 ),
-                child: Text(stage,
-                    style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: _accent)),
-              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -1449,7 +1473,7 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                         fontSize: 11.5,
                         fontWeight: FontWeight.w600,
                         color: _accent))
-              else if (longest > current && longest > 0)
+              else if (on && longest > current)
                 Text('Best: $longest',
                     style: TextStyle(
                         fontSize: 11.5, color: scheme.onSurfaceVariant)),
@@ -1464,10 +1488,9 @@ extension _SpacePageHelpers3 on _RelationshipSpacePageState {
                 foregroundColor: _accent,
                 visualDensity: VisualDensity.compact,
               ),
-              onPressed: _listenTogether,
-              icon: const Icon(Icons.headphones_rounded, size: 17),
-              label: Text(on ? 'Keep it alive — listen together'
-                  : 'Listen to a song together'),
+              onPressed: invite.$3,
+              icon: Icon(invite.$2, size: 17),
+              label: Text(invite.$1),
             ),
           ],
         ],

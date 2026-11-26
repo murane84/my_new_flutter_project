@@ -49,7 +49,8 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
         final right = _cardOrder.where((k) => !leftKeys.contains(k)).toList();
         scroller = ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(pad, 10, pad, 24),
+          // (room at the end for the floating ＋, as on the phone)
+          padding: EdgeInsets.fromLTRB(pad, 10, pad, isPair ? 84 : 24),
           children: [
             ...banners,
             Row(
@@ -247,9 +248,25 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
     final hasPartner = others.isNotEmpty;
     final stats = (_space['stats'] as Map?) ?? const {};
     final days = (stats['days_in_song'] as num?)?.toInt() ?? 0;
-    final streak = (stats['listen_streak'] as num?)?.toInt() ?? 0;
+    // The one streak of the page — the In-tune streak the card below tells
+    // (anything done together), not a second listening-only count.
+    final streak = _streak?['bonded'] == true
+        ? (_streak?['current_days'] as num?)?.toInt() ?? 0
+        : 0;
     final hasStats = hasPartner && (days > 0 || streak > 0);
     final daysTogether = hasPartner ? _daysTogether() : null;
+    // Alive right now: their record turns while they play, and the line
+    // under the name says so (else, softly, that they're online).
+    final pid = _partnerId;
+    final playing = pid != null && SteadyListening.instance.isPlaying(pid);
+    final online = hasPartner && others.first['is_online'] == true;
+    final live = !hasPartner
+        ? null
+        : playing
+            ? '🎧 $_partnerFirstName is listening'
+            : online
+                ? '$_partnerFirstName is online'
+                : null;
 
     // Every word on the banner uses one ink that reads on THIS theme (white
     // on most, near-black on pale ones like butter or petal).
@@ -285,7 +302,7 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
           [
             if (daysTogether != null)
               '$daysTogether day${daysTogether == 1 ? '' : 's'} together',
-            'since ${_closeSince()}',
+            live ?? 'since ${_closeSince()}',
           ].join(' · '),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -354,8 +371,11 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
         runSpacing: 8,
         alignment: spread ? WrapAlignment.spaceBetween : WrapAlignment.start,
         children: [
-          chip('🔥', '$streak', 'day streak'),
-          chip('🎧', '$days', days == 1 ? 'day in a song' : 'days in a song'),
+          // Only what's there: never a "0" on the banner.
+          if (streak > 0)
+            chip('🔥', '$streak', streak == 1 ? 'day in tune' : 'days in tune'),
+          if (days > 0)
+            chip('🎧', '$days', days == 1 ? 'day in a song' : 'days in a song'),
         ],
       ),
     );
@@ -402,7 +422,8 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
           ),
         );
 
-    final avatars = _heroAvatars(others, radius: roomy ? 24 : 20);
+    final avatars = _heroAvatars(others,
+        radius: roomy ? 24 : 20, spinning: playing, ring: ink);
 
     final content = roomy
         ? Row(
@@ -491,8 +512,10 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
   }
 
   /// Me + the other, slightly overlapped, in bevelled white rings.
+  /// [spinning]: their record edge turns (in [ring]) while they play — the
+  /// same signal as in the friend list.
   Widget _heroAvatars(List<Map<String, dynamic>> others,
-      {required double radius}) {
+      {required double radius, bool spinning = false, Color? ring}) {
     final rightUrl =
         others.isNotEmpty ? _full(others.first['avatar_url']) : null;
     final rightName =
@@ -505,20 +528,37 @@ extension _SpaceDashboardLayout on _RelationshipSpacePageState {
       ),
     );
     if (others.isEmpty) return me;
+    // Room for the turning edge is kept either way, so nothing shifts when
+    // it starts or stops.
+    const edge = 3.0;
     final d = radius * 2 + 6;
+    final them = _ringed(
+      child: InitialsAvatar(
+          name: rightName.isEmpty ? '?' : rightName,
+          radius: radius,
+          imageUrl: rightUrl),
+    );
     return SizedBox(
-      width: d * 1.62,
-      height: d,
+      width: d * 1.62 + edge,
+      height: d + edge * 2,
       child: Stack(
         children: [
-          Positioned(left: 0, child: me),
+          Positioned(left: 0, top: edge, child: me),
           Positioned(
             right: 0,
-            child: _ringed(
-              child: InitialsAvatar(
-                  name: rightName.isEmpty ? '?' : rightName,
-                  radius: radius,
-                  imageUrl: rightUrl),
+            top: 0,
+            child: AnimatedSwitcher(
+              duration: Motion.emphasized,
+              child: spinning
+                  ? SpinningVinylRing(
+                      key: const ValueKey('turning'),
+                      ring: edge,
+                      color: ring ?? _accent,
+                      child: them)
+                  : Padding(
+                      key: const ValueKey('still'),
+                      padding: const EdgeInsets.all(edge),
+                      child: them),
             ),
           ),
         ],

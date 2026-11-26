@@ -21,6 +21,7 @@ import 'live_session_screen.dart';
 import 'token_helper.dart' show getToken, mediaAuthHeaders;
 import '../services/now_playing_presence.dart';
 import '../services/steady_listening.dart';
+import 'spinning_vinyl_ring.dart';
 import '../utils/toast_helper.dart';
 import '../utils/voice_rec.dart';
 import '../utils/time_utils.dart' show parseServerTime;
@@ -604,6 +605,18 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   List<String> _cardOrder = List.of(kDefaultCardOrder);
   String get _orderKey => 'space_order_v1_$_id';
 
+  // The month whose mixtape was last played here (its card then quietens).
+  String? _recapPlayed;
+  String get _recapPlayedKey => 'space_recap_played_v1_$_id';
+
+  Future<void> _markRecapPlayed(String month) async {
+    setState(() => _recapPlayed = month);
+    try {
+      (_spacePrefs ?? await SharedPreferences.getInstance())
+          .setString(_recapPlayedKey, month);
+    } catch (_) {}
+  }
+
   bool _cachePainted = false;
   bool _localPainted = false;
 
@@ -621,6 +634,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     } catch (_) {}
     try {
       _applyLocal(prefs.getString(_seenKey), prefs.getStringList(_orderKey));
+      _recapPlayed = prefs.getString(_recapPlayedKey);
       _localPainted = true;
     } catch (_) {}
   }
@@ -653,8 +667,10 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
       _spacePrefs ??= prefs;
       final raw = prefs.getString(_seenKey);
       final order = prefs.getStringList(_orderKey);
+      final played = prefs.getString(_recapPlayedKey);
       if (!mounted) return;
       setState(() {
+        _recapPlayed = played;
         if (raw != null) {
           _seenCounts = (jsonDecode(raw) as Map)
               .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
@@ -731,6 +747,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
   }
   // Today's "Us" question: inline text answer + submit guard.
   final TextEditingController _qAnswerCtrl = TextEditingController();
+  // The streak card's invite brings you here: the card, then its field.
+  final GlobalKey _qCardKey = GlobalKey();
+  final FocusNode _qFocus = FocusNode();
   bool _qSubmitting = false;
 
   // A stable key per feature tile, so its on-screen centre can anchor the
@@ -802,6 +821,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     spaceEventBus.removeListener(_onSpaceEvent);
     _diaryPageCtrl.dispose();
     _qAnswerCtrl.dispose();
+    _qFocus.dispose();
     // Flush the "seen" counts now rather than losing a pending save.
     if (_seenSave?.isActive ?? false) {
       _seenSave!.cancel();
@@ -1362,7 +1382,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final note = (a['note'] ?? '').toString().trim();
     final ink = readableOn(_accent);
     return Padding(
-      padding: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
         decoration: BoxDecoration(
@@ -2385,8 +2405,9 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     final kind = (prompt['kind'] ?? 'text').toString();
     final answered = q['answered'] == true;
     final revealed = q['revealed'] == true;
-    final partnerName = _partnerShown(
-        (q['partner_name'] ?? 'your partner').toString());
+    final partnerName = _others.isEmpty
+        ? (q['partner_name'] ?? 'your partner').toString()
+        : _partnerFirstName;
     final myAns = (q['my_answer'] as Map?)?.cast<String, dynamic>();
     final partnerAns = (q['partner_answer'] as Map?)?.cast<String, dynamic>();
     // Both answered (and no mood to mend): fold to a small chip so the
@@ -2498,6 +2519,7 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
           Expanded(
             child: TextField(
               controller: _qAnswerCtrl,
+              focusNode: _qFocus,
               minLines: 1,
               maxLines: 3,
               maxLength: 240,
@@ -2520,9 +2542,15 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
               ),
             ),
           ),
-          const SizedBox(width: 6),
-          IconButton(
-            icon: Icon(Icons.send_rounded, color: _accent),
+          const SizedBox(width: 8),
+          // A filled round key, like every other action on the page.
+          IconButton.filled(
+            style: IconButton.styleFrom(
+              backgroundColor: _accent,
+              foregroundColor: readableOn(_accent),
+              fixedSize: const Size(40, 40),
+            ),
+            icon: const Icon(Icons.send_rounded, size: 19),
             onPressed: _qSubmitting ? null : _submitTextAnswer,
           ),
         ],
@@ -2530,34 +2558,22 @@ class _RelationshipSpacePageState extends State<RelationshipSpacePage> {
     }
 
     return Container(
+      key: _qCardKey,
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color:
-            Color.alphaBlend(_accent.withValues(alpha: 0.10), scheme.surface),
-        borderRadius: BorderRadius.circular(Radii.lg),
-        border: Border.all(color: _accent.withValues(alpha: 0.28)),
-      ),
+      decoration: _auraCard(scheme),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
+              _eyebrow(
                   kind == 'music'
                       ? Icons.music_note_rounded
                       : kind == 'mood'
                           ? Icons.mood_rounded
                           : Icons.favorite_rounded,
-                  size: 16,
-                  color: _accent),
-              const SizedBox(width: 6),
-              Text("Today's question",
-                  style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.3,
-                      color: _accent)),
+                  "Today's question"),
               const Spacer(),
               if (revealed)
                 GestureDetector(

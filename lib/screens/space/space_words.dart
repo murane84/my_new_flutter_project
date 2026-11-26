@@ -27,28 +27,26 @@ extension _SpaceWords on _RelationshipSpacePageState {
     String said(String p) => p == '❤️' ? 'sent ❤️' : 'said “$p”';
     final headline = 'You two ${said(phrase)} $total times this month '
         '${_emoji[phrase] ?? '💞'}';
+    // Who said it — gently, never a score: "From you, both times".
+    String from(String who, int n) => n == 1
+        ? 'From $who'
+        : n == 2
+            ? 'From $who, both times'
+            : 'From $who, all $n times';
     final split = (me > 0 && them > 0)
         ? 'You $me · $partner $them'
-        : (me > 0 ? 'All you — $me times' : 'All $partner — $them times');
+        : (me > 0 ? from('you', me) : from(partner, them));
     final rest = items.skip(1).take(3).toList();
     return Padding(
-      padding: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(Radii.lg),
-          color: _cardFill(scheme),
-          border: Border.all(color: _accent.withValues(alpha: 0.30)),
-        ),
+        decoration: _auraCard(scheme),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('💬 THIS MONTH IN YOUR WORDS',
-                style: TextStyle(
-                    fontSize: 10.5,
-                    letterSpacing: 1.2,
-                    fontWeight: FontWeight.w800,
-                    color: _accent)),
+            _eyebrow(Icons.chat_bubble_outline_rounded,
+                'This month in your words'),
             const SizedBox(height: 6),
             Text(headline,
                 style: TextStyle(

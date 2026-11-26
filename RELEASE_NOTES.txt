@@ -1,18 +1,12 @@
-🎵 When you bond with someone, Aluta now asks for the song that is yours — and remembers it on your anniversaries.
-💞 Our day: when a bond is accepted, both of you share the moment — and Aluta keeps the date.
-🎁 Invite your people: every member has invitations, and the first 1,000 carry a Founding Circle number.
-👋 Coming back? Aluta greets you with what your people sent while you were away.
-🌍 New here? Aluta welcomes you, shows you who invited you, and helps you find the people you already know.
-✍️ After creating your account, you're signed straight in.
-💿 Your bonded person's record now turns while they write to you.
-🖥️ On desktop, editing a photo covers only the chat — your Circle and your music stay right beside it.
-🎨 Picking a colour in the photo editor now does what you expect — and text can be recoloured after you add it.
-📸 Sending several photos: Skip one, or stop the rest — Aluta tells you what wasn't sent.
-✨ GIFs stay animated and stickers keep their see-through edges.
-🎬 Videos can now have a caption, just like photos.
-🖌️ Draw on your status photos, and post several at once.
-⏱️ Video statuses play up to 30 seconds.
-📲 Photos and videos shared into Aluta from other apps get the same editor and captions.
-💬 Messages lift smoothly when you hover — no more shaky text.
-🔒 Your chats say it plainly: not even Aluta can read them.
-📄 Our Privacy Policy and Terms are updated for invitations — you'll be asked to accept them once.
+📖 Tap the book under a message: "Opened" now tells you which day, not just the time.
+🕒 Message info, secret hearts and the photo viewer show times the same way — on the 12-hour clock, with the day when it matters.
+📋 On desktop, paste one screenshot after another with Ctrl+V — the message box is ready again as soon as a photo is sent.
+🔒 Duo statuses, sticker and GIF statuses, and your reactions to statuses are now end-to-end encrypted.
+🔒 Our Space is now end-to-end encrypted, including reactions, saved songs and their dedications, and voice notes. Only the titles in Our Playlist stay readable, so the playlist can tell when the same song is added twice.
+💞 Saving a song or sticker status to Our Space adds it only once.
+🖼️ In Our Space, text stays readable over any background photo, even the darkest or busiest one at full clarity.
+✨ A calmer Our Space: one streak instead of two, no "0" on the banner, the cards in one style, and one gentle next step instead of three.
+🎧 When your person plays a song, their photo at the top of Our Space turns like a record.
+🎨 Our Space backgrounds match the chat wallpapers: Default, Motif, Watermark, Gallery or your own photo, in your Space's colour.
+🌙 In dark mode, every wallpaper pattern takes your theme colour.
+📜 The privacy policy and terms now describe what's encrypted. Nothing new to accept.
